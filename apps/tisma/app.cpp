@@ -1759,6 +1759,13 @@ private:
     bool host_dialog_open_ = false;           // the upload dialog, to open next frame
     std::future<std::vector<device::MdnsService>> host_search_; // Zeroconf, for OctoPrint
     std::vector<device::MdnsService> host_found_;
+    // Klipper's Moonraker on the network (printer_connections.md, «Búsqueda en
+    // la red»): its `_moonraker._tcp` services that answer /server/info.
+    std::future<std::vector<device::FoundHost>> moonraker_search_;
+    std::vector<device::FoundHost> moonraker_found_;
+    // What another program's project brought that has no equivalent
+    // (project_import.md, rules 6 and 9: «sin equivalente», by name and value).
+    std::vector<std::string> import_skipped_;
     bool host_searched_ = false;
     std::string host_dialog_name_;
     device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
@@ -4527,8 +4534,21 @@ void App::load_model(const std::filesystem::path& path) {
                         const std::string table((std::istreambuf_iterator<char>(table_in)), std::istreambuf_iterator<char>());
                         try {
                             if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
-                                const SettingSort sort = sort_settings(parse_translation(table), own);
+                                const TranslationTable parsed = parse_translation(table);
+                                const SettingSort sort = sort_settings(parsed, own);
+                                // Translated and similar ones as changes by hand over the
+                                // printer and profiles chosen (rule 8); the rest named.
+                                const ProjectSettings got = translate_settings(parsed, own, settings_);
+                                settings_ = got.settings;
+                                settings_changed();
+                                import_skipped_ = got.skipped;
                                 notify(format(tr(T::ProjectSettingsSorted), sort.translated, sort.similar, sort.none));
+                                if (!import_skipped_.empty()) {
+                                    std::string some;
+                                    for (std::size_t k = 0; k < import_skipped_.size() && k < 3; ++k)
+                                        some += (k ? ", " : "") + import_skipped_[k];
+                                    notify(format(tr(T::ProjectSettingsSkipped), int(import_skipped_.size()), some.c_str()));
+                                }
                             }
                         } catch (const TranslationError&) {
                             // A table this program cannot read: the notice above stands.
@@ -25163,6 +25183,10 @@ void App::host_poll() {
         host_found_ = host_search_.get();
         host_searched_ = true;
     }
+    if (moonraker_search_.valid() && moonraker_search_.wait_for(0ms) == std::future_status::ready) {
+        moonraker_found_ = moonraker_search_.get();
+        host_searched_ = true;
+    }
     if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
         const device::HostResult r = host_job_.get();
         if (r.ok && !host_job_what_.empty())
@@ -25209,6 +25233,34 @@ void App::host_panel(float field, float button_h) {
             }
         }
         if (host_searched_ && host_found_.empty())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
+    }
+    // Moonraker announces itself too; only the ones that answer are shown.
+    if (host_.kind == device::HostKind::Moonraker) {
+        ImGui::BeginDisabled(moonraker_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            moonraker_search_ = std::async(std::launch::async, [] {
+                std::vector<std::pair<std::string, std::string>> candidates;
+                for (const device::MdnsService& m : device::mdns_browse("_moonraker._tcp.local", 4000))
+                    candidates.push_back({m.instance, m.url()});
+                return device::confirm_moonraker(candidates);
+            });
+        }
+        note_rect("moonraker_search");
+        ImGui::EndDisabled();
+        if (moonraker_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::FoundHost& h : moonraker_found_) {
+            const std::string label = std::string(tr(T::KlipperMoonraker)) + "  " + h.name + "  " + h.url;
+            if (ImGui::Selectable(label.c_str(), h.url == host_.url)) {
+                host_.url = h.url;
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && moonraker_found_.empty() && !moonraker_search_.valid())
             loc::TextDisabled("%s", tr(T::HostNoneFound));
     }
     ImGui::SetNextItemWidth(field * 1.4f);
@@ -26595,6 +26647,22 @@ void App::script_input() {
         std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
         if (got != step.key)
             return fail_step("got " + got);
+        next();
+    } else if (step.verb == "expect-setting") { // a setting's value now: "group.key VALUE" (numbers within 0.001)
+        const nlohmann::json all = nlohmann::json::parse(settings_json(settings_));
+        const std::string key = step.key, want = step.value;
+        const std::size_t dot = key.find('.');
+        std::string got;
+        if (dot != std::string::npos && all.contains(key.substr(0, dot)) && all.at(key.substr(0, dot)).contains(key.substr(dot + 1))) {
+            const nlohmann::json& v = all.at(key.substr(0, dot)).at(key.substr(dot + 1));
+            got = v.is_string() ? v.get<std::string>() : v.dump();
+        }
+        char* end = nullptr;
+        const double a = std::strtod(got.c_str(), &end), b = std::atof(want.c_str());
+        const bool ok = got == want || (!got.empty() && end && *end == 0 && std::abs(a - b) < 1e-3);
+        std::printf("ui-script: expect-setting %s %s: %s%s\n", key.c_str(), want.c_str(), ok ? "ok" : "got ", ok ? "" : got.c_str());
+        if (!ok)
+            return fail_step(key + " is " + got);
         next();
     } else if (step.verb == "expect-error") { // the error dialog's message contains VALUE (the whole line)
         const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);

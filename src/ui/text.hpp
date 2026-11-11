@@ -1244,8 +1244,8 @@
       "Project from %s: %d parts. Its settings are not brought in yet: Tisma's are used")                              \
     X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza. Sus ajustes todavía no se traen: se usan los de Tisma",          \
       "Project from %s: 1 part. Its settings are not brought in yet: Tisma's are used")                                 \
-    X(ProjectSettingsSorted, "Ajustes del proyecto: %d traducidos, %d parecidos, %d sin equivalente (todavía no se aplican)", \
-      "Project settings: %d translated, %d similar, %d without equivalent (not applied yet)")                    \
+    X(ProjectSettingsSorted, "Ajustes del proyecto: %d traducidos, %d parecidos, %d sin equivalente", \
+      "Project settings: %d translated, %d similar, %d without equivalent")                    \
     X(ProjectFromUnknown, "Proyecto de un programa desconocido: se abrieron las piezas, sin sus ajustes",             \
       "Project from an unknown program: the parts were opened, without their settings")                               \
     X(ViewerOnly, "Vista de un G-code abierto: no se puede volver a laminar", "Viewing an opened G-code file: it cannot be sliced again") \
@@ -1525,6 +1525,8 @@
     X(DesignTipDeleteLast, "Borra el último paso del diseño.", "Deletes the design's last step.") \
     X(DesignAccept, "Aceptar", "OK") \
     X(DesignInPanel, "Se edita en el cuadro de la derecha", "Being edited in the panel on the right") \
+    X(KlipperMoonraker, "Klipper (Moonraker)", "Klipper (Moonraker)") \
+    X(ProjectSettingsSkipped, "Sin equivalente (%d): %s…", "No equivalent (%d): %s…") \
     X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \
     X(DesignTimelineWaits, "Después de la marca: espera", "After the marker: waiting") \
     X(DesignTimelineSuppress, "Suprimir", "Suppress") \

@@ -13471,3 +13471,17 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `design_handles.txt` (tres flechas en la caja; subir la del alto la hace más alta; Aceptar las saca);
   orden nueva `expect-design-above`.
 
+## 2026-11-11 — interfaz: los ajustes de un proyecto de otro programa se aplican (beta, ítem 4) y Moonraker en la red (P2)
+
+- **Hecho:**
+  - al abrir un proyecto de otro programa con tabla de traducción, los ajustes traducidos y parecidos van como
+    cambios a mano sobre la impresora y los perfiles elegidos (`translate_settings` del motor, b23763a;
+    `project_import.md`, regla 8, en `spec/next`); el aviso ya no dice «todavía no se aplican», y otro aviso nombra
+    los que no tienen equivalente (los tres primeros y cuántos son). Falta «Ver detalle» con la lista buscable y
+    «Usar la impresora del proyecto» (regla 9);
+  - en Impresora › conexión, con Moonraker elegido, «Buscar» encuentra los `_moonraker._tcp` de la red que contestan
+    (`confirm_moonraker`, 12cfb7e) y los muestra como «Klipper (Moonraker)»; un clic pone su dirección. No probado
+    con una impresora real en la red: «not tested on hardware».
+- **Pruebas:** `project_import_settings.txt` (orden nueva `expect-setting`: el ancho de pared externa del proyecto,
+  0,45 mm, queda puesto; antes 0); pasan las 131 de importar, proyecto e impresora.
+
