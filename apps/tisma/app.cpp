@@ -925,6 +925,8 @@ private:
     // the view's paint now (empty: something else, as the brush's marks).
     void update_color_view();
     bool color_view_wanted() const;
+    // A filament's or blend's colour as 0xRRGGBB (the model's colour for none).
+    std::uint32_t extruder_rgb(int extruder) const;
     std::vector<std::string> color_view_key_;
     Vec3 mouse_ray() const;
     // CAD navigation (interface.md, «Navegación de la vista 3D»).
@@ -13397,19 +13399,52 @@ void App::paint_card(ImVec2 at) {
     } channels[] = {{T::PaintSupports, PaintChannel::Support, true},
                     {T::PaintSeam, PaintChannel::Seam, true},
                     {T::PaintFuzzy, PaintChannel::Fuzzy, true},
-                    {T::PaintColors, PaintChannel::Color, false}};
+                    {T::PaintColors, PaintChannel::Color, settings_.extruders > 1 || !mixes_.empty()}};
     for (const auto& c : channels) {
         ImGui::BeginDisabled(!c.ready);
         if (ImGui::RadioButton(tr(c.label), paint_channel_ == c.channel)) {
             paint_channel_ = c.channel;
             paint_dirty_ = true;
+            // The colour channel's marks are extruders; the others', enforce or block.
+            if (c.channel == PaintChannel::Color ? paint_mark_ < 1 : paint_mark_ > kPaintBlock)
+                paint_mark_ = kPaintEnforce;
         }
+        if (c.channel == PaintChannel::Color)
+            note_rect("paint_colors");
         ImGui::EndDisabled();
         if (!c.ready)
-            loc::SetItemTooltip("%s", tr(T::PaintLater));
+            loc::SetItemTooltip("%s", tr(T::PaintColorsNeedTwo));
     }
+    if (paint_channel_ == PaintChannel::Color && !channels[3].ready)
+        paint_channel_ = PaintChannel::Support, paint_dirty_ = true, paint_mark_ = kPaintEnforce;
     ImGui::Separator();
-    if (paint_channel_ != PaintChannel::Fuzzy) { // fuzzy skin is painted or not
+    if (paint_channel_ == PaintChannel::Color) {
+        // Each filament and each blend the paint can hold (multi_extruder.md,
+        // rule 1; color_mixing_plus.md, rule 16), as a swatch to pick.
+        std::vector<int> choices;
+        for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
+            choices.push_back(e);
+        for (const ColorMix& m : mixes_)
+            if (m.id <= kPaintMaxMark && mix_usable(m, settings_.extruders))
+                choices.push_back(m.id);
+        const float side = 22.0f * scale_;
+        for (std::size_t k = 0; k < choices.size(); ++k) {
+            const int e = choices[k];
+            ImGui::PushID(e + 6000);
+            if (k % 8 != 0)
+                ImGui::SameLine(0, 4.0f * scale_);
+            const std::uint32_t c = extruder_rgb(e);
+            if (ImGui::ColorButton("##colour", rgb(c), ImGuiColorEditFlags_NoTooltip, ImVec2(side, side)))
+                paint_mark_ = std::uint8_t(e);
+            if (paint_mark_ == e)
+                ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                                    ImGui::GetColorU32(rgb(theme_.accent_hover)), 3.0f * scale_, 2.5f * scale_);
+            loc::SetItemTooltip("%s", e <= settings_.extruders ? format(tr(T::ExtruderItem), e).c_str()
+                                                               : format(tr(T::VirtualExtruder), e).c_str());
+            note_rect("paint_color." + std::to_string(e));
+            ImGui::PopID();
+        }
+    } else if (paint_channel_ != PaintChannel::Fuzzy) { // fuzzy skin is painted or not
         // Each mark with a swatch of the colour it paints (UI35).
         const auto swatch = [&](std::uint32_t colour) {
             ImGui::SameLine(0, 4.0f * scale_);
@@ -13518,6 +13553,15 @@ bool App::color_view_wanted() const {
     return triangles <= 2000000;
 }
 
+std::uint32_t App::extruder_rgb(int extruder) const {
+    if (extruder >= 1 && extruder <= std::max(settings_.extruders, 1))
+        return hex_rgb(filament_color(extruder));
+    for (const ColorMix& m : mixes_)
+        if (m.id == extruder)
+            return hex_rgb(m.color);
+    return theme_.model;
+}
+
 void App::update_color_view() {
     // What it depends on: the plate, the extruders and the colours.
     std::vector<std::string> key{std::to_string(plate_version_), std::to_string(settings_.extruders)};
@@ -13533,14 +13577,7 @@ void App::update_color_view() {
         key.push_back(std::to_string(m.id) + m.color);
     if (key == color_view_key_)
         return;
-    const auto colour_of = [&](int extruder) {
-        if (extruder >= 1 && extruder <= std::max(settings_.extruders, 1))
-            return hex_rgb(filament_color(extruder));
-        for (const ColorMix& m : mixes_)
-            if (m.id == extruder)
-                return hex_rgb(m.color);
-        return theme_.model;
-    };
+    const auto colour_of = [&](int extruder) { return extruder_rgb(extruder); };
     std::map<std::uint32_t, std::vector<float>> by_colour;
     const auto put = [&](std::uint32_t colour, const Vec3f& a, const Vec3f& b, const Vec3f& c, const Vec3f& n) {
         std::vector<float>& v = by_colour[colour];
@@ -13614,7 +13651,10 @@ void App::update_paint_view() {
     const PaintMesh m = paint_cache_.build(objects_, placed_meshes_, paint_channel_);
     std::vector<Renderer::PaintGroup> groups;
     for (const PaintMesh::Group& g : m.groups)
-        groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_mark_block : theme_.paint_mark_enforce)});
+        groups.push_back({g.first, g.count,
+                          vec(paint_channel_ == PaintChannel::Color ? extruder_rgb(g.mark)
+                              : g.mark == kPaintBlock              ? theme_.paint_mark_block
+                                                                   : theme_.paint_mark_enforce)});
     renderer_.set_paint(m.vertices, groups);
     vk_view_.set_paint(m.vertices, groups);
     color_view_key_.clear();
@@ -25710,6 +25750,11 @@ void App::script_input() {
         std::printf("ui-script: expect-occlusion-passes %ld: %s%ld\n", most, passes <= most ? "ok, " : "got ", passes);
         if (passes > most)
             return fail_step(std::to_string(passes) + " were computed");
+        next();
+    } else if (step.verb == "paint-color") { // the Paint tool's colour channel, with extruder or blend N
+        paint_channel_ = PaintChannel::Color;
+        paint_mark_ = std::uint8_t(std::clamp(std::atoi(step.key.c_str()), 1, int(kPaintMaxMark)));
+        paint_dirty_ = true;
         next();
     } else if (step.verb == "paint-drag") { // the mouse down at "x0 y0", in one frame to "x1 y1", up (the Paint tool on)
         float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
