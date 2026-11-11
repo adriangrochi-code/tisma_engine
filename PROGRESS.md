@@ -13436,4 +13436,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   (Prusa por red fuera de PrusaLink, Elegoo, Creality con firmware propio, Flashforge) se agregan a mano, como dice
   `printer_connections.md`. De la interfaz: la lista «En el perfil / En la impresora» y «Leer de la impresora» en
   Límites, y llamar a la búsqueda de Moonraker. Sigue F6 (pedí a la sesión de spec los resultados de caja negra).
+- **F6, línea de base del motor** (2026-11-11 18:50, contenedor de 4 núcleos, sin GPU real: Vulkan es llvmpipe por
+  software). `tisma-engine slice` con los ajustes de fábrica, mediana de 3: Benchy 0,53 s (1 h 33 min estimados,
+  8,19 m de filamento), esfera de 50 mm 0,36 s, cilindro de 128 lados 0,04 s, islas 0,06 s. Con `compute.gpu` `auto`
+  y `off` el G-code es el mismo salvo la línea del ajuste, y el tiempo igual (no hay GPU que ayude). Falta: los
+  números de Tisma Slicer con las mismas piezas y ajustes (pedidos a la sesión de spec) y medir con una GPU real
+  (la PC del dueño).
 
