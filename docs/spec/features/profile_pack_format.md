@@ -117,6 +117,15 @@ archivo de modelo), `variants` (`id` y `nozzle` de cada una) y `default_variant`
    variante (o al primero que sirva, del mismo material) y se avisa «El filamento no servía con esta impresión: se
    cambió a <nombre>».
 5. **Impresión:** además, `nozzle`, la boquilla para la que está hecho, si todas sus impresoras usan la misma.
+6. **Ajustes que cruzan de perfil** (11-11-2026): en los programas de origen, el flujo de los puentes es de la impresión
+   y el volumen de purga por cambio, de la impresora. El paquete los escribe donde venían, y el motor los toma de ahí
+   aunque su grupo sea de otro tipo de perfil:
+   - un perfil de impresión puede traer `extrusion.bridge_flow_ratio`; manda sobre el del filamento (PF7);
+   - un perfil de impresora puede traer `wipe_tower.purge_volumes`; es el valor por defecto, y el de la impresión manda
+     si lo trae (PF8);
+   - `extrusion.type` de un filamento es un ajuste conocido (`docs/CONFIG.md`): se lee, no se avisa «unknown
+     setting» (PF9).
+   Fuera de estas tres claves sigue la regla de `docs/PROFILES.md`: un ajuste de otro tipo se deja afuera con aviso.
 
 ## `compatible.json`
 
@@ -237,3 +246,6 @@ para las impresoras 5 y 9.
 | PF4 | Modelo con `common.settings` y una variante que cambia una clave | El perfil de la variante tiene la clave de la variante y el resto de `common` |
 | PF5 | Filamento con `"compatible": 1` y `sets` `[[0], [2]]` | Se ofrece solo para la impresora 2 |
 | PF6 | Un archivo con `original` lleno | El motor no lo usa: el perfil es el mismo sin ese campo |
+| PF7 | Impresión con `extrusion.bridge_flow_ratio` 0,8 y un filamento sin él | Los puentes salen con flujo 0,8, sin aviso de «filament setting» |
+| PF8 | Impresora MMU con `wipe_tower.purge_volumes` 70; impresión sin él / con 120 | Cada cambio purga 70 mm³ / 120 mm³ |
+| PF9 | Filamento con `extrusion.type` «PLA» | Sin aviso; el tipo queda «PLA» |
