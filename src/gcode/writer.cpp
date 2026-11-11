@@ -2542,6 +2542,21 @@ std::vector<Warning> capability_warnings(const Settings& s) {
                       0.6 * d, 2.5 * d);
         add("line_width", text, w);
     }
+    // Beads under a quarter of the nozzle slice, with a warning (perimeters.md,
+    // rule 8, P15); check_settings refuses those no thicker than their layer.
+    for (const auto& [key, width] : std::initializer_list<std::pair<const char*, double>>{
+             {"walls.width", s.wall_width},
+             {"walls.outer_width", s.outer_wall_width},
+             {"infill.width", s.infill_width},
+             {"surfaces.solid_width", s.solid_width},
+             {"surfaces.top_width", s.top_width},
+             {"support.width", s.support_width.value > 0.0 ? s.support_width.of(s.layer_height) : 0.0},
+             {"layers.first_line_width", s.first_line_width.value > 0.0 ? s.first_line_width.of(s.first_layer_height) : 0.0}})
+        if (width > 0.0 && width < 0.25 * s.nozzle_diameter) {
+            std::snprintf(text, sizeof text, "%s: %.3g mm is a very thin line for a %.3g mm nozzle", key, width,
+                          s.nozzle_diameter);
+            add("line_width_thin", text, width);
+        }
     // Wavy infill asked, with an infill whose lines move from layer to layer
     // or sit too close: it stays flat, and says so.
     // The zigzag's moves in Z slowed to a stock Z when the profile gives no
@@ -3601,8 +3616,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {
             if (over_raft)
-                v = std::min(v, s.first_layer_over_raft.value > 0.0 ? s.first_layer_over_raft.of(v) : s.first_layer_speed);
-            return capped(first ? std::min(v, s.first_layer_speed) : v) * a.speed;
+                v = std::min(v, s.first_layer_over_raft.value > 0.0 ? s.first_layer_over_raft.of(v) : first_layer_of(s, v));
+            return capped(first ? first_layer_of(s, v) : v) * a.speed;
         };
         // The fills' feeds; the first layer's solid infill at its own speed,
         // past speed.first_layer (speeds_accels.md, rule 3).
@@ -3939,9 +3954,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             const std::vector<Toolpath>& skirt = model.sequential ? model.objects[object_of[l]].skirt : model.skirt;
             const std::vector<Toolpath>& brim = model.sequential ? model.objects[object_of[l]].brim : model.brim;
             if (first_group && (local(l) < std::size_t(std::max(s.skirt_layers, 0)) || s.draft_shield == DraftShield::Enabled))
-                group(skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
+                group(skirt, "Skirt/Brim", capped(first_layer_of(s, s.wall_speed)) * a.speed, SeamMode::Nearest);
             if (first_group && local(l) == 0)
-                group(brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
+                group(brim, "Skirt/Brim", capped(first_layer_of(s, s.wall_speed)) * a.speed, SeamMode::Nearest);
             // Every island is finished before the next, the nearest one first. In an
             // island: walls from the inside out, the outer wall (bead 0) last, each
             // bead index in nearest order; then the fills, one kind after the other.

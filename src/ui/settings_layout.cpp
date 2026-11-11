@@ -671,7 +671,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                : s.infill_nonplanar ? format(T::SumMm, number(s.infill_nonplanar_wavelength).c_str())
                                     : tr(T::SumOff);
     if (id == "first_layer")
-        return format(T::SumSpeed, speed_text(s.first_layer_speed).c_str());
+        return s.first_layer_speed_percent ? number(s.first_layer_speed, 0) + " %"
+                                           : format(T::SumSpeed, speed_text(s.first_layer_speed).c_str());
     if (id == "walls_surfaces")
         return format(T::SumWallSpeed, speed_unit(s.wall_speed).c_str(),
                       s.outer_wall_speed.percent ? (number(s.outer_wall_speed.value, 0) + " %").c_str()

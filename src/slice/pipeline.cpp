@@ -240,6 +240,12 @@ double outer_bead(const Settings& settings) {
     return settings.outer_wall_width > 0.0 ? settings.outer_wall_width : 1.125 * settings.nozzle_diameter;
 }
 
+// support.xy_gap in mm, a percentage being of the outer wall's bead
+// (supports_skirt.md, settings table and rule 2): 0.225 mm with a 0.45 one.
+double support_xy_gap(const Settings& settings) {
+    return settings.support_xy_gap.of(outer_bead(settings));
+}
+
 // The walls of a region, `count` of them, by the settings' generator.
 LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
     if (settings.wall_generator == WallGenerator::Fixed)
@@ -826,6 +832,26 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                     part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {},
                                     o.wipe_into_infill, o.wipe_into_object};
                 append_object(out, std::move(part), std::move(object));
+            }
+            // One skirt round them all, printed once, with the first object's
+            // first layer (sequential.md, rule 5); a draft shield, which goes
+            // up to the top, stays round each object.
+            if (out.objects.size() > 1 && settings.draft_shield != DraftShield::Enabled) {
+                Polygons first_layers;
+                bool raft = false;
+                for (const SlicedObject& o : out.objects) {
+                    const Polygons& r = out.regions[o.first_layer];
+                    first_layers.insert(first_layers.end(), r.begin(), r.end());
+                    raft = raft || o.raft_layers > 0;
+                }
+                first_layers = Clipper2Lib::Union(first_layers, Clipper2Lib::FillRule::NonZero);
+                AdhesionShape shape = adhesion_shape(settings);
+                if (raft)
+                    shape.brim_width = 0.0; // no brim on a raft (skirt_brim_raft.md, rule 9)
+                const Layer& first = out.layers[out.objects.front().first_layer];
+                out.objects.front().skirt = skirt_loops(first_layers, shape, first_bead(settings), first.top - first.bottom);
+                for (std::size_t k = 1; k < out.objects.size(); ++k)
+                    out.objects[k].skirt.clear();
             }
             if (!out.objects.empty()) { // the skirt and brim of the first, for what reads them from the model
                 out.skirt = out.objects.front().skirt;
@@ -1738,7 +1764,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                    : sp.z_gap_layers;
         sp.buildplate_only = settings.support_buildplate_only;
         sp.under_bridges = settings.support_under_bridges;
-        sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
+        sp.xy_gap = support_xy_gap(settings);
         // snug: fitted to what hangs, its gaps closed by support.closing_radius
         // (supports_more.md, rule 14).
         sp.margin = settings.support_style == SupportStyle::Snug ? 0.0 : kSupportMargin;
@@ -1827,7 +1853,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             return;
         // The support keeps support.xy_gap off the part: that much and a bead
         // more of what hangs still lies over it.
-        const double xy_gap = settings.support_xy_gap.of(settings.wall_width);
+        const double xy_gap = support_xy_gap(settings);
         Polygons on = Clipper2Lib::Intersect(
             Clipper2Lib::Difference(out.regions[l], held[l - 1], Clipper2Lib::FillRule::NonZero),
             offset(support_at[top], xy_gap + settings.wall_width), Clipper2Lib::FillRule::NonZero);

@@ -1,4 +1,5 @@
 #include "config/settings.hpp"
+#include "gcode/writer.hpp"
 #include "geom/polygons.hpp"
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -362,6 +363,10 @@ TEST_CASE("bad settings name the key", "[settings]") {
     // The XY gap is half the wall width by default (supports_skirt.md, rule 2).
     CHECK(Settings{}.support_xy_gap == Speed{50.0, true});
     CHECK(parse_settings(R"({"support": {"xy_gap": "75%"}})").support_xy_gap == Speed{75.0, true});
+    // A percentage is of the outer wall's bead, not walls.width (supports_skirt.md).
+    const Settings outer = parse_settings(R"({"walls": {"width": 0.45, "outer_width": 0.6}, "support": {"xy_gap": "50%"}})");
+    CHECK_THAT(support_xy_gap(outer), WithinAbs(0.30, 1e-9));
+    CHECK_THAT(support_xy_gap(parse_settings(R"({"support": {"xy_gap": 0.8}})")), WithinAbs(0.8, 1e-9));
     CHECK_THROWS_WITH(parse_settings(R"({"support": {"xy_gap": "75"}})"), ContainsSubstring("support.xy_gap: must be"));
     CHECK(parse_settings(R"({"support": {"line_angle": 45}})").support_line_angle == 45.0);
     const Settings sl = parse_settings(R"({"support": {"spacing": 3, "interface_layers": 2}, "speed": {"support": 60}})");
@@ -608,10 +613,11 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
         check_settings(parse_settings(R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 9}, "walls": {"width": 9}})")),
         ContainsSubstring("thicker than 8 mm"));
     // The first layer's bead too (the spec team's BH1): 20 mm on a 0.4 nozzle
-    // spilt past the skirt; 1.6 mm, four nozzles, is the most.
+    // spilt past the skirt; 1.2 mm, three nozzles, is the most (perimeters.md, rule 8).
     CHECK_THROWS_WITH(check_settings(parse_settings(R"({"layers": {"first_line_width": 20}})")),
                       ContainsSubstring("layers.first_line_width: 20 mm cannot come out of a 0.4 mm nozzle"));
-    CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 1.6}})")));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 1.2}})")));
+    CHECK_THROWS(check_settings(parse_settings(R"({"layers": {"first_line_width": 1.3}})")));
     CHECK_THROWS(check_settings(parse_settings(R"({"layers": {"first_line_width": "1000%"}})")));
     CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 0}})")));
     // The other beads too (the spec team's BH5).
@@ -625,6 +631,28 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
     CHECK_THROWS(check_settings(parse_settings(R"({"walls": {"min_line_width": "500%"}})")));
     CHECK_NOTHROW(check_settings(parse_settings(R"({"walls": {"min_line_width": 0}})")));
     CHECK_NOTHROW(check_settings(parse_settings(R"({"walls": {"min_line_width": "150%"}})")));
+}
+
+TEST_CASE("bead widths: above the layer's height, up to three nozzles; thin ones warn (perimeters.md, rule 8, P15)",
+          "[settings]") {
+    // P15: a 0.6 nozzle (a quarter is 0.15 mm), 0.12 mm layers: 0.133 mm walls
+    // slice with the warning; 0.11, under the layer's height, are refused.
+    Settings s = parse_settings(
+        R"({"machine": {"nozzle_diameter": 0.6}, "layers": {"height": 0.12, "first_height": 0.12}, "walls": {"width": 0.133}})");
+    CHECK_NOTHROW(check_settings(s));
+    const std::vector<Warning> warnings = capability_warnings(s);
+    const auto thin = std::find_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "line_width_thin"; });
+    REQUIRE(thin != warnings.end());
+    CHECK_THAT(thin->message, ContainsSubstring("walls.width: 0.133 mm is a very thin line for a 0.6 mm nozzle"));
+    s = parse_settings(
+        R"({"machine": {"nozzle_diameter": 0.6}, "layers": {"height": 0.12, "first_height": 0.12}, "walls": {"width": 0.11}})");
+    CHECK_THROWS_WITH(check_settings(s), ContainsSubstring("walls.width: 0.11 mm cannot come out of a 0.6 mm nozzle"));
+    // A usual width warns of nothing thin; three nozzles is the most.
+    s = parse_settings(R"({"walls": {"width": 0.45}})");
+    for (const Warning& w : capability_warnings(s))
+        CHECK(w.kind != "line_width_thin");
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"walls": {"width": 1.2}})")));
+    CHECK_THROWS(check_settings(parse_settings(R"({"walls": {"width": 1.21}})")));
 }
 
 TEST_CASE("extrusion.flow_by_speed and extrusion.section (pellets.md, rules 4 and 5)", "[settings]") {
