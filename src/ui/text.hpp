@@ -1516,6 +1516,8 @@
     X(DesignNavBodies, "Cuerpos", "Bodies") \
     X(DesignNavConstruction, "Construcción", "Construction") \
     X(DesignNavPlaneTip, "Un clic empieza un boceto en este plano", "A click starts a sketch on this plane") \
+    X(DesignTipSearch, "Busca una herramienta por su nombre; Enter empieza la primera.", "Finds a tool by its name; Enter starts the first one.") \
+    X(DesignSearchNothing, "Ninguna herramienta se llama así", "No tool by that name") \
     X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \
     X(DesignTimelineWaits, "Después de la marca: espera", "After the marker: waiting") \
     X(DesignTimelineSuppress, "Suprimir", "Suppress") \

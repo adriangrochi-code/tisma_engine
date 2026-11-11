@@ -13367,3 +13367,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   debajo hasta que los cuadros flotantes (11 quinquies) lo reemplacen.
 - **Pruebas:** pasan las 31 de Diseño; captura revisada.
 
+## 2026-11-11 — interfaz: buscar herramienta en Diseño (cad_design.md, regla 11 octies; CD29)
+
+- **Hecho:** la tecla S (o Utilidades › Buscar herramienta) abre un buscador arriba de la vista: filtra todas las
+  herramientas de la barra al escribir (sin distinguir mayúsculas ni tildes), con su ícono; Enter empieza la primera
+  que se puede usar. Falta fijar las más usadas a la barra.
+- **Pruebas:** `design_tool_search.txt` (CD29: «redo» muestra Redondeo y no Chaflán; Enter la empieza y pide las
+  aristas); pasan las 32 de Diseño.
+

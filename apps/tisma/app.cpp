@@ -620,6 +620,8 @@ private:
     void design_timeline();
     std::size_t design_rollback_ = SIZE_MAX;
     int timeline_menu_ = -1;
+    bool tool_search_open_ = false; // the tool search (rule 11 octies, CD29)
+    char tool_search_[64] = "";
     float view_top_inset_ = 0.0f;  // what the toolbar takes from the view's top, this frame
     void design_command_line();
     void run_command(std::string text);
@@ -15490,7 +15492,12 @@ void App::design_toolbar() {
                     {Group{T::DesignGroupInspect, "design_group_inspect", 2,
                            {soon("design_measure_tool", "measure", T::DesignMeasureTool), soon("design_section", "section", T::DesignSectionTool)}}}});
     tabs.push_back({T::DesignTabUtilities,
-                    {Group{T::DesignGroupUtilities, "design_group_utilities", 1, {soon("design_tool_search", "search", T::DesignToolSearch)}}}});
+                    {Group{T::DesignGroupUtilities, "design_group_utilities", 1,
+                           {{"design_tool_search", "search", tr(T::DesignToolSearch), tr(T::DesignTipSearch), "S", true, false,
+                             [this] { tool_search_open_ = true, tool_search_[0] = 0; }}}}}});
+    // S opens the tool search (rule 11 octies), when no field takes the keys.
+    if (plate_keys() && !ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false) && !tool_search_open_)
+        tool_search_open_ = true, tool_search_[0] = 0;
     // A sketch opens its tab; leaving it, back to Sólido.
     static bool was_sketching = false;
     if (sketching && !was_sketching)
@@ -15615,6 +15622,71 @@ void App::design_toolbar() {
             }
             ImGui::EndPopup();
         }
+    }
+    // The tool search: what is typed filters every tool by its name; Enter
+    // starts the first one that can be used (CD29).
+    if (tool_search_open_) {
+        ImGui::OpenPopup("##tool_search");
+        tool_search_open_ = false;
+        ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + 120.0f * scale_), ImGuiCond_Always,
+                                ImVec2(0.5f, 0.0f));
+    }
+    if (ImGui::BeginPopup("##tool_search")) {
+        const auto folded = [](std::string text) {
+            std::string out;
+            for (std::size_t i = 0; i < text.size(); ++i) {
+                const unsigned char ch = static_cast<unsigned char>(text[i]);
+                if (ch == 0xC3 && i + 1 < text.size()) { // á é í ó ú ñ and their capitals, as plain letters
+                    const unsigned char n = static_cast<unsigned char>(text[++i]);
+                    const char* plain = "aaaaaaaceeeeiiiidnooooo/ouuuuyty";
+                    out += (n >= 0x80 && n < 0xA0) ? char(std::tolower(static_cast<unsigned char>(plain[n - 0x80])))
+                           : (n >= 0xA0 && n < 0xC0) ? plain[n - 0xA0] : '?';
+                } else {
+                    out += char(std::tolower(ch));
+                }
+            }
+            return out;
+        };
+        ImGui::SetNextItemWidth(260.0f * scale_);
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        const bool enter = ImGui::InputTextWithHint("##search", tr(T::DesignToolSearch), tool_search_, sizeof tool_search_,
+                                                    ImGuiInputTextFlags_EnterReturnsTrue);
+        note_rect("design_tool_search_field");
+        const std::string want = folded(tool_search_);
+        const Tool* first = nullptr;
+        int shown = 0;
+        for (const auto& [tab, tab_groups] : tabs)
+            for (const Group& grp : tab_groups)
+                for (const Tool& tool : grp.tools) {
+                    if (tool.id == "design_tool_search" || (!want.empty() && folded(tool.label).find(want) == std::string::npos) ||
+                        shown >= 12)
+                        continue;
+                    ++shown;
+                    if (!first && tool.ready)
+                        first = &tool;
+                    ImGui::PushID(tool.id.c_str());
+                    const ImVec2 at = ImGui::GetCursorScreenPos();
+                    const float small = ImGui::GetFrameHeight();
+                    const bool hit = ImGui::Selectable("##found", first == &tool, tool.ready ? 0 : ImGuiSelectableFlags_Disabled,
+                                                       ImVec2(260.0f * scale_, small));
+                    note_rect("design_found_" + tool.id.substr(std::min<std::size_t>(7, tool.id.size())));
+                    cad_icon(ImGui::GetWindowDrawList(), tool.icon, ImVec2(at.x + 2.0f, at.y + 2.0f), small - 4.0f, tool.ready ? ink : dim);
+                    ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + small + 8.0f * scale_, at.y + (small - ImGui::GetFontSize()) * 0.5f),
+                                                        tool.ready ? ink : dim, tool.label.c_str());
+                    ImGui::PopID();
+                    if (hit && tool.ready) {
+                        chosen = tool.act;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+        if (shown == 0)
+            loc::TextDisabled("%s", tr(T::DesignSearchNothing));
+        if (enter && first) {
+            chosen = first->act;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
     view_top_inset_ = ImGui::GetWindowSize().y;
     g_menu_rects["design_toolbar"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
