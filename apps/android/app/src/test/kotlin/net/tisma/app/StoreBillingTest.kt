@@ -44,7 +44,11 @@ class StoreBillingTest {
     private class FakePlay(var owned: List<StorePurchase> = emptyList()) : StoreBilling {
         override val store = "google_play"
         val bought = mutableListOf<String>()
-        override suspend fun buy(productId: String): StorePurchase { bought += productId; return StorePurchase(store, productId, purchaseToken = "ok-$productId") }
+        val tokens = mutableListOf<String>()
+        override suspend fun buy(productId: String, accountToken: String): StorePurchase {
+            bought += productId; tokens += accountToken
+            return StorePurchase(store, productId, purchaseToken = "ok-$productId")
+        }
         override suspend fun active() = owned
     }
 
@@ -67,6 +71,9 @@ class StoreBillingTest {
         compose.onNodeWithTag("plan_buy_Pro").performScrollTo().performClick()
         until { vm.state.value.account?.plan == "Pro" }
         assertEquals(listOf("pro_month"), play.bought)
+        // The store is told which account buys (df50c4e).
+        assertEquals(listOf(vm.state.value.account!!.purchaseAccountToken), play.tokens)
+        kotlin.test.assertTrue(play.tokens.single().startsWith("acct-"))
         assertEquals("google_play", vm.state.value.account?.subscription?.store)
     }
 

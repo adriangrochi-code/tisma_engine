@@ -32,6 +32,8 @@ data class Account(
     val hasPassword: Boolean = true,
     /** cloud.md 5c: the store subscription that gives the plan, or null. */
     val subscription: Subscription? = null,
+    /** cloud.md 5c (df50c4e): given to the store when buying (Play's obfuscatedAccountId, StoreKit's appAccountToken). */
+    val purchaseAccountToken: String = "",
 ) {
     companion object {
         fun from(o: JsonObject) = Account(
@@ -48,6 +50,7 @@ data class Account(
             remotePrinters = o.number("remote_printers").toInt(),
             hasPassword = (o["has_password"] as? JsonPrimitive)?.booleanOrNull ?: true,
             subscription = (o["subscription"] as? JsonObject)?.let(Subscription::from),
+            purchaseAccountToken = o.text("purchase_account_token"),
         )
     }
 }

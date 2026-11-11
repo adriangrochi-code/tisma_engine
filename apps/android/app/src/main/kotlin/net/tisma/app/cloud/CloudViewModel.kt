@@ -142,7 +142,9 @@ class CloudViewModel(
         val b = billing ?: return
         val product = plan.storeProducts[b.store] ?: return
         viewModelScope.launch {
-            val proof = runCatching { b.buy(product) }.onFailure { AppLog.line("store: ${it.message}") }.getOrNull() ?: return@launch
+            // The store's proof must name this account (df50c4e): without the token, no purchase is started.
+            val token = state.value.account?.purchaseAccountToken?.takeIf { it.isNotBlank() } ?: return@launch
+            val proof = runCatching { b.buy(product, token) }.onFailure { AppLog.line("store: ${it.message}") }.getOrNull() ?: return@launch
             send(proof)
         }
     }
@@ -478,8 +480,11 @@ class CloudViewModel(
 interface StoreBilling {
     /** `google_play`, `app_store` or `microsoft_store`. */
     val store: String
-    /** Buys [productId] in the store's own sheet; the proof, or null when the person cancelled. */
-    suspend fun buy(productId: String): net.tisma.cloud.StorePurchase?
+    /**
+     * Buys [productId] in the store's own sheet, tied to [accountToken] (the account's `purchase_account_token`, so the
+     * store's proof names the account); the proof, or null when the person cancelled.
+     */
+    suspend fun buy(productId: String, accountToken: String): net.tisma.cloud.StorePurchase?
     /** The store's active purchases of this app, sent again at sign-in («restaurar compras»). */
     suspend fun active(): List<net.tisma.cloud.StorePurchase>
 }

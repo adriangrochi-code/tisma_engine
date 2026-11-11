@@ -413,6 +413,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
             put("unlimited", false)
             put("remote_printers", if (p.name == "Pro") 3 else 0)
             put("has_password", true)
+            put("purchase_account_token", "acct-" + a.email.hashCode().toUInt().toString(16))
             val sub = a.subscription
             if (sub == null) put("subscription", null as String?) else put("subscription", buildJsonObject {
                 put("store", sub.first); put("product_id", sub.second); put("expires", sub.third); put("auto_renew", true)

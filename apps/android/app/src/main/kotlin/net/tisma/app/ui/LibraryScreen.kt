@@ -203,7 +203,7 @@ private fun EntryDetail(entry: Library.Entry, lib: LibraryViewModel, slice: Slic
         item {
             Text(stringResource(R.string.library_printed_title), style = MaterialTheme.typography.labelLarge)
             entry.printed.forEach { p ->
-                Text(listOf(p.date, p.note).filter { it.isNotBlank() }.joinToString(" · ") +
+                Text(listOf(printedDay(p.date), p.note).filter { it.isNotBlank() }.joinToString(" · ") +
                     (if (p.photo.isNotBlank()) " · 📷" else ""), style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.testTag("library_printed_line"))
             }
@@ -263,3 +263,11 @@ private fun copyIn(context: android.content.Context, uri: Uri, folder: String = 
     context.contentResolver.openInputStream(uri)?.use { i -> f.outputStream().use { i.copyTo(it) } } ?: return null
     f
 }.getOrNull()
+
+/**
+ * «La imprimí»'s day as the person reads it (dd-MM-yyyy). local_library.md: the engine keeps AAAA-MM-DD; entries
+ * made before also have the time (2026-11-10T13:05:22Z), shown as their day. Anything else is shown as it is.
+ */
+internal fun printedDay(date: String): String =
+    runCatching { java.time.LocalDate.parse(date.trim().take(10)).format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy")) }
+        .getOrDefault(date)
