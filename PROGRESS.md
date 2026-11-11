@@ -12296,7 +12296,7 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | Actualizaciones de la app | Revisado 10-11 | Tamaño sin tope y huella en mayúsculas (18d78d2) |
 | Secretos (Keystore) | Revisado 10-11 | Un error pasajero borraba los códigos (735dccf) |
 | Ayuda sin conexión, glosario, materiales | Pendiente | |
-| CAD (SolidCraft) y Piezas | Revisado 11-11 (Piezas) | Un campo con valor entero por defecto (módulo 1) cortaba 1,5 a 1 y no daba coma en el teclado (`SpecNumberTest`); CAD: pendiente |
+| CAD (SolidCraft) y Piezas | Revisado 11-11 | Un campo con valor entero por defecto (módulo 1) cortaba 1,5 a 1 y no daba coma en el teclado (`SpecNumberTest`); CAD y panel: sin signo menos en el teclado no se podían escribir negativos, ahora botón ± (`SettingsPanelTest`) |
 | Calibraciones | Revisado 11-11 | Un rango completado en parte usaba el de siempre sin avisar; valores con punto en castellano (`CalibrationRangeTest`) |
 | Preferencias, créditos, visión de color | Revisado 11-11 (servidor) | Cambiar el servidor dejaba las secuencias de Compartida del anterior: la lista nueva se rechazaba para siempre (`BlockListTest`); créditos y visión de color: pendiente |
 | Giro de pantalla y muerte del proceso a mitad de laminar/subir | Revisado 11-11 | Cada giro volvía a Biblioteca y volvía a abrir el archivo compartido (4fc27df, `ShareTest`); tras la muerte del proceso la placa volvía vacía (`ProcessDeathTest`) |
