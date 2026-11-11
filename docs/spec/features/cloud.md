@@ -79,6 +79,10 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
     - el servidor la verifica con la tienda antes de dar el plan: 402 «The store did not confirm this purchase» si la
       tienda no la confirma, 409 «This purchase belongs to another account» si ya está en otra cuenta (una compra vale
       para una sola cuenta), 422 si falta un campo. La misma compra mandada dos veces da la misma respuesta;
+    - además: 404 si esa tienda no está configurada en el servidor, y 503 con `Retry-After` si la tienda no responde (la
+      app reintenta después, sin perder la compra); 402 también si la tienda confirma otro producto que el dicho;
+    - Microsoft Store: antes de comprar, la app pide `GET /v1/billing/microsoft/ticket` (con sesión) y recibe el
+      permiso y el `publisher_user_id` con que crea la `store_id_key`;
     - después, el servidor sigue los avisos de la tienda (Google Play: notificaciones en tiempo real; App Store:
       notificaciones del servidor, versión 2) y cambia el plan y el vencimiento de la cuenta al renovar, vencer,
       cancelar o reembolsar, sin la app;
