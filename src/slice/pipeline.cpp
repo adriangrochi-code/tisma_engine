@@ -928,11 +928,79 @@ void gradient_in_plane(SlicedModel& model, const ColorMix& mix, const std::vecto
     });
 }
 
+// A gradient between two points (color_mixing_plus.md, rule 3, MX31; own
+// design for the bands): its points from the part's coordinates to the
+// plate's (X and Y from the middle of what prints with the blend, beads'
+// half widths included; Z from its first layer's bottom). Each layer cut in
+// bands across the line's XY direction, about 5 mm a band (2 to 11), each
+// band with the blend at its middle and, outside the line, the nearer end's.
+// Nearly vertical: false, and the blend is left a gradient in Z.
+bool gradient_between(SlicedModel& model, ColorMix& mix, const std::vector<char>& present) {
+    double x0 = std::numeric_limits<double>::infinity(), x1 = -x0, y0 = x0, y1 = -x0;
+    std::size_t first = model.layers.size();
+    part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
+        for (const Toolpath& t : paths)
+            if (t.tool == mix.id)
+                for (const ToolpathPoint& q : t.points) {
+                    x0 = std::min(x0, q.p.x - q.width / 2), x1 = std::max(x1, q.p.x + q.width / 2);
+                    y0 = std::min(y0, q.p.y - q.width / 2), y1 = std::max(y1, q.p.y + q.width / 2);
+                    first = std::min(first, l);
+                }
+    });
+    if (first >= model.layers.size())
+        return true;
+    const std::array<double, 3> base{(x0 + x1) / 2, (y0 + y1) / 2, model.layers[first].bottom};
+    std::array<double, 3> f{}, d{};
+    for (int i = 0; i < 3; ++i)
+        f[std::size_t(i)] = (*mix.from)[std::size_t(i)] + base[std::size_t(i)],
+        d[std::size_t(i)] = (*mix.to)[std::size_t(i)] - (*mix.from)[std::size_t(i)];
+    const double xy = std::hypot(d[0], d[1]), len2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    if (!(len2 > 0.0))
+        return true;
+    if (xy < 0.1 * std::abs(d[2])) { // nearly vertical: in Z between the two heights
+        mix.min_z = std::min(f[2], f[2] + d[2]);
+        mix.max_z = std::max(f[2], f[2] + d[2]);
+        if (d[2] < 0.0)
+            for (ColorMix::Component& c : mix.components)
+                c.share = 1.0 - c.share;
+        mix.from.reset(), mix.to.reset();
+        return false;
+    }
+    const double ux = d[0] / xy, uy = d[1] / xy;
+    const int bands = std::clamp(int(std::lround(len2 / xy / 5.0)), 2, 11);
+    const double band = len2 / (bands * xy); // mm along (ux, uy) a band of the line takes
+    // Band 0 and the last are the ends, past the line.
+    std::vector<std::vector<int>> cycles{gradient_cycle(mix, 0.0)};
+    for (int b = 0; b < bands; ++b)
+        cycles.push_back(gradient_cycle(mix, (b + 0.5) / bands));
+    cycles.push_back(gradient_cycle(mix, 1.0));
+    part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
+        if (l >= present.size() || !present[l])
+            return;
+        const double z = 0.5 * (model.layers[l].bottom + model.layers[l].top);
+        const double start = f[0] * ux + f[1] * uy - d[2] * (z - f[2]) / xy; // where the line's 0 is on this layer
+        std::vector<Toolpath> out;
+        for (Toolpath& t : paths) {
+            if (t.tool != mix.id) {
+                out.push_back(std::move(t));
+                continue;
+            }
+            for (auto& [b, piece] : split_along(t, ux, uy, start - band, band, bands + 2)) {
+                const std::vector<int>& c = cycles[std::size_t(b)];
+                piece.tool = std::uint8_t(c[(l - std::min(first, l)) % c.size()]);
+                out.push_back(std::move(piece));
+            }
+        }
+        paths = std::move(out);
+    });
+    return true;
+}
+
 void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
     // Each layer's filament from the blends already laid, for the next
     // blend's cycle to agree with where it can (rule 39).
     std::vector<int> laid(model.layers.size(), 0);
-    for (const ColorMix& mix : mixes) {
+    for (ColorMix mix : mixes) {
         const ShellMoved shell = mix_shell(model, mix, settings);
         std::vector<char> present(model.layers.size(), 0);
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
@@ -942,6 +1010,8 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
         if (std::none_of(present.begin(), present.end(), [](char c) { return c != 0; }))
             continue;
         model.blended = true;
+        if (mix.gradient && mix.from && mix.to && gradient_between(model, mix, present))
+            continue;
         if (mix.gradient && (mix.axis == 'x' || mix.axis == 'y')) {
             gradient_in_plane(model, mix, present);
             continue;

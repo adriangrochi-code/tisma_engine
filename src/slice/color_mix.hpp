@@ -35,6 +35,12 @@ struct ColorMix {
     // A gradient's axis (color_mixing_plus.md, rule 3): 'z', 'x' or 'y'. In X
     // or Y each band of the layer, across the blend's paths, takes its blend.
     char axis = 'z';
+    // A gradient between two points (rule 3, MX31): start and end in the
+    // part's coordinates (mm; X and Y from the middle of what prints with the
+    // blend, Z from its bottom). Each place takes its projection on the line,
+    // 0 at the start, 1 at the end, the nearer end outside; nearly vertical
+    // (under 1 mm in XY per 10 mm in Z), a gradient in Z.
+    std::optional<std::array<double, 3>> from, to;
     struct Component {
         int extruder = 1;
         double share = 0.0; // a ratio, or a gradient's position
@@ -105,7 +111,8 @@ bool mix_usable(const ColorMix& mix, int extruders);
 // "physical_extruders": [{"id", "color"}], "virtual_extruders": [{"id",
 // "kind": "fullspectrum" or "gradient", "color", "components": [{"extruder",
 // "ratio"}] or, for a gradient, [{"extruder", "position"}], "minz", "maxz" and
-// "axis" ("x", "y"; "z" when left out, rule 3)}]}.
+// "axis" ("x", "y"; "z" when left out, rule 3), or "from" and "to" ([x, y, z],
+// MX31)}]}.
 // color_mixing_plus.md (rule 30) adds "kind": "pattern" with "pattern": [1,
 // 1, 2], and "enabled", "name" and "bias", written only when they are not
 // the default, so a project of ratio blends is written as before.
@@ -215,6 +222,9 @@ std::vector<int> gradient_cycle(const ColorMix& mix, double at);
 // as open pieces (the last joined to the first when both are in one band); a
 // loop inside one band stays a loop.
 std::vector<std::pair<int, Toolpath>> split_by_bands(const Toolpath& path, int axis, double lo, double band, int bands);
+// The same along any direction of the plane: the coordinate is x·ux + y·uy.
+std::vector<std::pair<int, Toolpath>> split_along(const Toolpath& path, double ux, double uy, double lo, double band,
+                                                  int bands);
 
 // The quick palette (color_mixing_plus.md, rule 22, MX18): one sample per
 // filament, then every blend of 2 and of 3 filaments whose cycle has at most

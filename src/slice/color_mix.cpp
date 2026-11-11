@@ -126,10 +126,15 @@ std::vector<int> gradient_cycle(const ColorMix& mix, double at) {
 }
 
 std::vector<std::pair<int, Toolpath>> split_by_bands(const Toolpath& path, int axis, double lo, double band, int bands) {
+    return split_along(path, axis == 1 ? 0.0 : 1.0, axis == 1 ? 1.0 : 0.0, lo, band, bands);
+}
+
+std::vector<std::pair<int, Toolpath>> split_along(const Toolpath& path, double ux, double uy, double lo, double band,
+                                                  int bands) {
     std::vector<std::pair<int, Toolpath>> out;
     if (path.points.empty() || !(band > 0.0) || bands < 1)
         return out;
-    const auto coord = [&](const ToolpathPoint& q) { return axis == 1 ? q.p.y : q.p.x; };
+    const auto coord = [&](const ToolpathPoint& q) { return q.p.x * ux + q.p.y * uy; };
     const auto band_of = [&](double v) { return std::clamp(int(std::floor((v - lo) / band)), 0, bands - 1); };
     std::vector<ToolpathPoint> points = path.points;
     if (path.closed && points.size() > 1)
@@ -403,6 +408,16 @@ std::vector<ColorMix> parse_color_mixes(std::string_view text) {
                 fail("a gradient's axis is \"x\", \"y\" or \"z\"");
             mix.axis = a.get<std::string>()[0];
         }
+        for (const char* key : {"from", "to"})
+            if (mix.gradient && v.contains(key)) {
+                const json& a = v.at(key);
+                if (!a.is_array() || a.size() != 3 || !std::all_of(a.begin(), a.end(), [](const json& n) { return n.is_number(); }))
+                    fail(std::string("a gradient's \"") + key + "\" is [x, y, z] in mm");
+                (std::string_view(key) == "from" ? mix.from : mix.to) =
+                    std::array<double, 3>{a[0].get<double>(), a[1].get<double>(), a[2].get<double>()};
+            }
+        if (mix.from.has_value() != mix.to.has_value())
+            fail("a gradient between two points needs both \"from\" and \"to\"");
         for (const char* key : {"minz", "maxz"})
             if (v.contains(key) && v.at(key).is_number())
                 (std::string_view(key) == "minz" ? mix.min_z : mix.max_z) = v.at(key).get<double>();
@@ -448,6 +463,10 @@ std::string color_mixes_json(const std::vector<ColorMix>& mixes, const std::vect
             v["bias"] = m.bias;
         if (m.gradient && m.axis != 'z')
             v["axis"] = std::string(1, m.axis);
+        if (m.gradient && m.from && m.to) {
+            v["from"] = {(*m.from)[0], (*m.from)[1], (*m.from)[2]};
+            v["to"] = {(*m.to)[0], (*m.to)[1], (*m.to)[2]};
+        }
         if (m.min_z)
             v["minz"] = *m.min_z;
         if (m.max_z)

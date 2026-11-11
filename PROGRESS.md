@@ -12740,6 +12740,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   IPv4 y `::ffff:a.b.c.d`, por dirección como antes. Huella = SHA-256(sal del día + texto); texto IPv6 = la red en
   RFC 5952 (comprimida, minúsculas) + «/64» (`2800:A4:1234:5600:abcd::9` → «2800:a4:1234:5600::/64»); IPv4 =
   «200.40.10.7». Exacto, para coincidir con el servidor.
+- **Full Spectrum, regla 3: degradé entre dos puntos (MX31)** (2026-11-11). `ColorMix::from`/`to` (`"from"`, `"to"` en
+  el JSON, en mm de la pieza: X e Y desde el centro de lo que imprime con la mezcla, con el medio ancho de los cordones;
+  Z desde su primera capa). `gradient_between` en `apply_mixes`: la proporción es la proyección sobre la recta, recortada
+  a 0..1; en cada capa, franjas de unos 5 mm (2 a 11) perpendiculares a la recta en XY con `split_along` (el corte de
+  `split_by_bands` en cualquier dirección), más una franja en cada extremo para lo de fuera del tramo; casi vertical
+  (< 1 mm en XY por 10 mm en Z) pasa a degradé en Z entre las dos alturas. Prueba `[mixing]` MX31: cubo de 20 mm de
+  (−10, −10, 0) a (10, 10, 20): esquina de abajo con más del triple de 1, de arriba con más del triple de 2, la capa del
+  medio con los dos; (0, 0, 0) a (0, 0, 20) igual que el degradé en Z; JSON de ida y vuelta; G-code verificado. Falta:
+  el estimado de cambios para este degradé (lo cuenta como en Z) y los puntos en la interfaz.
 - **Full Spectrum, regla 3: degradé en X o Y** (2026-11-11, bloque nocturno). `ColorMix::axis` ('z', 'x', 'y';
   `"axis"` en el JSON, escrito solo si no es Z). En `apply_mixes`, `gradient_in_plane`: franjas de unos 5 mm (de 2 a
   11) a lo largo del eje sobre los caminos de la mezcla; `split_by_bands` corta cada camino en los bordes (interpola

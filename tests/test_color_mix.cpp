@@ -1316,3 +1316,48 @@ TEST_CASE("color mixing plus: a gradient in X takes its bands from the part's si
     o.extent = 22.6;
     CHECK(mix_changes_estimate(g, 10.0, o) == counted);
 }
+
+TEST_CASE("color mixing plus: a gradient between two points of the part (rule 3, MX31)", "[mixing]") {
+    // MX31: a 20 mm cube, from (-10, -10, 0) to (10, 10, 20) of the cube, 1 to 2.
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 20);
+    p.objects = {{"cube", 0, 12, 0, 0, 3}};
+    Settings s = base();
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.from = std::array<double, 3>{-10, -10, 0};
+    g.to = std::array<double, 3>{10, 10, 20};
+    // From and to travel with the blends' JSON.
+    const std::vector<ColorMix> read = parse_color_mixes(color_mixes_json({g}, {"#ffffff", "#000000"}));
+    REQUIRE(read.size() == 1);
+    CHECK(read.front().from == g.from);
+    CHECK(read.front().to == g.to);
+    const SlicedModel model = sliced(p, s, {g});
+    // The bottom front left corner mostly 1, the top back right mostly 2
+    // (the corners fall in the bands of 1 : 9 and 2 : 8, by 10 %), over ten layers each.
+    const std::size_t top = model.walls.size() - 1;
+    const auto count_near = [&](std::size_t from, std::size_t to, double x, double y, int tool) {
+        int n = 0;
+        for (std::size_t l = from; l <= to; ++l)
+            for (const Toolpath& t : model.walls[l].toolpaths)
+                for (const ToolpathPoint& q : t.points)
+                    n += std::hypot(q.p.x - x, q.p.y - y) < 2.0 && t.tool == tool;
+        return n;
+    };
+    CHECK(count_near(0, 9, 90.5, 90.5, 1) > 3 * count_near(0, 9, 90.5, 90.5, 2));
+    CHECK(count_near(top - 9, top, 109.5, 109.5, 2) > 3 * count_near(top - 9, top, 109.5, 109.5, 1));
+    std::set<int> middle;
+    for (const Toolpath& t : model.walls[top / 2].toolpaths)
+        middle.insert(t.tool);
+    CHECK(middle == std::set<int>{1, 2});
+    gcode_of(model, s);
+    // (0, 0, 0) to (0, 0, 20): the same as a gradient in Z over the cube.
+    ColorMix up = g;
+    up.from = std::array<double, 3>{0, 0, 0};
+    up.to = std::array<double, 3>{0, 0, 20};
+    ColorMix z = blend(3, {{1, 0.0}, {2, 1.0}});
+    z.gradient = true;
+    z.min_z = 0.0;
+    z.max_z = 20.0;
+    CHECK(sequence(sliced(p, s, {up})) == sequence(sliced(p, s, {z})));
+}

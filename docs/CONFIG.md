@@ -600,6 +600,12 @@ va de abajo arriba de la pieza, o entre `"minz"` y `"maxz"` (mm) si están: `{"i
 `"axis": "y"` va a lo largo de ese eje, sobre lo que la pieza imprime con la mezcla: `{"id": 3, "kind": "gradient",
 "axis": "x", "components": [{"extruder": 1, "position": 0}, {"extruder": 2, "position": 1}]}`; cada franja de unos 5 mm
 (de 2 a 11 franjas) toma la proporción de su lugar redondeada al 10 % y sigue su ciclo capa por capa. Sin `"axis"`, Z.
+Entre dos puntos (MX31), `"from": [x, y, z]` y `"to": [x, y, z]` en mm de la pieza (X e Y desde el centro de lo que
+imprime con la mezcla, Z desde su base): `{"id": 3, "kind": "gradient", "from": [-10, -10, 0], "to": [10, 10, 20],
+"components": [{"extruder": 1, "position": 0}, {"extruder": 2, "position": 1}]}`. Cada lugar toma su proyección sobre la
+recta (0 al inicio, 1 al final, el extremo más cercano fuera del tramo); cada capa se parte en franjas de unos 5 mm
+(de 2 a 11) perpendiculares a la recta en XY. Casi vertical (menos de 1 mm en XY por cada 10 mm en Z): un degradé en Z
+entre las dos alturas.
 
 ### `curved`
 
