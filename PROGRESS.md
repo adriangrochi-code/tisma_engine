@@ -12679,7 +12679,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 5 | Pares automáticos | parcial: `auto_pair_mixes` (MX1); falta `mixing.auto_pairs` y crearlos en la interfaz |
   | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
   | 8–9 | Alto por filamento, paso | pendiente |
-  | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | pendiente |
+  | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: los cambios se cuentan solos en el plan de herramientas, falta el aviso antes de laminar |
   | 13–14 | Solo la superficie, paredes de más | pendiente |
   | 15 | Sesgo | pendiente |
   | 16 | Pintado con mezcla | parcial: las trayectorias pintadas toman el ciclo; falta con las reglas 10–15 |
@@ -12703,6 +12703,18 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- **Full Spectrum, paso 2: subcapas** (`color_mixing_plus.md` reglas 10 y 11; MX8 a MX10). Grupo nuevo `mixing`:
+  `subdivide`, `sub_min_height` (0,04), `sub_first_layer`, `sub_infill`. En las capas con una mezcla por proporción o
+  secuencia, cada trayectoria de la mezcla se imprime una vez por filamento, de abajo hacia arriba, con su parte del
+  alto: la boquilla en lo alto de la pasada y el cordón sobre la de abajo (como un cordón elevado del relleno
+  ondulado, así el escritor da la Z y el flujo de cada pasada). Las pasadas empiezan con el filamento con que terminó
+  la capa de abajo (un solo cambio por capa en una mezcla de dos); el modelo guarda ese orden por capa
+  (`SlicedModel::tool_order`) y el plan de herramientas lo respeta. El resto de la capa, sin mezcla, una vez (MX9).
+  Medido en la caja de 20 mm, 1 : 1 a 0,2 mm: capa 11 con T1 a 2,1 y T0 a 2,2; filamento total dentro del 5 % de
+  la caja sin subcapas. Decisiones propias: una pasada por filamento (no por paso del ciclo), un degradé sigue con su
+  ciclo, una parte más fina que `sub_min_height` deja esa capa sin dividir, el relleno disperso va una vez con el
+  último filamento salvo `sub_infill`. Falta: el aviso de costo antes de laminar (regla 12) y las subcapas en las
+  caras pintadas con mezcla (regla 16, ya pasan por el mismo camino pero sin prueba). No probado en una impresora.
 - BH55 (búsqueda profunda, calibraciones): una torre que baja (`calibration retraction --start 1 --end 0.2 --step 0.4`)
   daba el valor `0.19999999999999996`, que iba así a la lista, a los ajustes de la torre y al aplicar el mejor. Ahora
   cada valor se redondea a la milmillonésima: 1, 0,6 y 0,2. Prueba `[calibration]`, que falla sin el arreglo. Visto

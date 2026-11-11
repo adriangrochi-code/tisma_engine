@@ -562,6 +562,18 @@ De la ficha `docs/spec/features/multimaterial.md`: boquillas distintas y mezcla 
 Con una MMU de una sola boquilla, después de laminar se avisa cuánto filamento va a la purga, en la torre y dentro de los
 objetos, en gramos si se conoce `extrusion.density` (aviso `purge`, regla 10, MM5).
 
+### `mixing`
+
+De la ficha `docs/spec/features/color_mixing_plus.md`: subcapas en las zonas con mezcla de colores (reglas 10 y 11). Va
+en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `subdivide` | booleano | `false` | | En las zonas con una mezcla por proporción o por secuencia, cada capa se imprime una vez por filamento de la mezcla, de abajo hacia arriba, cada pasada con su parte del alto (MX8); el resto de la capa, una vez con el alto entero (MX9). Empieza con el filamento con que terminó la capa de abajo: una mezcla de dos cambia una vez por capa. Un degradé sigue con su ciclo |
+| `sub_min_height` | mm | 0,04 | 0,01 a 2 | Si la parte de un filamento da una pasada más fina que esto, esa capa sigue con el ciclo, sin subcapas |
+| `sub_first_layer` | booleano | `false` | | `false`: la primera capa no se divide (MX10) |
+| `sub_infill` | booleano | `false` | | `false`: el relleno disperso de la zona va una vez, con el filamento de la última pasada |
+
 ### `curved`
 
 De la ficha `docs/spec/features/nonplanar.md`: capas curvas en una impresora de 3 ejes. Cada capa es la superficie

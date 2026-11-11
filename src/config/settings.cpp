@@ -959,7 +959,7 @@ Settings parse_checked(std::string_view text) {
             group == "fuzzy" || group == "vase" || group == "cad" || group == "placement" || group == "transform" || group == "arcs" ||
             group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
-            group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
+            group == "interlocking" || group == "painting" || group == "multi" || group == "mixing" || group == "curved" || group == "head" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin" ||
             group == "belt" || group == "print" || group == "calibration" || group == "object")
             continue;
@@ -1477,6 +1477,21 @@ Settings parse_checked(std::string_view text) {
             s.color_mixing = v.get<bool>();
         else
             s.fine_walls_coarse_infill = v.get<bool>();
+    });
+    // Sublayers in the blends' zones (color_mixing_plus.md, rules 10 and 11).
+    read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "sub_min_height") {
+            if (!v.is_number() || !(v.get<double>() >= 0.01 && v.get<double>() <= 2.0))
+                fail(k, "must be from 0.01 to 2 mm");
+            s.mix_sub_min_height = v.get<double>();
+            return;
+        }
+        if (!v.is_boolean())
+            fail(k, "must be true or false");
+        (n == "subdivide" ? s.mix_subdivide : n == "sub_first_layer" ? s.mix_sub_first_layer : s.mix_sub_infill) =
+            v.get<bool>();
     });
     // Curved layers (nonplanar.md) and the print head around the nozzle.
     read_group(root, "curved",
@@ -3451,6 +3466,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"head.clearance_radius", num(s.head_clearance_radius)},
         {"head.profile", json(s.head_profile).dump()},
         {"multi.color_mixing", s.color_mixing ? flag(*s.color_mixing) : "auto"},
+        {"mixing.subdivide", flag(s.mix_subdivide)},
+        {"mixing.sub_min_height", num(s.mix_sub_min_height)},
+        {"mixing.sub_first_layer", flag(s.mix_sub_first_layer)},
+        {"mixing.sub_infill", flag(s.mix_sub_infill)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -4007,6 +4026,11 @@ std::string settings_json(const Settings& s) {
         {"multi",
          {{"fine_walls_coarse_infill", s.fine_walls_coarse_infill},
           {"color_mixing", s.color_mixing ? ordered_json(*s.color_mixing) : ordered_json(nullptr)}}},
+        {"mixing",
+         {{"subdivide", s.mix_subdivide},
+          {"sub_min_height", s.mix_sub_min_height},
+          {"sub_first_layer", s.mix_sub_first_layer},
+          {"sub_infill", s.mix_sub_infill}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},

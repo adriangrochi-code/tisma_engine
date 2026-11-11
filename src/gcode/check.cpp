@@ -753,6 +753,14 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     }
     if (const std::optional<WaveParams> waves = wave_params(s)) // the crests: half the amplitude higher
         limits.wave = std::max(limits.wave, 0.5 * waves->amplitude);
+    // Sublayers (color_mixing_plus.md, rule 10): a pass's top under its
+    // layer's, down to its thinnest pass.
+    if (s.mix_subdivide && std::any_of(model.tool_order.begin(), model.tool_order.end(), [](const auto& o) { return !o.empty(); })) {
+        double thickest = 0.0;
+        for (const Layer& layer : model.layers)
+            thickest = std::max(thickest, layer.top - layer.bottom);
+        limits.wave = std::max(limits.wave, thickest);
+    }
     // The raised loops and the crests, and the travels over them, go that
     // much higher than the top layer (a staggered top layer with no lift
     // went past it: fuzzer, seed 20261029, run 354).

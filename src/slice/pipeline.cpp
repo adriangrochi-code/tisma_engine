@@ -431,6 +431,12 @@ void append_object(SlicedModel& out, SlicedModel&& part, SlicedObject object) {
     object.skirt = std::move(part.skirt);
     object.brim = std::move(part.brim);
     const auto add = [](auto& to, auto& from) { to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end())); };
+    // The sublayers' extruder order, by layer (color_mixing_plus.md, rule 10).
+    if (!part.tool_order.empty() || !out.tool_order.empty()) {
+        out.tool_order.resize(offset);
+        part.tool_order.resize(part.layers.size());
+        add(out.tool_order, part.tool_order);
+    }
     add(out.layers, part.layers);
     add(out.regions, part.regions);
     add(out.walls, part.walls);
@@ -575,7 +581,91 @@ int object_tool(const MeshObject& o, const Settings&) {
 // Mixed colours (color_mixing.md, rules 6 to 10): the paths a blend's
 // objects lay (marked with its number) each take the filament of their
 // layer, whole layers at a time.
-void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes) {
+// With mixing.subdivide (color_mixing_plus.md, rules 10 and 11), each layer
+// of a ratio or sequence blend past the first (mixing.sub_first_layer) is
+// printed once per filament of the blend, the lowest first, each pass as
+// high as that filament's share of the layer: the nozzle at the pass's top,
+// the bead on the pass below (a raised bead, as the wavy infill's). The pass
+// order starts with the filament the blend's layer below ended with, so a
+// two-filament blend changes once a layer. A share thinner than
+// mixing.sub_min_height leaves the layer to the cycle; so does a gradient.
+// The sparse infill goes once, by the last pass's filament, unless
+// mixing.sub_infill. Own design (PROVENANCE.md).
+bool subdivide_layer(SlicedModel& model, std::size_t l, const ColorMix& mix, const Settings& s, int& last) {
+    if (!s.mix_subdivide || mix.gradient || l >= model.layers.size() || (l == 0 && !s.mix_sub_first_layer))
+        return false;
+    const double h = model.layers[l].top - model.layers[l].bottom;
+    std::vector<std::pair<int, double>> parts;
+    for (const ColorMix::Component& c : mix.pattern.empty() ? mix.components : pattern_mix(mix.id, mix.pattern).components)
+        if (c.share > 0.0)
+            parts.push_back({c.extruder, c.share});
+    double total = 0.0;
+    for (const auto& p : parts)
+        total += p.second;
+    if (parts.size() < 2 || !(total > 0.0) || !(h > 0.0))
+        return false;
+    for (const auto& p : parts)
+        if (p.second / total * h < s.mix_sub_min_height - 1e-9)
+            return false;
+    // The filament the layer below ended with first.
+    if (const auto it = std::find_if(parts.begin(), parts.end(), [&](const auto& p) { return p.first == last; });
+        it != parts.end())
+        std::rotate(parts.begin(), it, it + 1);
+    std::vector<double> bottom(parts.size()), top(parts.size());
+    double z = 0.0;
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        bottom[i] = z;
+        z += parts[i].second / total * h;
+        top[i] = i + 1 == parts.size() ? h : z;
+    }
+    const auto split = [&](std::vector<Toolpath>& paths, bool whole) {
+        std::vector<Toolpath> out;
+        for (Toolpath& t : paths) {
+            if (t.tool != mix.id) {
+                out.push_back(std::move(t));
+                continue;
+            }
+            if (whole) { // by the last pass's filament, the whole height
+                t.tool = std::uint8_t(parts.back().first);
+                out.push_back(std::move(t));
+                continue;
+            }
+            for (std::size_t i = 0; i < parts.size(); ++i) {
+                Toolpath pass = t;
+                pass.tool = std::uint8_t(parts[i].first);
+                pass.wavy = true;
+                for (ToolpathPoint& p : pass.points)
+                    p.dz += top[i] - h, p.below = bottom[i];
+                out.push_back(std::move(pass));
+            }
+        }
+        paths = std::move(out);
+    };
+    if (l < model.walls.size())
+        split(model.walls[l].toolpaths, false), split(model.walls[l].gaps, false);
+    if (l < model.fills.size()) {
+        LayerFill& fill = model.fills[l];
+        for (std::vector<Toolpath>* list : {&fill.top, &fill.solid, &fill.bridge, &fill.gaps, &fill.arcs, &fill.overhang_walls,
+                                            &fill.ironing})
+            split(*list, false);
+        split(fill.sparse, !s.mix_sub_infill);
+    }
+    if (l < model.thick.size()) {
+        ThickLayer& t = model.thick[l];
+        for (std::vector<Toolpath>* list : {&t.walls, &t.fill.top, &t.fill.solid, &t.fill.bridge, &t.fill.gaps})
+            split(*list, false);
+        split(t.fill.sparse, !s.mix_sub_infill);
+    }
+    if (model.tool_order.size() < model.layers.size())
+        model.tool_order.resize(model.layers.size());
+    for (const auto& p : parts)
+        if (std::find(model.tool_order[l].begin(), model.tool_order[l].end(), p.first) == model.tool_order[l].end())
+            model.tool_order[l].push_back(p.first);
+    last = parts.back().first;
+    return true;
+}
+
+void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
     for (const ColorMix& mix : mixes) {
         std::vector<char> present(model.layers.size(), 0);
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
@@ -585,6 +675,12 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes) {
         if (std::none_of(present.begin(), present.end(), [](char c) { return c != 0; }))
             continue;
         const std::vector<int> filament = mix_layers(mix, model.layers, present);
+        int last = 0;
+        for (std::size_t l = 0; l < model.layers.size(); ++l)
+            if (present[l]) {
+                if (!subdivide_layer(model, l, mix, settings, last) && l < filament.size() && filament[l] > 0)
+                    last = filament[l];
+            }
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
             for (Toolpath& t : paths)
                 if (t.tool == mix.id && l < filament.size() && filament[l] > 0)
@@ -836,7 +932,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                     continue;
                 if (object_tool(o, settings) != 1)
                     tag_tool(part, object_tool(o, settings));
-                apply_mixes(part, blends);
+                apply_mixes(part, blends, own);
                 SlicedObject object{o.name, o.object, o.instance, outline_of(mesh),
                                     part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {},
                                     o.wipe_into_infill, o.wipe_into_object};
@@ -881,7 +977,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
-        apply_mixes(out, blends);
+        apply_mixes(out, blends, settings);
         for (const MeshObject& o : *objects) {
             const std::vector<Vec3f> points = object_points(input, o); // its height and outline, without its mesh
             if (points.empty())

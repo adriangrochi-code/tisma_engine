@@ -129,6 +129,37 @@
      "purges at every change.\n\nMixing needs many changes: on an MMU that means a lot of time and wasted plastic, "
      "and turning it on warns you of the cost first.\n\nExample: leave it empty; on an MMU, turn it on only if you "
      "accept using much more filament."},
+    {"mixing.subdivide",
+     "Con una mezcla de colores, cada capa sale de un solo filamento y las capas se alternan. Con esto encendido, en "
+     "las partes con mezcla cada capa se imprime en pasadas más finas, una por filamento, de abajo hacia arriba: una "
+     "capa de 0,2 mm con una mezcla mitad y mitad lleva 0,1 mm de cada uno. El color se mezcla dentro de la capa y "
+     "las franjas se notan menos.\n\nEl resto de la capa, sin mezcla, se imprime una vez. Cada pasada es un cambio de "
+     "filamento más.\n\nEjemplo: encendido para una pieza chica de color mezclado vista de cerca.",
+     "With a colour mix, each layer is one filament and the layers take turns. With this on, in the parts with a mix "
+     "each layer is printed in thinner passes, one per filament, from the bottom up: a 0.2 mm layer of a half and half "
+     "mix gets 0.1 mm of each. The colour mixes within the layer and the stripes show less.\n\nThe rest of the layer, "
+     "with no mix, prints once. Each pass is one more filament change.\n\nExample: on for a small mixed-colour part "
+     "seen up close."},
+    {"mixing.sub_min_height",
+     "La pasada más fina que se permite al dividir una capa con mezcla. Si un filamento lleva tan poca parte de la "
+     "mezcla que su pasada quedaría más fina que esto, esa capa no se divide y sigue alternando capas enteras.\n\n"
+     "Las pasadas muy finas cuestan lo mismo en cambios y casi no se ven.\n\nEjemplo: 0,04 mm.",
+     "The thinnest pass allowed when a layer with a mix is split. If a filament has so small a share of the mix that "
+     "its pass would be thinner than this, that layer is not split and keeps taking whole layers in turn.\n\nVery "
+     "thin passes cost the same changes and hardly show.\n\nExample: 0.04 mm."},
+    {"mixing.sub_first_layer",
+     "Si la primera capa también se divide en pasadas con una mezcla. Apagado, la primera capa sale entera de un "
+     "filamento, que es lo que mejor se pega a la cama.\n\nLa primera capa casi nunca se ve, salvo en la base.\n\n"
+     "Ejemplo: apagado.",
+     "Whether the first layer is also split into passes with a mix. Off, the first layer is one filament, all of it, "
+     "which sticks best to the bed.\n\nThe first layer hardly ever shows, except underneath.\n\nExample: off."},
+    {"mixing.sub_infill",
+     "Si el relleno de adentro de una parte con mezcla también se divide en pasadas. Apagado, el relleno se imprime "
+     "una vez por capa con el filamento de la última pasada: no se ve, y ahorra tiempo.\n\nLas paredes y las "
+     "superficies se dividen igual.\n\nEjemplo: apagado.",
+     "Whether the inside infill of a part with a mix is also split into passes. Off, the infill prints once a layer "
+     "with the last pass's filament: it does not show, and it saves time.\n\nThe walls and the surfaces are split "
+     "all the same.\n\nExample: off."},
     {"wipe_tower.enabled",
      "Al cambiar de filamento o de boquilla, la que entra todavía tiene restos del color anterior o no sale pareja. "
      "La torre de purga es un bloque que se imprime al costado de la pieza: los cambios de herramienta se hacen "

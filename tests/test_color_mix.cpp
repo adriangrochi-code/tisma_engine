@@ -16,6 +16,9 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <cmath>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -23,6 +26,7 @@
 using namespace tisma;
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
 
 namespace {
 
@@ -384,4 +388,109 @@ TEST_CASE("color mixing plus: the new data in the project's file (rule 30, MX19)
     CHECK(back[0] == p);
     CHECK_THROWS_AS(parse_color_mixes(R"({"virtual_extruders": [{"id": 3, "kind": "pattern", "components": []}]})"),
                     ColorMixError);
+}
+
+namespace {
+
+// Per layer of a G-code (;LAYER_CHANGE), the Zs each tool extrudes at.
+std::vector<std::map<int, std::set<double>>> extruding_z(const std::string& text) {
+    std::vector<std::map<int, std::set<double>>> out;
+    std::istringstream in(text);
+    int tool = 0;
+    double z = 0.0;
+    bool tower = false;
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";LAYER_CHANGE", 0) == 0)
+            out.emplace_back();
+        if (line.rfind(";TYPE:", 0) == 0)
+            tower = line == ";TYPE:Wipe tower" || line == ";TYPE:Custom";
+        if (line.size() == 2 && line[0] == 'T' && line[1] >= '0' && line[1] <= '9')
+            tool = line[1] - '0';
+        if (line.rfind("G1", 0) != 0 && line.rfind("G0", 0) != 0)
+            continue;
+        if (const std::size_t at = line.find(" Z"); at != std::string::npos)
+            z = std::atof(line.c_str() + at + 2);
+        if (tower)
+            continue; // the tower and the change's own lines are at the layer's top
+        const std::size_t e = line.find(" E");
+        if (!out.empty() && e != std::string::npos && std::atof(line.c_str() + e + 2) > 0.0 && line.find(" X") != std::string::npos)
+            out.back()[tool].insert(std::round(z * 1000.0) / 1000.0);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("color mixing plus: sublayers where the blend is, one pass per filament (rules 10 and 11, MX8 to MX10)", "[mixing]") {
+    Settings s = base();
+    s.mix_subdivide = true;
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    // MX8: in each layer, two passes of 0.1 mm, one of each filament.
+    const SlicedModel model = sliced(box(3), s, {half});
+    REQUIRE(model.walls.size() == 50);
+    const LayerWalls& w = model.walls[10];
+    std::set<int> tools;
+    for (const Toolpath& t : w.toolpaths) {
+        tools.insert(t.tool);
+        REQUIRE(t.wavy);
+        const double dz = t.points.front().dz, below = t.points.front().below;
+        CHECK(((std::abs(dz + 0.1) < 1e-9 && std::abs(below) < 1e-9) || (std::abs(dz) < 1e-9 && std::abs(below - 0.1) < 1e-9)));
+    }
+    CHECK(tools == std::set<int>{1, 2});
+    const std::string text = gcode_of(model, s);
+    const auto zs = extruding_z(text);
+    REQUIRE(zs.size() >= 50);
+    // Layer 11 (top 2.2 mm): one tool at 2.1, the other at 2.2; the lower first.
+    const auto& layer = zs[10];
+    REQUIRE(layer.size() == 2);
+    std::set<double> all;
+    for (const auto& [t, z] : layer) {
+        all.insert(z.begin(), z.end());
+        INFO("tool " << t << ": " << z.size() << " Zs, first " << *z.begin() << ", last " << *z.rbegin());
+        CHECK(z.size() == 1);
+    }
+    CHECK(all == std::set<double>{2.1, 2.2});
+    // One change a layer: the next layer starts with the filament this one ended with.
+    CHECK(changes(text) <= 50);
+    // A pass lays half the layer's plastic: the walls' filament as without sublayers.
+    Settings plain = s;
+    plain.mix_subdivide = false;
+    const auto filament = [](const std::string& g) {
+        const std::size_t at = g.find("; filament used [mm] = ");
+        return at == std::string::npos ? 0.0 : std::atof(g.c_str() + at + 23);
+    };
+    INFO(text.substr(text.find("; filament used"), 80));
+    const double sub = filament(text), whole = filament(gcode_of(sliced(box(3), plain, {half}), plain));
+    CHECK(sub > 0.0);
+    CHECK_THAT(sub, WithinRel(whole, 0.05));
+    // MX10: the first layer whole, with one filament.
+    REQUIRE(zs[0].size() == 1);
+    CHECK(*zs[0].begin()->second.rbegin() == 0.2); // the part at the layer's top (the start's own lines aside)
+    s.mix_sub_first_layer = true;
+    CHECK(extruding_z(gcode_of(sliced(box(3), s, {half}), s))[0].size() == 2);
+    // A share thinner than sub_min_height: the cycle, no sublayers.
+    s.mix_sub_min_height = 0.15;
+    for (const Toolpath& t : sliced(box(3), s, {half}).walls[10].toolpaths)
+        CHECK_FALSE(t.wavy);
+}
+
+TEST_CASE("color mixing plus: half the box without the blend prints once a layer, whole (rule 10, MX9)", "[mixing]") {
+    Settings s = base();
+    s.mix_subdivide = true;
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 100, 110, 10);
+    add_box(p.mesh, 100, 90, 0, 110, 110, 10);
+    p.objects = {{"plain", 0, 12, 0, 0, 1}, {"mixed", 12, 12, 1, 0, 3}};
+    const SlicedModel model = sliced(p, s, {blend(3, {{1, 0.5}, {2, 0.5}})});
+    const auto zs = extruding_z(gcode_of(model, s));
+    REQUIRE(zs.size() > 10);
+    // Layer 11: the blend's two passes at 2.1 and 2.2; the plain half only at 2.2.
+    std::set<double> all;
+    for (const auto& [t, z] : zs[10])
+        all.insert(z.begin(), z.end());
+    CHECK(all == std::set<double>{2.1, 2.2});
+    int whole = 0;
+    for (const Toolpath& t : model.walls[10].toolpaths)
+        whole += !t.wavy;
+    CHECK(whole > 0); // the plain half's walls, not split
 }
