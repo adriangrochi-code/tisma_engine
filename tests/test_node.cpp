@@ -669,6 +669,13 @@ TEST_CASE("slice of a plain 3MF (no Tisma project): its parts with the default s
     CHECK(layers({}) == 50);                                       // no table: the defaults
     CHECK(layers({"--translation", table.string()}) == 40);        // 0.25 mm layers
     CHECK(layers({"--translation", table.string(), "--set", "layers.height=0.2"}) == 50); // the job's change wins
+    // The pack's folder: the engine picks the table of the program that saved the file.
+    const auto folder = dir / "translation";
+    std::filesystem::create_directories(folder);
+    std::filesystem::copy_file(table, folder / "orcaslicer.json");
+    CHECK(layers({"--translation-dir", folder.string()}) == 40);
+    std::filesystem::remove(folder / "orcaslicer.json");
+    CHECK(layers({"--translation-dir", folder.string()}) == 50); // no table for it: the defaults, with a warning
     std::ofstream(table) << "not a table";
     CHECK(run({"slice", orca_file.string(), "-o", gcode.string(), "--summary", summary.string(), "--translation",
                table.string()})

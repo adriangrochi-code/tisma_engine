@@ -52,6 +52,7 @@ struct NodeArgs {
     std::string config;            // --config: the settings of a bare model (aero, orient, analyze)
     std::string inspect_paint;     // --inspect-paint: the painting's summary, "-" for the standard output
     std::string translation;       // --translation: the pack's table for another program's 3MF (project_import.md, rule 11)
+    std::string translation_dir;   // --translation-dir: the pack's translation/ folder; the table of the file's program
 };
 
 std::optional<std::string> read_whole(const std::filesystem::path& path);
@@ -177,7 +178,8 @@ std::string first_input(std::span<const std::string_view> args) {
         if (a == "-o" || a == "--output" || a == "--summary" || a == "--config" || a == "-c" || a == "--warnings" ||
             a == "--case" || a == "--copies" || a == "--set" || a == "--config-over" || a == "--inspect-paint" ||
             a == "--inspect-mesh" || a == "--export-statistics" || a == "--export-settings" ||
-            a == "--ground-face-normal" || a == "--ground-face-point" || a == "--translation") {
+            a == "--ground-face-normal" || a == "--ground-face-point" || a == "--translation" ||
+            a == "--translation-dir") {
             ++i;
             continue;
         }
@@ -274,6 +276,8 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             a.inspect_paint = std::string(args[++i]);
         } else if (arg == "--translation" && has_value) {
             a.translation = std::string(args[++i]);
+        } else if (arg == "--translation-dir" && has_value) {
+            a.translation_dir = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -354,10 +358,27 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             }
         }
         std::string translated;
-        if (!a.translation.empty()) {
-            const std::optional<std::string> table = read_whole(a.translation);
+        // With the pack's folder, the table of the program that saved the
+        // file (project_import.md, rules 1 and 11); none for a standard 3MF.
+        std::string table_path = a.translation;
+        if (table_path.empty() && !a.translation_dir.empty()) {
+            std::string dialect;
+            try {
+                dialect = translation_dialect(project_source(*data));
+            } catch (const std::exception&) {
+            }
+            if (!dialect.empty()) {
+                const std::filesystem::path p = std::filesystem::path(a.translation_dir) / (dialect + ".json");
+                if (std::error_code ec; std::filesystem::is_regular_file(p, ec))
+                    table_path = p.string();
+                else
+                    translated = " no translation table for " + dialect + " in '" + a.translation_dir + "';";
+            }
+        }
+        if (!table_path.empty()) {
+            const std::optional<std::string> table = read_whole(table_path);
             if (!table)
-                return fail(kExitInput, "cannot read the translation table '" + a.translation + "'", "cannot_read",
+                return fail(kExitInput, "cannot read the translation table '" + table_path + "'", "cannot_read",
                             "no se puede leer la tabla de traducción");
             try {
                 const auto own = project_settings(*data);
@@ -367,7 +388,7 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
                     translated = " its settings translated, " + std::to_string(p.skipped.size()) + " without equivalent;";
                 }
             } catch (const std::exception& e) {
-                return fail(kExitInput, a.translation + ": " + e.what(), "bad_translation",
+                return fail(kExitInput, table_path + ": " + e.what(), "bad_translation",
                             "la tabla de traducción no se puede leer");
             }
         }

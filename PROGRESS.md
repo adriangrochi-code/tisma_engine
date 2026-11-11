@@ -13521,4 +13521,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   encima, como en la interfaz (`project_import.md` reglas 6, 8 y 11); `--config-over` y `--set` van al final. Prueba
   `[cloud]`: un 3MF de la familia OrcaSlicer con capa 0,25 da 50 capas sin tabla, 40 con ella y 50 con `--set
   layers.height=0.2`; una tabla rota es un error de entrada.
+  Tercera parte (pedido de la nube): `--translation-dir <carpeta translation/ del paquete>` elige la tabla del programa
+  que guardó el archivo (`project_source` + `translation_dialect`); sin tabla para ese programa, los ajustes del trabajo
+  con un aviso. Decisión: las tablas siguen en el paquete y no en el motor (`project_import.md` regla 11: «el motor no
+  lleva tabla propia»); el nodo suma la carpeta `translation/` del paquete. Prueba `[cloud]`: 40 capas con la tabla de
+  OrcaSlicer en la carpeta, 50 sin ella.
 
