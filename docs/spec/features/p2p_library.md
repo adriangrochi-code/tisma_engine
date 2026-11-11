@@ -133,6 +133,31 @@ desventajas».
 
 ## Privacidad
 
+8 sexies. **El permiso ante el intermediario** (propuesto por el servidor, 2026-11-11): protocolo
+   `/tisma/relay-ticket/1.0.0`. La app abre el stream y escribe el ticket de `POST /v1/library/relay-ticket` seguido
+   de un salto de línea; el intermediario responde una línea JSON, `{"ok":true,"expires":<unix>}` o
+   `{"ok":false,"error":"…"}`. El intermediario comprueba: la firma con la clave de la biblioteca (su certificado, con
+   la clave del proyecto); que `peer_id` sea el par autenticado por Noise; que no esté vencido; que ni la cuenta ni el
+   par estén en la lista de bloqueo firmada. Sin ticket válido no hay reserva ni circuito. La app lo presenta antes de
+   reservar y otra vez al renovar (dura 1 h). Los bytes que pasan se cuentan por cuenta y por hora; al pasar
+   `cap_mb_per_hour` se cortan sus circuitos y no se aceptan nuevos hasta la hora siguiente («Biblioteca ocupada, se
+   retoma sola»).
+8 septies. **El protocolo entre pares** `/tisma/library/1.0.0` (diseño propio, 2026-11-11), sobre un stream cifrado:
+   - Cada pedido es una línea JSON de hasta 64 KiB terminada en salto de línea; cada respuesta, otra línea JSON. Se
+     pueden mandar varios pedidos seguidos por el mismo stream, de a uno: el siguiente después de la respuesta.
+   - `{"op":"have","files":["<sha256>",…]}` (hasta 256): responde `{"ok":true,"have":{"<sha256>":"all"|"<base64>"}}`,
+     donde el base64 es un mapa de bits de los pedazos que tiene (bit más alto del primer byte = pedazo 0); un archivo
+     que no tiene no aparece.
+   - `{"op":"pieces","file":"<sha256>"}`: responde `{"ok":true,"size":<bytes>,"hashes":["<hex>",…]}`, el SHA-256 de
+     cada pedazo de 1 MiB (el último, más corto). Quien lo recibe comprueba que el SHA-256 de esas huellas crudas,
+     seguidas en orden, es el `piece_roots` del índice firmado; si no, descarta la lista y deja ese par.
+   - `{"op":"get","file":"<sha256>","piece":<n>}`: responde `{"ok":true,"length":<L>}` y a continuación L bytes
+     crudos, el pedazo. Quien lo recibe comprueba su SHA-256 contra la lista; si no coincide, lo descarta y lo pide a
+     otro par (P2P2).
+   - Errores: `{"ok":false,"error":"not_found"|"blocked"|"busy"|"bad_request"}`. Un par solo sirve archivos que están
+     en el índice firmado y no en la lista de bloqueo; uno bloqueado responde `blocked`. Con el tope de subida
+     alcanzado responde `busy`. Un pedido mal formado: `bad_request` y se cierra el stream.
+   - El sembrador de Tisma Cloud (regla 3) habla este mismo protocolo, igual que las apps.
 8. La app no comparte nada que la persona no haya publicado o bajado de la biblioteca. «Mi biblioteca» local
    (`local_library.md`) no se comparte nunca. Con intermediario, los otros pares no ven la IP; con «Directo» sí, y la pantalla lo dice antes de activarlo.
 
@@ -147,3 +172,7 @@ desventajas».
 | P2P5 | Índice o lista sin firma válida | No se usan |
 | P2P6 | Teléfono con datos móviles | No comparte (solo baja, si la persona lo pide) |
 | P2P7 | Lista de bloqueo de más de 7 días | Compartir apagado con aviso |
+| P2P8 | Pedir un circuito sin ticket, o con un ticket de otro par | El intermediario no reserva ni conecta |
+| P2P9 | Una cuenta pasa `cap_mb_per_hour` | Sus circuitos se cortan; se retoma a la hora siguiente |
+| P2P10 | `pieces` con una lista que no da `piece_roots` | Se descarta la lista y se deja ese par |
+| P2P11 | `get` de un archivo bloqueado | `blocked`; nada se manda |
