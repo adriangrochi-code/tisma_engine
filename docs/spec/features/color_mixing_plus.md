@@ -69,6 +69,12 @@ De cada mezcla (en el proyecto, junto a los datos de `color_mixing.md`):
 | `name` | Nombre visible; por defecto, el del color previsto más cercano (regla 6) |
 | `bias` | De −1 a 1, para cada par (regla 15) |
 
+**Número de una mezcla** (11-11-2026): las mezclas van numeradas después de los filamentos de la impresora (con 4
+filamentos, la primera mezcla es la 5, como en MX1). Si cambia la cantidad de filamentos, las mezclas se renumeran
+en el mismo orden y las piezas, pintura y modificadores que las usaban siguen con la misma mezcla, con su número
+nuevo; ninguna pieza pasa a un filamento nuevo por coincidencia de número. Una mezcla que usa un filamento que ya no
+existe queda apagada, con aviso (MX30).
+
 ## Crear mezclas
 
 1. **Cuatro tipos**, en un diálogo con una pestaña para cada uno y la vista previa del color siempre visible:
@@ -284,6 +290,7 @@ salvo donde se dice.
 | MX10 | MX8 con `sub_first_layer` en `no` | La primera capa entera con un filamento |
 | MX28 | Ciclo A, B (1 : 1) sin `subdivide`, `step` 0,2, altura de capa variable 0,1 y 0,3 | Cada 0,2 mm de altura cambia el filamento: las capas de 0,1 van de a dos con el mismo, las de 0,3 alternan según su centro |
 | MX29 | Ciclo A, B, `subdivide`, `step` 0,1; capa 0,2 / capa 0,3 | Capa 0,2: dos pasadas de 0,1 por capa, el ciclo sigue de una capa a la otra / capa 0,3: la capa entera con el filamento de su centro y el aviso de `mixing.step` |
+| MX30 | Mezcla 1 : 1 de 1 y 2 creada con 2 filamentos (es la 3) asignada a una pieza; se pasa a 4 filamentos / después a 1 | La mezcla pasa a ser la 5 y la pieza sigue con ella, no con el filamento 3 / la mezcla queda apagada con aviso y la pieza usa el filamento 1 |
 | MX11 | `surface_only` con `surface_depth` 0,8 | Solo las 2 paredes de afuera y las superficies alternan; el relleno de un solo filamento |
 | MX12 | MX11 contra la caja sin `surface_only` | Menos cambios de filamento en MX11 en las capas que tienen relleno |
 | MX13 | `bias` 0,5 en una mezcla 1 : 1 | Las paredes de afuera de las capas del segundo filamento quedan más adentro que las del primero |
