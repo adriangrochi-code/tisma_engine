@@ -124,6 +124,9 @@ desventajas».
    sola»). Los sembradores (regla 3) comparten directo desde la nube, sin intermediario.
 8 quinquies. **Quién sabe las IP:** solo el servidor central, para conectar y para el bloqueo de 24 h; no las publica,
    y en la lista de bloqueo una IP va como huella (SHA-256 con una sal que rota cada día), no en claro.
+   Una dirección IPv6 se bloquea por su red /64 (los primeros 64 bits), porque una conexión hogareña recibe un /64 y
+   puede cambiar de dirección dentro de él: la huella se calcula sobre el /64 y el par compara la huella del /64 de la
+   dirección que ve. IPv4 (también escrita `::ffff:a.b.c.d`) sigue por dirección (11-11-2026).
 
 ## Privacidad
 
