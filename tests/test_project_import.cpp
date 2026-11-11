@@ -303,3 +303,65 @@ TEST_CASE("project import: a project's settings translated over the profile (rul
     REQUIRE(read.size() == 2);
     CHECK(read[1] == std::pair<std::string, std::string>{"nozzle_diameter", "0.6,0.6"});
 }
+
+TEST_CASE("project import: the bed's temperature by the project's plate, and the other conversions (PF14)",
+          "[project_import]") {
+    const TranslationTable orca = parse_translation(R"({"format": "tisma-pack-translation", "version": 1,
+      "dialect": "orcaslicer",
+      "plate_temperature": {
+        "plates": {"High Temp Plate": ["hot_plate_temp", "hot_plate_temp_initial_layer"],
+                   "Textured PEI Plate": ["textured_plate_temp", "textured_plate_temp_initial_layer"],
+                   "Cool Plate": ["cool_plate_temp", "cool_plate_temp_initial_layer"]},
+        "select": ["curr_bed_type", "default_bed_type"],
+        "index": ["Default Plate", "Cool Plate", "Engineering Plate", "High Temp Plate", "Textured PEI Plate"],
+        "order": ["High Temp Plate", "Textured PEI Plate", "Cool Plate"]},
+      "kinds": {"filament": {
+       "hot_plate_temp": {"engine": "machine.variables.bed_temperature", "group": "similar", "prusaslicer": "bed_temperature",
+                          "conversion": {"how": "rule", "rule": "plate_temperature", "plate": "High Temp Plate"}},
+       "textured_plate_temp": {"engine": "machine.variables.bed_temperature", "group": "similar", "prusaslicer": "bed_temperature",
+                               "conversion": {"how": "rule", "rule": "plate_temperature", "plate": "Textured PEI Plate"}},
+       "cool_plate_temp": {"engine": "machine.variables.bed_temperature", "group": "similar", "prusaslicer": "bed_temperature",
+                           "conversion": {"how": "rule", "rule": "plate_temperature", "plate": "Cool Plate"}}},
+      "print": {
+       "skirt_loops": {"engine": "adhesion.skirt_loops", "group": "translated", "conversion": {"how": "at_least", "min": 0}},
+       "seam_gap": {"engine": "walls.seam_gap", "group": "similar",
+                    "conversion": {"how": "number_or_percent", "nonzero": true, "bare_percent_over": 5}},
+       "wall_loops": {"engine": "walls.count", "group": "translated", "conversion": {"how": "number", "nonnegative": true, "max": 50}},
+       "wall_generator": {"engine": "walls.generator", "group": "similar", "conversion": {"how": "rule", "rule": "role_width"}}},
+      "printer": {
+       "printable_area": {"engine": "machine.bed", "group": "translated", "conversion": {"how": "points"}}}}})");
+    REQUIRE(orca.plate_temperature);
+    Settings base;
+    const auto bed = [&](const std::vector<std::pair<std::string, std::string>>& project) {
+        const std::string json = settings_json(translate_settings(orca, project, base).settings);
+        const auto at = json.find("\"bed_temperature\"");
+        REQUIRE(at != std::string::npos);
+        return json.substr(at, json.find(']', at) - at + 1);
+    };
+    const std::vector<std::pair<std::string, std::string>> temps = {
+        {"hot_plate_temp", "55"}, {"textured_plate_temp", "65"}, {"cool_plate_temp", "35"}};
+    // PF14: the named plate; by number; none named: High Temp first.
+    auto named = temps;
+    named.push_back({"curr_bed_type", "Textured PEI Plate"});
+    CHECK(bed(named).find("\"65\"") != std::string::npos);
+    auto numbered = temps;
+    numbered.push_back({"default_bed_type", "1"});
+    CHECK(bed(numbered).find("\"35\"") != std::string::npos);
+    CHECK(bed(temps).find("\"55\"") != std::string::npos);
+    // The other conversions.
+    const ProjectSettings p = translate_settings(orca, {{"skirt_loops", "2"},
+                                                        {"seam_gap", "10"},
+                                                        {"wall_loops", "60"},
+                                                        {"wall_generator", "arachne"},
+                                                        {"printable_area", "0x0,220x0,220x220,0x220"}},
+                                                 base);
+    CHECK(p.settings.skirt_loops == 2);
+    CHECK(p.settings.wall_seam_gap.value == 10.0); // over 5: a %
+    CHECK(p.settings.wall_seam_gap.percent);
+    CHECK(p.settings.wall_count == base.wall_count);                     // 60: over max, not written
+    REQUIRE(p.settings.bed.size() == 4);
+    CHECK(p.settings.bed[2][0] == 220.0);
+    CHECK(p.skipped == std::vector<std::string>{"wall_loops = 60", "wall_generator = arachne"});
+    // Two points are no bed.
+    CHECK(translate_settings(orca, {{"printable_area", "0x0,220x0"}}, base).settings.bed == base.bed);
+}

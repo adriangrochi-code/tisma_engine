@@ -7,6 +7,7 @@
 #include "config/settings.hpp"
 
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -53,10 +54,24 @@ struct TranslationRow {
     double factor = 1.0;
     std::map<std::string, std::string> values, renamed;
     std::string base, percent_of;
+    // number's and its kin's limits (a value outside them is not written),
+    // number_or_percent's, and the named rule with its plate (PF14).
+    std::optional<double> min, max, bare_percent_over;
+    bool nonnegative = false, nonzero = false;
+    std::string rule, plate;
+};
+// The OrcaSlicer family's bed temperatures by plate (PF14): each plate's
+// pair of source keys (bed, first layer), the project keys that name the
+// plate (in order), the plates' names by number, and the order to try when
+// none is named.
+struct PlateTemperature {
+    std::map<std::string, std::pair<std::string, std::string>> plates;
+    std::vector<std::string> select, index, order;
 };
 struct TranslationTable {
     std::string dialect;
     std::map<std::string, std::map<std::string, TranslationRow>> kinds;
+    std::optional<PlateTemperature> plate_temperature;
 };
 struct TranslationError : std::runtime_error {
     using std::runtime_error::runtime_error;

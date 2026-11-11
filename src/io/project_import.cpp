@@ -112,6 +112,21 @@ TranslationTable parse_translation(std::string_view text) {
         throw TranslationError("translation table: a version this program does not read");
     TranslationTable out;
     out.dialect = j.value("dialect", "");
+    if (j.contains("plate_temperature") && j.at("plate_temperature").is_object()) {
+        const json& p = j.at("plate_temperature");
+        PlateTemperature t;
+        if (p.contains("plates") && p.at("plates").is_object())
+            for (const auto& [name, keys] : p.at("plates").items())
+                if (keys.is_array() && keys.size() == 2 && keys[0].is_string() && keys[1].is_string())
+                    t.plates[name] = {keys[0].get<std::string>(), keys[1].get<std::string>()};
+        const auto strings = [&](const char* name, std::vector<std::string>& into) {
+            if (p.contains(name) && p.at(name).is_array())
+                for (const json& v : p.at(name))
+                    into.push_back(v.is_string() ? v.get<std::string>() : std::string());
+        };
+        strings("select", t.select), strings("index", t.index), strings("order", t.order);
+        out.plate_temperature = std::move(t);
+    }
     if (!j.contains("kinds") || !j.at("kinds").is_object())
         return out;
     for (const auto& [kind, rows] : j.at("kinds").items()) {
@@ -143,7 +158,23 @@ TranslationTable parse_translation(std::string_view text) {
                 if (c.contains("values") && c.at("values").is_object())
                     for (const auto& [from, to] : c.at("values").items())
                         r.values[from] = text(to);
+                const auto opt = [&](const char* name) -> std::optional<double> {
+                    if (c.contains(name) && c.at(name).is_number())
+                        return c.at(name).get<double>();
+                    return std::nullopt;
+                };
+                r.min = opt("min"), r.max = opt("max"), r.bare_percent_over = opt("bare_percent_over");
+                r.nonnegative = c.value("nonnegative", false) == true;
+                r.nonzero = c.value("nonzero", false) == true;
+                if (c.contains("rule") && c.at("rule").is_string())
+                    r.rule = c.at("rule").get<std::string>();
+                if (c.contains("plate") && c.at("plate").is_string())
+                    r.plate = c.at("plate").get<std::string>();
             }
+            if (row.contains("rule") && row.at("rule").is_string())
+                r.rule = row.at("rule").get<std::string>();
+            if (row.contains("plate") && row.at("plate").is_string())
+                r.plate = row.at("plate").get<std::string>();
             if (row.contains("prusaslicer_values") && row.at("prusaslicer_values").is_object())
                 for (const auto& [from, to] : row.at("prusaslicer_values").items())
                     r.renamed[from] = text(to);
@@ -322,8 +353,49 @@ ProjectSettings translate_settings(const TranslationTable& table,
         if (key == "nozzle_diameter")
             if (const auto d = number_of(value.substr(0, value.find(','))); d && *d > 0.0)
                 nozzle = *d;
+    // The plate whose bed temperatures count (PF14): the one the project
+    // names, by name or number, else the first in the table's order with a
+    // value.
+    std::string plate;
+    if (table.plate_temperature) {
+        const PlateTemperature& t = *table.plate_temperature;
+        const auto value_of = [&](const std::string& key) -> const std::string* {
+            for (const auto& [k, v] : settings)
+                if (k == key && !trimmed(v).empty())
+                    return &v;
+            return nullptr;
+        };
+        for (const std::string& key : t.select) {
+            const std::string* named = value_of(key);
+            if (!named)
+                continue;
+            std::string name = trimmed(*named);
+            if (const auto n = number_of(name); n && *n >= 0 && std::size_t(*n) < t.index.size())
+                name = t.index[std::size_t(*n)];
+            if (t.plates.count(name)) {
+                plate = name;
+                break;
+            }
+        }
+        for (std::size_t i = 0; plate.empty() && i < t.order.size(); ++i) {
+            const std::string& o = t.order[i];
+            for (const auto& [name, keys] : t.plates)
+                if ((o == name && value_of(keys.first)) || (o == keys.first && value_of(o)) || (o == keys.second && value_of(o))) {
+                    plate = name;
+                    break;
+                }
+        }
+    }
     const auto put = [&](const std::string& key, const std::string& value, const TranslationRow& row) {
         nlohmann::json* node = row.engine.find(',') == std::string::npos ? node_of(root, row.engine) : nullptr;
+        // A key the settings' JSON leaves out (at its default, or a machine
+        // variable the profile does not have): made in its group, and
+        // parse_settings says whether the engine has it.
+        if (!node && row.engine.find(',') == std::string::npos)
+            if (const std::size_t dot = row.engine.rfind('.'); dot != std::string::npos)
+                if (nlohmann::json* group = node_of(root, row.engine.substr(0, dot)); group && group->is_object())
+                    node = &((*group)[row.engine.substr(dot + 1)] =
+                                 row.engine.starts_with("machine.variables.") ? nlohmann::json::array() : nlohmann::json());
         if (!node)
             return false;
         std::string v = value;
@@ -351,14 +423,60 @@ ProjectSettings translate_settings(const TranslationTable& table,
                 v = text.str();
             }
         std::optional<nlohmann::json> to;
-        if (row.how == "number" || row.how.empty()) {
+        // number and its kin: a value outside the row's limits is not written.
+        const auto limited = [&](double d) -> std::optional<nlohmann::json> {
+            if ((row.nonnegative && d < 0.0) || (row.min && d < *row.min) || (row.max && d > *row.max))
+                return std::nullopt;
+            return nlohmann::json(d);
+        };
+        if (row.how == "number" || row.how.empty() || (row.how == "rule" && row.rule == "plate_temperature")) {
             if (const auto d = number_of(v))
-                to = *d;
+                to = limited(*d);
             else if (row.how.empty() && node->is_string())
                 to = v;
         } else if (row.how == "first_item") {
-            if (const auto d = number_of(v.substr(0, v.find_first_of(",;"))))
+            // The first extruder's text.
+            const std::string first = trimmed(v.substr(0, v.find(',')));
+            if (const auto d = number_of(first))
                 to = *d;
+            else if (!node->is_number())
+                to = first;
+        } else if (row.how == "at_least") {
+            if (const auto d = number_of(v); d && (!row.min || *d >= *row.min))
+                to = *d;
+        } else if (row.how == "points") {
+            // "XxY,XxY,...": at least 3 points.
+            nlohmann::json points = nlohmann::json::array();
+            bool good = true;
+            std::size_t start = 0;
+            while (good && start <= v.size()) {
+                const std::size_t comma = std::min(v.find(',', start), v.size());
+                const std::string p = trimmed(std::string_view(v).substr(start, comma - start));
+                const std::size_t x = p.find('x');
+                const auto a = x == std::string::npos ? std::nullopt : number_of(std::string_view(p).substr(0, x));
+                const auto b = x == std::string::npos ? std::nullopt : number_of(std::string_view(p).substr(x + 1));
+                if (a && b)
+                    points.push_back({*a, *b});
+                else
+                    good = false;
+                start = comma + 1;
+            }
+            if (good && points.size() >= 3)
+                to = points;
+        } else if (row.how == "number_or_percent") {
+            const std::string t = trimmed(v);
+            if (!t.empty() && t.back() == '%') {
+                if (number_of(std::string_view(t).substr(0, t.size() - 1)))
+                    to = t;
+            } else if (const auto d = number_of(t); d && !(row.nonzero && *d == 0.0)) {
+                if (row.bare_percent_over && *d > *row.bare_percent_over) {
+                    std::ostringstream text;
+                    text << *d << '%';
+                    to = text.str();
+                } else {
+                    to = *d;
+                }
+            }
         } else if (row.how == "flag") {
             const std::string t = lower(trimmed(v));
             if (t == "1" || t == "true")
@@ -389,25 +507,43 @@ ProjectSettings translate_settings(const TranslationTable& table,
             if (!t.empty() && t.back() == '%')
                 t.pop_back();
             if (const auto d = number_of(t))
-                to = *d;
+                to = limited(*d);
         }
         if (!to)
             return false;
-        // The engine's own type: a number where a number goes, and so on.
-        if (node->is_number_integer() && to->is_number())
+        // The engine's own type: a number where a number goes, a list of
+        // texts for a variable, and so on.
+        const auto text_of = [](const nlohmann::json& n) {
+            if (n.is_string())
+                return n.get<std::string>();
+            std::ostringstream text;
+            text << (n.is_number() ? n.get<double>() : 0.0);
+            return n.is_number() ? text.str() : n.dump();
+        };
+        if (node->is_array() && !to->is_array())
+            to = nlohmann::json::array({text_of(*to)});
+        else if (node->is_number_integer() && to->is_number())
             to = static_cast<long long>(std::llround(to->get<double>()));
         else if (node->is_boolean() && !to->is_boolean())
             return false;
         else if (node->is_number() && !to->is_number())
             return false;
         else if (node->is_string() && !to->is_string())
-            to = to->is_number() ? nlohmann::json(to->dump()) : *to;
+            to = to->is_number() ? nlohmann::json(text_of(*to)) : *to;
+        const bool made = node->is_null() || (node->is_array() && node->empty() && to->is_array());
         const nlohmann::json before = *node;
         *node = *to;
         try {
             out.settings = parse_settings(root.dump());
         } catch (const std::exception&) {
-            *node = before; // the engine refuses it: left out
+            // The engine refuses it, or has no such key: left out.
+            if (made && before.is_null()) {
+                const std::size_t dot = row.engine.rfind('.');
+                if (nlohmann::json* group = node_of(root, row.engine.substr(0, dot)))
+                    group->erase(row.engine.substr(dot + 1));
+            } else {
+                *node = before;
+            }
             return false;
         }
         (void)key;
@@ -420,6 +556,13 @@ ProjectSettings translate_settings(const TranslationTable& table,
             const TranslationRow* row = row_of(table, key);
             if (!row || row->group == SettingGroup::None || row->engine.empty())
                 continue;
+            if (row->rule == "plate_temperature" && row->plate != plate)
+                continue; // only the project's plate counts
+            if (row->how == "rule" && row->rule != "plate_temperature") {
+                if (pass == 0)
+                    out.skipped.push_back(key + " = " + value); // a named rule not done yet
+                continue;
+            }
             const bool late = row->how == "percent_of" || (!row->percent_of.empty() && row->percent_of != "nozzle");
             if (late != (pass == 1))
                 continue;

@@ -13362,4 +13362,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   grados sobre la tapa de la capa (45 por defecto; negativo, como 45: los perfiles de OrcaSlicer traen −1); con
   `angle_fixed`, `angle` es el ángulo desde X en todas las capas. Leídos, guardados, en la tarjeta de planchado y con su
   guía. Prueba `[ironing]` IR8: tapa a 45°; 90 → 135°, 90 fijo → 90°, −1 → 90°.
+- **Ítem 4, segunda parte: PF14 y las demás conversiones** (2026-11-11, con la semántica que mandó QA). La tabla puede
+  traer `plate_temperature` (placas con su par de claves, `select`, `index`, `order`): la cama sale de la placa de
+  `curr_bed_type`, si no de `default_bed_type` (por nombre o por número), si no de la primera del orden con valor; solo
+  cuenta la fila de esa placa. Conversiones nuevas: `at_least` (`min`), `points` ("XxY,..." con 3 puntos o más),
+  `number_or_percent` (`nonzero`, `bare_percent_over`) y los límites `nonnegative`, `min`, `max` de `number`. Una
+  clave que el JSON de los ajustes no escribe (en su valor por defecto, o una variable nueva de la máquina) se crea en
+  su grupo y `parse_settings` la valida. Prueba `[project_import]` PF14 (65 °C con Textured PEI; por número; 55 °C sin
+  placa nombrada). Falta: las 12 `rule` con nombre (sus pasos están en el `note` de cada fila de la tabla publicada;
+  hoy van a `skipped`) y que la interfaz aplique `translate_settings` al abrir.
 
