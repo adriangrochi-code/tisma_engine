@@ -324,17 +324,38 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     const std::optional<std::string> data = read_whole(a.project);
     if (!data)
         return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
-    if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma (its own file, or a 3MF with " +
-                                    "Metadata/tisma_project.json): projects of other slicers are not read yet",
-                    "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
-    try {
-        project = read_project(*data);
-    } catch (const ProjectTooNew& e) {
-        return fail(kExitInput, a.project + ": " + e.what(), "project_too_new", kTooNewEs);
-    } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
+    if (!looks_like_project(*data)) {
+        // A plain 3MF, or another program's project (formats.md, rules 5 and
+        // 18): its parts, placed by their build items, with the default
+        // settings; the file's own settings are not used.
+        std::vector<ThreeMfItem> items;
+        try {
+            items = read_3mf_items(*data, nullptr, {}, true);
+        } catch (const std::exception&) {
+            items.clear();
+        }
+        if (items.empty())
+            return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma, nor a 3MF with a model",
+                        "not_a_project", "el archivo no es un proyecto de Tisma");
+        for (ThreeMfItem& item : items) {
+            ProjectModel model;
+            model.name = item.name.empty() ? "model" : item.name;
+            model.mesh = std::move(item.mesh);
+            model.turn = item.turn;
+            model.offset = item.offset;
+            project.models.push_back(std::move(model));
+        }
+        err << "warning: '" << a.project << "' is a 3MF without Tisma's project: its parts with the default settings "
+            << "(and the changes given); its own settings are not used\n";
+    } else {
+        try {
+            project = read_project(*data);
+        } catch (const ProjectTooNew& e) {
+            return fail(kExitInput, a.project + ": " + e.what(), "project_too_new", kTooNewEs);
+        } catch (const std::exception& e) {
+            return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
+        }
     }
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");

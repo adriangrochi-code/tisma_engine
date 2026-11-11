@@ -13510,4 +13510,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `["marlin_legacy", "marlin"]` en las impresoras de Cura. Se lee, se valida y se guarda (solo si no está vacía);
   `flavor` sigue siendo el que se usa. Prueba `[settings]` PF15. La interfaz ya separa «Marlin 1» y «Marlin 2»; le
   toca ofrecer solo los de la lista cuando la hay (aviso a esa sesión).
+- **La nube lamina un 3MF sin proyecto de Tisma** (2026-11-11, pedido de la sesión de la nube: desde que el dueño dejó
+  Tisma Slicer, los nodos laminan solo con el motor y fallaban los modelos de la biblioteca y los proyectos de otros
+  programas). `slice <archivo.3mf>` (forma de los nodos): si no es un proyecto de Tisma pero es un 3MF con modelo, sus
+  piezas por sus ítems de la placa con los ajustes por defecto y los cambios de la línea de comandos (`formats.md`,
+  reglas 5 y 18: los ajustes del archivo no se usan), con un aviso; si no tiene modelo, `not_a_project` como antes.
+  Prueba `[cloud]`: la caja de 20 × 20 × 10 en (128, 128) de su prueba da 50 capas.
 

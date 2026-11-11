@@ -4,6 +4,7 @@
 #include "cli/cli.hpp"
 #include "io/stl.hpp"
 #include "mesh/shapes.hpp"
+#include "io/model.hpp"
 #include "project/project.hpp"
 #include "test_temp.hpp"
 #include "ui/slicing.hpp"
@@ -625,5 +626,26 @@ TEST_CASE("slice of a project: a model that is not printable is left out", "[cli
     r = run({"slice", project.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"});
     CHECK(r.code != kExitOk);
     CHECK_THAT(nlohmann::json::parse(read_text(summary))["error"].get<std::string>(), ContainsSubstring("printable"));
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice of a plain 3MF (no Tisma project): its parts with the default settings (formats.md rules 5, 18)",
+          "[cli][cloud]") {
+    // The cloud's test: a 20 x 20 x 10 mm box at (128, 128), mesh and build item only.
+    const auto dir = fresh_dir("tisma_test_node_plain");
+    const auto model = dir / "project.3mf", gcode = dir / "out.gcode", summary = dir / "summary.json";
+    const TriangleMesh box = make_box(20.0, 20.0, 10.0);
+    {
+        std::ofstream f(model, std::ios::binary);
+        f << write_3mf_objects({{"box", &box, {118.0, 118.0, 0.0}}});
+    }
+    REQUIRE_FALSE(looks_like_project(read_text(model)));
+    const Run r = run({"slice", model.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"});
+    CHECK(r.code == 0);
+    CHECK_THAT(r.err, ContainsSubstring("without Tisma's project"));
+    const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+    CHECK_FALSE(j.contains("error"));
+    CHECK(j.value("layers", 0) == 50);
+    CHECK(read_text(gcode).find("G1") != std::string::npos);
     std::filesystem::remove_all(dir);
 }
