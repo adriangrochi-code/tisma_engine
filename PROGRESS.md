@@ -13343,5 +13343,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   zona cambiarían el relleno de abajo capa por capa; las paredes de más que caen en la zona pintada toman su color.
   Prueba `[mixing][paint]` MX14: 2 paredes y `extra_walls` 2 dan 4, las del lado pintado con 2; sin pintura, 2.
   Regla 16 cerrada (subcapas, solo la superficie y sesgo trabajan por el número de la mezcla, también en lo pintado).
-  Regla 31 bloqueada hasta tener un 3MF real de Full Spectrum (MX20). Sigue: la regla 9 con A, B, A en una capa.
+  Regla 31 bloqueada hasta tener un 3MF real de Full Spectrum (MX20). Decisión: la regla 9 con A, B, A en una capa
+  (un filamento dos veces por capa) queda para después: pide pasadas con número propio en el plan de herramientas,
+  la torre, el escritor y el verificador, y la ficha marca el paso «a confirmar»; hoy esa capa va por altura con un
+  aviso. Full Spectrum queda así en el motor; sigue el ítem 4 de la beta (PF12 a PF14, IR8).
 
