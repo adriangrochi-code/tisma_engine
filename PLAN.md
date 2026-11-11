@@ -775,7 +775,8 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
   través de otras piezas (2026-11-11; mover varios juntos falta)
 - [ ] Barra de vista abajo al centro (girar, desplazar, acercar, encuadrar, perspectiva/ortogonal, estilo)
 - [ ] Aspecto: degradé gris claro en el tema claro, grilla con líneas cada 10 mm marcadas
-- [ ] Diseño: barra de herramientas con pestañas y grupos (11 bis, CD26)
+- [x] Diseño: barra de herramientas con pestañas y grupos (11 bis, CD26) (2026-11-11; Extruir con su panel a la
+  derecha llega con los cuadros flotantes, 11 quinquies)
 - [ ] Diseño: navegador a la izquierda (11 ter)
 - [ ] Diseño: línea de tiempo abajo con marca arrastrable (11 quater, CD27)
 - [ ] Diseño: cuadros de operación flotantes con manipuladores (11 quinquies)

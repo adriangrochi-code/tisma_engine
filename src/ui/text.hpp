@@ -1486,6 +1486,30 @@
     X(DesignNeedsSolid, "Hacé un sólido primero.", "Make a solid first.") \
     X(DesignRestarted, "El componente de diseño se cerró y se abrió de nuevo.", "The design component closed and was opened again.") \
     X(DesignMissing, "Falta el componente de diseño (solidcraft-cli %s) en %s. Los paquetes de Tisma lo traen; una compilación propia lo baja con -DTISMA_SOLIDCRAFT=ON.", "The design component (solidcraft-cli %s) is missing from %s. Tisma's packages carry it; a build of your own downloads it with -DTISMA_SOLIDCRAFT=ON.") \
+    X(DesignTabSolid, "Sólido", "Solid") \
+    X(DesignTabSketch, "Boceto", "Sketch") \
+    X(DesignTabInspect, "Inspeccionar", "Inspect") \
+    X(DesignTabUtilities, "Utilidades", "Utilities") \
+    X(DesignGroupCreate, "Crear", "Create") \
+    X(DesignGroupModify, "Modificar", "Modify") \
+    X(DesignGroupConstruct, "Construir", "Construct") \
+    X(DesignGroupInsert, "Insertar", "Insert") \
+    X(DesignGroupInspect, "Inspeccionar", "Inspect") \
+    X(DesignGroupUtilities, "Utilidades", "Utilities") \
+    X(DesignGroupFinish, "Terminar", "Finish") \
+    X(DesignTipSketch, "Un boceto en un plano: líneas, rectángulos y círculos con cotas, para extruirlo después.", "A sketch on a plane: lines, rectangles and circles with dimensions, to extrude afterwards.") \
+    X(DesignTipPrimitive, "Agrega este sólido; sus medidas se cambian en su renglón del historial.", "Adds this solid; its sizes change in its row of the history.") \
+    X(DesignTipOperation, "Cambia un cuerpo: después se eligen en la vista sus aristas o caras.", "Changes a body: its edges or faces are then picked in the view.") \
+    X(DesignTipSketchTool, "Dibuja en el boceto: clics en la vista o coordenadas en la línea de comandos.", "Draws in the sketch: clicks in the view or coordinates on the command line.") \
+    X(DesignTipFinish, "Cierra el boceto y vuelve a Sólido.", "Closes the sketch and goes back to Solid.") \
+    X(DesignToolKey, "Tecla:", "Key:") \
+    X(DesignPressPull, "Presionar/Tirar", "Press/Pull") \
+    X(DesignAppearance, "Apariencia", "Appearance") \
+    X(DesignOffsetPlane, "Plano desplazado", "Offset plane") \
+    X(DesignAxisTool, "Eje", "Axis") \
+    X(DesignMeasureTool, "Medir", "Measure") \
+    X(DesignSectionTool, "Sección", "Section") \
+    X(DesignToolSearch, "Buscar herramienta", "Search tools") \
     X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
     X(DesignBuilding, "Construyendo…", "Building…") \
     X(DesignVolume, "Volumen", "Volume") \
