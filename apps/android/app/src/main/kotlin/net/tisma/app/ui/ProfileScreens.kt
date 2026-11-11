@@ -219,9 +219,9 @@ fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, o
         if (found == null) {
             OutlinedTextField(query, { query = it }, singleLine = true, label = { Text(stringResource(R.string.profile_search)) },
                 modifier = Modifier.fillMaxWidth().testTag("pack_search"))
-            val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val words = net.tisma.app.engine.searchWords(query)
             val list = index.vendors.flatMap { v -> v.models.map { v to it } }
-                .filter { (v, m) -> words.all { w -> m.name.lowercase().contains(w) || v.name.lowercase().contains(w) } }
+                .filter { (v, m) -> words.all { w -> net.tisma.app.engine.fold(m.name).contains(w) || net.tisma.app.engine.fold(v.name).contains(w) } }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(list.take(300), key = { it.second.file }) { (v, m) ->
                     Card(onClick = { chosenFile = m.file; variantId = m.defaultVariant.ifBlank { m.variants.firstOrNull()?.id } },

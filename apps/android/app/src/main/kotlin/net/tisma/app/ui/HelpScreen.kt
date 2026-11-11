@@ -55,8 +55,8 @@ fun HelpScreen(k: Knowledge?, apply: (String, kotlinx.serialization.json.JsonEle
         k.glossary.map { Entry("glossary", it.term, it.term, it.definition) } +
         k.materials.map { Entry("materials", it.name, it.name, "") } +
         k.calibrations.map { Entry("calibrations", it.id, it.name, it.why) }
-    val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    val shown = if (words.isNotEmpty()) all.filter { e -> words.all { w -> (e.title + " " + e.text).lowercase().contains(w) } }
+    val words = net.tisma.app.engine.searchWords(query)
+    val shown = if (words.isNotEmpty()) all.filter { e -> val t = net.tisma.app.engine.fold(e.title + " " + e.text); words.all { w -> t.contains(w) } }
         else all.filter { it.kind == kind }
     fun go(toKind: String, id: String) { kind = toKind; query = ""; open = "$toKind/$id" }
     LazyColumn(Modifier.fillMaxSize().testTag("help"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

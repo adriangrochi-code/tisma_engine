@@ -32,10 +32,10 @@ data class LibraryState(
     /** Rule 4: by name, tag, printer or material, «with analysis»; newest first or by name. */
     val shown: List<Library.Item>
         get() {
-            val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val words = searchWords(query)
             return items.filter { i ->
                 (!withAnalysis || i.analyses > 0) && words.all { w ->
-                    i.name.lowercase().contains(w) || (i.tags + i.printers + i.materials).any { it.lowercase().contains(w) }
+                    fold(i.name).contains(w) || (i.tags + i.printers + i.materials).any { fold(it).contains(w) }
                 }
             }.let { l -> if (byName) l.sortedBy { it.name.lowercase() } else l.sortedByDescending { it.modified } }
         }

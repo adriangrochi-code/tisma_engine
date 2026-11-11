@@ -143,7 +143,7 @@ private fun SettingsList(
         if (q.isNotEmpty()) {
             // Rule 5: a hidden setting is found too, and marked with its level.
             val found = tab.sections.flatMap { s -> s.subsections.flatMap { b -> b.rows.map { s to it } } }
-                .filter { (_, r) -> r.label.contains(q, true) || r.key.contains(q, true) }
+                .filter { (_, r) -> net.tisma.app.engine.fold(r.label).contains(net.tisma.app.engine.fold(q)) || r.key.contains(q, true) }
                 .filter { (s, r) -> !PanelVisibility.hiddenByParent(r.key, s.id) { state.value(it) } }
             if (found.isEmpty()) item { Text(stringResource(R.string.panel_nothing_found)) }
             items(found, key = { it.second.key }) { (s, r) ->

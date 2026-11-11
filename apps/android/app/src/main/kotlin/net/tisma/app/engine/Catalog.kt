@@ -44,8 +44,8 @@ class Catalog(val printers: List<PrinterModel>, val filaments: List<FilamentMode
     private fun sameBrand(a: String, b: String) = a.filter { it.isLetterOrDigit() }.equals(b.filter { it.isLetterOrDigit() }, ignoreCase = true)
 
     fun search(query: String): List<PrinterModel> {
-        val words = query.lowercase().split(' ').filter { it.isNotBlank() }
-        return printers.filter { p -> words.all { p.name.lowercase().contains(it) } }.sortedBy { it.name.lowercase() }
+        val words = searchWords(query)
+        return printers.filter { p -> val n = fold(p.name); words.all { n.contains(it) } }.sortedBy { it.name.lowercase() }
     }
 
     fun printer(name: String?): PrinterModel? = printers.firstOrNull { it.name == name }
