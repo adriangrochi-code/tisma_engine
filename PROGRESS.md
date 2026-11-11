@@ -12299,7 +12299,7 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | CAD (SolidCraft) y Piezas | Pendiente | |
 | Calibraciones | Pendiente | |
 | Preferencias, créditos, visión de color | Revisado 11-11 (servidor) | Cambiar el servidor dejaba las secuencias de Compartida del anterior: la lista nueva se rechazaba para siempre (`BlockListTest`); créditos y visión de color: pendiente |
-| Giro de pantalla y muerte del proceso a mitad de laminar/subir | Revisado 11-11 (giro) | Cada giro volvía a Biblioteca y volvía a abrir el archivo compartido (4fc27df, `ShareTest`); muerte del proceso: pendiente |
+| Giro de pantalla y muerte del proceso a mitad de laminar/subir | Revisado 11-11 | Cada giro volvía a Biblioteca y volvía a abrir el archivo compartido (4fc27df, `ShareTest`); tras la muerte del proceso la placa volvía vacía (`ProcessDeathTest`) |
 | Sin red ↔ con red (nube, impresoras, Compartida) | Revisado 10-11 | Seguir un trabajo se cortaba para siempre (`CloudOfflineTest`); una Bambu con el Wi-Fi perdido sin cierre mostraba su último estado para siempre (`BambuTest`); Compartida: lista nueva con firma vieja guardada si se cortaba la red entre las dos (8f4b478, `BlockListTest`) |
 | Textos: plurales, castellano/inglés | Revisado 10-11 | Plurales (ba8b30a); mensajes propios del motor en inglés en Mi biblioteca, paquete, CAD, piezas, calibraciones y placa (`AppMessageTest`) |
 - Suscripciones por tienda (`cloud.md` 5b y 5c, spec/next 99b7ee2): «Administrar la suscripción» abre la página de
