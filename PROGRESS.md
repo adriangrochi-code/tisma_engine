@@ -12737,6 +12737,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   del proyecto antes de la conversión de `prusaslicer` (OrcaSlicer 0,6 y "105%" → 0,63 mm).
   PF13: `percent_of` también puede nombrar una clave del motor; el porcentaje es de su valor por defecto
   (`bridge_acceleration` "50%" con 5000 por defecto → 2500).
+  PF14: `plate_temperature` en las tablas de la familia OrcaSlicer: la temperatura de cama de la placa de
+  `curr_bed_type`, si no la de `default_bed_type`, si no la primera presente en el orden High Temp, Textured PEI,
+  Engineering, Cool, Textured Cool, Supertack.
 - **Cola de baja prioridad (después del orden de la beta; spec/next, 2026-11-11):** `ironing.md`, `ironing.angle`
   (desplazamiento sobre el relleno de arriba, 45 por defecto, negativo = por defecto) e `ironing.angle_fixed` (ángulo
   absoluto), prueba IR8. Ningún perfil del paquete plancha con ángulo hoy.
