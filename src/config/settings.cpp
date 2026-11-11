@@ -2769,12 +2769,18 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be from 0.1 to 20 mm");
                    s.fuzzy_point_distance = v;
                });
-    read_group(root, "ironing", {"enabled", "surfaces", "flow", "spacing", "speed"},
+    read_group(root, "ironing", {"enabled", "surfaces", "flow", "spacing", "speed", "angle", "angle_fixed"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "enabled") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
                        s.ironing = g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "angle_fixed") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.ironing_angle_fixed = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "surfaces") {
@@ -2792,6 +2798,10 @@ Settings parse_checked(std::string_view text) {
                        if (!(v >= 0.01 && v <= 2.0))
                            fail(k, "must be from 0.01 to 2 mm");
                        s.ironing_spacing = v;
+                   } else if (n == "angle") {
+                       if (!(v >= -360.0 && v <= 360.0))
+                           fail(k, "must be from -360 to 360 degrees");
+                       s.ironing_angle = v;
                    } else {
                        if (!(v > 0.0 && v <= 1000.0))
                            fail(k, "must be more than 0 and at most 1000 mm/s");
@@ -3490,6 +3500,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"ironing.flow", num(s.ironing_flow)},
         {"ironing.spacing", num(s.ironing_spacing)},
         {"ironing.speed", num(s.ironing_speed)},
+        {"ironing.angle", num(s.ironing_angle)},
+        {"ironing.angle_fixed", flag(s.ironing_angle_fixed)},
         {"review.nozzle_force", num(s.review_nozzle_force)},
         {"review.bed_adhesion", num(s.review_bed_adhesion)},
         {"review.max_deflection", num(s.review_max_deflection)},
@@ -4391,7 +4403,9 @@ std::string settings_json(const Settings& s) {
                                                                       : "top"},
           {"flow", s.ironing_flow},
           {"spacing", s.ironing_spacing},
-          {"speed", s.ironing_speed}}},
+          {"speed", s.ironing_speed},
+          {"angle", s.ironing_angle},
+          {"angle_fixed", s.ironing_angle_fixed}}},
         {"review",
          {{"nozzle_force", s.review_nozzle_force},
           {"bed_adhesion", s.review_bed_adhesion},

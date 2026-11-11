@@ -344,6 +344,8 @@ de siempre). Las partes más angostas que dos líneas no se planchan.
 | `surfaces` | texto | `"top"` | `top`, `topmost`, `solid` | `top`: lo que la capa de arriba no cubre; `topmost`: lo que nada de más arriba cubre (la superficie más alta de cada parte); `solid`: todas las superficies sólidas de cada capa |
 | `flow` | número | 15 | más de 0 a 100 | Material, en % de una capa de la altura normal |
 | `spacing` | número | 0,1 | 0,01 a 2 | Separación entre líneas, en mm |
+| `angle` | número | 45 | −360 a 360 | Grados que giran las líneas sobre las del relleno de arriba de esa capa (IR8); negativo: 45, como los perfiles de OrcaSlicer que traen −1 |
+| `angle_fixed` | booleano | `false` | — | `angle` es el ángulo de las líneas desde X, en todas las capas |
 | `speed` | número | 15 | más de 0 a 1000 | Velocidad, en mm/s (la de la ficha, no una de la impresora) |
 
 ### `retraction`

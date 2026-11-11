@@ -2961,7 +2961,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             area = offset(offset(area, -spacing), spacing); // nothing narrower than two lines
             if (area.empty())
                 return;
-            const double angle = settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0) + 45.0;
+            // ironing.md rule 2 and IR8: over the top fill's, or fixed.
+            const double over = settings.ironing_angle < 0.0 ? 45.0 : settings.ironing_angle;
+            const double angle = settings.ironing_angle_fixed
+                                     ? over
+                                     : settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0) + over;
             out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width_at(l), true);
         });
     }

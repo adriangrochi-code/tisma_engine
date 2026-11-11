@@ -3300,3 +3300,34 @@ TEST_CASE("the preview's legend adds up to the G-code it shows", "[gcode]") {
     CHECK(p.moves_seconds <= p.estimated_seconds + 1.0);
     CHECK(p.moves_seconds >= 0.75 * p.estimated_seconds);
 }
+
+TEST_CASE("ironing: its angle over the top fill's, or fixed (ironing.md, IR8)", "[gcode][ironing]") {
+    // IR2's cube, 9.8 mm high: the top fill at 45 degrees.
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 9.8);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.min_layer_time = 0.0;
+    s.ironing = true;
+    // The direction of the long ironing lines, 0 to 180 degrees.
+    const auto direction = [&](double angle, bool fixed) {
+        Settings w = s;
+        w.ironing_angle = angle;
+        w.ironing_angle_fixed = fixed;
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, w), w);
+        std::map<long, double> by;
+        for (const Extrusion& x : extrusions(out.str()))
+            if (x.type == "Ironing" && x.length() > 1.0) {
+                double a = std::atan2(x.y1 - x.y0, x.x1 - x.x0) * 180.0 / std::numbers::pi;
+                a = std::fmod(a + 360.0, 180.0);
+                by[std::lround(a) % 180] += x.length();
+            }
+        REQUIRE_FALSE(by.empty());
+        return std::max_element(by.begin(), by.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->first;
+    };
+    CHECK(direction(45.0, false) == 90); // IR2, the default
+    CHECK(direction(90.0, false) == 135);
+    CHECK(direction(90.0, true) == 90);
+    CHECK(direction(-1.0, false) == 90); // negative: the default
+}

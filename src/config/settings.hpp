@@ -286,6 +286,10 @@ struct Settings {
     double ironing_flow = 15.0;   // %
     double ironing_spacing = 0.1; // mm
     double ironing_speed = 15.0;  // mm/s
+    // The lines' angle (IR8): ironing_angle degrees over the top fill's,
+    // below 0 as the default 45; with ironing_angle_fixed, from X, every layer.
+    double ironing_angle = 45.0;
+    bool ironing_angle_fixed = false;
     // The stability review (docs/spec/features/stability.md): measured with
     // its calibration piece; 0 is not measured yet.
     double review_nozzle_force = 0.0;   // N, the nozzle's push on the layer it prints

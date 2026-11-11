@@ -13358,4 +13358,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `[project_import]`. Falta: PF14 (`plate_temperature`; pedí su forma JSON), `at_least`, `points`, `number_or_percent`
   y las `rule` con nombre (pedí su semántica), y que la interfaz aplique `translate_settings` al abrir (aviso a esa
   sesión). La forma de `percent_of` a nivel de fila es la que entiendo de la ficha; se confirma con la respuesta.
+- **IR8, `ironing.angle` e `ironing.angle_fixed`** (2026-11-11; `ironing.md` de spec/next). El planchado gira `angle`
+  grados sobre la tapa de la capa (45 por defecto; negativo, como 45: los perfiles de OrcaSlicer traen −1); con
+  `angle_fixed`, `angle` es el ángulo desde X en todas las capas. Leídos, guardados, en la tarjeta de planchado y con su
+  guía. Prueba `[ironing]` IR8: tapa a 45°; 90 → 135°, 90 fijo → 90°, −1 → 90°.
 
