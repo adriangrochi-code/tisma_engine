@@ -9,6 +9,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Colores pintados: se laminan, cada zona con su filamento o mezcla; las paredes finas llevan el color de su lado
+  pintado en todo el espesor y los techos y pisos pintados colorean sus capas sólidas. El color termina en el borde
+  pintado (antes se pasaba un ancho de línea a lo largo de la pared, o dos en una pared fina, y una cara que terminaba
+  en la base de una capa pintaba esa capa). Casillas de la pintura en el proyecto (`paint_slots`). 8 veces más rápido
+  en piezas grandes.
 - Mezclas de color: degradé a lo largo de X o Y (cada franja de la capa con su mezcla) y pieza de la paleta de mezclas.
 - Mezclas de color: el estimado de cambios antes de laminar sigue el alto por filamento y el paso
   (`mixing.cadence_heights`, `mixing.step`).
