@@ -1175,3 +1175,24 @@ TEST_CASE("color mixing plus: the estimate before slicing follows mixing.step (r
         CHECK(mix_changes_estimate(half, 10.0, o) == counted);
     }
 }
+
+TEST_CASE("color mixing plus: the estimate before slicing with mixing.step and sublayers (rules 9 and 12)", "[mixing]") {
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    const ColorMix third = blend(3, {{1, 2.0 / 3.0}, {2, 1.0 / 3.0}});
+    for (const ColorMix& mix : {half, third})
+        for (const double step : {0.1, 0.08, 0.4}) {
+            Settings s = base();
+            s.mix_step = step;
+            s.mix_subdivide = true;
+            const int counted = changes(gcode_of(sliced(box(3), s, {mix}), s));
+            MixChangeOptions o;
+            o.first_layer_height = s.first_layer_height;
+            o.layer_height = s.layer_height;
+            o.subdivide = true;
+            o.sub_min_height = s.mix_sub_min_height;
+            o.sub_first_layer = s.mix_sub_first_layer;
+            o.step = s.mix_step;
+            INFO("step " << step << ", parts " << mix.components.front().share);
+            CHECK(mix_changes_estimate(mix, 10.0, o) == counted);
+        }
+}

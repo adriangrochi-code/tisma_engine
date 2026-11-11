@@ -12731,8 +12731,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Búsqueda profunda: el estimado de cambios ignoraba `mixing.step`** (2026-11-11, reglas 9 y 12). Con capas de
   0,2 mm y paso 0,4 el estimado decía 49 cambios en un cubo de 10 mm y el laminado hace 24 (16 con paso 0,6).
   `MixChangeOptions::step` y el estimado toma el paso como el laminado: apagado a la altura de capa, por capa si es más
-  fino que las capas sin subcapas. Prueba `[mixing]` con pasos 0,4, 0,6 y 0,1 contra el G-code. Falta: el paso con
-  `subdivide` (pasadas por paso) en el estimado; la interfaz tiene que llenar `step`.
+  fino que las capas sin subcapas. Prueba `[mixing]` con pasos 0,4, 0,6 y 0,1 contra el G-code. Con `subdivide` el
+  estimado también arma las pasadas de `step` (la última lo que queda, el ciclo sigue entre capas, una capa con un
+  filamento dos veces va entera): antes daba 49 contra 98 (paso 0,1), 24 (0,08) y 35 (0,4) del laminado; prueba con
+  1:1 y 2:1. La interfaz llena `step` (1f26c24).
 - **Full Spectrum, reglas 22 y 24: nombres de colores y paleta rápida** (2026-11-11, bloque nocturno; MX18).
   `color_name(hex)` en `src/slice/color_mix.*`: lista propia en inglés y español sobre CIELAB (croma < 10: blanco,
   gris claro, gris, gris oscuro, negro por L*; si no, una banda del tono h_ab: rojo, naranja, amarillo, verde, cian,

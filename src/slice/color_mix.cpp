@@ -463,8 +463,35 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
         changes += last != 0 && f != last;
         last = f;
     };
+    // With the step, a subdivided layer prints passes of `step` (the last
+    // what is left), each the cycle's next element, as the slicing does; a
+    // layer where one filament would come twice goes whole, by height.
+    const std::vector<int> sequence = by_height > 0.0 ? mix_sequence(mix) : std::vector<int>{};
+    std::size_t passes = 0;
     for (std::size_t l = 0; l < layers.size(); ++l) {
         const double h = layers[l].top - layers[l].bottom;
+        if (by_height > 0.0 && o.subdivide && !mix.gradient && !sequence.empty()) {
+            std::vector<int> pass;
+            if ((l > 0 || o.sub_first_layer) && by_height < h - 1e-9 && by_height >= o.sub_min_height - 1e-9) {
+                auto count = static_cast<std::size_t>(std::floor(h / by_height + 1e-9));
+                const double rest = h - double(count) * by_height;
+                count += rest > 1e-9 && rest >= o.sub_min_height - 1e-9;
+                std::size_t next = passes;
+                for (std::size_t i = 0; i < count; ++i)
+                    pass.push_back(sequence[next++ % sequence.size()]);
+                for (std::size_t i = 0; i < pass.size() && !pass.empty(); ++i)
+                    for (std::size_t j = i + 1; j < pass.size(); ++j)
+                        if (pass[i] == pass[j])
+                            pass.clear();
+                if (!pass.empty())
+                    passes = next;
+            }
+            if (pass.empty())
+                use(l < cycle.size() ? cycle[l] : 0);
+            for (const int f : pass)
+                use(f);
+            continue;
+        }
         bool split = o.subdivide && parts.size() >= 2 && total > 0.0 && (l > 0 || o.sub_first_layer);
         for (const auto& p : parts)
             split = split && p.second / total * h >= o.sub_min_height - 1e-9;
