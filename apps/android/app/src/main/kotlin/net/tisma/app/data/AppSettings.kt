@@ -42,6 +42,11 @@ class AppSettings(context: Context) {
         get() = prefs.getStringSet("scans.kept", null)?.toSet() ?: emptySet()
         set(v) = prefs.edit().putStringSet("scans.kept", v).apply()
 
+    /** cloud.md 5c: store purchases the server could not verify yet (the store did not answer, 503), as JSON lines. */
+    var pendingPurchases: Set<String>
+        get() = prefs.getStringSet("cloud.pending_purchases", null)?.toSet() ?: emptySet()
+        set(v) = prefs.edit().putStringSet("cloud.pending_purchases", v).apply()
+
     /** The server the shared library's sequences and kept files belong to. */
     var p2pOrigin: String
         get() = prefs.getString("p2p.origin", "") ?: ""

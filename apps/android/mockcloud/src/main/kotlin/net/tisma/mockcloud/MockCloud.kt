@@ -57,6 +57,8 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
     /** cloud.md 5c: the store's answer for a proof (true confirmed); and which account each purchase belongs to. */
     @Volatile var storeConfirms: (store: String, proof: String) -> Boolean = { _, proof -> proof.startsWith("ok") }
     private val purchaseOwner = mutableMapOf<String, String>()
+    /** Tests: how many purchases get 503 «the store did not answer». */
+    @Volatile var storeDown = 0
 
     class JobDef(
         val id: String,
@@ -383,6 +385,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         val proof = when (store) { "google_play" -> s("purchase_token"); "app_store" -> s("signed_transaction"); else -> s("store_id_key") }
         if (store.isEmpty() || product.isEmpty() || proof.isEmpty()) throw Stop(422, "Missing store, product_id or the store's proof")
         val plan = synchronized(lock) { plans.firstOrNull { it.storeProducts[store] == product } } ?: throw Stop(422, "Unknown product")
+        if (storeDown > 0) { storeDown--; throw Stop(503, "The store did not answer; try again") }
         if (!storeConfirms(store, proof)) throw Stop(402, "The store did not confirm this purchase")
         synchronized(lock) {
             val owner = purchaseOwner.getOrPut(store + ":" + proof) { a.email }

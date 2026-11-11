@@ -18,6 +18,7 @@ import net.tisma.app.data.SecretStore
 import net.tisma.cloud.Account
 import net.tisma.cloud.CloudClient
 import net.tisma.cloud.CloudException
+import kotlinx.serialization.json.put
 import net.tisma.cloud.Job
 import net.tisma.cloud.JobRequest
 import net.tisma.cloud.Plan
@@ -121,6 +122,7 @@ class CloudViewModel(
     fun refreshAccount() {
         refreshPublic()
         if (!state.value.signedIn) return
+        if (settings.pendingPurchases.isNotEmpty()) restorePurchases()
         launchRequest(quiet = true) {
             val account = client.account()
             settings.email = account.email
@@ -141,19 +143,46 @@ class CloudViewModel(
         val product = plan.storeProducts[b.store] ?: return
         viewModelScope.launch {
             val proof = runCatching { b.buy(product) }.onFailure { AppLog.line("store: ${it.message}") }.getOrNull() ?: return@launch
-            val account = request { client.purchase(proof) } ?: return@launch
-            _state.update { it.copy(account = account) }
+            send(proof)
         }
     }
 
+    /**
+     * Sends a purchase to the server. When the store does not answer it (503), the purchase is kept on the phone and
+     * sent again at the next sign-in or account refresh: a paid plan is never lost to a passing outage.
+     */
+    private suspend fun send(p: net.tisma.cloud.StorePurchase, quiet: Boolean = false): net.tisma.cloud.Account? {
+        val line = purchaseLine(p)
+        val r = try {
+            withContext(io) { client.purchase(p) }
+        } catch (e: CloudException) {
+            if (e.status == 503 || e.network) { settings.pendingPurchases += line; AppLog.line("store: kept for later (${e.status})") }
+            else { settings.pendingPurchases -= line; if (!quiet) _state.update { it.copy(notice = Notice.Failed(e)) } }
+            return null
+        }
+        settings.pendingPurchases -= line
+        _state.update { it.copy(account = r) }
+        return r
+    }
+
+    private fun purchaseLine(p: net.tisma.cloud.StorePurchase) = kotlinx.serialization.json.buildJsonObject {
+        put("store", p.store); put("product_id", p.productId); put("purchase_token", p.purchaseToken)
+        put("signed_transaction", p.signedTransaction); put("store_id_key", p.storeIdKey)
+    }.toString()
+
+    private fun purchaseOf(line: String): net.tisma.cloud.StorePurchase? = runCatching {
+        val o = kotlinx.serialization.json.Json.parseToJsonElement(line) as kotlinx.serialization.json.JsonObject
+        fun s(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+        net.tisma.cloud.StorePurchase(s("store"), s("product_id"), s("purchase_token"), s("signed_transaction"), s("store_id_key"))
+    }.getOrNull()
+
     /** «Restaurar compras»: the store's active purchases go to the server again, so a new phone gets the plan. */
     private fun restorePurchases() {
-        val b = billing ?: return
+        val b = billing
         viewModelScope.launch {
-            val list = runCatching { b.active() }.getOrDefault(emptyList())
-            var account: net.tisma.cloud.Account? = null
-            for (p in list) request(quiet = true) { client.purchase(p) }?.let { account = it }
-            account?.let { a -> _state.update { it.copy(account = a) } }
+            val kept = settings.pendingPurchases.mapNotNull { purchaseOf(it) }
+            val active = b?.let { runCatching { it.active() }.getOrDefault(emptyList()) }.orEmpty()
+            for (p in (kept + active).distinct()) send(p, quiet = true)
         }
     }
 

@@ -81,4 +81,25 @@ class StoreBillingTest {
         while (vm.state.value.account?.plan != "Pro" && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
         assertEquals("Pro", vm.state.value.account?.plan)
     }
+
+    @Test
+    fun `a purchase the store could not confirm yet (503) is kept and sent again`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context).apply { this.server = this@StoreBillingTest.server.url; pendingPurchases = emptySet() }
+        val play = FakePlay()
+        val vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5, billing = play)
+        vm.signIn("ana@example.com", "password1")
+        val end = System.currentTimeMillis() + 20_000
+        while ((vm.state.value.account == null || vm.state.value.plans.isEmpty()) && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+        server.storeDown = 1
+        vm.buy(vm.state.value.plans.first { it.name == "Pro" })
+        while (settings.pendingPurchases.isEmpty() && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+        assertEquals(1, settings.pendingPurchases.size)
+        assertEquals("Maker", vm.state.value.account?.plan)
+        // The next refresh sends it again; the store answers now.
+        vm.refreshAccount()
+        while (vm.state.value.account?.plan != "Pro" && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+        assertEquals("Pro", vm.state.value.account?.plan)
+        assertEquals(emptySet(), settings.pendingPurchases)
+    }
 }
