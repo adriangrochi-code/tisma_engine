@@ -249,6 +249,11 @@ TEST_CASE("calibration: towers write each segment's value", "[calibration]") {
     CHECK(tower_values(0.4, 2.0, 0.4).size() == 5);
     CHECK(tower_values(1, 1, 0).size() == 1);
     CHECK(tower_values(0, 1000, 1).size() == 40);
+    // The values as written, without the sums' noise (BH55): going down,
+    // 1 - 0.4 * 2 is 0.2; going up, 0.2 + 0.3 * 2 is 0.8.
+    CHECK(tower_values(1.0, 0.2, 0.4) == std::vector<double>{1.0, 0.6, 0.2});
+    CHECK(tower_values(0.2, 1.0, 0.3) == std::vector<double>{0.2, 0.5, 0.8});
+    CHECK(tower_values(0.1, 0.7, 0.1) == std::vector<double>{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7});
 
     SECTION("temperature") {
         const CalibrationPrint p = temperature_tower(230, 200, 10);

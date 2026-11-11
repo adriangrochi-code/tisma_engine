@@ -222,7 +222,8 @@ std::vector<double> tower_values(double start, double end, double step) {
         return {start};
     const double direction = end >= start ? 1.0 : -1.0;
     for (std::size_t i = 0; i < kMaxSegments; ++i) {
-        const double v = start + direction * step * double(i);
+        // To the nanounit: 1 - 0.4 * 2 is 0.2, not 0.19999999999999996 (BH55).
+        const double v = std::round((start + direction * step * double(i)) * 1e9) / 1e9;
         if ((v - end) * direction > step * 1e-6)
             break;
         out.push_back(v);

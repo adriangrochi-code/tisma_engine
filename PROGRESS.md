@@ -12618,7 +12618,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 | Lo propio de Tisma (curvas, altura variable, cúspide) | revisado (parcial) | 10-11 | altura variable con soporte | `support.z_gap` contado en capas nominales: con capas de 0,1 quedaba a 0,1 mm |
 | Servicios (nube, nodos, biblioteca) | pendiente | | | |
 | Interfaz: menús, diálogos, preferencias | revisado (parcial) | 10-11 | auditoría de interface.md (tabla de arriba), Imprimible, vaso | vaso con modelos no imprimibles |
-| Interfaz: calibraciones | pendiente | | | |
+| Interfaz: calibraciones | revisado (parcial) | 11-11 | valores de las torres por la línea de comandos (subida, bajada, paso 0, negativo, fuera de rango) | BH55 |
 | Línea de comandos | revisado (parcial) | 11-11 | `profile` por nombre de impresora y filamento, `--copies` | BH51 (nombre sin marca ambiguo) |
 | Análisis (FEA, CFD) | pendiente | | | |
 | Migración | pendiente | | | |
@@ -12703,6 +12703,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- BH55 (búsqueda profunda, calibraciones): una torre que baja (`calibration retraction --start 1 --end 0.2 --step 0.4`)
+  daba el valor `0.19999999999999996`, que iba así a la lista, a los ajustes de la torre y al aplicar el mejor. Ahora
+  cada valor se redondea a la milmillonésima: 1, 0,6 y 0,2. Prueba `[calibration]`, que falla sin el arreglo. Visto
+  sin cambio: paso 0 o negativo dan error de uso; un inicio fuera del rango se recorta al rango.
 - BH54, PF7 a PF9 (spec/next 3f1decf, `profile_pack_format.md`, perfiles de impresión, regla 6; perfiles de Anycubic Predator):
   `extrusion.bridge_flow_ratio` de una impresión del paquete se dejaba afuera con aviso («is a filament setting»);
   ahora se pone sobre el del filamento. `wipe_tower.purge_volumes` de una impresora se dejaba afuera; ahora es el
