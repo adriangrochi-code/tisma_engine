@@ -12744,6 +12744,18 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   IPv4 y `::ffff:a.b.c.d`, por dirección como antes. Huella = SHA-256(sal del día + texto); texto IPv6 = la red en
   RFC 5952 (comprimida, minúsculas) + «/64» (`2800:A4:1234:5600:abcd::9` → «2800:a4:1234:5600::/64»); IPv4 =
   «200.40.10.7». Exacto, para coincidir con el servidor.
+- **Los colores pintados se laminan** (2026-11-11; `multi_extruder.md` regla 1, `color_mixing_plus.md` regla 16).
+  Hasta hoy el canal Colores de la pintura se veía en la interfaz pero el motor no lo usaba: las caras pintadas salían
+  con el filamento de la pieza. `color_zones` (en `src/slice/painted.*`): en cada capa, cada punto de la región toma la
+  marca de la cara más cercana, pintada o no (una cara sin pintar deja el filamento de la pieza), creciendo la banda de
+  cada marca un ancho de pared por vez, hasta `painting.max_region_width` (0: sin límite); `split_by_zones` corta los
+  caminos en los bordes (a medio paso) y `paint_colors` les pone la marca antes de `apply_mixes` (una mezcla pintada se
+  lamina como mezcla; una marca que no es filamento ni mezcla deja el de la pieza). En la placa, en secuencial y sin
+  objetos. Prueba `[paint]`: cubo con la cara +X pintada con 2: las paredes de ese lado con 2, las del otro con 1;
+  pintada con una mezcla 1:1, ese lado con los dos; marca 9 sin filamento: el de la pieza; G-code verificado. Diseño
+  propio de la profundidad, a confirmar con la sesión de spec. Falta: paredes propias en el borde entre colores (hoy
+  los caminos se cortan; MX14 `extra_walls` en zonas pintadas), `painting.interlocking_depth`, la tabla casilla→número
+  de MX33 en el proyecto.
 - **Formatos FM9, partes de un 3MF para la interfaz** (2026-11-11, pedido de la sesión de interfaz).
   `ModelFile::pieces`: cada parte con su tramo de triángulos en `mesh`, el objeto (ítem de la placa) al que pertenece,
   su nombre (el del volumen en un proyecto de slicer, si no el del objeto) y su extrusor (metadato `extruder`, 0 si no

@@ -317,8 +317,9 @@ struct Settings {
     int interlock_layers = 2;
     double interlock_orientation = 22.5;
     int interlock_depth = 2, interlock_avoidance = 2;
-    // Painted regions of a colour (rule 18): their widest and how deep they
-    // interlock, mm (read; the colour channel is not sliced yet).
+    // Painted regions of a colour (rule 18): how far in from a painted face a
+    // colour reaches (0: no limit; paint_colors) and how deep they interlock,
+    // mm (the interlocking is read, not applied yet).
     double paint_max_region_width = 0.0, paint_interlocking_depth = 0.0;
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 
 namespace tisma {
 
@@ -104,6 +105,141 @@ std::vector<Polygons> painted_areas(const std::vector<PaintedPiece>& pieces, con
         }
         out[l] = std::move(area);
     });
+    return out;
+}
+
+std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const Painting& painting,
+                                                const std::vector<Layer>& layers, const std::vector<Polygons>& regions,
+                                                double step, double depth) {
+    std::vector<std::vector<ColorZone>> out(layers.size());
+    if (painting.empty(PaintChannel::Color) || !(step > 0.0))
+        return out;
+    // Each mark's band at the outline, by layer.
+    std::vector<std::pair<std::uint8_t, std::vector<Polygons>>> bands;
+    for (int m = 1; m < Painting::kSplit; ++m)
+        if (painting.has(PaintChannel::Color, std::uint8_t(m)))
+            bands.push_back({std::uint8_t(m), painted_areas(painted_pieces(mesh, painting, PaintChannel::Color, std::uint8_t(m)),
+                                                            layers, step)});
+    if (bands.empty())
+        return out;
+    const std::size_t steps =
+        depth > 0.0 ? std::size_t(std::ceil(depth / step)) : std::numeric_limits<std::size_t>::max();
+    tbb::parallel_for(std::size_t(0), std::min(layers.size(), regions.size()), [&](std::size_t l) {
+        const Polygons& region = regions[l];
+        if (region.empty())
+            return;
+        // The labels: 0 (the part's own, unpainted faces) and each mark.
+        std::vector<std::uint8_t> marks{0};
+        std::vector<Polygons> zone{};
+        Polygons painted;
+        for (const auto& [m, by_layer] : bands)
+            if (l < by_layer.size() && !by_layer[l].empty()) {
+                Polygons z = Clipper2Lib::Intersect(by_layer[l], region, Clipper2Lib::FillRule::NonZero);
+                if (z.empty())
+                    continue;
+                marks.push_back(m);
+                painted = Clipper2Lib::Union(painted, z, Clipper2Lib::FillRule::NonZero);
+                zone.push_back(std::move(z));
+            }
+        if (marks.size() == 1)
+            return;
+        // The unpainted band at the outline.
+        const Polygons ring = Clipper2Lib::Difference(region, offset(region, -step), Clipper2Lib::FillRule::NonZero);
+        zone.insert(zone.begin(), Clipper2Lib::Difference(ring, painted, Clipper2Lib::FillRule::NonZero));
+        Polygons taken = Clipper2Lib::Union(zone.front(), painted, Clipper2Lib::FillRule::NonZero);
+        // Grown all together, a step at a time, each over what is not taken yet.
+        std::vector<Polygons> front = zone;
+        for (std::size_t s = 0; s < steps; ++s) {
+            bool grew = false;
+            Polygons now = taken;
+            for (std::size_t k = 0; k < zone.size(); ++k) {
+                if (front[k].empty())
+                    continue;
+                Polygons more = Clipper2Lib::Intersect(offset(front[k], step), region, Clipper2Lib::FillRule::NonZero);
+                more = Clipper2Lib::Difference(more, taken, Clipper2Lib::FillRule::NonZero);
+                more = Clipper2Lib::Difference(more, now, Clipper2Lib::FillRule::NonZero); // first label this step wins
+                if (more.empty() || std::abs(Clipper2Lib::Area(more)) < 1.0) {
+                    front[k].clear();
+                    continue;
+                }
+                zone[k] = Clipper2Lib::Union(zone[k], more, Clipper2Lib::FillRule::NonZero);
+                now = Clipper2Lib::Union(now, more, Clipper2Lib::FillRule::NonZero);
+                front[k] = std::move(more);
+                grew = true;
+            }
+            taken = std::move(now);
+            if (!grew)
+                break;
+        }
+        for (std::size_t k = 1; k < zone.size(); ++k)
+            if (!zone[k].empty())
+                out[l].push_back({marks[k], std::move(zone[k])});
+    });
+    return out;
+}
+
+std::vector<std::pair<std::uint8_t, Toolpath>> split_by_zones(const Toolpath& path, const std::vector<ColorZone>& zones,
+                                                              double step) {
+    std::vector<std::pair<std::uint8_t, Toolpath>> out;
+    if (path.points.empty())
+        return out;
+    // Inside a zone: its contours' winding (outer ones counter-clockwise,
+    // holes clockwise) is not zero there.
+    const auto mark_at = [&](double x, double y) {
+        const Clipper2Lib::Point64 q{to_units(x), to_units(y)};
+        for (const ColorZone& z : zones) {
+            int winding = 0;
+            for (const auto& poly : z.area)
+                if (Clipper2Lib::PointInPolygon(q, poly) != Clipper2Lib::PointInPolygonResult::IsOutside)
+                    winding += Clipper2Lib::Area(poly) > 0 ? 1 : -1;
+            if (winding != 0)
+                return z.mark;
+        }
+        return std::uint8_t(0);
+    };
+    std::vector<ToolpathPoint> points = path.points;
+    if (path.closed && points.size() > 1)
+        points.push_back(points.front());
+    const auto lerp = [](const ToolpathPoint& a, const ToolpathPoint& b, double t) {
+        ToolpathPoint q = a;
+        q.p.x = a.p.x + (b.p.x - a.p.x) * t, q.p.y = a.p.y + (b.p.y - a.p.y) * t;
+        q.width = a.width + (b.width - a.width) * t;
+        q.dz = a.dz + (b.dz - a.dz) * t;
+        q.below = a.below + (b.below - a.below) * t;
+        return q;
+    };
+    Toolpath piece = path;
+    piece.closed = false;
+    piece.points = {points.front()};
+    int now = -1;
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        const ToolpathPoint& a = points[i - 1];
+        const ToolpathPoint& b = points[i];
+        const double length = std::hypot(b.p.x - a.p.x, b.p.y - a.p.y);
+        const int parts = std::max(1, int(std::ceil(length / step)));
+        for (int k = 1; k <= parts; ++k) {
+            const ToolpathPoint end = lerp(a, b, double(k) / parts);
+            const ToolpathPoint mid = lerp(a, b, (k - 0.5) / parts);
+            const int m = mark_at(mid.p.x, mid.p.y);
+            if (now >= 0 && m != now) {
+                out.push_back({std::uint8_t(now), piece});
+                piece.points = {piece.points.back()};
+            }
+            now = m;
+            piece.points.push_back(end);
+        }
+    }
+    if (piece.points.size() >= 2 && now >= 0)
+        out.push_back({std::uint8_t(now), piece});
+    // Only one colour: the path as it was. A loop cut open: its last piece
+    // and its first, of one colour, are one.
+    if (out.size() == 1) {
+        out.front().second = path;
+    } else if (path.closed && out.size() > 1 && out.front().first == out.back().first) {
+        Toolpath& last = out.back().second;
+        last.points.insert(last.points.end(), out.front().second.points.begin() + 1, out.front().second.points.end());
+        out.erase(out.begin());
+    }
     return out;
 }
 

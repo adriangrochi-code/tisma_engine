@@ -998,6 +998,39 @@ bool gradient_between(SlicedModel& model, ColorMix& mix, const std::vector<char>
     return true;
 }
 
+// The colours painted on the faces (multi_extruder.md, rule 1;
+// color_mixing_plus.md, rule 16): each path of the parts cut at the zones
+// color_zones finds and printed with the zone's mark (a filament, or a blend
+// that apply_mixes then lays). A mark that is neither keeps the part's. The
+// zones reach painting.max_region_width in (0: no limit).
+void paint_colors(SlicedModel& model, const IndexedMesh& mesh, const Painting* painting, const Settings& settings,
+                  const std::vector<ColorMix>& blends) {
+    if (!painting || painting->empty(PaintChannel::Color) || model.layers.empty())
+        return;
+    const double step = std::max(settings.wall_width, 0.2);
+    std::vector<std::vector<ColorZone>> zones =
+        color_zones(mesh, *painting, model.layers, model.regions, step, settings.paint_max_region_width);
+    const auto known = [&](int mark) {
+        return (mark >= 1 && mark <= settings.extruders) ||
+               std::any_of(blends.begin(), blends.end(), [&](const ColorMix& m) { return m.id == mark; });
+    };
+    for (auto& layer : zones)
+        std::erase_if(layer, [&](const ColorZone& z) { return !known(z.mark); });
+    part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
+        if (l >= zones.size() || zones[l].empty())
+            return;
+        std::vector<Toolpath> out;
+        for (Toolpath& t : paths) {
+            for (auto& [mark, piece] : split_by_zones(t, zones[l], step)) {
+                if (mark != 0)
+                    piece.tool = mark;
+                out.push_back(std::move(piece));
+            }
+        }
+        paths = std::move(out);
+    });
+}
+
 // Every gradient is measured on each object (color_mixing_plus.md, rule 3,
 // MX32): with several objects (or copies) on the plate, each one's paths of a
 // gradient take a number of their own (from 200, by the object's outline)
@@ -1447,6 +1480,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                     continue;
                 if (object_tool(o, settings) != 1)
                     tag_tool(part, object_tool(o, settings));
+                paint_colors(part, mesh, painting ? &paint : nullptr, own, blends);
                 apply_mixes(part, blends, own);
                 SlicedObject object{o.name, o.object, o.instance, outline_of(mesh),
                                     part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {},
@@ -1508,6 +1542,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 if (!p.empty())
                     outlines.push_back(outline_of(std::span<const Vec3f>(p)));
         }
+        paint_colors(out, input, painting, settings, blends);
         apply_mixes(out, blends, settings, outlines);
         for (const MeshObject& o : *objects) {
             const std::vector<Vec3f> points = object_points(input, o); // its height and outline, without its mesh
@@ -1523,6 +1558,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         return out;
     }
     SlicedModel plate = slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);
+    paint_colors(plate, input, painting, settings, {});
     plate.notices.insert(plate.notices.end(), mix_notices.begin(), mix_notices.end());
     return plate;
 }

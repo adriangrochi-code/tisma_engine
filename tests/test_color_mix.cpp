@@ -7,6 +7,7 @@
 #include "gcode/writer.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/paint.hpp"
 #include "project/project.hpp"
 #include "slice/color_mix.hpp"
 #include "slice/pipeline.hpp"
@@ -1522,4 +1523,54 @@ TEST_CASE("color mixing plus: an object inside another one's outline keeps its o
     // frame's gradient its middle was nearly half and half (180 and 120).
     CHECK(count(95, 96.5, 1) > 2 * count(95, 96.5, 2));
     CHECK(count(103.5, 105, 2) > 2 * count(103.5, 105, 1));
+}
+
+TEST_CASE("painted colours are printed: each zone with its filament or blend (multi_extruder.md rule 1, MX rule 16)",
+          "[mixing][paint]") {
+    // A 20 mm cube on filament 1, its +X face painted with 2: the walls by
+    // that face print with 2, the far ones with 1.
+    Plate p = box(1);
+    Painting paint;
+    for (std::size_t t = 0; t < p.mesh.triangle_count(); ++t) {
+        bool right = true;
+        for (int k = 0; k < 3; ++k)
+            right = right && p.mesh.corner(t, k).x > 109.9f;
+        if (right)
+            paint.set_tree(PaintChannel::Color, t, {2});
+    }
+    Settings s = base();
+    const auto slice = [&](const std::vector<ColorMix>& mixes) {
+        return slice_model(weld_exact(p.mesh), s, nullptr, nullptr, &paint, &p.objects, &mixes);
+    };
+    const SlicedModel model = slice({});
+    const auto count = [&](const SlicedModel& m, double x0, double x1, int tool) {
+        int n = 0;
+        for (const LayerWalls& w : m.walls)
+            for (const Toolpath& t : w.toolpaths)
+                for (const ToolpathPoint& q : t.points)
+                    n += q.p.x > x0 && q.p.x < x1 && q.p.y > 92 && q.p.y < 108 &&
+                         std::max<int>(t.tool, 1) == tool; // 0: the part's own, filament 1
+        return n;
+    };
+    CHECK(count(model, 108.5, 110, 2) > 0);
+    CHECK(count(model, 108.5, 110, 1) == 0);
+    CHECK(count(model, 90, 91.5, 1) > 0);
+    CHECK(count(model, 90, 91.5, 2) == 0);
+    gcode_of(model, s); // checked
+    // Painted with a blend (number 3): that zone lays the blend's filaments.
+    for (std::size_t t = 0; t < p.mesh.triangle_count(); ++t)
+        if (!paint.tree(PaintChannel::Color, t).empty())
+            paint.set_tree(PaintChannel::Color, t, {3});
+    const SlicedModel blended = slice({blend(3, {{1, 0.5}, {2, 0.5}})});
+    CHECK(count(blended, 108.5, 110, 1) > 0);
+    CHECK(count(blended, 108.5, 110, 2) > 0);
+    CHECK(count(blended, 90, 91.5, 2) == 0);
+    for (const LayerWalls& w : blended.walls)
+        for (const Toolpath& t : w.toolpaths)
+            CHECK(t.tool <= 2);
+    // A mark that is no filament nor blend: the part's own.
+    for (std::size_t t = 0; t < p.mesh.triangle_count(); ++t)
+        if (!paint.tree(PaintChannel::Color, t).empty())
+            paint.set_tree(PaintChannel::Color, t, {9});
+    CHECK(count(slice({}), 108.5, 110, 1) > 0);
 }
