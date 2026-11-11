@@ -1786,6 +1786,7 @@ private:
     // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
     // the first-use tip on screen, the tips already seen and whether they show.
     int tour_step_ = -1;
+    std::string tour_pointed_; // the anchor the assistant's step outlined last
     std::string tip_;
     std::set<std::string> tips_seen_;
     bool tips_ = true;
@@ -7245,6 +7246,7 @@ void App::top_bar() {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
+    anchor("open_button");
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     const bool more = icon_button("##more", "tisma_more", tr(T::More), button_h);
@@ -13737,21 +13739,24 @@ const std::map<std::string, TipText>& tip_texts() {
 // The welcome, the basic ideas with a drawing each (the owner's request,
 // 2026-10-29: someone who never used a slicer understands them), then how
 // to go from a model to a print.
+// Each step that names a part of the screen points at it (PLAN.md, «Ayuda,
+// lo que sigue»): the anchor it outlines, when that part is on screen.
 struct TourStep {
     T title, text;
     Picture picture = Picture::None;
+    const char* anchor = nullptr;
 };
 constexpr std::array<TourStep, 11> kTour = {{{T::Tour0Title, T::Tour0},
                                              {T::TourSliceTitle, T::TourSlice, Picture::Slicing},
                                              {T::TourLayersTitle, T::TourLayers, Picture::TopBottom},
                                              {T::TourSupportTitle, T::TourSupport, Picture::Support},
                                              {T::TourMaterialTitle, T::TourMaterial, Picture::NozzleTemp},
-                                             {T::Tour1Title, T::Tour1},
-                                             {T::Tour2Title, T::Tour2},
-                                             {T::Tour3Title, T::Tour3},
-                                             {T::Tour4Title, T::Tour4},
-                                             {T::Tour5Title, T::Tour5},
-                                             {T::Tour6Title, T::Tour6}}};
+                                             {T::Tour1Title, T::Tour1, Picture::None, "open_button"},
+                                             {T::Tour2Title, T::Tour2, Picture::None, "printer_selector"},
+                                             {T::Tour3Title, T::Tour3, Picture::None, "quick_settings"},
+                                             {T::Tour4Title, T::Tour4, Picture::None, "plate_tools"},
+                                             {T::Tour5Title, T::Tour5, Picture::None, "slice_button"},
+                                             {T::Tour6Title, T::Tour6, Picture::None, "send_button"}}};
 
 } // namespace
 
@@ -13793,6 +13798,16 @@ void App::help_windows() {
     const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
     if (!tour && tip_.empty())
         return;
+    // The part the step names, outlined over everything.
+    if (tour && kTour[std::size_t(tour_step_)].anchor)
+        if (const auto found = anchors_.find(kTour[std::size_t(tour_step_)].anchor); found != anchors_.end()) {
+            const float pad = 4.0f * scale_;
+            const ImVec2 a(found->second[0] - pad, found->second[1] - pad), b(found->second[2] + pad, found->second[3] + pad);
+            ImDrawList* dl = ImGui::GetForegroundDrawList();
+            dl->AddRect(a, b, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.35f)), 8.0f * scale_, 7.0f * scale_);
+            dl->AddRect(a, b, ImGui::GetColorU32(rgb(theme_.accent_hover)), 8.0f * scale_, 2.5f * scale_);
+            tour_pointed_ = found->first;
+        }
     const float width = (tour ? 500.0f : 420.0f) * scale_;
     // At the bottom of the view; in the preview, whose move slider and legend
     // are down there, at the top under the view's buttons.
@@ -25982,6 +25997,16 @@ void App::script_input() {
             return fail_step("no such part");
         objects_[i].parts[k].extruder = e;
         objects_material_changed();
+        next();
+    } else if (step.verb == "tour") { // the assistant at step N (0 to 10)
+        tour_step_ = std::atoi(step.key.c_str());
+        tour_pointed_.clear();
+        next();
+    } else if (step.verb == "expect-tour-points") { // the anchor the assistant's step outlines
+        std::printf("ui-script: expect-tour-points %s: %s%s\n", step.key.c_str(), tour_pointed_ == step.key ? "ok" : "got ",
+                    tour_pointed_ == step.key ? "" : tour_pointed_.c_str());
+        if (tour_pointed_ != step.key)
+            return fail_step("it outlines " + (tour_pointed_.empty() ? std::string("nothing") : tour_pointed_));
         next();
     } else if (step.verb == "expect-models") { // how many models the plate has
         const std::size_t want = std::size_t(std::atoi(step.key.c_str()));

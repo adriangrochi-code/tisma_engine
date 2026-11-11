@@ -13202,3 +13202,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   en su lugar; Ctrl+Y rehace). `place_undo` y `more_cards` siguen pasando. Orden nueva `expect-models`.
 - **Falta** de la regla 29: la lista de pasos al lado de los botones.
 
+## 2026-11-11 — interfaz: el asistente señala lo que nombra (PLAN, «Ayuda, lo que sigue»)
+
+- **Hecho:** cada paso del asistente que nombra una parte de la pantalla la marca con un borde violeta encima de
+  todo: Abrir, la impresora, el panel de ajustes, las herramientas de la placa, Laminar y, cuando está, Imprimir.
+  «Ajustes en una sola página por pestaña» ya estaba hecho desde el 2026-10-29: queda marcado en PLAN.
+- **Pruebas:** `tour_points.txt` (órdenes nuevas `tour` y `expect-tour-points`). Captura del paso de Laminar
+  revisada.
+- **Falta:** el texto de los ajustes en inglés (la ayuda (i) lee `docs/CONFIG.md`, que está en español).
+

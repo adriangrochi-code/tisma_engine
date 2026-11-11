@@ -696,8 +696,8 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   mezcla (hasta el número 16), las marcas con su color; el relleno inteligente con su ángulo (MT30); deshacer la pintura y el corte (MT31)
 - [x] Ayuda (pedido del dueño, 2026-10-26): asistente, consejos de la primera vez y botón (i) en cada ajuste
   (`docs/UI.md`, «Ayuda»)
-- [ ] Ayuda, lo que sigue: el texto de los ajustes en inglés; señalar en la pantalla lo que cada paso del asistente
-  nombra
+- [ ] Ayuda, lo que sigue: el texto de los ajustes en inglés. Hecho (2026-11-11): cada paso del asistente que nombra
+  algo de la pantalla lo marca con un borde (Abrir, la impresora, los ajustes, las herramientas, Laminar, Imprimir)
 - [ ] Cortar, Partir y Medir de la ficha `interface.md` (hoy `model_tools.md`, regla 18). Hecho (2026-11-11): conectores
   sobre el corte horizontal, espiga fija y pasador, redondos o cuadrados, con tamaño, profundidad, tolerancia, clic en
   el plano e «Invertir plano» (MT22, MT23); la mitad que apoya sobre la cara no lleva la espiga (MT32). Hecho después: un objeto con dos partes (MT24) y separar en partes (regla 19). Falta: plano libre, encastre a presión, cola de milano, base hexagonal y
@@ -784,8 +784,9 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
 El dueño probó la aplicación en Windows. Los errores que informó están arreglados (ver `PROGRESS.md`); quedan sus
 pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene que el equipo de fichas actualice
 `settings_panel.md` antes de los que la contradicen):
-- [ ] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
-  abrir y cerrar (como OrcaSlicer), y más juntas
+- [x] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
+  abrir y cerrar (como OrcaSlicer), y más juntas (hecho el 2026-10-29, `settings_panel.md` reglas 2 a 4; marcado el
+  2026-11-11)
 - [x] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
   impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
   (2026-10-29: en Impresión, entre Adhesión y Otros, con Capas curvas, su transición y caudal, y Relleno ondulado; en
