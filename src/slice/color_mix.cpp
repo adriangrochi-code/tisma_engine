@@ -532,6 +532,7 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
             return 0;
         ColorMix plain = mix;
         plain.from.reset(), plain.to.reset();
+        plain.axis = 'z'; // nearly vertical, a gradient in Z whatever axis it had
         if (xy < 0.1 * std::abs(dz)) {
             plain.min_z = std::min(f[2], f[2] + dz), plain.max_z = std::max(f[2], f[2] + dz);
             if (dz < 0.0)
@@ -556,7 +557,9 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
             const double mid = z + h / 2.0;
             z += h;
             std::vector<int> tools;
-            for (int b = band_at(-half, mid); b <= band_at(half, mid); ++b)
+            // The part's edges themselves print no bead: just inside them.
+            const double in = half * (1.0 - 1e-9);
+            for (int b = band_at(-in, mid); b <= band_at(in, mid); ++b)
                 tools.push_back(cycles[std::size_t(b)][l % cycles[std::size_t(b)].size()]);
             std::sort(tools.begin(), tools.end());
             tools.erase(std::unique(tools.begin(), tools.end()), tools.end());

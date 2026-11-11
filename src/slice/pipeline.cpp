@@ -964,6 +964,7 @@ bool gradient_between(SlicedModel& model, ColorMix& mix, const std::vector<char>
             for (ColorMix::Component& c : mix.components)
                 c.share = 1.0 - c.share;
         mix.from.reset(), mix.to.reset();
+        mix.axis = 'z'; // whatever axis it had
         return false;
     }
     const double ux = d[0] / xy, uy = d[1] / xy;

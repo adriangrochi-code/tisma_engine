@@ -1462,3 +1462,35 @@ TEST_CASE("color mixing plus: a gradient is measured on each object (rule 3, MX3
             CHECK(t.tool <= 2); // no temporary number left
     gcode_of(model, s);
 }
+
+TEST_CASE("color mixing plus: two points nearly vertical make a gradient in Z whatever its axis was (MX31)", "[mixing]") {
+    // Reported by the interface: the blend's axis 'x' stayed, and the
+    // estimate and the slicing took it for a gradient in X.
+    Settings s = base();
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.axis = 'x';
+    g.from = std::array<double, 3>{0, 0, 0};
+    g.to = std::array<double, 3>{0, 0, 10};
+    ColorMix z = blend(3, {{1, 0.0}, {2, 1.0}});
+    z.gradient = true;
+    z.min_z = 0.0;
+    z.max_z = 10.0;
+    MixChangeOptions o;
+    o.first_layer_height = s.first_layer_height;
+    o.layer_height = s.layer_height;
+    o.extent = 20.0;
+    CHECK(mix_changes_estimate(g, 10.0, o) == mix_changes_estimate(z, 10.0, o));
+    CHECK(sequence(sliced(box(3), s, {g})) == sequence(sliced(box(3), s, {z})));
+    // Two points along X at one height span the part as a gradient in X
+    // does: the same estimate (the ends on the part's edges add no band).
+    ColorMix along = blend(3, {{1, 0.0}, {2, 1.0}});
+    along.gradient = true;
+    along.from = std::array<double, 3>{-10, 0, 5};
+    along.to = std::array<double, 3>{10, 0, 5};
+    ColorMix x = blend(3, {{1, 0.0}, {2, 1.0}});
+    x.gradient = true;
+    x.axis = 'x';
+    CHECK(mix_changes_estimate(along, 10.0, o) == mix_changes_estimate(x, 10.0, o));
+    CHECK(mix_changes_estimate(along, 10.0, o) == changes(gcode_of(sliced(box(3), s, {along}), s)));
+}
