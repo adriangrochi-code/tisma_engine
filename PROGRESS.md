@@ -12680,7 +12680,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
   | 8–9 | Alto por filamento, paso | 8 hecho (MX7; `mixing.cadence_heights`, `height_a`, `height_b`); 9 hecho (`mixing.step`, MX28; MX29 con dos pasadas distintas por capa; A, B, A en una capa pendiente: el G-code imprime cada filamento una vez por capa) |
   | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: el motor estima los cambios antes de laminar (`mix_changes_estimate`); falta que la interfaz los muestre en el aviso |
-  | 13–14 | Solo la superficie, paredes de más | 13 hecho (MX11, MX12; `mixing.surface_only`, `surface_depth`); 14 (`extra_walls`, MX14) pendiente |
+  | 13–14 | Solo la superficie, paredes de más | 13 hecho (MX11, MX12; `mixing.surface_only`, `surface_depth`); 14 hecho (`mixing.extra_walls`, MX14) |
   | 15 | Sesgo | pendiente |
   | 16 | Pintado con mezcla | parcial: las trayectorias pintadas toman el ciclo; falta con las reglas 10–15 |
   | 17 | Vista previa del color antes de laminar | parcial: color previsto de la mezcla |
@@ -12723,6 +12723,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 14: paredes de más** (2026-11-11, bloque nocturno; MX14). `mixing.extra_walls` (0 a 8) suma
+  paredes en las piezas con mezcla y en las partes de un objeto impresas con otro filamento que su primera parte (una
+  zona pintada llega al motor como una parte con su extrusor). En `slice_plate` es un grupo propio («zona», además de
+  extrusor y ajustes), así otra pieza con el mismo filamento no las recibe. Prueba `[mixing]` MX14: el objeto con 2
+  paredes, la parte pintada con 4, otra pieza del filamento 2 con 2, una pieza con mezcla con 4. Pasan también las
+  pruebas de multiextrusor, placa, transformaciones y secuencial. Siguiente: el sesgo (regla 15, MX13).
 - **Full Spectrum, regla 13: solo la superficie** (2026-11-11, bloque nocturno; MX11 y MX12). `mixing.surface_only`
   y `surface_depth` (0,8 mm), en una tarjeta nueva «Mezcla de colores: dónde va». `mix_shell` en `apply_mixes`,
   antes del ciclo, pasa al filamento de mayor parte de la mezcla las paredes que empiezan a `surface_depth` o más de

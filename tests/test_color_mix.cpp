@@ -677,3 +677,33 @@ TEST_CASE("color mixing plus: the blend only in the shell (rule 13, MX11, MX12)"
     };
     CHECK(moves(gcode_of(sliced(box(1), s, {}), s)) == moves(gcode_of(sliced(box(1), all, {}), all)));
 }
+
+TEST_CASE("color mixing plus: more walls in the zones of another colour (rule 14, MX14)", "[mixing]") {
+    Settings s = base();
+    s.mix_extra_walls = 2;
+    // One object: a box with filament 1 and, against it, a part painted with
+    // filament 2; another object with filament 2 alone.
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 10);
+    add_box(p.mesh, 110, 90, 0, 130, 110, 10);
+    add_box(p.mesh, 60, 40, 0, 80, 60, 10);
+    p.objects = {{"box", 0, 12, 0, 0, 1}, {"painted", 12, 12, 0, 0, 2}, {"other", 24, 12, 1, 0, 2}};
+    const auto walls_of_tool = [](const SlicedModel& m, int tool, double x0, double x1) {
+        int most = 0;
+        for (const Toolpath& t : m.walls[20].toolpaths)
+            if (t.tool == tool && !t.points.empty() && t.points.front().p.x > x0 && t.points.front().p.x < x1)
+                most = std::max(most, t.index + 1);
+        return most;
+    };
+    const SlicedModel model = sliced(p, s, {});
+    CHECK(walls_of_tool(model, 1, 85, 115) == 2);  // the object's own filament: as many as always
+    CHECK(walls_of_tool(model, 2, 105, 135) == 4); // the painted part: 2 more
+    CHECK(walls_of_tool(model, 2, 55, 85) == 2);   // another object of filament 2: as always
+    // A blend's part (a zone with a blend): 2 more as well.
+    const SlicedModel blended = sliced(box(3), s, {blend(3, {{1, 0.5}, {2, 0.5}})});
+    int most = 0;
+    for (const Toolpath& t : blended.walls[20].toolpaths)
+        most = std::max(most, t.index + 1);
+    CHECK(most == 4);
+    gcode_of(model, s);
+}

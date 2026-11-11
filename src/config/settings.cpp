@@ -1480,9 +1480,16 @@ Settings parse_checked(std::string_view text) {
     });
     // Sublayers in the blends' zones (color_mixing_plus.md, rules 10 and 11).
     read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill", "cadence_heights", "height_a",
-                                "height_b", "step", "surface_only", "surface_depth"},
+                                "height_b", "step", "surface_only", "surface_depth",
+                                "extra_walls"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
+        if (n == "extra_walls") { // rule 14
+            if (!v.is_number_integer() || v.get<int>() < 0 || v.get<int>() > 8)
+                fail(k, "must be a whole number from 0 to 8");
+            s.mix_extra_walls = v.get<int>();
+            return;
+        }
         if (n == "surface_depth") { // rule 13
             if (!v.is_number() || !(v.get<double>() >= 0.1 && v.get<double>() <= 5.0))
                 fail(k, "must be from 0.1 to 5 mm");
@@ -3507,6 +3514,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"mixing.step", num(s.mix_step)},
         {"mixing.surface_only", flag(s.mix_surface_only)},
         {"mixing.surface_depth", num(s.mix_surface_depth)},
+        {"mixing.extra_walls", std::to_string(s.mix_extra_walls)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -4073,7 +4081,8 @@ std::string settings_json(const Settings& s) {
           {"height_b", s.mix_height_b},
           {"step", s.mix_step},
           {"surface_only", s.mix_surface_only},
-          {"surface_depth", s.mix_surface_depth}}},
+          {"surface_depth", s.mix_surface_depth},
+          {"extra_walls", s.mix_extra_walls}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},

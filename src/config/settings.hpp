@@ -508,6 +508,9 @@ struct Settings {
     // the sparse infill with the blend's largest filament.
     bool mix_surface_only = false;
     double mix_surface_depth = 0.8; // mm
+    // More walls where a blend prints, or a part of an object printed with
+    // another filament than the rest (rule 14).
+    int mix_extra_walls = 0;
     // Curved layers (docs/spec/features/nonplanar.md): each layer the
     // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
     // curved_flat_below over curved_ramp_height (and out at the top with

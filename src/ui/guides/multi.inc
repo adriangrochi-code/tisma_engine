@@ -195,6 +195,11 @@
      "adentro que esto se imprime con un solo filamento.\n\nEjemplo: 0,8 mm, dos paredes de 0,4.",
      "The thickness of the shell that takes the mix, with surface only on. A wall that starts further in than this "
      "prints with one filament.\n\nExample: 0.8 mm, two walls of 0.4."},
+    {"mixing.extra_walls",
+     "Paredes de más en las piezas con mezcla y en las partes de otro color que el resto de su objeto (por ejemplo, "
+     "una parte pintada). Así el color de afuera no se ve mezclado con el del relleno de adentro.\n\nEjemplo: 2.",
+     "Extra walls in the parts with a mix and in the parts of another colour than the rest of their object (a "
+     "painted part, say). That way the outside colour does not show mixed with the infill's inside.\n\nExample: 2."},
     {"mixing.height_b",
      "El alto de las capas del segundo filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
      "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,15 mm.",

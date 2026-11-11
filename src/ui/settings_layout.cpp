@@ -229,7 +229,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"mixing.height_a", A},
             {"mixing.height_b", A},
             {"mixing.step", A}}},
-          {"color_mix_zones", T::SubColorMixZones, {{"mixing.surface_only", A}, {"mixing.surface_depth", A}}},
+          {"color_mix_zones", T::SubColorMixZones, {{"mixing.surface_only", A}, {"mixing.surface_depth", A}, {"mixing.extra_walls", A}}},
           {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}, {"resin.first_layer_height", A}}},
           {"resin_supports", T::SubResinSupports,
            {{"resin.supports", N},

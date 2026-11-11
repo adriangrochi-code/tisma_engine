@@ -1118,9 +1118,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         if (several_tools(*objects, settings) || modifiers) {
             out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative, modifiers, volumes);
         } else {
-            out = slice_plate(input, own_settings(settings, objects->front().settings, objects->front().name), gpu,
-                              stress, painting, nullptr, object_tool(objects->front(), settings), negative, nullptr,
-                              volumes);
+            Settings own = own_settings(settings, objects->front().settings, objects->front().name);
+            if (settings.mix_extra_walls > 0 && own.wall_count > 0 && object_tool(objects->front(), settings) > settings.extruders)
+                own.wall_count += settings.mix_extra_walls; // a blend's part (rule 14)
+            out = slice_plate(input, own, gpu, stress, painting, nullptr, object_tool(objects->front(), settings), negative,
+                              nullptr, volumes);
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
@@ -1328,15 +1330,28 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         int tool = 1;
         std::string settings, part; // the merged settings, and the part's own (for the ranges)
         std::size_t last = 0;
+        bool zone = false; // more walls (color_mixing_plus.md, rule 14)
+    };
+    // A zone with a blend, or a part printed with another filament than its
+    // object's first part.
+    const auto zone_of = [&](const MeshObject& o) {
+        if (settings.mix_extra_walls <= 0)
+            return false;
+        const int tool = object_tool(o, settings);
+        const auto first =
+            std::find_if(objects.begin(), objects.end(), [&](const MeshObject& x) { return x.object == o.object; });
+        return tool > settings.extruders || object_tool(*first, settings) != tool;
     };
     std::vector<Group> groups;
     for (std::size_t i = 0; i < objects.size(); ++i) {
         const int tool = object_tool(objects[i], settings);
+        const bool zone = zone_of(objects[i]);
         const auto g = std::find_if(groups.begin(), groups.end(), [&](const Group& x) {
-            return x.tool == tool && x.settings == objects[i].settings && x.part == objects[i].part_settings;
+            return x.tool == tool && x.settings == objects[i].settings && x.part == objects[i].part_settings &&
+                   x.zone == zone;
         });
         if (g == groups.end())
-            groups.push_back({tool, objects[i].settings, objects[i].part_settings, i});
+            groups.push_back({tool, objects[i].settings, objects[i].part_settings, i, zone});
         else
             g->last = i;
     }
@@ -1349,6 +1364,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         tools.push_back(g.tool);
         const MeshObject& named = objects[g.last];
         Settings own = own_settings(part_settings, g.settings, named.name);
+        if (g.zone && own.wall_count > 0) // more walls (rule 14)
+            own.wall_count += settings.mix_extra_walls;
         group_settings.push_back(std::move(own));
     }
     std::vector<int> distinct = tools;
@@ -1388,7 +1405,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     for (std::size_t p = 0; p < tools.size(); ++p)
         for (const MeshObject& o : objects) {
             if (object_tool(o, settings) != tools[p] || o.settings != groups[p].settings ||
-                o.part_settings != groups[p].part)
+                o.part_settings != groups[p].part || zone_of(o) != groups[p].zone)
                 continue;
             const IndexedMesh piece = object_mesh(mesh, o);
             if (painting)
@@ -1434,7 +1451,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
                 for (std::size_t p = 0; p < groups.size(); ++p)
                     if (std::any_of(objects.begin(), objects.end(), [&](const MeshObject& o) {
                             return o.object == m.object && object_tool(o, settings) == tools[p] &&
-                                   o.settings == groups[p].settings && o.part_settings == groups[p].part;
+                                   o.settings == groups[p].settings && o.part_settings == groups[p].part &&
+                                   zone_of(o) == groups[p].zone;
                         }))
                         infill_zones[p].push_back(
                             {reach, own_settings(part_settings, zone_own(groups[p], m), m.name)});
@@ -1445,7 +1463,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
                 IndexedMesh parts;
                 for (const MeshObject& o : objects) {
                     if (o.object != m.object || object_tool(o, settings) != tools[p] || o.settings != groups[p].settings ||
-                        o.part_settings != groups[p].part)
+                        o.part_settings != groups[p].part || zone_of(o) != groups[p].zone)
                         continue;
                     const IndexedMesh piece = object_mesh(mesh, o);
                     const auto base = std::uint32_t(parts.vertices.size());
