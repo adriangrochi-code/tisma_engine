@@ -51,6 +51,19 @@ con lo medido.
 (La interfaz propia estaba en esta lista; salió el 2026-10-24, cuando el dueño decidió que el motor reemplaza a Tisma
 Slicer.)
 
+## Orden hasta la beta de diciembre (dueño, 2026-11-11 01:20)
+
+Entre las horas de búsqueda profunda (hasta el 12-11 03:10 UTC), en este orden:
+
+1. Full Spectrum: `color_mixing_plus.md` hasta terminar (tabla de estado y orden de pasos en PROGRESS.md).
+2. CAD estilo Fusion 360: navegación de `interface.md` (UI17, UI18) y `cad_design.md` 11 bis a 11 decies (CD26 a CD29).
+3. Huecos de P1: cortar, partir y medir; pintar colores; los ajustes en una página por pestaña; el panel de ayuda.
+4. P2: conexiones de red de todas las marcas y los límites de la impresora.
+5. F6: comparación con Tisma Slicer, con los resultados de caja negra que pasa la sesión de spec.
+
+Después de la beta: la investigación (F9 cinco ejes, A2/A3, pruebas T/Q largas). Si una ficha falta o no alcanza, se
+pide a la sesión de spec.
+
 ## Cómo se usa
 
 - La interfaz `tisma` (`docs/UI.md`) es el slicer para el usuario; `tisma-engine slice modelo.stl --config
