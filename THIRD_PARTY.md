@@ -108,3 +108,9 @@ en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica
 | Kotlin (compilador, Kotlin/Native para iOS y complementos Multiplatform, Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app y el módulo compartido con iPhone (`apps/android/shared`). |
 | Android SDK (plataforma 36, build-tools 36.0.0) | — | Licencia del SDK de Android (aceptada en la máquina que compila) | Compila el APK; no se guarda en el repositorio. |
 | Android NDK | r29 (29.0.14206865) | Licencia del SDK de Android; su `libc++` es Apache-2.0 con la excepción LLVM | Compila `tisma-engine` para el teléfono. La r28 no sirve: su `libc++` no tiene `std::from_chars` con decimales, que el motor usa. |
+
+## Modelos del banco (`bench/`, no se distribuyen con el programa)
+
+| Modelo | Archivo | Licencia | Leída en | Fuente | Uso |
+|---|---|---|---|---|---|
+| 3DBenchy (Creative Tools) | `bench/3DBenchy.stl.xz` (el STL de una pieza, comprimido con xz; SHA-256 del STL `6ab57f1c3f8e86bc3cbd302c6fa6270acf06277c6335454e922419c25d42e97e`) | CC0-1.0 (dominio público; atribución no requerida) | https://www.3dbenchy.com/license/ (leída el 2026-11-11: «licensed under a Creative Commons CC0 1.0 Universal license», se puede redistribuir original o modificado, también en programas) | https://github.com/CreativeTools/3DBenchy (`Single-part/3DBenchy.stl`, la descarga directa que da https://www.3dbenchy.com/download/) | Medir el motor en F6 (`bench/run_benchy.sh`), decisión del dueño (2026-11-11 20:50 UTC). |

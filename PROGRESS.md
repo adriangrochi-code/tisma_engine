@@ -13498,4 +13498,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   (60 mm, 319 200 triángulos) 0,56 s, 300 capas, 1 h 59 min, 9421 mm; T de 18 mm con apoyos 0,04 s, 90 capas, 19 min,
   1215 mm; sin apoyos 0,04 s, 10 min, 382 mm. Con GPU: en este contenedor solo hay llvmpipe (Vulkan por software), sin
   diferencia y con el mismo G-code; falta medir en la PC del dueño con una GPU real (no medido).
+- **F6: 3DBenchy en el banco** (dueño, 2026-11-11 20:50 UTC: «usemos el Benchy para medir el motor»). Licencia actual,
+  leída en https://www.3dbenchy.com/license/: CC0 1.0 (dominio público), que permite guardarlo y redistribuirlo; va en
+  `bench/3DBenchy.stl.xz` (2,9 MB; el STL de una pieza de github.com/CreativeTools/3DBenchy, SHA-256 comprobado), anotado
+  en `THIRD_PARTY.md`. `bench/run_benchy.sh` lo descomprime, comprueba el SHA-256 y lamina con y sin GPU. Con
+  `tests/data/settings.json` (los ajustes de los números de QA), 4 núcleos: 0,51 a 0,59 s, 240 capas, 1 h 11 min 30 s,
+  3943 mm de filamento; con `gpu` `auto` igual (solo llvmpipe, que el motor no usa). Firmware: Marlin 2 (`marlin`) y
+  Marlin 1 (`marlin_legacy`) ya son dos opciones en el motor y en la interfaz («Marlin 2», «Marlin 1»).
 
