@@ -749,6 +749,70 @@ void mix_shell(SlicedModel& model, const ColorMix& mix, const Settings& s) {
         walls(t.walls), inside(t.fill.sparse);
 }
 
+// The bias of a blend of two (color_mixing_plus.md, rule 15): on the layers
+// of its second filament (a bias above 0) or its first (below 0), the outer
+// walls go |bias| x half their width further in, so the colour leans to the
+// other without changing the cycle. In: the side of each point where a step
+// of 0.01 mm falls in the layer's region. Own design (PROVENANCE.md).
+void bias_walls(SlicedModel& model, const ColorMix& mix, const std::vector<int>& filament) {
+    if (mix.gradient || !mix.pattern.empty() || mix.components.size() != 2 || !(std::abs(mix.bias) > 1e-9))
+        return;
+    const int target = mix.bias > 0.0 ? mix.components[1].extruder : mix.components[0].extruder;
+    const double amount = std::min(std::abs(mix.bias), 1.0);
+    const auto inside = [](const Polygons& region, double x, double y) {
+        const Clipper2Lib::Point64 q{to_units(x), to_units(y)};
+        int n = 0;
+        for (const auto& path : region)
+            n += Clipper2Lib::PointInPolygon(q, path) == Clipper2Lib::PointInPolygonResult::IsInside;
+        return n % 2 == 1;
+    };
+    for (std::size_t l = 0; l < model.walls.size() && l < filament.size() && l < model.regions.size(); ++l) {
+        if (filament[l] != target)
+            continue;
+        for (Toolpath& t : model.walls[l].toolpaths) {
+            if (t.tool != mix.id || t.index != 0 || t.wavy || t.points.size() < 3)
+                continue;
+            const std::size_t n = t.points.size();
+            const bool closed = std::hypot(t.points.front().p.x - t.points.back().p.x,
+                                           t.points.front().p.y - t.points.back().p.y) < 1e-6;
+            std::vector<ToolpathPoint> moved = t.points;
+            // Each segment's inward normal, by a step from its middle.
+            const auto normal = [&](std::size_t a, std::size_t b, double& nx, double& ny) {
+                const Point2d &p = t.points[a].p, &q = t.points[b].p;
+                const double len = std::hypot(q.x - p.x, q.y - p.y);
+                if (!(len > 1e-9))
+                    return false;
+                nx = -(q.y - p.y) / len, ny = (q.x - p.x) / len;
+                if (!inside(model.regions[l], 0.5 * (p.x + q.x) + 0.01 * nx, 0.5 * (p.y + q.y) + 0.01 * ny))
+                    nx = -nx, ny = -ny;
+                return true;
+            };
+            for (std::size_t i = 0; i < n; ++i) {
+                const std::size_t a = i == 0 ? (closed ? n - 2 : 0) : i - 1;
+                const std::size_t b = i + 1 == n ? (closed ? 1 : n - 1) : i + 1;
+                double ax = 0, ay = 0, bx = 0, by = 0;
+                const bool before = a != i && normal(a, i, ax, ay), after = b != i && normal(i, b, bx, by);
+                if (!before && !after)
+                    continue;
+                if (!before)
+                    ax = bx, ay = by;
+                if (!after)
+                    bx = ax, by = ay;
+                // The miter: along the two normals' bisector, so each side moves d (at most twice d at a corner).
+                double mx = ax + bx, my = ay + by;
+                const double ml = std::hypot(mx, my);
+                if (!(ml > 1e-9))
+                    mx = ax, my = ay;
+                else
+                    mx /= ml, my /= ml;
+                const double d = amount * 0.5 * t.points[i].width / std::max(0.5, mx * ax + my * ay);
+                moved[i].p = {t.points[i].p.x + d * mx, t.points[i].p.y + d * my};
+            }
+            t.points = std::move(moved);
+        }
+    }
+}
+
 void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
     for (const ColorMix& mix : mixes) {
         mix_shell(model, mix, settings);
@@ -773,6 +837,7 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
                 if (!subdivide_layer(model, l, mix, settings, last, step, passes) && l < filament.size() && filament[l] > 0)
                     last = filament[l];
             }
+        bias_walls(model, mix, filament);
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
             for (Toolpath& t : paths)
                 if (t.tool == mix.id && l < filament.size() && filament[l] > 0)

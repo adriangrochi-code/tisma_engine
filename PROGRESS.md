@@ -12681,7 +12681,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 8–9 | Alto por filamento, paso | 8 hecho (MX7; `mixing.cadence_heights`, `height_a`, `height_b`); 9 hecho (`mixing.step`, MX28; MX29 con dos pasadas distintas por capa; A, B, A en una capa pendiente: el G-code imprime cada filamento una vez por capa) |
   | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: el motor estima los cambios antes de laminar (`mix_changes_estimate`); falta que la interfaz los muestre en el aviso |
   | 13–14 | Solo la superficie, paredes de más | 13 hecho (MX11, MX12; `mixing.surface_only`, `surface_depth`); 14 hecho (`mixing.extra_walls`, MX14) |
-  | 15 | Sesgo | pendiente |
+  | 15 | Sesgo | hecho en el motor (MX13; `bias` de la mezcla); falta mostrarlo en la vista previa del color |
   | 16 | Pintado con mezcla | parcial: las trayectorias pintadas toman el ciclo; falta con las reglas 10–15 |
   | 17 | Vista previa del color antes de laminar | parcial: color previsto de la mezcla |
   | 18–19 | Soportes y torre sin mezcla; sin mezcla, G-code igual | parcial: a probar con las opciones nuevas (MX16) |
@@ -12723,6 +12723,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 15: sesgo** (2026-11-11, bloque nocturno; MX13). `bias_walls` en `apply_mixes`: en una mezcla
+  de dos, con `bias` > 0 las paredes de afuera de las capas del segundo filamento se corren hacia adentro
+  |bias| × la mitad de su ancho (con < 0, las del primero). Se mueven en inglete: cada lado se corre lo mismo, y en
+  una esquina como mucho el doble. El lado de adentro de cada tramo es el que da un paso de 0,01 mm dentro de la
+  región de la capa. No se corren las pasadas de subcapas. Prueba `[mixing]` MX13: con 0,5 el borde del filamento 2
+  queda 0,25 × el ancho más adentro que el del 1, y con −0,5 al revés. Falta: la vista previa del color estimado
+  (es de la interfaz). Siguiente: paso 7, purga con una sola boquilla (reglas 32 a 40).
 - **Full Spectrum, regla 14: paredes de más** (2026-11-11, bloque nocturno; MX14). `mixing.extra_walls` (0 a 8) suma
   paredes en las piezas con mezcla y en las partes de un objeto impresas con otro filamento que su primera parte (una
   zona pintada llega al motor como una parte con su extrusor). En `slice_plate` es un grupo propio («zona», además de

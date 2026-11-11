@@ -707,3 +707,39 @@ TEST_CASE("color mixing plus: more walls in the zones of another colour (rule 14
     CHECK(most == 4);
     gcode_of(model, s);
 }
+
+TEST_CASE("color mixing plus: the bias sinks one filament's outer walls (rule 15, MX13)", "[mixing]") {
+    Settings s = base();
+    ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    half.bias = 0.5;
+    const SlicedModel model = sliced(box(3), s, {half});
+    // The outer wall's left edge and its width on a layer.
+    const auto outer = [&](std::size_t l, int& tool, double& width) {
+        double x = 1e9;
+        for (const Toolpath& t : model.walls[l].toolpaths)
+            if (t.index == 0)
+                for (const ToolpathPoint& p : t.points)
+                    if (p.p.x < x)
+                        x = p.p.x, tool = t.tool, width = p.width;
+        return x;
+    };
+    int t10 = 0, t11 = 0;
+    double w10 = 0, w11 = 0;
+    const double x10 = outer(10, t10, w10), x11 = outer(11, t11, w11);
+    REQUIRE(t10 != t11);
+    const double x1 = t10 == 1 ? x10 : x11, x2 = t10 == 1 ? x11 : x10;
+    INFO("filament 1 at " << x1 << ", filament 2 at " << x2 << ", width " << w10);
+    // The second filament's outer wall 0.5 x half its width further in.
+    CHECK_THAT(x2 - x1, WithinAbs(0.25 * w10, 1e-6));
+    gcode_of(model, s);
+    // A negative bias sinks the first filament's instead.
+    half.bias = -0.5;
+    const SlicedModel other = sliced(box(3), s, {half});
+    double left[2] = {1e9, 1e9};
+    for (const std::size_t l : {std::size_t(10), std::size_t(11)})
+        for (const Toolpath& t : other.walls[l].toolpaths)
+            if (t.index == 0)
+                for (const ToolpathPoint& p : t.points)
+                    left[t.tool - 1] = std::min(left[t.tool - 1], p.p.x);
+    CHECK(left[0] > left[1] + 0.05);
+}
