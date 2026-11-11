@@ -33,6 +33,10 @@
 
 using json = nlohmann::json;
 
+// As solidcraft-cli 0.30.0 does in `mcp`: files are written only inside the
+// folders given with --allow-path (none given: anywhere, as `run` does).
+std::vector<std::string> g_allowed;
+
 namespace {
 
 constexpr const char* kCommands[] = {"solid.box",       "solid.cylinder",  "solid.sphere",     "solid.cone",
@@ -827,6 +831,13 @@ int run(const std::vector<std::string>& args) {
                 std::fprintf(stderr, "%s: `path` is required\n", cmd.c_str());
                 return 1;
             }
+            if (!g_allowed.empty() && std::none_of(g_allowed.begin(), g_allowed.end(), [&](const std::string& dir) {
+                    return path.compare(0, dir.size(), dir) == 0;
+                })) {
+                std::fprintf(stderr, "%s: %s: outside the folders this agent may use; allow another folder with `--allow-path DIR`\n",
+                             cmd.c_str(), path.c_str());
+                return 1;
+            }
             const std::string quality = text(p, "quality", "standard");
             if (quality != "standard" && quality != "fine" && quality != "finest") {
                 std::fprintf(stderr, "%s: `quality` must be standard, fine or finest, not %s\n", cmd.c_str(), quality.c_str());
@@ -971,8 +982,14 @@ int main(int argc, char** argv) {
     }
     if (args[0] == "run")
         return run(std::vector<std::string>(args.begin() + 1, args.end()));
-    if (args[0] == "mcp")
+    if (args[0] == "mcp") {
+        for (std::size_t i = 1; i + 1 < args.size(); ++i)
+            if (args[i] == "--allow-path")
+                g_allowed.push_back(args[i + 1]);
+        if (g_allowed.empty()) // the real tool's own folders only: the test's are outside them
+            g_allowed.push_back("/nonexistent-solidcraft-recovery");
         return mcp();
+    }
     std::fprintf(stderr, "%s: not a command\n", args[0].c_str());
     return 2;
 }

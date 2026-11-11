@@ -610,6 +610,11 @@ private:
     // The Design tab (cad_design.md, stage D1): the panel, the command line
     // under the view, the design built through the bundled tool.
     void design_panel();
+    // Design's toolbar over the view, as Fusion 360 lays it out (cad_design.md,
+    // rule 11 bis): tabs, groups with their main tools and a menu of all.
+    void design_toolbar();
+    int design_tab_ = 0;           // Sólido, Boceto, Inspeccionar, Utilidades
+    float view_top_inset_ = 0.0f;  // what the toolbar takes from the view's top, this frame
     void design_command_line();
     void run_command(std::string text);
     void add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxSizes>& sizes);
@@ -4866,7 +4871,7 @@ void App::view_cube() {
         }
     }
     const float size = 108.0f * scale_, half = 0.5f * size;
-    const ImVec2 centre(view_pos_.x + view_size_.x - half - 18.0f * scale_, view_pos_.y + half + 56.0f * scale_);
+    const ImVec2 centre(view_pos_.x + view_size_.x - half - 18.0f * scale_, view_pos_.y + view_top_inset_ + half + 56.0f * scale_);
     ImGui::SetNextWindowPos(ImVec2(centre.x - half - 4.0f * scale_, centre.y - half - 4.0f * scale_));
     ImGui::SetNextWindowSize(ImVec2(size + 8.0f * scale_, size + 34.0f * scale_));
     ImGui::Begin("##view_cube", nullptr,
@@ -11168,8 +11173,8 @@ void App::view_tools() {
                           {"tisma_zoom_out", T::ZoomOut, -2},
                           {"tisma_zoom_fit", T::ZoomFit, -3}};
     const float size = 32.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + 10.0f * scale_), ImGuiCond_Always,
-                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + view_top_inset_ + 10.0f * scale_),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.85f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale_, 4.0f * scale_));
@@ -15187,6 +15192,367 @@ void App::edit_in_design(std::size_t object) {
     rebuild_design();
 }
 
+
+namespace {
+
+// The Design toolbar's icons (cad_design.md, rule 11 bis): simple line
+// drawings of each tool, own design, in a square from `a` of side `w`.
+void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c) {
+    const auto p = [&](float x, float y) { return ImVec2(a.x + x * w, a.y + y * w); };
+    const float t = std::max(1.5f, w * 0.06f);
+    const auto box = [&](float x0, float y0, float x1, float y1) { dl->AddRect(p(x0, y0), p(x1, y1), c, w * 0.04f, t); };
+    const auto line = [&](float x0, float y0, float x1, float y1) { dl->AddLine(p(x0, y0), p(x1, y1), c, t); };
+    const auto ellipse = [&](float cx, float cy, float rx, float ry) {
+        dl->AddEllipse(p(cx, cy), ImVec2(rx * w, ry * w), c, 0.0f, 24, t);
+    };
+    if (id == "sketch") {
+        box(0.15f, 0.25f, 0.7f, 0.8f);
+        line(0.45f, 0.55f, 0.85f, 0.15f);
+    } else if (id == "box" || id == "press_pull") {
+        const ImVec2 q[6] = {p(0.5f, 0.12f), p(0.85f, 0.3f), p(0.85f, 0.7f), p(0.5f, 0.88f), p(0.15f, 0.7f), p(0.15f, 0.3f)};
+        dl->AddPolyline(q, 6, c, t, ImDrawFlags_Closed);
+        line(0.15f, 0.3f, 0.5f, 0.48f), line(0.85f, 0.3f, 0.5f, 0.48f), line(0.5f, 0.48f, 0.5f, 0.88f);
+        if (id == "press_pull")
+            line(0.5f, 0.05f, 0.5f, 0.3f);
+    } else if (id == "cylinder" || id == "tube") {
+        ellipse(0.5f, 0.25f, 0.32f, 0.12f);
+        line(0.18f, 0.25f, 0.18f, 0.75f), line(0.82f, 0.25f, 0.82f, 0.75f);
+        dl->PathArcTo(p(0.5f, 0.75f), 0.32f * w, 0.0f, 3.14159f, 16);
+        dl->PathStroke(c, t);
+        if (id == "tube")
+            ellipse(0.5f, 0.25f, 0.16f, 0.06f);
+    } else if (id == "sphere") {
+        dl->AddCircle(p(0.5f, 0.5f), 0.36f * w, c, 32, t);
+        ellipse(0.5f, 0.5f, 0.36f, 0.12f);
+    } else if (id == "cone") {
+        line(0.5f, 0.12f, 0.16f, 0.75f), line(0.5f, 0.12f, 0.84f, 0.75f);
+        ellipse(0.5f, 0.75f, 0.34f, 0.11f);
+    } else if (id == "torus") {
+        ellipse(0.5f, 0.5f, 0.38f, 0.22f);
+        ellipse(0.5f, 0.47f, 0.15f, 0.07f);
+    } else if (id == "fasteners") {
+        const ImVec2 q[6] = {p(0.3f, 0.12f), p(0.7f, 0.12f), p(0.82f, 0.25f), p(0.7f, 0.38f), p(0.3f, 0.38f), p(0.18f, 0.25f)};
+        dl->AddPolyline(q, 6, c, t, ImDrawFlags_Closed);
+        box(0.38f, 0.38f, 0.62f, 0.9f);
+        for (float y = 0.5f; y < 0.9f; y += 0.12f)
+            line(0.38f, y, 0.62f, y + 0.06f);
+    } else if (id == "gears") {
+        dl->AddCircle(p(0.5f, 0.5f), 0.28f * w, c, 24, t);
+        dl->AddCircle(p(0.5f, 0.5f), 0.1f * w, c, 16, t);
+        for (int k = 0; k < 8; ++k) {
+            const float ang = float(k) * 0.785398f;
+            line(0.5f + 0.28f * std::cos(ang), 0.5f + 0.28f * std::sin(ang), 0.5f + 0.4f * std::cos(ang), 0.5f + 0.4f * std::sin(ang));
+        }
+    } else if (id == "fillet" || id == "chamfer") {
+        line(0.2f, 0.85f, 0.2f, 0.45f), line(0.55f, 0.15f, 0.85f, 0.15f);
+        if (id == "fillet") {
+            dl->PathArcTo(p(0.55f, 0.45f), 0.35f * w, 3.14159f, 4.71239f, 16);
+            dl->PathStroke(c, t);
+        } else {
+            line(0.2f, 0.45f, 0.55f, 0.15f);
+        }
+    } else if (id == "shell") {
+        box(0.15f, 0.15f, 0.85f, 0.85f), box(0.3f, 0.3f, 0.7f, 0.7f);
+    } else if (id == "hole") {
+        box(0.15f, 0.15f, 0.85f, 0.85f);
+        dl->AddCircle(p(0.5f, 0.5f), 0.18f * w, c, 20, t);
+    } else if (id == "mirror") {
+        const ImVec2 l[3] = {p(0.42f, 0.2f), p(0.42f, 0.8f), p(0.12f, 0.8f)}, r[3] = {p(0.58f, 0.2f), p(0.58f, 0.8f), p(0.88f, 0.8f)};
+        dl->AddPolyline(l, 3, c, t, ImDrawFlags_Closed), dl->AddPolyline(r, 3, c, t, ImDrawFlags_Closed);
+        for (float y = 0.08f; y < 0.92f; y += 0.16f)
+            line(0.5f, y, 0.5f, y + 0.08f);
+    } else if (id == "pattern_circular") {
+        for (int k = 0; k < 6; ++k) {
+            const float ang = float(k) * 1.0472f;
+            dl->AddCircle(p(0.5f + 0.3f * std::cos(ang), 0.5f + 0.3f * std::sin(ang)), 0.08f * w, c, 12, t);
+        }
+    } else if (id == "pattern_rectangular") {
+        for (int k = 0; k < 3; ++k)
+            box(0.1f + float(k) * 0.29f, 0.38f, 0.32f + float(k) * 0.29f, 0.62f);
+    } else if (id == "combine") {
+        box(0.12f, 0.12f, 0.62f, 0.62f), box(0.38f, 0.38f, 0.88f, 0.88f);
+    } else if (id == "thread") {
+        box(0.3f, 0.1f, 0.7f, 0.9f);
+        for (float y = 0.2f; y < 0.85f; y += 0.15f)
+            line(0.3f, y, 0.7f, y + 0.08f);
+    } else if (id == "move") {
+        line(0.5f, 0.1f, 0.5f, 0.9f), line(0.1f, 0.5f, 0.9f, 0.5f);
+        line(0.5f, 0.1f, 0.42f, 0.2f), line(0.5f, 0.1f, 0.58f, 0.2f), line(0.9f, 0.5f, 0.8f, 0.42f), line(0.9f, 0.5f, 0.8f, 0.58f);
+    } else if (id == "split") {
+        box(0.15f, 0.15f, 0.85f, 0.85f);
+        line(0.1f, 0.9f, 0.9f, 0.1f);
+    } else if (id == "draft") {
+        const ImVec2 q[4] = {p(0.3f, 0.15f), p(0.7f, 0.15f), p(0.85f, 0.85f), p(0.15f, 0.85f)};
+        dl->AddPolyline(q, 4, c, t, ImDrawFlags_Closed);
+    } else if (id == "plane" || id == "section") {
+        const ImVec2 q[4] = {p(0.3f, 0.2f), p(0.9f, 0.2f), p(0.7f, 0.8f), p(0.1f, 0.8f)};
+        dl->AddPolyline(q, 4, c, t, ImDrawFlags_Closed);
+        if (id == "section")
+            line(0.5f, 0.05f, 0.5f, 0.95f);
+    } else if (id == "axis") {
+        line(0.15f, 0.85f, 0.85f, 0.15f);
+        dl->AddCircleFilled(p(0.5f, 0.5f), 0.07f * w, c);
+    } else if (id == "measure") {
+        box(0.1f, 0.35f, 0.9f, 0.65f);
+        for (float x = 0.22f; x < 0.9f; x += 0.14f)
+            line(x, 0.35f, x, 0.48f);
+    } else if (id == "step" || id == "dxf") {
+        const ImVec2 q[5] = {p(0.2f, 0.1f), p(0.62f, 0.1f), p(0.8f, 0.28f), p(0.8f, 0.9f), p(0.2f, 0.9f)};
+        dl->AddPolyline(q, 5, c, t, ImDrawFlags_Closed);
+        line(0.62f, 0.1f, 0.62f, 0.28f), line(0.62f, 0.28f, 0.8f, 0.28f);
+    } else if (id == "appearance") {
+        dl->AddCircle(p(0.5f, 0.5f), 0.35f * w, c, 32, t);
+        dl->AddCircleFilled(p(0.38f, 0.4f), 0.07f * w, c), dl->AddCircleFilled(p(0.6f, 0.36f), 0.07f * w, c);
+        dl->AddCircleFilled(p(0.64f, 0.6f), 0.07f * w, c);
+    } else if (id == "search") {
+        dl->AddCircle(p(0.42f, 0.42f), 0.25f * w, c, 24, t);
+        line(0.6f, 0.6f, 0.88f, 0.88f);
+    } else if (id == "line") {
+        line(0.15f, 0.85f, 0.85f, 0.15f);
+        dl->AddCircleFilled(p(0.15f, 0.85f), 0.06f * w, c), dl->AddCircleFilled(p(0.85f, 0.15f), 0.06f * w, c);
+    } else if (id == "rectangle") {
+        box(0.15f, 0.25f, 0.85f, 0.75f);
+    } else if (id == "circle") {
+        dl->AddCircle(p(0.5f, 0.5f), 0.36f * w, c, 32, t);
+        dl->AddCircleFilled(p(0.5f, 0.5f), 0.05f * w, c);
+    } else if (id == "arc") {
+        dl->PathArcTo(p(0.5f, 0.7f), 0.38f * w, 3.14159f, 6.28318f, 20);
+        dl->PathStroke(c, t);
+    } else if (id == "finish") {
+        line(0.15f, 0.5f, 0.4f, 0.75f), line(0.4f, 0.75f, 0.85f, 0.25f);
+    } else { // a constraint or an edit tool: a dot and a stroke
+        dl->AddCircle(p(0.5f, 0.5f), 0.3f * w, c, 20, t);
+        line(0.35f, 0.5f, 0.65f, 0.5f);
+    }
+}
+
+const char* operation_icon(cad::OperationKind kind) {
+    switch (kind) {
+    case cad::OperationKind::Fillet: return "fillet";
+    case cad::OperationKind::Chamfer: return "chamfer";
+    case cad::OperationKind::Shell: return "shell";
+    case cad::OperationKind::Hole: return "hole";
+    case cad::OperationKind::Mirror: return "mirror";
+    case cad::OperationKind::PatternCircular: return "pattern_circular";
+    case cad::OperationKind::PatternRectangular: return "pattern_rectangular";
+    case cad::OperationKind::Combine: return "combine";
+    case cad::OperationKind::Thread: return "thread";
+    case cad::OperationKind::Move: return "move";
+    case cad::OperationKind::Split: return "split";
+    case cad::OperationKind::Draft: return "draft";
+    }
+    return "";
+}
+
+} // namespace
+
+void App::design_toolbar() {
+    // A tool: its name for the tests (rect), icon, label, what it does, its
+    // key, whether it can be used now and what a click does.
+    struct Tool {
+        std::string id, icon, label, tip, key;
+        bool ready = true, soon = false;
+        std::function<void()> act;
+    };
+    struct Group {
+        T name;
+        std::string id;
+        std::size_t shown = 3; // the main ones, as big icons
+        std::vector<Tool> tools;
+    };
+    const bool ready = solidcraft_probed_ && solidcraft_.available;
+    const bool any_body = std::any_of(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
+        return g.type != cad::Feature::Type::Operation && !g.suppressed;
+    });
+    const bool sketching = sketch_edit_ && editing_sketch();
+    const auto soon = [&](std::string id, std::string icon, T label) {
+        return Tool{std::move(id), std::move(icon), tr(label), tr(T::ComingSoon), "", false, true, {}};
+    };
+    std::vector<std::pair<T, std::vector<Group>>> tabs;
+    // Sólido.
+    {
+        Group create{T::DesignGroupCreate, "design_group_create", 3, {}};
+        create.tools.push_back({"design_sketch", "sketch", tr(T::DesignSketch), tr(T::DesignTipSketch), "",
+                                ready && solidcraft_.has("sketch.create") && solidcraft_.has("solid.extrude"), false,
+                                [this] { design_pick_sketch_ = true; }});
+        for (const cad::Primitive kind : kPrimitives)
+            create.tools.push_back({std::string("design_") + primitive_id(kind), primitive_id(kind), primitive_label(kind),
+                                    tr(T::DesignTipPrimitive), "", ready && solidcraft_.has(cad::command_of(kind)), false,
+                                    [this, kind] { add_primitive(kind, cad::default_sizes(kind)); }});
+        create.tools.push_back({"design_fasteners", "fasteners", tr(T::TabFasteners), tr(T::DesignFastenersTip), "", true, false,
+                                [this] { open_page(DesignPage::Fasteners); }});
+        create.tools.push_back({"design_gears", "gears", tr(T::GearsTitle), tr(T::DesignGearsTip), "", true, false,
+                                [this] { open_page(DesignPage::Gears); }});
+        Group modify{T::DesignGroupModify, "design_group_modify", 3, {}};
+        for (const cad::OperationKind kind : kOperations)
+            modify.tools.push_back({std::string("design_op_") + cad::operation_name(kind), operation_icon(kind), tr(op_label(kind)),
+                                    tr(any_body ? T::DesignTipOperation : T::OpNeedBody), "",
+                                    ready && solidcraft_.has(cad::operation_command(kind)) && any_body, false,
+                                    [this, kind] { add_operation(kind); }});
+        modify.tools.push_back(soon("design_press_pull", "press_pull", T::DesignPressPull));
+        modify.tools.push_back(soon("design_appearance", "appearance", T::DesignAppearance));
+        Group construct{T::DesignGroupConstruct, "design_group_construct", 2,
+                        {soon("design_offset_plane", "plane", T::DesignOffsetPlane), soon("design_axis", "axis", T::DesignAxisTool)}};
+        Group insert{T::DesignGroupInsert, "design_group_insert", 1, {soon("design_open_step", "step", T::DesignOpenStep)}};
+        tabs.push_back({T::DesignTabSolid, {std::move(create), std::move(modify), std::move(construct), std::move(insert)}});
+    }
+    // Boceto, while one is open (rule 11 sexies).
+    if (sketching) {
+        Group draw{T::DesignGroupCreate, "design_group_sketch_create", 4, {}};
+        const std::tuple<SketchEdit::Tool, T, const char*, const char*> kinds[] = {
+            {SketchEdit::Tool::Line, T::SketchToolLine, "line", "L"},
+            {SketchEdit::Tool::Rectangle, T::SketchToolRect, "rectangle", "REC"},
+            {SketchEdit::Tool::Circle, T::SketchToolCircle, "circle", "C"},
+            {SketchEdit::Tool::Arc, T::SketchToolArc, "arc", "A"}};
+        for (const auto& [tool, label, icon, key] : kinds)
+            draw.tools.push_back({std::string("design_sketch_") + icon, icon, tr(label), tr(T::DesignTipSketchTool), key, true, false,
+                                  [this, tool] { sketch_tool(tool); }});
+        Group finish{T::DesignGroupFinish, "design_group_finish", 1,
+                     {{"design_toolbar_finish", "finish", tr(T::SketchFinish), tr(T::DesignTipFinish), "", true, false,
+                       [this] { finish_sketch(); }}}};
+        tabs.push_back({T::DesignTabSketch, {std::move(draw), std::move(finish)}});
+    }
+    // Inspeccionar and Utilidades.
+    tabs.push_back({T::DesignTabInspect,
+                    {Group{T::DesignGroupInspect, "design_group_inspect", 2,
+                           {soon("design_measure_tool", "measure", T::DesignMeasureTool), soon("design_section", "section", T::DesignSectionTool)}}}});
+    tabs.push_back({T::DesignTabUtilities,
+                    {Group{T::DesignGroupUtilities, "design_group_utilities", 1, {soon("design_tool_search", "search", T::DesignToolSearch)}}}});
+    // A sketch opens its tab; leaving it, back to Sólido.
+    static bool was_sketching = false;
+    if (sketching && !was_sketching)
+        design_tab_ = 1;
+    if (!sketching && was_sketching)
+        design_tab_ = 0;
+    was_sketching = sketching;
+    design_tab_ = std::clamp(design_tab_, 0, int(tabs.size()) - 1);
+
+    const float big = 40.0f * scale_, pad = 8.0f * scale_;
+    ImGui::SetNextWindowPos(view_pos_);
+    ImGui::SetNextWindowSize(ImVec2(view_size_.x, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, 4.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##design_toolbar", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // The tabs, the chosen one underlined in the accent.
+    for (std::size_t k = 0; k < tabs.size(); ++k) {
+        if (k > 0)
+            ImGui::SameLine(0, 18.0f * scale_);
+        const bool on = int(k) == design_tab_;
+        ImGui::PushStyleColor(ImGuiCol_Text, rgb(on ? theme_.accent_hover : theme_.text_dim));
+        const std::string label = std::string(tr(tabs[k].first)) + "##design_tab" + std::to_string(k);
+        if (ImGui::Selectable(label.c_str(), false, 0, ImGui::CalcTextSize(tr(tabs[k].first))))
+            design_tab_ = int(k);
+        ImGui::PopStyleColor();
+        note_rect("design_tab_" + std::to_string(k));
+        if (on)
+            dl->AddLine(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + 2.0f * scale_),
+                        ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y + 2.0f * scale_),
+                        ImGui::GetColorU32(rgb(theme_.accent_hover)), 2.0f * scale_);
+    }
+    ImGui::Dummy(ImVec2(0, 2.0f * scale_));
+    // The groups: big icons, the group's name and its arrow below.
+    const auto tool_tip = [&](const Tool& tool) {
+        if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+            return;
+        ImGui::BeginTooltip();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tool.label.c_str());
+        ImGui::PushTextWrapPos(260.0f * scale_);
+        ImGui::TextUnformatted(tool.tip.c_str());
+        ImGui::PopTextWrapPos();
+        if (!tool.key.empty())
+            loc::TextDisabled("%s %s", tr(T::DesignToolKey), tool.key.c_str());
+        ImGui::EndTooltip();
+    };
+    const ImU32 ink = ImGui::GetColorU32(rgb(theme_.text)), dim = ImGui::GetColorU32(rgb(theme_.text_dim, 0.45f));
+    std::function<void()> chosen;
+    const std::vector<Group>& groups = tabs[std::size_t(design_tab_)].second;
+    for (std::size_t g = 0; g < groups.size(); ++g) {
+        const Group& group = groups[g];
+        if (g > 0) {
+            ImGui::SameLine(0, 10.0f * scale_);
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            dl->AddLine(ImVec2(at.x, at.y + 4.0f * scale_), ImVec2(at.x, at.y + big + 22.0f * scale_), dim, 1.0f);
+            ImGui::Dummy(ImVec2(1.0f, 1.0f));
+            ImGui::SameLine(0, 10.0f * scale_);
+        }
+        ImGui::BeginGroup();
+        const std::size_t shown = std::min(group.shown, group.tools.size());
+        for (std::size_t k = 0; k < shown; ++k) {
+            const Tool& tool = group.tools[k];
+            if (k > 0)
+                ImGui::SameLine(0, 4.0f * scale_);
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            ImGui::PushID(tool.id.c_str());
+            ImGui::BeginDisabled(!tool.ready);
+            const bool hit = ImGui::InvisibleButton("##tool", ImVec2(big, big));
+            ImGui::EndDisabled();
+            const bool hover = ImGui::IsItemHovered();
+            if (hover && tool.ready)
+                dl->AddRectFilled(at, ImVec2(at.x + big, at.y + big), ImGui::GetColorU32(rgb(theme_.accent, 0.35f)), 6.0f * scale_);
+            cad_icon(dl, tool.icon, ImVec2(at.x + big * 0.15f, at.y + big * 0.15f), big * 0.7f,
+                     tool.ready ? (tool.id == "design_toolbar_finish" ? IM_COL32(60, 200, 110, 255) : ink) : dim);
+            note_rect(tool.id);
+            tool_tip(tool);
+            ImGui::PopID();
+            if (hit && tool.ready)
+                chosen = tool.act;
+        }
+        // Its name and the arrow with all of them.
+        const std::string head = std::string(tr(group.name)) + "##" + group.id;
+        ImGui::PushStyleColor(ImGuiCol_Text, rgb(theme_.text_dim));
+        const float width = std::max(float(shown) * (big + 4.0f * scale_) - 4.0f * scale_, ImGui::CalcTextSize(tr(group.name)).x + 16.0f * scale_);
+        const bool open = ImGui::Selectable(head.c_str(), false, 0, ImVec2(width, 0));
+        ImGui::PopStyleColor();
+        note_rect(group.id);
+        if (group.tools.size() > shown) { // its arrow: all of them
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const float x = min.x + ImGui::CalcTextSize(tr(group.name)).x + 6.0f * scale_, y = min.y + ImGui::GetTextLineHeight() * 0.5f;
+            const float r = 3.5f * scale_;
+            dl->AddTriangleFilled(ImVec2(x, y - r * 0.6f), ImVec2(x + 2.0f * r, y - r * 0.6f), ImVec2(x + r, y + r * 0.8f),
+                                  ImGui::GetColorU32(rgb(theme_.text_dim)));
+        }
+        if (open)
+            ImGui::OpenPopup(("##menu" + group.id).c_str());
+        ImGui::EndGroup();
+        if (ImGui::BeginPopup(("##menu" + group.id).c_str())) {
+            for (const Tool& tool : group.tools) {
+                ImGui::PushID(tool.id.c_str());
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                const float small = ImGui::GetFrameHeight();
+                const bool hit = ImGui::Selectable((std::string("##item") + tool.id).c_str(), false,
+                                                   tool.ready ? 0 : ImGuiSelectableFlags_Disabled, ImVec2(220.0f * scale_, small));
+                note_rect(tool.id);
+                tool_tip(tool);
+                cad_icon(ImGui::GetWindowDrawList(), tool.icon, ImVec2(at.x + 2.0f, at.y + 2.0f), small - 4.0f, tool.ready ? ink : dim);
+                ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + small + 8.0f * scale_, at.y + (small - ImGui::GetFontSize()) * 0.5f),
+                                                    tool.ready ? ink : dim, tool.label.c_str());
+                if (tool.soon)
+                    ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 150.0f * scale_, at.y + (small - ImGui::GetFontSize()) * 0.5f),
+                                                        dim, tr(T::ComingSoon));
+                ImGui::PopID();
+                if (hit && tool.ready) {
+                    chosen = tool.act;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
+        }
+    }
+    view_top_inset_ = ImGui::GetWindowSize().y;
+    g_menu_rects["design_toolbar"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                            ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                            ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    if (chosen)
+        chosen();
+}
+
 void App::design_panel() {
     // The left column, where the print settings go in the other tabs.
     const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -15231,14 +15597,10 @@ void App::design_panel() {
     }
     const bool ready = solidcraft_probed_ && solidcraft_.available;
 
-    // Nuevo: a sketch (stage D2), the primitives, a STEP file (stage D5).
-    section(T::DesignSecNew);
+    // The tools to make and change bodies are in the toolbar over the view
+    // (rule 11 bis); the sketch's plane and a primitive are asked here.
     const bool can_sketch = ready && solidcraft_.has("sketch.create") && solidcraft_.has("solid.extrude");
-    ImGui::BeginDisabled(!can_sketch);
-    const bool sketch_clicked = ImGui::Button(tr(T::DesignSketch));
-    ImGui::EndDisabled();
-    rect_of("design_sketch");
-    if (sketch_clicked || design_pick_sketch_) {
+    if (design_pick_sketch_) {
         ImGui::OpenPopup("##sketch_plane");
         design_pick_sketch_ = false;
     }
@@ -15256,7 +15618,6 @@ void App::design_panel() {
         }
         ImGui::EndPopup();
     }
-    loc::TextDisabled("%s", tr(T::DesignPrimitive));
     if (design_pick_primitive_) {
         ImGui::OpenPopup("##pick_primitive");
         design_pick_primitive_ = false;
@@ -15269,47 +15630,6 @@ void App::design_panel() {
             }
         ImGui::EndPopup();
     }
-    {
-        const float width = (ImGui::GetContentRegionAvail().x - 2.0f * ImGui::GetStyle().ItemSpacing.x) / 3.0f;
-        int k = 0;
-        for (const cad::Primitive kind : kPrimitives) {
-            // Each one the tool has; «Próximamente» otherwise (rule 1).
-            const bool known = ready && solidcraft_.has(cad::command_of(kind));
-            if (k % 3 != 0)
-                ImGui::SameLine();
-            ImGui::BeginDisabled(!known);
-            const bool clicked = ImGui::Button(primitive_label(kind), ImVec2(width, 0));
-            ImGui::EndDisabled();
-            rect_of((std::string("design_") + primitive_id(kind)).c_str());
-            if (ready && !known && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                loc::SetTooltip("%s", tr(T::ComingSoon));
-            if (clicked)
-                add_primitive(kind, cad::default_sizes(kind));
-            ++k;
-        }
-    }
-    // Fasteners: made by the engine, so open with or without the tool (the
-    // owner's request, 2026-11-02: inside Design).
-    {
-        const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
-        if (ImGui::Button(tr(T::TabFasteners), ImVec2(half, 0)))
-            open_page(DesignPage::Fasteners);
-        rect_of("design_fasteners");
-        if (ImGui::IsItemHovered())
-            loc::SetTooltip("%s", tr(T::DesignFastenersTip));
-        ImGui::SameLine();
-        if (ImGui::Button(tr(T::GearsTitle), ImVec2(half, 0)))
-            open_page(DesignPage::Gears);
-        rect_of("design_gears");
-        if (ImGui::IsItemHovered())
-            loc::SetTooltip("%s", tr(T::DesignGearsTip));
-    }
-    ImGui::BeginDisabled(true);
-    ImGui::Button(tr(T::DesignOpenStep));
-    ImGui::SameLine();
-    loc::TextDisabled("%s", tr(T::ComingSoon));
-    ImGui::EndDisabled();
-    rect_of("design_open_step");
 
     // Boceto: the tools and the toggles while a sketch is being drawn.
     section(T::DesignSecSketch);
@@ -15429,30 +15749,7 @@ void App::design_panel() {
     }
     // Operaciones (rule 7, stage D4): on the bodies made; each one known to
     // the installed SolidCraft, the rest «Próximamente».
-    section(T::DesignSecOperations);
     {
-        const bool any_body = std::any_of(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
-            return g.type != cad::Feature::Type::Operation && !g.suppressed;
-        });
-        float x = 0.0f;
-        const float room = ImGui::GetContentRegionAvail().x;
-        for (const cad::OperationKind kind : kOperations) {
-            const char* label = tr(op_label(kind));
-            const float w = ImGui::CalcTextSize(label).x + 2.0f * ImGui::GetStyle().FramePadding.x;
-            if (x > 0.0f && x + w <= room)
-                ImGui::SameLine();
-            else
-                x = 0.0f;
-            const bool known = ready && solidcraft_.has(cad::operation_command(kind));
-            ImGui::BeginDisabled(!known || !any_body);
-            if (ImGui::Button(label))
-                add_operation(kind);
-            ImGui::EndDisabled();
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && (!known || !any_body))
-                loc::SetTooltip("%s", tr(!known ? T::ComingSoon : T::OpNeedBody));
-            rect_of((std::string("design_op_") + cad::operation_name(kind)).c_str());
-            x += w + ImGui::GetStyle().ItemSpacing.x;
-        }
         if (design_pick_ && *design_pick_ < design_.features.size()) {
             loc::TextColored(rgb(theme_.accent_hover), "%s", tr(pick_hint(design_.features[*design_pick_].op.kind)));
             if (ImGui::SmallButton(tr(T::DesignDone)))
@@ -23436,7 +23733,7 @@ void App::layout() {
         else if (tab_ == Tab::Design && design_page_ == DesignPage::Gears)
             gears_panel();
         else if (tab_ == Tab::Design)
-            design_panel();
+            design_panel(), design_toolbar();
         else if (tab_ == Tab::Structural)
             structural_panel();
         else if (tab_ == Tab::Aerodynamics)
@@ -26354,6 +26651,7 @@ void App::script_input() {
 }
 
 void App::frame() {
+    view_top_inset_ = 0.0f;
     poll_pack_update();
     refresh_bed_extras();
     // --pick-pack-printer: that pack printer added and chosen (profile_pack.md, PK6).

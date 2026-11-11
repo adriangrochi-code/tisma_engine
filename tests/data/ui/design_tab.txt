@@ -14,13 +14,20 @@ expect-control tab_structural
 expect-control structural_part
 expect-control tab_design
 menu tab_design
-expect-control design_fasteners
+expect-control design_toolbar
 expect-no-control tab_prepare
 expect-apart mode_engineering tab_design
 expect-control design_box
-expect-control design_torus
 expect-control design_sketch
+# The toolbar's groups (rule 11 bis): Crear's arrow shows all of them,
+# Insertar's the STEP file that is coming.
+menu design_group_create
+expect-control design_torus
+expect-control design_fasteners
+key escape
+menu design_group_insert
 expect-control design_open_step
+key escape
 expect-control design_send
 expect-control design_needs_solid
 expect-control design_command

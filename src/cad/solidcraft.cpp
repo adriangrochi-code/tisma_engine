@@ -79,13 +79,33 @@ SolidCraftInfo probe_solidcraft(const std::filesystem::path& exe, double timeout
 
 namespace {
 
+// The folder every build's own folder goes in, one for this run of the
+// program: the session is started allowed to write there (solidcraft-cli
+// 0.30.0 refuses paths outside the folders it is given with --allow-path).
+const std::filesystem::path& design_root() {
+    static const std::filesystem::path root = [] {
+        std::error_code ec;
+        std::filesystem::path base = std::filesystem::temp_directory_path(ec);
+        if (ec)
+            return std::filesystem::path();
+        for (int tries = 0; tries < 100; ++tries) {
+            const std::filesystem::path candidate = base / ("tisma-design-" + std::to_string(std::rand() % 1000000));
+            if (std::filesystem::create_directory(candidate, ec) && !ec)
+                return candidate;
+            ec.clear();
+        }
+        return std::filesystem::path();
+    }();
+    return root;
+}
+
 // A folder of its own for one build, removed when the build ends.
 class TempFolder {
 public:
     TempFolder() {
         static std::atomic<unsigned> counter{0};
         std::error_code ec;
-        const std::filesystem::path base = std::filesystem::temp_directory_path(ec);
+        const std::filesystem::path base = design_root().empty() ? std::filesystem::temp_directory_path(ec) : design_root();
         if (ec)
             return;
         for (int tries = 0; tries < 100 && path_.empty(); ++tries) {
@@ -157,7 +177,11 @@ void SolidCraftSession::close_if_idle(double seconds) {
 
 bool SolidCraftSession::start(std::string& error) {
     process_ = std::make_unique<ChildProcess>();
-    if (!process_->start(exe_, {"mcp"}, error)) {
+    // Headless (no app to connect to), allowed to write in the builds' folder.
+    std::vector<std::string> args{"mcp", "--headless"};
+    if (!design_root().empty())
+        args.insert(args.end(), {"--allow-path", design_root().string()});
+    if (!process_->start(exe_, args, error)) {
         process_.reset();
         return false;
     }

@@ -17,6 +17,7 @@ key enter
 expect-design 3904
 menu design_delete_2
 expect-design 8000
+menu design_group_modify
 menu design_op_hole
 design-pick 0 0 20
 menu design_pick_done

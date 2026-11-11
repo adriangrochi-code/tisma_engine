@@ -13305,3 +13305,26 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   vacía, con «o arrastrá un STL, un 3MF o un G-code acá» debajo; con algo elegido y más de un modelo, los no elegidos
   se ven un poco atenuados (al 80 %). Pasan los 203 `ui_`.
 
+## 2026-11-11 — interfaz: Diseño al estilo de Fusion 360, primer paso: la barra de herramientas (cad_design.md, regla 11 bis)
+
+- **Hecho** (prioridad del dueño, 16:30; ficha en `spec/next`, pasa `check_spec.py`):
+  - arriba de la vista, a todo su ancho, la barra con pestañas **Sólido**, **Boceto** (solo con un boceto abierto, se
+    abre sola al empezar uno), **Inspeccionar** y **Utilidades**; cada pestaña con grupos con nombre (Crear, Modificar,
+    Construir, Insertar, Inspeccionar…), sus 2 o 3 herramientas principales como íconos grandes y una flecha que abre
+    todas con ícono y nombre; al pasar el mouse, una tarjeta con el nombre, qué hace y su tecla. Lo que todavía no
+    está (Presionar/Tirar, Apariencia, Plano desplazado, Eje, Abrir STEP, Medir, Sección, Buscar herramienta) se ve
+    apagado con «Próximamente» (regla 11 novies). Los íconos son dibujos propios hechos con líneas;
+  - en Boceto: Línea, Rectángulo, Círculo, Arco y «Terminar boceto» en verde;
+  - el panel de la izquierda ya no repite Nuevo ni Operaciones; los botones de la vista y el cubo bajan lo que ocupa
+    la barra; tema oscuro de Tisma, como pidió el dueño (la regla 11 decies dice claro: a confirmar con fichas).
+- **Arreglado:** con el `solidcraft-cli` 0.30.0 real, cada construcción fallaba («outside the folders this agent may
+  use»): la sesión `mcp` ahora arranca `--headless` y con `--allow-path` a una carpeta propia de esta ejecución, donde
+  van las carpetas de cada construcción. El sustituto de las pruebas ahora rechaza escribir fuera de esas carpetas,
+  como el real. Probado con el real en Linux: la caja de 20 mm se construye (8000 mm³).
+- **Visto y no arreglado:** al abrir con `--view design` sin modelo, el cuerpo construido no se ve en la vista (pasaba
+  antes de este cambio también); entrando a Diseño desde Ingeniería sí se ve.
+- **Pruebas:** `design_tab`, `design_operations`, `fasteners` y `gears` abren el menú del grupo; pasan los 227 de
+  interfaz y de diseño.
+- **Sigue:** navegador a la izquierda (11 ter), línea de tiempo abajo (11 quater, CD27), cuadros flotantes (11
+  quinquies), menú radial (CD28) y buscar herramienta con S (CD29).
+
