@@ -133,6 +133,10 @@ TEST_CASE("print host: OctoPrint's REST API, test, upload and print, state, paus
     REQUIRE(up.ok);
     CHECK(fake.uploaded_name == "cube.gcode");
     CHECK(fake.uploaded == "G28\nG1 X10 Y10 F3000\n");
+    // A quote in the name does not end the form's header (BH53).
+    REQUIRE(host_upload(host, g.string(), "big \"one\".gcode", false).ok);
+    CHECK(fake.uploaded_name == "big _one_.gcode");
+    REQUIRE(host_upload(host, g.string(), "cube.gcode", true).ok);
     CHECK(fake.started);
     // The state with the temperatures.
     HostStatus s = host_status(host);
@@ -304,7 +308,7 @@ public:
             const std::string ha2 = tisma::net::md5_hex(req.method + ":" + field("uri"));
             const std::string expected = tisma::net::md5_hex(ha1 + ":N0NCE:" + nc + ":" + field("cnonce") + ":auth:" + ha2);
             if (a.rfind("Digest ", 0) == 0 && field("username") == "maker" && field("response") == expected &&
-                field("uri") == req.path)
+                field("uri") == req.target) // as it was sent, before decoding
                 return true;
             res.status = 401;
             res.set_header("WWW-Authenticate", R"(Digest realm="Printer", nonce="N0NCE", qop="auth", algorithm=MD5)");
@@ -401,6 +405,10 @@ TEST_CASE("print host: PrusaLink's API with Digest, upload and print, state, pau
     CHECK(host_cancel(host).code == "conflict"); // no job yet
     const std::filesystem::path g = std::filesystem::temp_directory_path() / "tisma_print_host_p.gcode";
     std::ofstream(g, std::ios::binary) << "G28\nM104 S215\n";
+    // A name with spaces, # and an accent, as typed (BH53): percent-encoded
+    // in the path, the same name on the printer.
+    REQUIRE(host_upload(host, g.string(), "Mi pieza #2 ñ.gcode", false).ok);
+    CHECK(fake.name == "Mi pieza #2 ñ.gcode");
     REQUIRE(host_upload(host, g.string(), "cube.gcode", true).ok);
     CHECK(fake.name == "cube.gcode");
     CHECK(fake.body == "G28\nM104 S215\n");

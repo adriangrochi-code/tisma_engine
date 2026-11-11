@@ -12614,7 +12614,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 | Vista previa / visor de G-code | revisado (parcial) | 10-11 | leyenda frente al G-code, OBJ de trayectorias | — |
 | Archivos (STL/OBJ/3MF, G-code binario, unidades) | revisado (parcial) | 10-11 | idas y vueltas STL/OBJ/3MF, binario↔ASCII, normales invertidas | 3MF a `%.9g` |
 | Perfiles y configuración (paquete) | revisado (parcial) | 10-11 | `compatible_prints`, cambio de filamento | regla nueva |
-| Conexión con impresoras / página de la impresora | pendiente | | | |
+| Conexión con impresoras / página de la impresora | revisado (parcial) | 11-11 | nombres de archivo al subir (PrusaLink, OctoPrint, Moonraker) | BH53 |
 | Lo propio de Tisma (curvas, altura variable, cúspide) | revisado (parcial) | 10-11 | altura variable con soporte | `support.z_gap` contado en capas nominales: con capas de 0,1 quedaba a 0,1 mm |
 | Servicios (nube, nodos, biblioteca) | pendiente | | | |
 | Interfaz: menús, diálogos, preferencias | revisado (parcial) | 10-11 | auditoría de interface.md (tabla de arriba), Imprimible, vaso | vaso con modelos no imprimibles |
@@ -12703,6 +12703,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- BH53 (búsqueda profunda, conexión con impresoras): el nombre del archivo que la persona escribe al mandar a la
+  impresora iba tal cual en la ruta de PrusaLink (`PUT /api/v1/files/usb/Mi pieza #2.gcode`: una línea de pedido
+  inválida, y el `#` cortaba el nombre), y una comilla en el nombre cortaba el encabezado del formulario de OctoPrint
+  y Moonraker. Ahora la ruta va codificada (`%20`, `%23`, UTF-8) y en el formulario las comillas y los saltos de
+  línea pasan a `_`. Pruebas `[device]` BH53, que fallan sin el arreglo.
 - ME15 (spec/next, `multi_extruder.md` regla 8 quater; filamentos de la Prusa XL a 170 °C): `filament.idle_temperature`
   (o `material.idle_temperature`) va a `machine.variables.idle_temperature`. Sin prevención de goteo, la herramienta
   que deja de imprimir baja a esa temperatura (`M104 S170 T0 ;idle`) y antes de volver a imprimir se calienta y se

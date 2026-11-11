@@ -187,8 +187,11 @@ HostVersion prusalink_version(const HostConfig& host) {
     return out;
 }
 
+std::string url_part(const std::string& s);
+
 HostResult prusalink_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
-    net::Request r = prusalink_request(host, "PUT", "/api/v1/files/usb/" + name);
+    // The name in the path, percent-encoded: «Mi pieza #2.gcode» (BH53).
+    net::Request r = prusalink_request(host, "PUT", "/api/v1/files/usb/" + url_part(name));
     r.timeout_s = std::max(host.timeout_s, 600);
     std::ifstream in(path, std::ios::binary);
     if (!in)

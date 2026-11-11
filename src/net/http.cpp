@@ -67,8 +67,14 @@ bool form_body(const std::vector<FormPart>& parts, const std::string& boundary, 
     for (const FormPart& p : parts) {
         body += "--" + boundary + "\r\n";
         body += "Content-Disposition: form-data; name=\"" + p.name + "\"";
-        if (!p.filename.empty())
-            body += "; filename=\"" + p.filename + "\"";
+        if (!p.filename.empty()) {
+            // A quote or a line break in the name would end the header (BH53).
+            std::string name = p.filename;
+            for (char& c : name)
+                if (c == '"' || c == '\r' || c == '\n' || c == '\\')
+                    c = '_';
+            body += "; filename=\"" + name + "\"";
+        }
         body += "\r\n";
         if (!p.path.empty() || !p.filename.empty())
             body += "Content-Type: " + p.content_type + "\r\n";
