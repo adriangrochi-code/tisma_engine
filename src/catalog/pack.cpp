@@ -56,6 +56,9 @@ const std::set<std::string>& known_keys() {
         std::set<std::string> k;
         for (const auto& [key, value] : describe(Settings{}))
             k.insert(key);
+        // The filament's material type, which the settings' file writes only
+        // when given (profile_pack_format.md, print profiles, rule 6, PF9).
+        k.insert("extrusion.type");
         k.insert("machine.variables");
         k.insert("machine.macros");
         return k;
@@ -280,7 +283,8 @@ bool safe_pack_path(std::string_view path) {
     return true;
 }
 
-Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings) {
+Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings,
+                             std::string* print_defaults) {
     const json j = parse_object(model_json, "printer model");
     if (text(j, "format") != "tisma-pack-model")
         throw PackError("not a pack printer model (\"format\" must be \"tisma-pack-model\")");
@@ -344,6 +348,17 @@ Profile pack_printer_profile(std::string_view model_json, const std::string& var
     if ((technology == "sla" || technology == "fff") &&
         !(settings.contains("machine") && settings.at("machine").is_object() && settings.at("machine").contains("technology")))
         settings["machine"]["technology"] = technology == "sla" ? "msla" : "fdm";
+    // A printer's purge volumes are a print setting here (PF8): the print's default.
+    json carried = json::object();
+    if (settings.contains("wipe_tower") && settings.at("wipe_tower").is_object() &&
+        settings.at("wipe_tower").contains("purge_volumes")) {
+        carried["wipe_tower"]["purge_volumes"] = settings.at("wipe_tower").at("purge_volumes");
+        settings["wipe_tower"].erase("purge_volumes");
+        if (settings.at("wipe_tower").empty())
+            settings.erase("wipe_tower");
+    }
+    if (print_defaults)
+        *print_defaults = carried.dump();
     const json profile{{"format", "tisma-profile"},
                        {"version", 2},
                        {"kind", "printer"},
@@ -432,7 +447,7 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     // other programs keep them) go to the printer profile, not lost (BH27);
     // another kind's are left out with a warning.
     const std::optional<ProfileKind> own = profile_kind_from_name(text(profile, "kind"));
-    json printer_part = json::object();
+    json printer_part = json::object(), filament_part = json::object();
     if (own && *own != ProfileKind::Printer) {
         json& settings = profile["settings"];
         for (auto& [group, keys] : settings.items()) {
@@ -443,6 +458,8 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                     continue;
                 if (*k == ProfileKind::Printer)
                     printer_part[group][key] = value;
+                else if (*own == ProfileKind::Print && group == "extrusion" && key == "bridge_flow_ratio")
+                    filament_part[group][key] = value; // the print's bridges' flow (PF7)
                 else
                     warnings.push_back(where + ": " + group + "." + key + " is a " + std::string(profile_kind_name(*k)) +
                                        " setting: left out");
@@ -458,6 +475,7 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
         profile["version"] = 2;
     }
     out.printer_settings = printer_part.dump();
+    out.filament_settings = filament_part.dump();
     try {
         out.profile = parse_profile(profile.dump());
     } catch (const SettingsError& e) {

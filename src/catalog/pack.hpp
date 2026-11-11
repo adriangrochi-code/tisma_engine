@@ -96,7 +96,12 @@ bool safe_pack_path(std::string_view path);
 // A variant's printer profile (rule 10, PF4): common.settings with the
 // variant's settings over them, group by group and key by key, named after
 // the variant. Unknown keys are left out, each with a warning (rule 10).
-Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings);
+// The print settings a printer variant carries (profile_pack_format.md,
+// print profiles, rule 6, PF8: wipe_tower.purge_volumes) go to
+// `print_defaults` as a JSON object of groups, when given: the print's own
+// value wins.
+Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings,
+                             std::string* print_defaults = nullptr);
 
 // A filament, print or resin entry's profile (rule 10, PF6): its "profile",
 // unknown keys left out with a warning; "original" is never read.
@@ -119,6 +124,10 @@ struct PackEntry {
     // cooling.min_speed, which the engine keeps in the printer profile.
     // pack_profiles lays them over the printer's.
     std::string printer_settings = "{}";
+    // The filament settings a print entry carries (profile_pack_format.md,
+    // print profiles, rule 6, PF7: extrusion.bridge_flow_ratio): laid over
+    // the filament's.
+    std::string filament_settings = "{}";
 };
 PackEntry parse_pack_entry(std::string_view json, std::vector<std::string>& warnings);
 

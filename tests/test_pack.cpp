@@ -651,3 +651,47 @@ TEST_CASE("pack: the translation table's archive is named, planned and unpacked 
     CHECK(safe_pack_path("translation/prusaslicer.json"));
     CHECK_FALSE(safe_pack_path("translation/../index.json"));
 }
+
+TEST_CASE("pack: settings that cross profiles, the print's bridges and the printer's purge (profile_pack_format.md, "
+          "print profiles, rule 6, PF7 to PF9)",
+          "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_cross") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage_cross"));
+    const PackIndex index = pack_installed(pack);
+    const auto edit = [&](const fs::path& file, const auto& change) {
+        nlohmann::json j = nlohmann::json::parse(std::ifstream(file));
+        change(j);
+        std::ofstream(file) << j.dump();
+    };
+    const fs::path model = pack / "vendors" / "acme" / "models" / "A1.json";
+    const fs::path print = pack / "vendors" / "acme" / "prints" / "Standard.json";
+    const fs::path pla = pack / "vendors" / "acme" / "filaments" / "PLA.json";
+    edit(model, [](nlohmann::json& j) { j["common"]["settings"]["wipe_tower"]["purge_volumes"] = 70; });
+    edit(print, [](nlohmann::json& j) { j["profile"]["settings"]["extrusion"]["bridge_flow_ratio"] = 0.8; });
+    edit(pla, [](nlohmann::json& j) { j["profile"]["settings"]["extrusion"]["type"] = "PLA"; });
+    const auto chosen = [&] {
+        return pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "vendors/acme/filaments/PLA.json",
+                             "vendors/acme/prints/Standard.json");
+    };
+    PackProfiles p = chosen();
+    INFO(nlohmann::json(p.warnings).dump());
+    for (const std::string& w : p.warnings) {
+        CHECK_THAT(w, !Catch::Matchers::ContainsSubstring("bridge_flow_ratio"));
+        CHECK_THAT(w, !Catch::Matchers::ContainsSubstring("purge_volumes"));
+        CHECK_THAT(w, !Catch::Matchers::ContainsSubstring("extrusion.type"));
+    }
+    REQUIRE(p.filament);
+    REQUIRE(p.print);
+    // PF7: the print's bridges' flow over the filament's.
+    CHECK(p.filament->settings.bridge_flow_ratio == 0.8);
+    // PF8: the printer's purge volume, the print's default.
+    REQUIRE(p.print->settings.purge_volumes.size() > 1);
+    CHECK(p.print->settings.purge_volumes[0][1] == 70.0);
+    // PF9: the filament's type read.
+    CHECK(p.filament->settings.filament_type == "PLA");
+    // The print's own purge volume wins.
+    edit(print, [](nlohmann::json& j) { j["profile"]["settings"]["wipe_tower"]["purge_volumes"] = 120; });
+    p = chosen();
+    REQUIRE(p.print);
+    CHECK(p.print->settings.purge_volumes[0][1] == 120.0);
+}

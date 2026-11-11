@@ -348,7 +348,8 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
     std::string model_text;
     if (!read_pack(file, model_text))
         throw PackError("the printer's model file is not installed: " + file);
-    out.printer = pack_printer_profile(model_text, variant, out.warnings);
+    std::string print_defaults = "{}";
+    out.printer = pack_printer_profile(model_text, variant, out.warnings, &print_defaults);
     // Rule 13: the variant's first filament and its print profile by default
     // (on a resin printer, its first resin and its resin print profile).
     out.filament_path = filament;
@@ -383,6 +384,8 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
     if (read_all(pack_dir / "compatible.json", sets_text))
         sets = parse_pack_compatible(sets_text);
     nlohmann::json printer_over = nlohmann::json::object(); // the printer settings they carry (BH27)
+    nlohmann::json filament_over = nlohmann::json::object(); // the print's filament settings (PF7)
+    bool print_purges = false; // whether the print gives its own purge volumes (PF8)
     std::vector<std::string> filament_prints; // the filament's compatible_prints
     for (const auto& [path, kind] : {std::pair{out.filament_path, ProfileKind::Filament}, std::pair{out.print_path, ProfileKind::Print}}) {
         if (path.empty())
@@ -391,6 +394,15 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
         if (!read_pack(path, text))
             throw PackError("not in the installed pack: " + path);
         PackEntry entry = parse_pack_entry(text, out.warnings);
+        if (kind == ProfileKind::Print) {
+            filament_over = nlohmann::json::parse(entry.filament_settings);
+            const nlohmann::json raw = nlohmann::json::parse(text, nullptr, false);
+            print_purges = raw.is_object() && raw.contains("profile") && raw["profile"].is_object() &&
+                           raw["profile"].contains("settings") && raw["profile"]["settings"].is_object() &&
+                           raw["profile"]["settings"].contains("wipe_tower") &&
+                           raw["profile"]["settings"]["wipe_tower"].is_object() &&
+                           raw["profile"]["settings"]["wipe_tower"].contains("purge_volumes");
+        }
         if (entry.profile.kind != kind)
             throw PackError(path + " is not a " + (kind == ProfileKind::Filament ? "filament" : "print") + " profile");
         if (entry.compatible && *entry.compatible >= 0 && std::size_t(*entry.compatible) < sets.size() &&
@@ -421,6 +433,25 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
                 printer_over[group][key] = value; // the print's after the filament's
         (kind == ProfileKind::Filament ? out.filament : out.print) = std::move(entry.profile);
     }
+    // Settings that cross profiles (profile_pack_format.md, print profiles,
+    // rule 6): the print's bridges' flow over the filament's (PF7), the
+    // printer's purge volumes under the print's own (PF8).
+    const auto lay = [&](std::optional<Profile>& profile, const nlohmann::json& over) {
+        if (!profile || over.empty())
+            return;
+        nlohmann::json merged = nlohmann::json::parse(profile_file_json(*profile));
+        for (const auto& [group, keys] : over.items())
+            for (const auto& [key, value] : keys.items())
+                merged["settings"][group][key] = value;
+        try {
+            profile = parse_profile(merged.dump());
+        } catch (const SettingsError& e) {
+            throw PackError(profile->name + ": " + e.what());
+        }
+    };
+    lay(out.filament, filament_over);
+    if (!print_purges)
+        lay(out.print, nlohmann::json::parse(print_defaults));
     if (!printer_over.empty()) {
         nlohmann::json merged = nlohmann::json::parse(profile_file_json(out.printer));
         for (const auto& [group, keys] : printer_over.items())
