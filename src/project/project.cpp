@@ -163,6 +163,8 @@ static ordered_json project_json(const Project& project, bool offsets) {
     // The blends in the file the spec gives them (color_mixing.md, rule 15).
     if (!project.mixes.empty() || !project.filament_colors.empty())
         root["color_mixing"] = ordered_json::parse(color_mixes_json(project.mixes, project.filament_colors));
+    if (!project.paint_slots.empty())
+        root["paint_slots"] = project.paint_slots;
     if (project.calibration) {
         ordered_json segments = ordered_json::array();
         for (const CalibrationSegment& s : project.calibration->segments)
@@ -477,6 +479,16 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                 p.filament_colors.push_back(f.is_object() && f.contains("color") && f.at("color").is_string()
                                                 ? f.at("color").get<std::string>()
                                                 : std::string());
+    }
+    if (root.contains("paint_slots")) {
+        const ordered_json& s = root.at("paint_slots");
+        if (!s.is_array() || s.size() > kPaintMaxMark)
+            fail("paint_slots: must be a list of at most " + std::to_string(kPaintMaxMark) + " numbers");
+        for (const ordered_json& n : s) {
+            if (!n.is_number_integer() || n.get<long long>() < 0 || n.get<long long>() > 254)
+                fail("paint_slots: each slot must be a filament or blend number from 0 to 254");
+            p.paint_slots.push_back(n.get<int>());
+        }
     }
     if (root.contains("calibration")) {
         const ordered_json& c = root.at("calibration");

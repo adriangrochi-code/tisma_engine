@@ -214,6 +214,28 @@ std::uint32_t get32(std::string_view in, std::size_t& pos) {
 
 } // namespace
 
+Painting with_color_slots(const Painting& painting, const std::vector<int>& slots) {
+    if (slots.empty())
+        return painting;
+    std::array<std::uint8_t, 256> to{};
+    to[Painting::kSplit] = Painting::kSplit;
+    for (std::size_t k = 0; k < slots.size() && k + 1 < Painting::kSplit; ++k)
+        to[k + 1] = slots[k] > 0 && slots[k] < Painting::kSplit ? std::uint8_t(slots[k]) : 0;
+    Painting out = painting;
+    for (std::size_t t = 0; t < painting.size(PaintChannel::Color); ++t) {
+        Painting::Tree tree = painting.tree(PaintChannel::Color, t);
+        if (tree.empty())
+            continue;
+        for (std::uint8_t& b : tree)
+            b = to[b];
+        // All of it the part's own: unpainted.
+        if (std::all_of(tree.begin(), tree.end(), [](std::uint8_t b) { return b == 0 || b == Painting::kSplit; }))
+            tree.clear();
+        out.set_tree(PaintChannel::Color, t, std::move(tree));
+    }
+    return out;
+}
+
 bool Painting::empty() const {
     for (std::size_t c = 0; c < kPaintChannels; ++c)
         if (!empty(PaintChannel(c)))

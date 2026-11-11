@@ -13254,4 +13254,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Falta:** mover, girar y escalar varios juntos (hoy actúan sobre uno).
 - **CI local** (clang de 9a1a7c4): 1253/1255; las dos fallaron por pantallas (una «Xvfb failed to start», la otra pasa
   sola); ASan en curso.
-
+- **MX33, casillas de la pintura en el proyecto** (2026-11-11, acordado con la sesión de interfaz). `Project::paint_slots`
+  (`"paint_slots"` en el JSON, hasta 16 números de 0 a 254; otro valor rechaza el archivo) y `with_color_slots`: la marca
+  k del canal de color pasa a `paint_slots[k-1]`, 0 o fuera de la tabla es la pieza propia (sin pintar); tabla vacía,
+  sin cambios. `tisma node` la aplica al cortar un proyecto; la interfaz la aplica en su corte. Prueba `[project][paint]`.
+  Además (búsqueda profunda): el color pintado terminaba un ancho de línea pasado el borde pintado (69005b6).

@@ -103,6 +103,11 @@ struct Project {
     // (color_mixing.md): they travel with the models, not with a profile.
     std::vector<ColorMix> mixes;
     std::vector<std::string> filament_colors;
+    // The paint's slots (color_mixing_plus.md, MX33): colour mark k paints
+    // with paint_slots[k - 1], a filament or blend number (0: the part's
+    // own); at most kPaintMaxMark. Empty: each mark is its number. See
+    // with_color_slots.
+    std::vector<int> paint_slots;
     // What opening the file left out, for the person (not saved): Engineering
     // data this program does not read, conditions that no longer fit their mesh.
     std::vector<std::string> notices;

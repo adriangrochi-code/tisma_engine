@@ -584,7 +584,9 @@ en el perfil de impresión.
 | `purge_infill_max` | % | 0 | 0 a 100 | Regla 35 (MX23): en una boquilla, si la purga de un cambio (el volumen del par menos `min_purge_on_tower`) no entra en el relleno disperso de su capa, ese relleno se vuelve a llenar más denso, en proporción a la purga, hasta este valor. Solo donde el relleno disperso de la capa es todo de la pieza con mezcla. 0: apagado |
 | `predictor` | texto | `"mixer"` | `mixer`, `spectral` | Reglas 20 y 21: cómo se predice el color de una mezcla al buscar un color (`match_color`). `mixer`: promedio pesado por la parte. `spectral`: Kubelka y Munk con la `extrusion.transmission_distance` de cada filamento (con TD 0, como `mixer`) |
 
-Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). Desde la línea de comandos, `slice <modelo>
+Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). El proyecto lleva también las casillas de la
+pintura (`"paint_slots": [3, 0, 1]`, MX33, hasta 16): la marca de color k pinta con el filamento o la mezcla de la
+casilla k (0: el de la pieza); sin la lista, cada marca es su número. Desde la línea de comandos, `slice <modelo>
 --config <ajustes.json> --mixes <mezclas.json> --mix <n>` lee las mezclas en ese mismo JSON (`{"version": 1,
 "virtual_extruders": [{"id": 3, "kind": "fullspectrum", "components": [{"extruder": 1, "ratio": 0.5}, {"extruder": 2,
 "ratio": 0.5}]}]}`) y lamina el modelo con la mezcla `n`, que tiene que poder imprimirse en la máquina (su número

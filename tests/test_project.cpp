@@ -690,3 +690,36 @@ TEST_CASE("a project keeps which models are not printable", "[project]") {
     CHECK_FALSE(back_3mf.models[1].printable);
     CHECK(write_project(sample()).find("\"printable\"") == std::string::npos);
 }
+
+TEST_CASE("the paint's slots travel with the project and pick what each mark prints with (MX33)", "[project][paint]") {
+    Project p;
+    p.paint_slots = {3, 0, 1};
+    const Project back = read_project(write_project(p));
+    CHECK(back.paint_slots == std::vector<int>{3, 0, 1});
+    CHECK(read_project(write_project(Project{})).paint_slots.empty());
+    // Too many slots, or one that is no number: the file is refused.
+    std::string bad = write_project(p);
+    const std::size_t at = bad.find("\"paint_slots\"");
+    REQUIRE(at != std::string::npos);
+    std::string many = bad;
+    many.replace(at, bad.find(']', at) - at + 1, "\"paint_slots\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]");
+    CHECK_THROWS_AS(read_project(many), ProjectError);
+    bad.replace(at, bad.find(']', at) - at + 1, "\"paint_slots\": [255]");
+    CHECK_THROWS_AS(read_project(bad), ProjectError);
+
+    // Slot 1 → blend 3, slot 2 empty (the part's own), slot 3 → filament 1;
+    // a mark past the table is the part's own too.
+    Painting paint;
+    paint.set_tree(PaintChannel::Color, 0, {1});
+    paint.set_tree(PaintChannel::Color, 1, {2});
+    paint.set_tree(PaintChannel::Color, 2, {Painting::kSplit, 3, 1, 2, 7});
+    paint.set_tree(PaintChannel::Color, 3, {5});
+    paint.set_tree(PaintChannel::Seam, 0, {1});
+    const Painting slotted = with_color_slots(paint, p.paint_slots);
+    CHECK(slotted.tree(PaintChannel::Color, 0) == Painting::Tree{3});
+    CHECK(slotted.tree(PaintChannel::Color, 1).empty());
+    CHECK(slotted.tree(PaintChannel::Color, 2) == Painting::Tree{Painting::kSplit, 1, 3, 0, 0});
+    CHECK(slotted.size(PaintChannel::Color) == 3); // the last one unpainted now
+    CHECK(slotted.tree(PaintChannel::Seam, 0) == Painting::Tree{1});
+    CHECK(with_color_slots(paint, {}) == paint);
+}

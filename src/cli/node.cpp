@@ -380,6 +380,7 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     for (const ui::PlateObject& o : objects)
         placed.push_back(ui::placed_mesh(o));
     ui::PlateSlice plate = ui::plate_slice(objects, placed, settings);
+    plate.painting = with_color_slots(plate.painting, project.paint_slots); // MX33
     const TriangleMesh mesh = ui::plate_mesh(placed);
     placed.clear();
     // What is painted, by kind (orca_2_5.md, rule 26).
