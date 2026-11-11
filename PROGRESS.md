@@ -12300,5 +12300,5 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | Calibraciones | Pendiente | |
 | Preferencias, créditos, visión de color | Pendiente | |
 | Giro de pantalla y muerte del proceso a mitad de laminar/subir | Pendiente | |
-| Sin red ↔ con red (nube, impresoras, Compartida) | Revisado 10-11 (nube, Bambu) | Seguir un trabajo se cortaba para siempre (`CloudOfflineTest`); una Bambu con el Wi-Fi perdido sin cierre mostraba su último estado para siempre (`BambuTest`); Compartida: pendiente |
+| Sin red ↔ con red (nube, impresoras, Compartida) | Revisado 10-11 | Seguir un trabajo se cortaba para siempre (`CloudOfflineTest`); una Bambu con el Wi-Fi perdido sin cierre mostraba su último estado para siempre (`BambuTest`); Compartida: lista nueva con firma vieja guardada si se cortaba la red entre las dos (8f4b478, `BlockListTest`) |
 | Textos: plurales, castellano/inglés | Revisado 10-11 | Plurales (ba8b30a); mensajes propios del motor en inglés en Mi biblioteca, paquete, CAD, piezas, calibraciones y placa (`AppMessageTest`) |
