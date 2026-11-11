@@ -825,6 +825,7 @@ ajustes, cada uno con un comentario `; calibration`; al escribir los ajustes que
 | `pressure_advance` | número | 0 | 0 a 2 | Avance de presión del firmware, escrito una vez después del G-code de inicio con el comando del dialecto: `M900 K…` (Marlin, linear advance), `SET_PRESSURE_ADVANCE ADVANCE=…` (Klipper) o `M572 D0 S…` (RepRapFirmware). 0: no se escribe y queda lo que tenga la impresora. Lo da la calibración de avance de presión |
 | `max_flow` | número | 0 | 0 a 10000 | Flujo volumétrico máximo del filamento, en mm³/s (como `machine.max_flow`; vale el menor de los dos). 0: sin límite propio |
 | `min_purge_on_tower` | número o lista | 0 | 0 a 10000 | Con una MMU y objetos que reciben la purga (en la interfaz y la API, por objeto: purgar en su relleno o en todo el objeto), lo que se purga igual en la torre antes, en mm³, por extrusor que entra. Después del cambio, el filamento nuevo imprime primero el relleno ralo (o todo) de esos objetos que todavía no se imprimió en esa capa, y la torre recibe solo lo que falta (ficha `multi_extruder.md`, regla 13, ME8) |
+| `transmission_distance` | número o lista | 0 | 0 a 100 | Cuánto deja pasar la luz el filamento, mm (TD), uno o uno por extrusor. Más de 10: con mezclas en una boquilla, sus piezas (y las mezclas que lo llevan) no reciben purga en el relleno (`color_mixing_plus.md`, regla 33, MX27). También desde el material con el mismo nombre |
 | `loading_speed`, `loading_speed_start` | número | 28, 3 | 0 (no se usa: el paso se salta) a 1000 | Velocidades de carga del filamento en una MMU, en mm/s (ver `mmu`) |
 | `unloading_speed`, `unloading_speed_start` | número | 90, 100 | 0 (no se usa) a 1000 | Velocidades de descarga, en mm/s (ver `mmu`) |
 | `cooling_moves` | entero | 4 | 0 a 100 | Idas y vueltas de enfriamiento de la punta en el tubo de la MMU |
@@ -963,7 +964,7 @@ escribe: al leer, cada clave pasa a su lugar.
 | `bed_temp`, `first_bed_temp` | `machine.variables.bed_temperature` y `first_layer_bed_temperature` |
 | `flow_factor` | `extrusion.flow` × 100 (un factor 0,95 es un flujo de 95 %) |
 | `variables` | `machine.variables`, cada nombre |
-| `type`, `density`, `cost`, `spool_weight`, `shrinkage_xy`, `shrinkage_z`, `chamber_temperature`, `chamber_min_temperature`, `start_gcode`, `end_gcode`, `infill_max_speed`, `infill_max_crossing_speed`, `min_purge_on_tower`, `purge_multiplier`, `ramming`, `loading_speed`, `loading_speed_start`, `unloading_speed`, `unloading_speed_start`, `cooling_moves`, `cooling_initial_speed`, `cooling_final_speed`, `toolchange_delay`, `load_time`, `unload_time` | `extrusion`, con el mismo nombre |
+| `type`, `density`, `cost`, `spool_weight`, `shrinkage_xy`, `shrinkage_z`, `chamber_temperature`, `chamber_min_temperature`, `start_gcode`, `end_gcode`, `infill_max_speed`, `infill_max_crossing_speed`, `min_purge_on_tower`, `purge_multiplier`, `ramming`, `loading_speed`, `loading_speed_start`, `unloading_speed`, `unloading_speed_start`, `cooling_moves`, `cooling_initial_speed`, `cooling_final_speed`, `toolchange_delay`, `load_time`, `unload_time`, `transmission_distance` | `extrusion`, con el mismo nombre |
 
 Una clave que no está en la tabla es un error, y también una que viene a la vez por su nombre del motor
 (`material.cost` y `extrusion.cost`). El asistente acepta estos nombres en sus acciones (`material.nozzle_temp`).

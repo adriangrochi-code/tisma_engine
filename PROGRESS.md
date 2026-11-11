@@ -12729,8 +12729,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   nuevo, que es lo que ya hacía `plan_sinks`, y antes van `material.min_purge_on_tower` a la torre. Clave propia
   `mixing.purge_into_infill` (sí por defecto) para apagarlo. Prueba `[mixing]` MX22: la caja 1 : 1 con relleno al 20 %
   manda menos a la torre que con la opción apagada; sin mezclas no cambia nada. Pasan también las pruebas de
-  multiextrusor. Pendiente de la regla 33: el filamento transparente (`filament.transmission_distance` > 10, MX27),
-  porque el ajuste todavía no existe en el motor. Regla 34 (paredes después del relleno en la capa del cambio):
+  multiextrusor. Filamento transparente (MX27, mismo día): nuevo `extrusion.transmission_distance` (TD, mm, uno o
+  uno por extrusor; también del material). Una pieza cuyo filamento, o algún filamento de su mezcla, pasa de 10 no
+  recibe la purga. Prueba `[mixing]` MX27: la mezcla que lleva el filamento claro no la recibe, ni la pieza clara;
+  la opaca sí. Regla 34 (paredes después del relleno en la capa del cambio):
   falta ver si el orden de la capa la cumple entera.
 - **Búsqueda profunda (05:15): mezclas nuevas combinadas.** Probé sesgo con solo la superficie, paredes de más con
   alto por filamento, solo la superficie con subcapas, un degradé con paso y subcapas, sesgo con paso y subcapas, y

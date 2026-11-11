@@ -1093,8 +1093,17 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         std::any_of(resolved.begin(), resolved.end(), [&](const MeshObject& o) {
             return std::any_of(blends.begin(), blends.end(), [&](const ColorMix& m) { return m.id == o.extruder; });
         }))
-        for (MeshObject& o : resolved)
-            o.wipe_into_infill = true;
+        for (MeshObject& o : resolved) {
+            // Never into a see-through filament's parts (TD above 10 mm): the purge would show.
+            const auto clear = [&](int e) { return e >= 1 && per_extruder(settings.transmission_distance, std::size_t(e - 1), 0.0) > 10.0; };
+            bool see_through = clear(o.extruder);
+            for (const ColorMix& m : blends)
+                if (m.id == o.extruder)
+                    for (const ColorMix::Component& c : m.components)
+                        see_through = see_through || clear(c.extruder);
+            if (!see_through)
+                o.wipe_into_infill = true;
+        }
     const std::vector<MeshObject>* objects = given ? &resolved : nullptr;
     // Each filament with its own layer height (color_mixing_plus.md, rule
     // 8): one blend of two filaments printing the whole plate, its layers

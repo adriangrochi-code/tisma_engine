@@ -813,3 +813,28 @@ TEST_CASE("color mixing plus: blends on one nozzle purge into the infill by defa
     // A plate without blends keeps its parts' own choice.
     CHECK_FALSE(sliced(box(1), s, {}).objects.front().wipe_into_infill);
 }
+
+TEST_CASE("color mixing plus: no purge into a see-through filament's part (rule 33, MX27)", "[mixing]") {
+    Settings s = base();
+    s.single_extruder_mmu = true;
+    s.wipe_tower = true;
+    s.infill_density = 0.2;
+    s.transmission_distance = {2.0, 15.0}; // filament 2 lets the light through 15 mm
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 10);
+    add_box(p.mesh, 40, 40, 0, 60, 60, 10);
+    add_box(p.mesh, 140, 40, 0, 160, 60, 10);
+    p.objects = {{"blend", 0, 12, 0, 0, 3}, {"opaque", 12, 12, 1, 0, 1}, {"clear", 24, 12, 2, 0, 2}};
+    const SlicedModel model = sliced(p, s, {blend(3, {{1, 0.5}, {2, 0.5}})});
+    REQUIRE(model.objects.size() == 3);
+    for (const SlicedObject& o : model.objects) {
+        INFO(o.name);
+        CHECK(o.wipe_into_infill == (o.name == "opaque")); // the blend has the clear filament in it
+    }
+    gcode_of(model, s);
+    // One value for every filament.
+    s.transmission_distance = {20.0};
+    const SlicedModel all_clear = sliced(p, s, {blend(3, {{1, 0.5}, {2, 0.5}})});
+    for (const SlicedObject& o : all_clear.objects)
+        CHECK_FALSE(o.wipe_into_infill);
+}

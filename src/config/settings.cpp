@@ -860,7 +860,7 @@ void material_aliases(json& root) {
         "unloading_speed", "unloading_speed_start", "start_gcode", "end_gcode", "ramming", "purge_multiplier", "density",
         "cost", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "chamber_temperature",
         "chamber_min_temperature", "load_time", "unload_time", "toolchange_delay", "spool_weight", "shrinkage_xy",
-        "shrinkage_z", "type", "custom_parameters"};
+        "shrinkage_z", "type", "custom_parameters", "transmission_distance"};
     for (const auto& [key, value] : material.items()) {
         if (const auto t = temperatures.find(key); t != temperatures.end()) {
             variable(t->second, key, value);
@@ -2953,7 +2953,8 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section", "feedstock"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section", "feedstock",
+                "transmission_distance"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "feedstock") { // pellets.md, rule 1
             s.material_feedstock = choice<Feedstock>(g, n, k, {{"filament", Feedstock::Filament}, {"pellet", Feedstock::Pellet}});
@@ -3035,6 +3036,20 @@ Settings parse_checked(std::string_view text) {
              : n == "toolchange_delay"      ? s.toolchange_delay
              : n == "load_time"             ? s.load_time
                                             : s.unload_time) = d;
+            return;
+        }
+        if (n == "transmission_distance") { // color_mixing_plus.md, rule 33: one value, or one per extruder
+            const json& v = g.at(n);
+            const char* what = "must be from 0 to 100 mm, or a list of them by extruder";
+            std::vector<double> list;
+            for (const json& x : v.is_array() ? v : json::array({v})) {
+                if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= 100.0))
+                    fail(k, what);
+                list.push_back(x.get<double>());
+            }
+            if (list.empty() || list.size() > std::size_t(kMaxExtruders))
+                fail(k, what);
+            s.transmission_distance = std::move(list);
             return;
         }
         // multi_extruder.md, rules 12 and 13: one value, or one per extruder.
@@ -3415,6 +3430,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"wipe_tower.purge_volumes", json(s.purge_volumes).dump()},
         {"extrusion.purge_multiplier", json(s.purge_multiplier).dump()},
         {"extrusion.min_purge_on_tower", json(s.min_purge_on_tower).dump()},
+        {"extrusion.transmission_distance", json(s.transmission_distance).dump()},
         {"mmu.cooling_tube_length", num(s.mmu_cooling_tube_length)},
         {"mmu.cooling_tube_position", num(s.mmu_cooling_tube_position)},
         {"mmu.parking_position", num(s.mmu_parking_position)},
@@ -4391,6 +4407,7 @@ std::string settings_json(const Settings& s) {
           {"end_gcode", s.filament_end_gcode},
           {"purge_multiplier", s.purge_multiplier},
           {"min_purge_on_tower", s.min_purge_on_tower},
+          {"transmission_distance", s.transmission_distance},
           {"loading_speed", s.loading_speed},
           {"loading_speed_start", s.loading_speed_start},
           {"unloading_speed", s.unloading_speed},

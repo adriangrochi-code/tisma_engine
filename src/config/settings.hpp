@@ -866,6 +866,10 @@ struct Settings {
     // What a change purges on the wipe tower at least before it purges into
     // objects (rule 13), mm3, by extruder.
     std::vector<double> min_purge_on_tower{0.0};
+    // How far light goes through the filament, mm (HueForge's TD); above 10
+    // it shows what is inside, so no purge into its parts' infill
+    // (color_mixing_plus.md, rule 33). One value, or one per extruder.
+    std::vector<double> transmission_distance{0.0};
     // The filament in an MMU's change (rule 15): its loading and unloading
     // speeds (the start's and the rest's, mm/s), the cooling moves in the
     // tube (how many, the filament's speed at the first and the last, mm/s),
