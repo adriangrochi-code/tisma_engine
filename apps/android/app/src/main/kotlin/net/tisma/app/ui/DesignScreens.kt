@@ -89,13 +89,14 @@ fun PartsScreen(slice: SliceViewModel, nav: Navigator) {
                         modifier = Modifier.testTag("spec_$key").named(partLabel(key)))
                 }
                 v.doubleOrNull != null && !v.isString -> {
-                    val integer = v.intOrNull != null && !v.content.contains('.')
                     var text by remember(kind, key) { mutableStateOf(v.content.removeSuffix(".0")) }
                     OutlinedTextField(text, { t ->
                         text = t
-                        t.replace(',', '.').toDoubleOrNull()?.let { d -> values[key] = if (integer) JsonPrimitive(d.toLong()) else JsonPrimitive(d) }
+                        specNumber(t)?.let { values[key] = it }
                     }, singleLine = true, label = { Text(partLabel(key)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = if (integer) KeyboardType.Number else KeyboardType.Decimal),
+                        // A default that happens to be whole (a module of 1) may still take decimals: never a keyboard
+                        // without the comma, never 1,5 cut to 1. A count with decimals goes as typed; the engine says.
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth().testTag("spec_$key"))
                 }
             }
@@ -239,4 +240,10 @@ internal fun calibrationRange(typed: List<String>): DoubleArray? {
     val r = typed.map { it.trim().replace(',', '.').toDoubleOrNull() ?: return null }
     if (r.size != 3 || r[2] <= 0.0 || r[0] == r[1]) return null
     return r.toDoubleArray()
+}
+
+/** A number typed in a part's spec, as typed: whole as an integer, otherwise with its decimals (comma or point). */
+internal fun specNumber(t: String): JsonPrimitive? {
+    val d = t.trim().replace(',', '.').toDoubleOrNull() ?: return null
+    return if (d % 1.0 == 0.0 && kotlin.math.abs(d) < 1e15) JsonPrimitive(d.toLong()) else JsonPrimitive(d)
 }
