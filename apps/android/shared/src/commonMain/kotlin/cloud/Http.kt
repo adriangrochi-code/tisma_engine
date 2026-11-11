@@ -133,3 +133,26 @@ fun measure(input: ByteInput): Long {
     }
     return n
 }
+
+/** How this platform sends requests: `UrlConnectionHttp` on Android and the JVM, NSURLSession on iOS. */
+expect val PlatformHttp: Http
+
+/** The app's platform, as the server's User-Agent names it (`Tisma-Android`, `Tisma-iOS`). */
+expect val PLATFORM_NAME: String
+
+/**
+ * Percent-encodes a path segment or query value (RFC 3986): letters, digits and `-._~` stay, every other UTF-8
+ * byte becomes `%XX`, a space included.
+ */
+fun percentEncode(s: String): String {
+    val out = StringBuilder(s.length + 8)
+    for (b in s.encodeToByteArray()) {
+        val c = b.toInt() and 0xFF
+        val ch = c.toChar()
+        if (ch in 'A'..'Z' || ch in 'a'..'z' || ch in '0'..'9' || ch == '-' || ch == '.' || ch == '_' || ch == '~') out.append(ch)
+        else out.append('%').append(HEX[c shr 4]).append(HEX[c and 15])
+    }
+    return out.toString()
+}
+
+private const val HEX = "0123456789ABCDEF"

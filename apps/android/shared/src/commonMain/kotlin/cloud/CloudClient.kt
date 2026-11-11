@@ -9,10 +9,11 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
-import java.net.URLEncoder
+import net.tisma.io.ByteInput
+import net.tisma.io.ByteOutput
+import net.tisma.io.BytesOutput
+import net.tisma.io.IOException
+import kotlin.concurrent.Volatile
 
 /**
  * The Tisma Cloud API v1 (docs/spec/features/cloud.md, rules 1 to 11).
@@ -24,7 +25,7 @@ import java.net.URLEncoder
 class CloudClient(
     serverUrl: String,
     @Volatile var token: String? = null,
-    private val http: Http = UrlConnectionHttp,
+    private val http: Http = PlatformHttp,
 ) {
     val serverUrl: String = normalizeServer(serverUrl)
 
@@ -119,7 +120,7 @@ class CloudClient(
      * `POST /v1/jobs`: sends a project (a 3MF package) to be sliced or analyzed.
      * [open] gives the project's bytes; it may be called once.
      */
-    fun submit(kind: JobKind, params: JsonObject, filename: String, length: Long, open: () -> InputStream): Job {
+    fun submit(kind: JobKind, params: JsonObject, filename: String, length: Long, open: () -> ByteInput): Job {
         val response = send(HttpRequest(
             "POST", serverUrl + "/v1/jobs", headers(true),
             form = listOf(
@@ -150,14 +151,14 @@ class CloudClient(
      * `index.json` and their `.sig`.
      */
     fun libraryFile(name: String, maxBytes: Long = 64L * 1024 * 1024): ByteArray {
-        val out = java.io.ByteArrayOutputStream()
+        val out = BytesOutput()
         val response = send(HttpRequest("GET", serverUrl + "/v1/library/" + name, headers(false), timeoutMs = 60_000))
         response.use { r ->
             if (!r.ok) throw failure(r)
             val b = ByteArray(64 * 1024)
             var total = 0L
             while (true) {
-                val n = r.body.read(b)
+                val n = r.body.read(b, 0, b.size)
                 if (n < 0) break
                 total += n
                 if (total > maxBytes) throw CloudException(0, "The library's $name is too large")
@@ -180,10 +181,10 @@ class CloudClient(
      * own): `GET /v1/me/scans?device=`, `GET /v1/me/scans/{id}/mesh` and `POST /v1/me/scans/{id}/taken {"device"}`.
      */
     fun scans(device: String): List<Scan> =
-        list(get("/v1/me/scans?device=" + URLEncoder.encode(device, Charsets.UTF_8.name()).replace("+", "%20")), "scans").map(Scan::from)
+        list(get("/v1/me/scans?device=" + percentEncode(device)), "scans").map(Scan::from)
 
     /** A scan's mesh, written to [out], at most [maxBytes]. */
-    fun downloadScan(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download =
+    fun downloadScan(id: String, out: ByteOutput, maxBytes: Long = MAX_RESULT_BYTES): Download =
         fetch("/v1/me/scans/" + path(id) + "/mesh", out, maxBytes)
 
     /** The scan reached this device's library: the server stops offering it to this device (idempotent). */
@@ -195,10 +196,10 @@ class CloudClient(
      * `GET /v1/jobs/{id}/result`, written to [out] as it arrives (rule 9). At
      * most [maxBytes] are read; a larger result is an error.
      */
-    fun download(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download =
+    fun download(id: String, out: ByteOutput, maxBytes: Long = MAX_RESULT_BYTES): Download =
         fetch("/v1/jobs/" + path(id) + "/result", out, maxBytes)
 
-    private fun fetch(route: String, out: OutputStream, maxBytes: Long): Download {
+    private fun fetch(route: String, out: ByteOutput, maxBytes: Long): Download {
         val response = send(HttpRequest("GET", serverUrl + route, headers(true),
             timeoutMs = 30 * 60_000))
         response.use { r ->
@@ -207,7 +208,7 @@ class CloudClient(
             val buffer = ByteArray(64 * 1024)
             try {
                 while (true) {
-                    val n = r.body.read(buffer)
+                    val n = r.body.read(buffer, 0, buffer.size)
                     if (n < 0) break
                     total += n
                     if (total > maxBytes) throw CloudException(0, "The result is larger than $maxBytes bytes")
@@ -283,7 +284,7 @@ class CloudClient(
 
     private fun postObject(path: String, body: JsonObject, auth: Boolean = true): JsonObject {
         val h = headers(auth) + ("Content-Type" to "application/json")
-        return objectOf(send(HttpRequest("POST", serverUrl + path, h, body.toString().toByteArray(Charsets.UTF_8))))
+        return objectOf(send(HttpRequest("POST", serverUrl + path, h, body.toString().encodeToByteArray())))
     }
 
     private fun objectOf(r: HttpResponse): JsonObject = parse(r) as? JsonObject
@@ -324,7 +325,7 @@ class CloudClient(
         const val MAX_RESULT_BYTES = 1L shl 30
 
         const val PROJECT_TYPE = "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"
-        private const val USER_AGENT = "Tisma-Android"
+        private val USER_AGENT = "Tisma-$PLATFORM_NAME"
 
         /** Adds `https://` when there is no scheme and drops the trailing slashes. */
         fun normalizeServer(url: String): String {
@@ -333,7 +334,7 @@ class CloudClient(
             return if (t.startsWith("http://", true) || t.startsWith("https://", true)) t else "https://$t"
         }
 
-        private fun path(id: String) = URLEncoder.encode(id, "UTF-8").replace("+", "%20")
+        private fun path(id: String) = percentEncode(id)
 
         /** The file name of a Content-Disposition header, if it has a plain one. */
         internal fun filenameOf(header: String?): String? {

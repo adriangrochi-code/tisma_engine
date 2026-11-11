@@ -1,4 +1,6 @@
+import net.tisma.cloud.CloudClient
 import net.tisma.cloud.FormPart
+import net.tisma.cloud.percentEncode
 import net.tisma.cloud.HttpResponse
 import net.tisma.cloud.multipartLength
 import net.tisma.cloud.readUpTo
@@ -9,6 +11,7 @@ import net.tisma.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The common HTTP pieces (multipart body, capped text), on the JVM and the iPhone simulator. */
@@ -34,5 +37,19 @@ class HttpCommonTest {
         assertEquals("hola", HttpResponse(200, emptyMap(), BytesInput("hola".encodeToByteArray())).text())
         assertFailsWith<IOException> { HttpResponse(200, emptyMap(), BytesInput(ByteArray(11))).text(max = 10) }
         assertEquals(3, BytesInput(ByteArray(9)).readUpTo(3).size)
+    }
+
+    @Test
+    fun resultNameNeverLeavesItsFolder() {
+        assertEquals("a.gcode", CloudClient.filenameOf("attachment; filename=\"../../a.gcode\""))
+        assertEquals("b.tea", CloudClient.filenameOf("attachment; filename=b.tea"))
+        assertNull(CloudClient.filenameOf(null))
+    }
+
+    @Test
+    fun idsAndQueryValuesArePercentEncoded() {
+        assertEquals("Mi%20tel%C3%A9fono%20%28Android%29", percentEncode("Mi teléfono (Android)"))
+        assertEquals("job-1_a.b~c", percentEncode("job-1_a.b~c"))
+        assertEquals("a%2F..%2Fb%3Fx%3D1%26y", percentEncode("a/../b?x=1&y"))
     }
 }

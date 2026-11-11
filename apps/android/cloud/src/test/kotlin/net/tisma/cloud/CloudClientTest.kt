@@ -298,13 +298,6 @@ class CloudClientTest {
         assertEquals("HTTP 502", CloudException.detailOf("<html>bad gateway</html>", 502))
     }
 
-    @Test
-    fun `a result name never leaves its folder`() {
-        assertEquals("a.gcode", CloudClient.filenameOf("attachment; filename=\"../../a.gcode\""))
-        assertEquals("b.tea", CloudClient.filenameOf("attachment; filename=b.tea"))
-        assertNull(CloudClient.filenameOf(null))
-    }
-
     companion object {
         /** A minimal 3MF package: a ZIP with `3D/3dmodel.model`. */
         fun cube3mf(padding: Int = 0): ByteArray {

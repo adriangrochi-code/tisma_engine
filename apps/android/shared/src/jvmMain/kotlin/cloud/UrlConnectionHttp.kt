@@ -60,3 +60,8 @@ object UrlConnectionHttp : Http {
     }
 }
 
+
+/** Android and the JVM send with [UrlConnectionHttp]. */
+actual val PlatformHttp: Http get() = UrlConnectionHttp
+
+actual val PLATFORM_NAME: String = "Android"
