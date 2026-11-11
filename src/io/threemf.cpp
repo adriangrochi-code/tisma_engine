@@ -194,6 +194,8 @@ struct Volume {
     bool part = true;
     bool negative = false; // a volume that takes material away (model_tools.md, rule 2)
     VolumeKind kind = VolumeKind::Part; // project_import.md, rule 4
+    std::string name; // its "name" metadata
+    int extruder = 0; // its "extruder" metadata; 0: not given
 };
 std::map<std::uint32_t, std::vector<Volume>> project_volumes(std::string_view text) {
     std::map<std::uint32_t, std::vector<Volume>> out;
@@ -218,6 +220,14 @@ std::map<std::uint32_t, std::vector<Volume>> project_volumes(std::string_view te
                 continue;
             out[*object].push_back({parse_index(*first, xml, "triangle index"), parse_index(*last, xml, "triangle index"), true});
             volume = &out[*object].back();
+        } else if (name == "metadata" && volume && xml.attribute("key").value_or("") == "name") {
+            volume->name = std::string(xml.attribute("value").value_or(""));
+        } else if (name == "metadata" && volume && xml.attribute("key").value_or("") == "extruder") {
+            const std::string value(xml.attribute("value").value_or("0"));
+            int e = 0;
+            for (const char ch : value)
+                e = ch >= '0' && ch <= '9' && e < 1000 ? e * 10 + (ch - '0') : e;
+            volume->extruder = e;
         } else if (name == "metadata" && volume && xml.attribute("key").value_or("") == "volume_type") {
             const std::string_view type = xml.attribute("value").value_or("ModelPart");
             volume->part = type == "ModelPart";
@@ -277,6 +287,7 @@ struct Builder {
     std::string root;
     double scale = 1.0;
     ModelFile& out;
+    std::size_t item = 0; // the build item being emitted
 
     void emit(const std::string& path, std::uint32_t id, const Transform& transform, int depth) {
         if (depth > 32)
@@ -304,6 +315,8 @@ struct Builder {
             for (const Volume& v : *listed)
                 if (v.kind == VolumeKind::Modifier)
                     out.modifiers.emplace_back();
+        const Volume* piece_of = nullptr; // the part volume of the piece being filled
+        bool piece_open = false;
         for (std::size_t t = 0; t < object.triangles.size(); ++t) {
             const auto in = [&](const Volume& v) { return t >= v.first && t <= v.last; };
             const Volume* volume = nullptr;
@@ -333,6 +346,18 @@ struct Builder {
             const Vec3f a = apply(transform, object.vertices[tri[0]], scale);
             const Vec3f b = apply(transform, object.vertices[tri[1]], scale);
             const Vec3f c = apply(transform, object.vertices[tri[2]], scale);
+            if (&to == &out.mesh) { // a part: its piece (FM9)
+                if (!piece_open || volume != piece_of) {
+                    ModelFile::Piece piece;
+                    piece.name = volume && !volume->name.empty() ? volume->name : object.name;
+                    piece.object = item;
+                    piece.first = out.mesh.triangle_count();
+                    piece.extruder = volume ? volume->extruder : 0;
+                    out.pieces.push_back(std::move(piece));
+                    piece_of = volume, piece_open = true;
+                }
+                ++out.pieces.back().count;
+            }
             if (mirrored)
                 to.add_triangle(a, c, b);
             else
@@ -359,6 +384,7 @@ ModelFile parse_3mf(std::string_view data) {
         for (const Item& item : model.build) {
             if (!item.printable)
                 continue;
+            builder.item = out.objects;
             ++out.objects;
             builder.emit(item.what.path.empty() ? root : item.what.path, item.what.id, item.what.transform, 0);
         }

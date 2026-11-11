@@ -12740,6 +12740,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   IPv4 y `::ffff:a.b.c.d`, por dirección como antes. Huella = SHA-256(sal del día + texto); texto IPv6 = la red en
   RFC 5952 (comprimida, minúsculas) + «/64» (`2800:A4:1234:5600:abcd::9` → «2800:a4:1234:5600::/64»); IPv4 =
   «200.40.10.7». Exacto, para coincidir con el servidor.
+- **Formatos FM9, partes de un 3MF para la interfaz** (2026-11-11, pedido de la sesión de interfaz).
+  `ModelFile::pieces`: cada parte con su tramo de triángulos en `mesh`, el objeto (ítem de la placa) al que pertenece,
+  su nombre (el del volumen en un proyecto de slicer, si no el del objeto) y su extrusor (metadato `extruder`, 0 si no
+  hay). Prueba `[formats]`: una pieza por parte, seguidas y sin huecos, la suma igual a la malla; caja, caja de dos
+  partes (un objeto), proyecto con partes, modificador que no es parte.
 - **Full Spectrum, regla 3: cada degradé se mide sobre cada objeto (MX32, spec/next)** (2026-11-11). Con varios
   objetos o copias en la placa, `gradients_by_object` da a los caminos de cada degradé un número propio por objeto
   (desde 200, por el contorno del objeto: la envolvente de sus partes juntas, por objeto y copia) y el degradé se aplica
