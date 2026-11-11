@@ -13429,4 +13429,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   contestan `GET /server/info`, cada dirección una vez, con lo que dice el servidor. Prueba `[device]` contra el
   Moonraker simulado. Falta: que la interfaz busque `_moonraker._tcp.local` junto a `_octoprint._tcp.local` y pase los
   resultados por `confirm_moonraker` (aviso a esa sesión). No probado con una impresora real.
+- **P2 en el motor, cerrado salvo la interfaz** (2026-11-11). Decisión: el «servicio local de `tisma`» para la app
+  (docs/MOBILE.md, diseño propio del 24-10) no lo pide la ficha `mobile_app.md`, que es posterior: la app habla con
+  las impresoras de la red con la capa compartida y usa la API en C del motor (`include/tisma/tisma_engine.h`). Queda
+  para después de la beta, si el dueño lo quiere para las impresoras USB de la PC. Las marcas sin fuente oficial
+  (Prusa por red fuera de PrusaLink, Elegoo, Creality con firmware propio, Flashforge) se agregan a mano, como dice
+  `printer_connections.md`. De la interfaz: la lista «En el perfil / En la impresora» y «Leer de la impresora» en
+  Límites, y llamar a la búsqueda de Moonraker. Sigue F6 (pedí a la sesión de spec los resultados de caja negra).
 
