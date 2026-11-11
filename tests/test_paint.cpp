@@ -436,7 +436,8 @@ TEST_CASE("paint: the slicer follows painted support and seams", "[paint]") {
     // The painted area and the margin round it (supports_skirt.md, rule 2), not the whole shelf.
     CHECK_FALSE(contains(enforced.support_areas[l], 10.8, 8));
     // Without paint, automatic off means no support at all.
-    for (const Polygons& a : slice_model(mesh, s).support_areas)
+    const SlicedModel unpainted = slice_model(mesh, s); // kept alive: the loop reads its areas
+    for (const Polygons& a : unpainted.support_areas)
         CHECK(a.empty());
 
     // A seam painted down the +X side of a 20 mm cube at Y = 15.

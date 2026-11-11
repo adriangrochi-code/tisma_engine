@@ -470,7 +470,8 @@ TEST_CASE("color mixing plus: sublayers where the blend is, one pass per filamen
     CHECK(extruding_z(gcode_of(sliced(box(3), s, {half}), s))[0].size() == 2);
     // A share thinner than sub_min_height: the cycle, no sublayers.
     s.mix_sub_min_height = 0.15;
-    for (const Toolpath& t : sliced(box(3), s, {half}).walls[10].toolpaths)
+    const SlicedModel thin = sliced(box(3), s, {half}); // kept alive: the loop reads its walls
+    for (const Toolpath& t : thin.walls[10].toolpaths)
         CHECK_FALSE(t.wavy);
 }
 
