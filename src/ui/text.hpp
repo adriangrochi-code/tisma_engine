@@ -2518,7 +2518,18 @@
     X(NavigationNote, "Rueda: desplaza; Mayús + rueda: gira; doble clic con la rueda: encuadra", \
       "Wheel: moves; Shift + wheel: turns; double click with the wheel: frames") \
     X(MixChangesPlanned, "Con los modelos de la placa: unos %d cambios de filamento", \
-      "With the plate's models: about %d filament changes")
+      "With the plate's models: about %d filament changes") \
+    X(MixPurgeShare, "La purga sería el %.0f %% del filamento. Lo que la baja:", "The purge would be %.0f %% of the filament. What lowers it:") \
+    X(MixSuggestSubdivide, "Apagar las subcapas: %d cambios, purga del %.0f %%", "Sublayers off: %d changes, %.0f %% purge") \
+    X(MixSuggestCadence, "Capas más altas para el filamento que más hay: %d cambios, purga del %.0f %%", \
+      "Higher layers for the larger share: %d changes, %.0f %% purge") \
+    X(MixSuggestSurface, "Solo la superficie: %d cambios, purga del %.0f %%", "Only the surface: %d changes, %.0f %% purge") \
+    X(PurgeByColors, "Según los colores de los filamentos", "By the filaments' colours") \
+    X(PurgePairs, "Pares…", "Pairs…") \
+    X(PurgeByColorsHint, "por colores", "by colours") \
+    X(PurgePairsRow, "Purga por par", "Purge by pair") \
+    X(PurgePairsTitle, "Purga entre filamentos, mm³ (fila: de; columna: a)", "Purge between filaments, mm³ (row: from; column: to)") \
+    X(PurgeResetColors, "Volver a los colores", "Back to the colours")
 
 #include <cstdarg>
 #include <optional>

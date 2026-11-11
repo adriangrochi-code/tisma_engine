@@ -12949,3 +12949,18 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **CI local (a4bc6aa sobre d420339):** gcc y clang 1209/1209. ASan: un uso después de liberar en
   `tests/test_color_mix.cpp:473` (de la otra sesión, avisada; ya arreglado en ba84a92) y
   `ui_project_import_settings` sin el aviso a tiempo con la máquina cargada; sola, en ASan, pasa (lentitud, no error).
+
+## 2026-11-11 — interfaz: purga por colores y cómo bajarla (color_mixing_plus.md, reglas 37 y 38)
+
+- **Hecho:** sin `wipe_tower.purge_volumes` escrita, el laminado usa la purga de cada par por los colores de los
+  filamentos (`purge_table` de la otra sesión). En «Más de la torre de purga», la fila «Volúmenes de purga» dice «por
+  colores»; un número escrito ahí vale para todos los pares, como antes; «Pares…» abre la tabla de pares (fila: de,
+  columna: a), que muestra los valores por colores hasta que la persona cambia uno (entonces la tabla es suya) y
+  «Volver a los colores» la vacía. El aviso de costo de la mezcla y su tarjeta, si la purga pasa del 50 % del
+  filamento, dicen el porcentaje y lo que la baja con sus cambios y su purga (`mix_purge_suggestions`): apagar las
+  subcapas, capas más altas para el filamento que más hay, solo la superficie. Orden de guion nueva: `pref level`.
+- **Pruebas:** `mix_changes.txt` (49 cambios, 90 % de purga para el cubo de 10 mm amarillo y azul 1 : 1; la
+  sugerencia de solo la superficie; «Pares…»); `unit_fields.txt` sigue escribiendo un valor para todos. 184/186
+  pruebas de interfaz en paralelo; las 2 que fallaron por la carga pasan solas. Captura de la tabla revisada:
+  amarillo→azul 128 mm³, azul→amarillo 224 mm³.
+- **Sigue:** selección múltiple y barra de vista abajo al centro.
