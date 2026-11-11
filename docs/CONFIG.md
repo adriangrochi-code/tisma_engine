@@ -585,7 +585,11 @@ Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). De
 --config <ajustes.json> --mixes <mezclas.json> --mix <n>` lee las mezclas en ese mismo JSON (`{"version": 1,
 "virtual_extruders": [{"id": 3, "kind": "fullspectrum", "components": [{"extruder": 1, "ratio": 0.5}, {"extruder": 2,
 "ratio": 0.5}]}]}`) y lamina el modelo con la mezcla `n`, que tiene que poder imprimirse en la máquina (su número
-después de los filamentos reales y sus filamentos entre ellos). `object.extruder` sigue siendo solo un extrusor real.
+después de los filamentos reales y sus filamentos entre ellos). `object.extruder` sigue siendo solo un extrusor real. Una mezcla de dos puede llevar `"bias"` (−1 a 1, regla 15, MX13): con un valor positivo, las paredes de afuera de las
+capas del segundo filamento van `bias` × la mitad de su ancho más adentro; con uno negativo, las del primero. Sin
+`wipe_tower.purge_volumes`, la interfaz puede llenar la tabla con `purge_table` de los colores de los filamentos
+(regla 37, MX25): 60 mm³, más 1,6 por punto de claridad que se gana (CIELAB L*), más 0,6 por punto de diferencia de
+color, hasta 300; de negro a blanco, 220, y de blanco a negro, 60.
 
 ### `curved`
 

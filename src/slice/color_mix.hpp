@@ -128,4 +128,14 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
 // An approximation: the colours real filaments give were not measured.
 std::string mix_color(const std::vector<std::string>& colors, const std::vector<double>& shares);
 
+// The purge between two filaments by their colours ("#rrggbb"), mm3
+// (color_mixing_plus.md, rule 37; own design): 0 for the same colour, else
+// 60 plus 1.6 a point of lightness gained (CIELAB L*, D65) plus 0.6 a point
+// of colour apart (a*b*), at most 300. More from dark to light than back.
+// An unreadable colour counts as mid grey.
+double purge_from_colors(const std::string& from, const std::string& to);
+
+// The table of every pair (row: from, column: to), as wipe_tower.purge_volumes takes it.
+std::vector<std::vector<double>> purge_table(const std::vector<std::string>& colors);
+
 } // namespace tisma

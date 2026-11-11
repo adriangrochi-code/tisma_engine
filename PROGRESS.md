@@ -12723,6 +12723,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 37: purga según los colores** (2026-11-11, bloque nocturno; MX25). `purge_from_colors` y
+  `purge_table` en `src/slice/color_mix.*`: CIELAB (D65) de cada color, 60 mm³ + 1,6 por punto de L* que se gana +
+  0,6 por punto de a*b*, hasta 300 (diseño propio). Negro a blanco 220, blanco a negro 60, el mismo color 0. El motor
+  no conoce los colores de los filamentos (solo los del JSON de mezclas). Por eso la tabla la arma la interfaz con
+  los colores y la pasa como `wipe_tower.purge_volumes` (aviso a la sesión de la interfaz). Prueba `[mixing]` MX25.
+  Siguiente del paso 7: purgar en el relleno prendido por defecto con mezclas y el orden relleno-primero (reglas 33 y
+  34, MX22).
 - **Full Spectrum, regla 15: sesgo** (2026-11-11, bloque nocturno; MX13). `bias_walls` en `apply_mixes`: en una mezcla
   de dos, con `bias` > 0 las paredes de afuera de las capas del segundo filamento se corren hacia adentro
   |bias| × la mitad de su ancho (con < 0, las del primero). Se mueven en inglete: cada lado se corre lo mismo, y en

@@ -743,3 +743,19 @@ TEST_CASE("color mixing plus: the bias sinks one filament's outer walls (rule 15
                     left[t.tool - 1] = std::min(left[t.tool - 1], p.p.x);
     CHECK(left[0] > left[1] + 0.05);
 }
+
+TEST_CASE("color mixing plus: the purge by the colours, more from dark to light (rule 37, MX25)", "[mixing]") {
+    const double up = purge_from_colors("#000000", "#ffffff"), down = purge_from_colors("#ffffff", "#000000");
+    CHECK(up > down);
+    CHECK_THAT(up, WithinAbs(220.0, 0.5));   // 60 + 1.6 x 100 points of lightness
+    CHECK_THAT(down, WithinAbs(60.0, 0.5));
+    CHECK(purge_from_colors("#ff0000", "#ff0000") == 0.0);
+    CHECK(purge_from_colors("#ff0000", "#0000ff") > 60.0); // colours apart purge more
+    CHECK(purge_from_colors("#202020", "#ffff00") <= 300.0);
+    const auto table = purge_table({"#000000", "#ffffff", "#ff0000"});
+    REQUIRE(table.size() == 3);
+    CHECK(table[0][0] == 0.0);
+    CHECK(table[0][1] == up);
+    CHECK(table[1][0] == down);
+    CHECK(purge_from_colors("nonsense", "#808080") < 61.0); // unreadable: mid grey
+}

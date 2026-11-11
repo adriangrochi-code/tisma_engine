@@ -8,6 +8,8 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <numeric>
@@ -458,6 +460,44 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
             use(p.first);
     }
     return changes;
+}
+
+namespace {
+
+// sRGB "#rrggbb" to CIELAB with the D65 white (IEC 61966-2-1 and CIE 15).
+std::array<double, 3> lab_of(const std::string& hex) {
+    double rgb[3] = {0.5, 0.5, 0.5};
+    if (hex.size() == 7 && hex[0] == '#' &&
+        std::all_of(hex.begin() + 1, hex.end(), [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; }))
+        for (int i = 0; i < 3; ++i)
+            rgb[i] = double(std::stoi(hex.substr(1 + 2 * std::size_t(i), 2), nullptr, 16)) / 255.0;
+    for (double& c : rgb)
+        c = c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    const double x = (0.4124 * rgb[0] + 0.3576 * rgb[1] + 0.1805 * rgb[2]) / 0.95047;
+    const double y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    const double z = (0.0193 * rgb[0] + 0.1192 * rgb[1] + 0.9505 * rgb[2]) / 1.08883;
+    const auto f = [](double t) { return t > 216.0 / 24389.0 ? std::cbrt(t) : (24389.0 / 27.0 * t + 16.0) / 116.0; };
+    const double fx = f(x), fy = f(y), fz = f(z);
+    return {116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)};
+}
+
+} // namespace
+
+double purge_from_colors(const std::string& from, const std::string& to) {
+    const std::array<double, 3> a = lab_of(from), b = lab_of(to);
+    const double lighter = std::max(0.0, b[0] - a[0]);
+    const double apart = std::hypot(b[1] - a[1], b[2] - a[2]);
+    if (lighter < 1e-9 && apart < 1e-9 && std::abs(b[0] - a[0]) < 1e-9)
+        return 0.0;
+    return std::min(300.0, 60.0 + 1.6 * lighter + 0.6 * apart);
+}
+
+std::vector<std::vector<double>> purge_table(const std::vector<std::string>& colors) {
+    std::vector<std::vector<double>> out(colors.size(), std::vector<double>(colors.size(), 0.0));
+    for (std::size_t i = 0; i < colors.size(); ++i)
+        for (std::size_t j = 0; j < colors.size(); ++j)
+            out[i][j] = i == j ? 0.0 : purge_from_colors(colors[i], colors[j]);
+    return out;
 }
 
 } // namespace tisma
