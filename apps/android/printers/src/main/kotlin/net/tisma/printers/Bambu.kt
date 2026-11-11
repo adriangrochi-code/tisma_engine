@@ -56,9 +56,10 @@ class BambuConnection(
             } catch (e: java.io.IOException) {
                 throw PrinterException(PrinterException.Kind.NETWORK, e.message ?: "MQTT failed", e)
             }
-            c.subscribe("device/$sn/report")
-            // A new link starts from the printer's own report, not from what the last one left.
+            // A new link starts from the printer's own report, not from what the last one left. Cleared before
+            // subscribing: a report that arrives right after the subscription is kept, not wiped.
             synchronized(lock) { state.clear() }
+            c.subscribe("device/$sn/report")
             mqtt = c
             request(buildJsonObject {
                 put("pushing", buildJsonObject {
