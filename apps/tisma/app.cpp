@@ -7095,9 +7095,19 @@ void App::frame_now() {
         if (show_legend_ && legend_rect_.z > legend_rect_.x)
             left = std::clamp(legend_rect_.z - view_pos_.x, 0.0f, view_size_.x * 0.5f);
     }
-    camera_.fit(lo, hi, std::max(view_size_.x - left - right, 1.0f) / std::max(view_size_.y, 1.0f));
-    if (left != right)
-        camera_.pan(0.5f * (left - right), 0.0f, view_size_.y);
+    // In Design the toolbar covers the top of the view and the command line
+    // and the timeline its bottom: the part fits between them, whole.
+    float top = 0.0f, bottom = 0.0f;
+    if (tab_ == Tab::Design) {
+        top = view_top_inset_ > 0.0f ? view_top_inset_ : 100.0f * scale_;
+        bottom = 120.0f * scale_;
+    }
+    const float tall = std::max(view_size_.y - top - bottom, 1.0f);
+    camera_.fit(lo, hi, std::max(view_size_.x - left - right, 1.0f) / tall);
+    if (top + bottom > 0.0f) // fit() fills the height: as if the view were that tall
+        camera_.distance *= view_size_.y / tall;
+    if (left != right || top != bottom)
+        camera_.pan(0.5f * (left - right), 0.5f * (top - bottom), view_size_.y);
     // The calibration and device panels cover the left of the view: the part goes right.
     if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);

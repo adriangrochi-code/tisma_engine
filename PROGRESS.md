@@ -13423,4 +13423,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   pudieron borrar desde acá).
 - **Pruebas:** `design_radial.txt` (CD28: los siete del anillo y lo del último paso; Repetir hace otra caja, Borrar
   la saca); pasan las 39 de Diseño.
+- **Después** (fichas, viendo las capturas): al construir, la vista de Diseño encuadra la pieza entera entre la barra
+  de arriba y la línea de comandos y la de tiempo de abajo (antes quedaba medio tapada). Fichas confirmó el tema
+  oscuro por defecto en Diseño (el claro, como opción en Preferencias: pendiente).
 
