@@ -8,8 +8,10 @@ plugins {
 
 kotlin {
     jvm { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
-    iosArm64()
-    iosSimulatorArm64()
+    // The iPhone app links this as a static framework named TismaShared (apps/ios/PLAN.md, step 3).
+    listOf(iosArm64(), iosSimulatorArm64()).forEach { t ->
+        t.binaries.framework { baseName = "TismaShared"; isStatic = true }
+    }
     compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes"); optIn.addAll("kotlin.time.ExperimentalTime", "kotlin.io.encoding.ExperimentalEncodingApi") }
 
     sourceSets {
