@@ -45,8 +45,8 @@
     <string name="hours_value">%1$s de %2$s h usadas · quedan %3$s h</string>
     <string name="paid_until">Pagado hasta el %1$s</string>
     <string name="jobs_running">Trabajos corriendo: %1$d de %2$d</string>
-    <string name="manage_plan">Planes y pago</string>
-    <string name="manage_plan_hint">Pagar y cambiar de plan se hace en la página de la cuenta, en el navegador.</string>
+    <string name="manage_plan">Administrar la suscripción</string>
+    <string name="manage_plan_hint">El plan se compra, se cambia y se cancela en Google Play, con tu cuenta de Tisma.</string>
     <string name="plans_title">Planes</string>
     <string name="plan_current">Tu plan</string>
     <string name="plan_line">%1$s h por mes · %2$d a la vez</string>
@@ -236,6 +236,7 @@
     <string name="err_engine_answer">El motor dio una respuesta que la app no puede leer.</string>
     <string name="err_engine_stopped">El motor se detuvo (código %1$d).</string>
     <string name="err_incomplete">%1$s llegó incompleto: probá de nuevo.</string>
+    <string name="manage_plan_web">Pagar por la web</string>
     <string name="plate_share">Compartir el G-code</string>
     <string name="plate_send_to">Mandar a</string>
     <string name="plate_print">Imprimir</string>

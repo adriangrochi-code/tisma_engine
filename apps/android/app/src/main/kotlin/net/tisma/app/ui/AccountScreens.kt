@@ -103,10 +103,13 @@ private fun AccountCard(state: CloudState, cloud: CloudViewModel) {
             if (a.maxConcurrent > 0) Text(stringResource(R.string.jobs_running, a.activeJobs, a.maxConcurrent),
                 style = MaterialTheme.typography.bodyMedium)
         }
-        // Paying is done in the browser (rule 5): the app holds no payment data.
-        OutlinedButton(onClick = { context.openAccountPage(state) }, modifier = Modifier.fillMaxWidth()) {
+        // cloud.md 5b: the subscription is bought and cancelled in the store; the app opens its page and holds no
+        // payment data. The web page only when the server turned web billing on (off by default).
+        OutlinedButton(onClick = { context.openStoreSubscriptions() }, modifier = Modifier.fillMaxWidth().testTag("manage_plan")) {
             Text(stringResource(R.string.manage_plan))
         }
+        if (state.billingUrl.isNotBlank()) AccentTextButton(onClick = { context.openAccountPage(state) },
+            modifier = Modifier.testTag("manage_plan_web")) { Text(stringResource(R.string.manage_plan_web)) }
         Text(stringResource(R.string.manage_plan_hint), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         AccentTextButton(onClick = { cloud.signOut() }, modifier = Modifier.testTag("sign_out")) {
@@ -289,6 +292,12 @@ private fun CodeField(value: String, onChange: (String) -> Unit) {
         label = { Text(stringResource(R.string.code)) }, singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
         modifier = Modifier.fillMaxWidth().testTag("code"))
+}
+
+/** cloud.md 5b: Google Play's page of this app's subscriptions, where a plan is changed or cancelled. */
+fun Context.openStoreSubscriptions() {
+    val url = "https://play.google.com/store/account/subscriptions?package=" + packageName
+    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
 /** Opens the account's page in the browser (rule 5); only http(s) addresses. */
