@@ -12240,6 +12240,21 @@ static std::uint32_t hex_rgb(const std::string& hex) {
     return v;
 }
 
+// The settings a blend's estimate before slicing reads (color_mixing_plus.md,
+// rules 8, 10 and 12): the layers, the sublayers and each filament's height.
+static MixChangeOptions mix_change_options(const Settings& s) {
+    MixChangeOptions options;
+    options.first_layer_height = s.first_layer_height;
+    options.layer_height = s.layer_height;
+    options.subdivide = s.mix_subdivide;
+    options.sub_first_layer = s.mix_sub_first_layer;
+    options.sub_min_height = s.mix_sub_min_height;
+    options.cadence_heights = s.mix_cadence_heights;
+    options.height_a = s.mix_height_a;
+    options.height_b = s.mix_height_b;
+    return options;
+}
+
 std::vector<std::vector<double>> App::color_purge_table() const {
     std::vector<std::string> colors;
     for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
@@ -12259,12 +12274,7 @@ Settings App::with_color_purge(const Settings& s) const {
 App::MixCost App::mix_cost() const {
     MixCost cost;
     const Settings s = with_color_purge(settings_);
-    MixChangeOptions options;
-    options.first_layer_height = s.first_layer_height;
-    options.layer_height = s.layer_height;
-    options.subdivide = s.mix_subdivide;
-    options.sub_first_layer = s.mix_sub_first_layer;
-    options.sub_min_height = s.mix_sub_min_height;
+    const MixChangeOptions options = mix_change_options(s);
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         const auto mix = std::find_if(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) { return m.id == objects_[i].extruder; });
         if (mix == mixes_.end() || placed_meshes_[i].empty())
@@ -12378,12 +12388,7 @@ void App::purge_pairs_popup() {
 }
 
 int App::mix_changes_planned() const {
-    MixChangeOptions options;
-    options.first_layer_height = settings_.first_layer_height;
-    options.layer_height = settings_.layer_height;
-    options.subdivide = settings_.mix_subdivide;
-    options.sub_first_layer = settings_.mix_sub_first_layer;
-    options.sub_min_height = settings_.mix_sub_min_height;
+    const MixChangeOptions options = mix_change_options(settings_);
     int changes = 0;
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         const auto mix = std::find_if(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) { return m.id == objects_[i].extruder; });

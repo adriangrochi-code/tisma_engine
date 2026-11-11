@@ -12985,4 +12985,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   sugerencia de solo la superficie; «Pares…»); `unit_fields.txt` sigue escribiendo un valor para todos. 184/186
   pruebas de interfaz en paralelo; las 2 que fallaron por la carga pasan solas. Captura de la tabla revisada:
   amarillo→azul 128 mm³, azul→amarillo 224 mm³.
-- **Sigue:** selección múltiple y barra de vista abajo al centro.
+- **Después:** la estimación antes de laminar lee la altura de cada filamento (`mixing.cadence_heights`,
+  `height_a`, `height_b`; 3aff0cf de la otra sesión): con 0,3 y 0,15 mm el cubo da 44 cambios, no 49 (guion).
+- **Sigue:** selector `mixing.predictor` y la pestaña «Color buscado» cuando el motor los suba; selección múltiple y
+  barra de vista abajo al centro.

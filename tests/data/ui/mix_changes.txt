@@ -19,3 +19,10 @@ set wipe_tower.enabled true
 pref level advanced
 click wipe_tower.extra_flow
 expect-control purge_pairs
+# Each filament's own layer height counts (rule 8): 0.3 and 0.15 mm take fewer changes.
+set mixing.cadence_heights true
+set mixing.height_a 0.3
+set mixing.height_b 0.15
+add-mix 1 2
+click multi.fine_walls_coarse_infill
+expect-text unos 44 cambios de filamento
