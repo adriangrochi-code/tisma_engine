@@ -12733,6 +12733,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   igual al G-code laminado; falla sin el arreglo.
 - **Para P2 (sesión de especificaciones, 2026-11-11):** el puente de impresoras (`cloud.md` reglas 12 a 17) manda dos
   veces la misma impresora si la ve por red y por USB; tiene que mandar una por id, la de red si están las dos.
+  Y `p2p_library.md` regla 8 quinquies (spec/next): una IPv6 bloqueada es la huella de su /64 (SHA-256 de sal + /64);
+  IPv4 y `::ffff:a.b.c.d`, por dirección como antes.
 - **Full Spectrum, regla 3: degradé en X o Y** (2026-11-11, bloque nocturno). `ColorMix::axis` ('z', 'x', 'y';
   `"axis"` en el JSON, escrito solo si no es Z). En `apply_mixes`, `gradient_in_plane`: franjas de unos 5 mm (de 2 a
   11) a lo largo del eje sobre los caminos de la mezcla; `split_by_bands` corta cada camino en los bordes (interpola
