@@ -27,7 +27,7 @@ cargan de archivos.
     orden de la lista: de adelante a la izquierda, a lo largo de X, en filas de 5 hacia atrás (10 → 2 filas; 26 → 6
     filas, la última con una);
   - cada muestra es un cuadrado de 15 × 15 mm y 2 mm de alto sobre la base, impreso con su mezcla, con 3 mm entre
-    muestras y 3 mm de borde de base alrededor; 2 mm alcanza para 10 capas de 0,2, varios ciclos de 2 y 3 capas;
+    muestras (y entre el número de una fila y la muestra de la siguiente) y 3 mm de borde de base alrededor; 2 mm alcanza para 10 capas de 0,2, varios ciclos de 2 y 3 capas;
   - delante de cada muestra, sobre la base, su número (1 a 26) en relieve como en la regla 6, de 4 mm de alto y con
     el filamento 1; el nombre del color (en el idioma de la interfaz) va en la lista que muestra el programa junto al
     número, no en la pieza (los dígitos de siete segmentos no escriben letras);
@@ -135,4 +135,4 @@ El ancho es el de cada parche más su separación; la pieza ocupa el ancho menos
 | CM5 | Paso 0 | No se genera la pieza: «el paso y su alto tienen que ser mayores que 0» |
 | CM6 | Caudal máximo con `machine.max_flow` 20 | De 10 a 30 mm³/s, de a 2, franjas de 2 mm (11 franjas) |
 | CM7 | Caudal máximo sin `machine.max_flow` | De 5 a 25 mm³/s, de a 1, franjas de 2 mm |
-| CM8 | Paleta rápida de 10 con 4 filamentos | Base de 87 × 39 mm y 1 mm (5 columnas, 2 filas); 10 cuadrados de 15 × 15 × 2 mm, cada uno con su mezcla; números 1 a 10 adelante de cada uno, con el filamento 1; la lista del programa da el nombre de cada número |
+| CM8 | Paleta rápida de 10 con 4 filamentos | Base de 93 × 49 mm y 1 mm (5 columnas, 2 filas: 3 + 5 × 15 + 4 × 3 + 3 de ancho; por fila 15 de muestra, 1 de separación y 4 de número, con 3 entre filas y de borde); 10 cuadrados de 15 × 15 × 2 mm, cada uno con su mezcla; números 1 a 10 adelante de cada uno, con el filamento 1; la lista del programa da el nombre de cada número |
