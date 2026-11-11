@@ -12763,3 +12763,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   flotante a la derecha con vista previa y manipuladores; boceto normal al plano con «Terminar boceto», paleta y
   restricciones; menú radial; S busca herramientas; Presionar/Tirar, Mover/Copiar, Medir, Sección, Apariencia; lo
   que falte en gris «Próximamente»; tema claro por defecto en Diseño. Diseño propio; capturas de la primera versión.
+
+## 2026-11-11 00:41 UTC — mantenimiento (cada 8 h)
+
+- **Integrado:** `origin/main` y `origin/dev` sin nada nuevo.
+- **CI local a4439e9:** gcc, clang y ASan, 1195/1195; EXIT 0. El de 618d815 corre en segundo plano.
+- **Fuzz:** `tisma_fuzz_gcode 2000 20261111`: 2000 casos, 19 rechazados por no imprimibles, 0 fallos.
+- **Medido:** esfera de banco de 100 mm (`bench/gen_sphere.py --segments 400`): 1,8 a 2,6 s el laminado con la
+  escritura, con la máquina cargada por el CI local (carga 13,9 en 4 núcleos); no se compara con los 0,97 a 1,12 s
+  del bloque anterior, sin carga. Sin cambio de rendimiento que medir.
+- **Arreglado en este turno (búsqueda profunda y pedidos de spec):** BH50 a BH54, ME14, ME15; entradas de arriba.

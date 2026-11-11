@@ -9,6 +9,15 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Mandar a la impresora: un nombre de archivo con espacios, `#`, acentos o comillas llega entero (PrusaLink,
+  OctoPrint, Moonraker).
+- Paquete de perfiles: el flujo de puentes de la impresión, el volumen de purga de la impresora y el tipo de
+  filamento se leen, sin avisos.
+- Varias boquillas: temperatura de espera del filamento (`filament.idle_temperature`); un extrusor que la impresora
+  no tiene pasa a ser el 1, con un aviso.
+- Copias: la cuenta de las que entran en la cama deja lugar a la falda.
+- Línea de comandos: `profile --filament` acepta el nombre del filamento sin la marca.
+- Mezcla de colores: secuencias escritas (`1,1,2` o `AAB`), pares automáticos y mezclas apagadas o con nombre.
 - Firma de versiones: la clave se crea sola al enchufar el pendrive (`tools/crear_clave_pendrive.bat`), con copia en
   un segundo pendrive, la clave pública en GitHub y los borradores firmados; después queda bloqueada.
 - Macros: una lista por extrusor y los números escritos como texto valen como número en cuentas y comparaciones
