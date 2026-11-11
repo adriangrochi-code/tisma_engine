@@ -13078,5 +13078,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   color las siguen; una mezcla que usa un filamento que ya no está queda apagada, sus modelos van con el filamento 1 y
   un aviso lo dice. Los ajustes propios de una parte que nombren una mezcla todavía no se renumeran.
 - **Pruebas:** `mix_numbers.txt`. Orden de guion nueva: `expect-extruder`.
-- **CI local:** el de 7af18c8 corre en segundo plano; el tramo de gcc quedó mezclado con una compilación mía y no
-  cuenta; clang y ASan cubren este commit.
+- **Decisión:** un proyecto viejo cuyas mezclas tienen números que chocan con filamentos no se renumera al abrirlo:
+  se descarta la mezcla (como ya hace `mix_usable` en el motor), porque el número viejo es ambiguo.
+- **CI local:** `tools/ci_linux.sh` EXIT 0 (gcc 1241/1241, clang 1242/1242, ASan 1241/1241); el tramo de gcc quedó
+  mezclado con una compilación mía, clang y ASan cubren el commit.
+
+## 2026-11-11 — interfaz: la mitad que apoya sobre el corte no lleva la espiga (MT32)
+
+- **Hecho:** la mitad de arriba siempre apoya plana, así que una espiga con «Invertir» pasa a la de abajo; con «Dar
+  vuelta la de abajo» la espiga pasa a pasador. Un aviso lo dice. Ninguna mitad se gira con la espiga.
+- **Pruebas:** `ctest -R "ui_script_cut_(connectors|pin)"` pasa (6/6 de corte y mezcla).
