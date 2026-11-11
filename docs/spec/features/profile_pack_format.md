@@ -125,7 +125,11 @@ archivo de modelo), `variants` (`id` y `nozzle` de cada una) y `default_variant`
      si lo trae (PF8);
    - `extrusion.type` de un filamento es un ajuste conocido (`docs/CONFIG.md`): se lee, no se avisa «unknown
      setting» (PF9).
-   Fuera de estas tres claves sigue la regla de `docs/PROFILES.md`: un ajuste de otro tipo se deja afuera con aviso.
+   - `extrusion.travel` de un filamento (los viajes propios del material, como `extrusion.retraction`) se lee como
+     los otros ajustes del filamento (PF10);
+   - en resina, `resin.bottom_layers` viene en el perfil de impresión de resina, como en el programa de origen; manda
+     sobre el de la resina (PF11).
+   Fuera de estas claves sigue la regla de `docs/PROFILES.md`: un ajuste de otro tipo se deja afuera con aviso.
 
 ## `compatible.json`
 
@@ -249,3 +253,5 @@ para las impresoras 5 y 9.
 | PF7 | Impresión con `extrusion.bridge_flow_ratio` 0,8 y un filamento sin él | Los puentes salen con flujo 0,8, sin aviso de «filament setting» |
 | PF8 | Impresora MMU con `wipe_tower.purge_volumes` 70; impresión sin él / con 120 | Cada cambio purga 70 mm³ / 120 mm³ |
 | PF9 | Filamento con `extrusion.type` «PLA» | Sin aviso; el tipo queda «PLA» |
+| PF10 | Filamento con `extrusion.travel` `{"ramping_lift": true, "slope": 1, "max_lift": 0.6}` | Sin aviso; los viajes con ese filamento suben en rampa hasta 0,6 mm |
+| PF11 | Impresión de resina con `resin.bottom_layers` 4, resina con 6 | 4 capas de base, sin aviso |
