@@ -123,6 +123,9 @@ De cada mezcla (en el proyecto, junto a los datos de `color_mixing.md`):
    - con `subdivide` y `step` menor que la capa: la zona con mezcla se imprime en pasadas de `step` (la última, lo que
      falte hasta la capa), cada una con el elemento siguiente del ciclo; una pasada de menos de `sub_min_height` se junta
      con la anterior;
+     si en una capa un mismo filamento tocaría dos pasadas (capa 0,3, paso 0,1, ciclo A, B: A, B, A), esa capa va entera
+     con el filamento de su centro, como sin `subdivide`, con el aviso «mixing.step: a layer would print one filament in
+     two passes…» (11-11-2026: dos pasadas del mismo filamento por capa quedan para después de la beta);
    - `step` igual a la capa (por defecto): el comportamiento de las reglas 7 y 10, sin cambios (MX28, MX29).
 10. **Subcapas** (`subdivide`; en Full Spectrum se llamó «Local Z»):
     - en las zonas con mezcla, cada capa se divide en subcapas, una por filamento del ciclo o las que entren sin bajar
@@ -277,7 +280,7 @@ salvo donde se dice.
 | MX9 | MX8 con la mitad de la caja sin mezcla | La mitad sin mezcla se imprime una vez por capa, con 0,2 mm |
 | MX10 | MX8 con `sub_first_layer` en `no` | La primera capa entera con un filamento |
 | MX28 | Ciclo A, B (1 : 1) sin `subdivide`, `step` 0,2, altura de capa variable 0,1 y 0,3 | Cada 0,2 mm de altura cambia el filamento: las capas de 0,1 van de a dos con el mismo, las de 0,3 alternan según su centro |
-| MX29 | Ciclo A, B, `subdivide`, capa 0,3, `step` 0,1 | Tres pasadas de 0,1 por capa en la zona con mezcla: A, B, A y la capa siguiente B, A, B |
+| MX29 | Ciclo A, B, `subdivide`, `step` 0,1; capa 0,2 / capa 0,3 | Capa 0,2: dos pasadas de 0,1 por capa, el ciclo sigue de una capa a la otra / capa 0,3: la capa entera con el filamento de su centro y el aviso de `mixing.step` |
 | MX11 | `surface_only` con `surface_depth` 0,8 | Solo las 2 paredes de afuera y las superficies alternan; el relleno de un solo filamento |
 | MX12 | MX11 contra la caja sin `surface_only` | Menos cambios de filamento en MX11 en las capas que tienen relleno |
 | MX13 | `bias` 0,5 en una mezcla 1 : 1 | Las paredes de afuera de las capas del segundo filamento quedan más adentro que las del primero |
