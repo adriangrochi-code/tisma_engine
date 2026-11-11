@@ -1510,6 +1510,12 @@
     X(DesignMeasureTool, "Medir", "Measure") \
     X(DesignSectionTool, "Sección", "Section") \
     X(DesignToolSearch, "Buscar herramienta", "Search tools") \
+    X(DesignNavigator, "Navegador", "Browser") \
+    X(DesignNavOrigin, "Origen", "Origin") \
+    X(DesignNavSketches, "Bocetos", "Sketches") \
+    X(DesignNavBodies, "Cuerpos", "Bodies") \
+    X(DesignNavConstruction, "Construcción", "Construction") \
+    X(DesignNavPlaneTip, "Un clic empieza un boceto en este plano", "A click starts a sketch on this plane") \
     X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \
     X(DesignTimelineWaits, "Después de la marca: espera", "After the marker: waiting") \
     X(DesignTimelineSuppress, "Suprimir", "Suppress") \

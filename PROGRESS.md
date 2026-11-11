@@ -13358,3 +13358,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `mix_paint_slots.txt` (órdenes nuevas `mix-paint`, `expect-paint-slot`); pasan las 66 de pintura,
   mezclas, paleta, deshacer y proyecto. No laminado entero ni impreso.
 
+## 2026-11-11 — interfaz: el navegador de Diseño (cad_design.md, regla 11 ter)
+
+- **Hecho:** arriba del panel de Diseño, un árbol: **Origen** (planos XY, XZ e YZ, que con un clic empiezan un boceto
+  en ese plano, y los ejes), **Bocetos**, **Cuerpos** (cada uno con su ojo para mostrar u ocultar, un clic lleva el
+  historial a él, doble clic edita un boceto, clic derecho: suprimir, renombrar, editar boceto, borrar),
+  **Construcción** («Próximamente») y **Parámetros** con su valor. El historial con los campos de cada paso sigue
+  debajo hasta que los cuadros flotantes (11 quinquies) lo reemplacen.
+- **Pruebas:** pasan las 31 de Diseño; captura revisada.
+

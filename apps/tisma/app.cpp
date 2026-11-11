@@ -15834,6 +15834,115 @@ void App::design_panel() {
         ImGui::EndPopup();
     }
 
+    // The navigator (cad_design.md, rule 11 ter): the origin's planes and
+    // axes, the sketches, the bodies, the construction and the parameters;
+    // each step with an eye, a click takes the history to it, a double
+    // click edits a sketch, a right click opens its menu.
+    {
+        bool nav_changed = false;
+        std::optional<std::size_t> nav_erase;
+        const auto eye = [&](bool shown) {
+            const float h = ImGui::GetTextLineHeight();
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const bool hit = ImGui::InvisibleButton("##eye", ImVec2(h * 1.4f, h));
+            ImDrawList* d = ImGui::GetWindowDrawList();
+            const ImU32 c = ImGui::GetColorU32(shown ? rgb(theme_.text) : rgb(theme_.text_dim, 0.5f));
+            d->AddEllipse(ImVec2(at.x + h * 0.7f, at.y + h * 0.5f), ImVec2(h * 0.6f, h * 0.32f), c, 0.0f, 20, 1.3f);
+            if (shown)
+                d->AddCircleFilled(ImVec2(at.x + h * 0.7f, at.y + h * 0.5f), h * 0.18f, c);
+            else
+                d->AddLine(ImVec2(at.x + h * 0.15f, at.y + h * 0.9f), ImVec2(at.x + h * 1.25f, at.y + h * 0.1f), c, 1.3f);
+            ImGui::SameLine();
+            return hit;
+        };
+        const auto step_row = [&](std::size_t i) {
+            cad::Feature& f = design_.features[i];
+            ImGui::PushID(int(i) + 9000);
+            if (eye(!f.suppressed))
+                f.suppressed = !f.suppressed, nav_changed = true;
+            const bool fails = design_failed_ && *design_failed_ == i && !f.suppressed;
+            if (fails)
+                ImGui::PushStyleColor(ImGuiCol_Text, rgb(0xE5484D));
+            else if (f.suppressed)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            const bool picked = ImGui::Selectable(f.name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
+            if (fails || f.suppressed)
+                ImGui::PopStyleColor();
+            rect_of(("design_nav_" + std::to_string(i + 1)).c_str());
+            if (picked) {
+                design_scroll_to_ = std::to_string(i + 1);
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && f.type == cad::Feature::Type::Sketch)
+                    edit_sketch(i);
+            }
+            if (ImGui::BeginPopupContextItem("##nav_menu")) {
+                if (ImGui::MenuItem(tr(f.suppressed ? T::DesignTimelineUnsuppress : T::DesignTimelineSuppress)))
+                    f.suppressed = !f.suppressed, nav_changed = true;
+                if (ImGui::MenuItem(tr(T::DesignTimelineRename))) {
+                    design_rename_ = int(i);
+                    design_rename_focus_ = true;
+                    design_scroll_to_ = std::to_string(i + 1);
+                    std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+                }
+                if (f.type == cad::Feature::Type::Sketch && ImGui::MenuItem(tr(T::EditSketch)))
+                    edit_sketch(i);
+                if (ImGui::MenuItem(tr(T::DesignTimelineDelete)))
+                    nav_erase = i;
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+        };
+        section(T::DesignNavigator);
+        rect_of("design_navigator");
+        if (ImGui::TreeNodeEx(tr(T::DesignNavOrigin), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+            for (const cad::SketchPlane plane : {cad::SketchPlane::XY, cad::SketchPlane::XZ, cad::SketchPlane::YZ}) {
+                // A click on a plane starts a sketch on it.
+                if (ImGui::Selectable(plane_label(plane), false, can_sketch ? 0 : ImGuiSelectableFlags_Disabled))
+                    start_sketch(plane);
+                if (ImGui::IsItemHovered())
+                    loc::SetTooltip("%s", tr(T::DesignNavPlaneTip));
+            }
+            for (const char* axis : {"X", "Y", "Z"})
+                loc::TextDisabled("%s %s", tr(T::DesignAxisTool), axis);
+            ImGui::TreePop();
+        }
+        const auto group = [&](T title, auto&& wanted) {
+            std::size_t count = 0;
+            for (const cad::Feature& f : design_.features)
+                count += wanted(f);
+            const std::string head = std::string(tr(title)) + " (" + std::to_string(count) + ")###" + std::to_string(int(title));
+            if (ImGui::TreeNodeEx(head.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                for (std::size_t i = 0; i < design_.features.size(); ++i)
+                    if (wanted(design_.features[i]))
+                        step_row(i);
+                ImGui::TreePop();
+            }
+        };
+        group(T::DesignNavSketches, [](const cad::Feature& f) { return f.type == cad::Feature::Type::Sketch; });
+        group(T::DesignNavBodies, [](const cad::Feature& f) { return f.type != cad::Feature::Type::Sketch; });
+        if (ImGui::TreeNodeEx(tr(T::DesignNavConstruction), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+            loc::TextDisabled("%s", tr(T::ComingSoon));
+            ImGui::TreePop();
+        }
+        {
+            const cad::ParameterValues values = cad::evaluate_parameters(design_.parameters);
+            const std::string head = std::string(tr(T::DesignSecParameters)) + " (" + std::to_string(design_.parameters.size()) + ")###nav_params";
+            if (ImGui::TreeNodeEx(head.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                for (const cad::Parameter& prm : design_.parameters) {
+                    const auto v = values.values.find(prm.name);
+                    if (v != values.values.end())
+                        loc::Text("%s = %.2f", prm.name.c_str(), v->second.value);
+                    else
+                        loc::TextColored(rgb(0xE5484D), "%s = %s", prm.name.c_str(), prm.expression.c_str());
+                }
+                ImGui::TreePop();
+            }
+        }
+        if (nav_erase)
+            design_.features.erase(design_.features.begin() + std::ptrdiff_t(*nav_erase)), nav_changed = true;
+        if (nav_changed)
+            rebuild_design();
+    }
+
     // Boceto: the tools and the toggles while a sketch is being drawn.
     section(T::DesignSecSketch);
     if (sketch_edit_ && editing_sketch()) {
