@@ -688,6 +688,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_unreachable.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_unreachable.png)
     set_tests_properties(ui_script_cloud_unreachable PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    add_test(NAME ui_script_cloud_slice_402
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_slice_402.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_slice_402.png)
+    set_tests_properties(ui_script_cloud_slice_402 PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_CLOUD_402=1;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_402_secrets.txt")
     add_test(NAME ui_script_cloud_slice
       COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}

@@ -13530,3 +13530,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `machine.flavor_choices` como «unknown setting» en las 617 corridas de impresoras de Cura). La lista de claves del
   paquete sale de `describe`, que no escribe la lista vacía; ahora la conoce. Prueba `[pack]` PF15.
 
+## 2026-11-11 — interfaz: el 402 de la nube con palabras propias (cloud.md, CC16)
+
+- **Hecho** (QA de la sesión del motor; ficha en `spec/next` c565dfb): si el servidor contesta 402 al laminar o al
+  analizar en la nube, el aviso dice «Incluido en el plan …» con los planes que incluyen ese trabajo (laminar, FEA o
+  aerodinámica), y no el texto del servidor.
+- **Pruebas:** `cloud_slice_402.txt` contra el servidor de prueba (variable nueva `TISMA_MOCK_CLOUD_402`: contesta 402
+  con su propio texto en inglés, que no debe verse); pasan las de la nube.
+

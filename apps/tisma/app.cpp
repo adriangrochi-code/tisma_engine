@@ -18905,7 +18905,12 @@ void App::cloud_engineering_step() {
         cloud_open_ = true;
         return;
     }
-    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+    // 402: the plan does not include it; our own words, not the server's
+    // (cloud.md, CC16).
+    const std::string why = r.error.status == 402
+                                ? format(tr(T::CloudPlanLock),
+                                         cloud::plans_with(cloud_plans_, cloud_eng_kind_ == "aerodynamics" ? "aero" : "fea").c_str())
+                            : r.error.status == 413 ? std::string(tr(T::CloudTooLarge))
                             : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
                             : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
                             : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
@@ -20935,7 +20940,8 @@ void App::cloud_slice_step() {
         cloud_open_ = true;
         return;
     }
-    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+    const std::string why = r.error.status == 402 ? format(tr(T::CloudPlanLock), cloud::plans_with(cloud_plans_, "slice").c_str())
+                            : r.error.status == 413 ? std::string(tr(T::CloudTooLarge))
                             : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
                             : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
                             : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
