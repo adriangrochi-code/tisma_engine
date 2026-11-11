@@ -477,7 +477,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # The Design tab (cad_design.md, stage D1) driven through the stand-in
     # solidcraft-cli: the tab, the primitives, the command line, sending to the
     # plate and editing again; without the component (CD21); hidden (CD1).
-    foreach(script aerodynamics design_tab design_parameters design_constraints design_operations design_sketch_edit design_sketch_fillet design_command design_hidden design_sketch fasteners gears structural_tab structural_analyze)
+    foreach(script aerodynamics design_tab design_timeline_marker design_tool_search design_radial design_parameters design_constraints design_operations design_sketch_edit design_sketch_fillet design_command design_hidden design_sketch fasteners gears structural_tab structural_analyze)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
@@ -555,7 +555,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_object_menu_actions.png)
     set_tests_properties(ui_script_object_menu_actions PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The 3D view's navigation (interface.md, «Navegación de la vista 3D»: UI17, UI18).
-    foreach(script navigation view_cube mix_changes mix_settings mix_match cut_connectors cut_pin mix_numbers mix_gradient palette_piece cut_parts paint_colors smart_fill undo_plate tour_points multi_select delete_one)
+    foreach(script navigation view_cube mix_changes mix_settings mix_match cut_connectors cut_pin mix_numbers mix_gradient palette_piece cut_parts paint_colors smart_fill undo_plate tour_points multi_select delete_one mix_paint_slots)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760

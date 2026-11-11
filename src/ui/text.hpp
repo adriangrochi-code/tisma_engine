@@ -1510,6 +1510,25 @@
     X(DesignMeasureTool, "Medir", "Measure") \
     X(DesignSectionTool, "Sección", "Section") \
     X(DesignToolSearch, "Buscar herramienta", "Search tools") \
+    X(DesignNavigator, "Navegador", "Browser") \
+    X(DesignNavOrigin, "Origen", "Origin") \
+    X(DesignNavSketches, "Bocetos", "Sketches") \
+    X(DesignNavBodies, "Cuerpos", "Bodies") \
+    X(DesignNavConstruction, "Construcción", "Construction") \
+    X(DesignNavPlaneTip, "Un clic empieza un boceto en este plano", "A click starts a sketch on this plane") \
+    X(DesignTipSearch, "Busca una herramienta por su nombre; Enter empieza la primera.", "Finds a tool by its name; Enter starts the first one.") \
+    X(DesignSearchNothing, "Ninguna herramienta se llama así", "No tool by that name") \
+    X(DesignRepeat, "Repetir: %s", "Repeat: %s") \
+    X(DesignRepeatNone, "Repetir (todavía nada)", "Repeat (nothing yet)") \
+    X(DesignTipRepeat, "Vuelve a empezar la última herramienta usada.", "Starts the last tool used again.") \
+    X(DesignTipDeleteLast, "Borra el último paso del diseño.", "Deletes the design's last step.") \
+    X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \
+    X(DesignTimelineWaits, "Después de la marca: espera", "After the marker: waiting") \
+    X(DesignTimelineSuppress, "Suprimir", "Suppress") \
+    X(DesignTimelineUnsuppress, "Volver a usar", "Use again") \
+    X(DesignTimelineRename, "Renombrar", "Rename") \
+    X(DesignTimelineDelete, "Borrar", "Delete") \
+    X(DesignTimelineMarker, "Arrastrala para volver atrás en el historial", "Drag it to go back in the history") \
     X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
     X(DesignBuilding, "Construyendo…", "Building…") \
     X(DesignVolume, "Volumen", "Volume") \
@@ -2623,6 +2642,8 @@
     X(CutPartBelow, "Abajo", "Lower") \
     X(CutPartAbove, "Arriba", "Upper") \
     X(PartObjectsExtruder, "El del objeto", "The object's") \
+    X(MixForPainting, "Para pintar", "For painting") \
+    X(MixPaintFull, "La pintura admite 16 colores: destildá otra mezcla para usar esta", "Painting takes 16 colours: untick another blend to use this one") \
     X(PalettePieceLoad, "Poner la pieza de muestras en la placa", "Put the sample card on the plate") \
     X(PalettePieceNames, "Nombre de cada muestra", "Each sample's name") \
     X(PalettePieceName, "Paleta de colores", "Colour palette") \

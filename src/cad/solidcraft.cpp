@@ -12,9 +12,18 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+
+#ifdef _WIN32
+#include <process.h>
+#define TISMA_GETPID _getpid
+#else
+#include <unistd.h>
+#define TISMA_GETPID getpid
+#endif
 
 namespace tisma::cad {
 
@@ -82,21 +91,34 @@ namespace {
 // The folder every build's own folder goes in, one for this run of the
 // program: the session is started allowed to write there (solidcraft-cli
 // 0.30.0 refuses paths outside the folders it is given with --allow-path).
+// Named by the process and the time, and removed with everything in it
+// when the program ends.
 const std::filesystem::path& design_root() {
-    static const std::filesystem::path root = [] {
-        std::error_code ec;
-        std::filesystem::path base = std::filesystem::temp_directory_path(ec);
-        if (ec)
-            return std::filesystem::path();
-        for (int tries = 0; tries < 100; ++tries) {
-            const std::filesystem::path candidate = base / ("tisma-design-" + std::to_string(std::rand() % 1000000));
-            if (std::filesystem::create_directory(candidate, ec) && !ec)
-                return candidate;
-            ec.clear();
+    struct Root {
+        std::filesystem::path path;
+        Root() {
+            std::error_code ec;
+            const std::filesystem::path base = std::filesystem::temp_directory_path(ec);
+            if (ec)
+                return;
+            const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+            for (int tries = 0; tries < 100 && path.empty(); ++tries) {
+                const std::filesystem::path candidate =
+                    base / ("tisma-design-" + std::to_string(long(TISMA_GETPID())) + "-" + std::to_string((now + tries) % 1000000007));
+                if (std::filesystem::create_directory(candidate, ec) && !ec)
+                    path = candidate;
+                ec.clear();
+            }
         }
-        return std::filesystem::path();
-    }();
-    return root;
+        ~Root() {
+            if (!path.empty()) {
+                std::error_code ec;
+                std::filesystem::remove_all(path, ec);
+            }
+        }
+    };
+    static const Root root;
+    return root.path;
 }
 
 // A folder of its own for one build, removed when the build ends.

@@ -614,6 +614,18 @@ private:
     // rule 11 bis): tabs, groups with their main tools and a menu of all.
     void design_toolbar();
     int design_tab_ = 0;           // Sólido, Boceto, Inspeccionar, Utilidades
+    // The timeline under the view (cad_design.md, rule 11 quater): its
+    // marker, how many features count (the rest wait, grey, CD27); the
+    // feature its menu is open for.
+    void design_timeline();
+    std::size_t design_rollback_ = SIZE_MAX;
+    int timeline_menu_ = -1;
+    bool tool_search_open_ = false; // the tool search (rule 11 octies, CD29)
+    // The right button's radial menu in Design (rule 11 septies, CD28): open
+    // at this place; the last tool chosen, for Repeat.
+    std::optional<ImVec2> design_radial_;
+    std::string last_design_tool_;
+    char tool_search_[64] = "";
     float view_top_inset_ = 0.0f;  // what the toolbar takes from the view's top, this frame
     void design_command_line();
     void run_command(std::string text);
@@ -933,6 +945,17 @@ private:
     bool color_view_wanted() const;
     // A filament's or blend's colour as 0xRRGGBB (the model's colour for none).
     std::uint32_t extruder_rgb(int extruder) const;
+    // The colours the paint holds (color_mixing_plus.md, «Pintar con mezclas»:
+    // MX33): slot k is paint mark k, a filament or a blend number (0: unused).
+    // Empty: each mark is its own number, the first 16 by number.
+    std::vector<int> paint_slots_;
+    int slot_extruder(int mark) const {
+        if (paint_slots_.empty())
+            return mark;
+        return mark >= 1 && std::size_t(mark) <= paint_slots_.size() ? paint_slots_[std::size_t(mark - 1)] : 0;
+    }
+    bool for_painting(int extruder) const;
+    bool set_for_painting(int extruder, bool on); // false: no room (16 colours)
     std::vector<std::string> color_view_key_;
     Vec3 mouse_ray() const;
     // CAD navigation (interface.md, «Navegación de la vista 3D»).
@@ -5057,6 +5080,7 @@ void App::load_project_config(const std::filesystem::path& path) {
         chosen_profile_ = p.profiles;
         profiles_checked_.clear();
         filament_colors_ = std::move(p.filament_colors);
+        paint_slots_ = std::move(p.paint_slots);
         fill_speeds();
         bed_changed();
         settings_changed();
@@ -5130,6 +5154,7 @@ void App::open_project(const std::filesystem::path& path) {
     std::erase_if(mixes_, [&](const ColorMix& m) { return !mix_usable(m, settings_.extruders); });
     mix_extruders_ = std::max(settings_.extruders, 1);
     filament_colors_ = std::move(p.filament_colors);
+    paint_slots_ = std::move(p.paint_slots);
     bed_changed();
     settings_changed();
     if (!p.models.empty()) {
@@ -5211,6 +5236,7 @@ Project App::current_project() const {
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
+    p.paint_slots = paint_slots_;
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
     return p;
@@ -6874,7 +6900,8 @@ void App::start_slice() {
     // The purge between filaments, by their colours when unset (color_mixing_plus.md, rule 37).
     const Settings settings = with_color_purge(calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_);
     PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
-    Painting painting = std::move(plate.painting);
+    // The paint's colour marks as the filaments and blends they stand for (MX33).
+    Painting painting = paint_slots_.empty() ? std::move(plate.painting) : with_color_slots(plate.painting, paint_slots_);
     std::vector<MeshObject> objects = std::move(plate.objects);
     SliceVolumes volumes = std::move(plate.volumes);
     const bool by_object = plate.by_object;
@@ -11117,6 +11144,10 @@ void App::viewport() {
     // A right click, not a drag: on a model, its menu (settings_levels.md,
     // rule 10); on the plate, add a model or a shape, or arrange them (own
     // design, the owner's request).
+    // In Design, the radial menu (cad_design.md, rule 11 septies).
+    if (tab_ == Tab::Design && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+        io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f && !sketch_edit_)
+        design_radial_ = io.MousePos;
     if (tab_ == Tab::Prepare && !calibration_ && !viewer_ && ImGui::IsItemHovered() &&
         !(tool_ == PlateTool::Cut && cut_connector_ != 0) &&
         ImGui::IsMouseReleased(ImGuiMouseButton_Right) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f) {
@@ -12992,13 +13023,17 @@ void App::renumber_mixes() {
         const auto it = to.find(e);
         return it == to.end() ? e : it->second;
     };
+    for (int& e : paint_slots_)
+        if (e != 0)
+            e = to.contains(e) && to.at(e) == 1 && e > n ? 0 : moved(e);
     for (PlateObject& o : objects_) {
         o.extruder = moved(o.extruder);
         for (PlatePart& part : o.parts)
             if (part.extruder != 0)
                 part.extruder = moved(part.extruder);
-        // The colour painting: its marks are extruder numbers.
-        for (std::size_t t = 0; t < o.painting.size(PaintChannel::Color); ++t) {
+        // The colour painting: its marks are extruder numbers, unless they
+        // are slots of the table (MX33), which moved above.
+        for (std::size_t t = 0; paint_slots_.empty() && t < o.painting.size(PaintChannel::Color); ++t) {
             Painting::Tree tree = o.painting.tree(PaintChannel::Color, t);
             bool changed = false;
             for (std::uint8_t& mark : tree)
@@ -13564,6 +13599,11 @@ void App::mixing_dialog() {
         }
         if (edited)
             recolor(m);
+        // Whether it is one of the paint's 16 colours (MX33).
+        bool paintable = for_painting(m.id);
+        if (ImGui::Checkbox(tr(T::MixForPainting), &paintable) && !set_for_painting(m.id, paintable))
+            notify(tr(T::MixPaintFull));
+        note_rect("mix_paint");
         ImGui::TextUnformatted(tr(T::DisplayColor));
         ImGui::SameLine();
         ImGui::ColorButton("##shown", color_of(m.color), 0, ImVec2(48.0f * scale_, 18.0f * scale_));
@@ -13656,22 +13696,28 @@ void App::paint_card(ImVec2 at) {
     if (paint_channel_ == PaintChannel::Color) {
         // Each filament and each blend the paint can hold (multi_extruder.md,
         // rule 1; color_mixing_plus.md, rule 16), as a swatch to pick.
-        std::vector<int> choices;
-        for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
-            choices.push_back(e);
-        for (const ColorMix& m : mixes_)
-            if (m.id <= kPaintMaxMark && mix_usable(m, settings_.extruders))
-                choices.push_back(m.id);
+        // Each mark with what it prints: the filaments and the blends marked
+        // «Para pintar» (MX33).
+        std::vector<std::pair<int, int>> choices; // mark, extruder
+        for (int k = 1; k <= kPaintMaxMark; ++k) {
+            const int e = slot_extruder(k);
+            const bool exists = e >= 1 && (e <= std::max(settings_.extruders, 1) ||
+                                           std::any_of(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) {
+                                               return m.id == e && mix_usable(m, settings_.extruders);
+                                           }));
+            if (exists)
+                choices.push_back({k, e});
+        }
         const float side = 22.0f * scale_;
         for (std::size_t k = 0; k < choices.size(); ++k) {
-            const int e = choices[k];
+            const auto [mark, e] = choices[k];
             ImGui::PushID(e + 6000);
             if (k % 8 != 0)
                 ImGui::SameLine(0, 4.0f * scale_);
             const std::uint32_t c = extruder_rgb(e);
             if (ImGui::ColorButton("##colour", rgb(c), ImGuiColorEditFlags_NoTooltip, ImVec2(side, side)))
-                paint_mark_ = std::uint8_t(e);
-            if (paint_mark_ == e)
+                paint_mark_ = std::uint8_t(mark);
+            if (paint_mark_ == mark)
                 ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                                                     ImGui::GetColorU32(rgb(theme_.accent_hover)), 3.0f * scale_, 2.5f * scale_);
             loc::SetItemTooltip("%s", e <= settings_.extruders ? format(tr(T::ExtruderItem), e).c_str()
@@ -13813,6 +13859,40 @@ bool App::color_view_wanted() const {
     return triangles <= 2000000;
 }
 
+bool App::for_painting(int extruder) const {
+    if (paint_slots_.empty())
+        return extruder >= 1 && extruder <= kPaintMaxMark;
+    return std::find(paint_slots_.begin(), paint_slots_.end(), extruder) != paint_slots_.end();
+}
+
+bool App::set_for_painting(int extruder, bool on) {
+    if (for_painting(extruder) == on)
+        return true;
+    // The table as it stands: each mark keeps its meaning.
+    if (paint_slots_.empty()) {
+        for (int k = 1; k <= kPaintMaxMark; ++k) {
+            const bool exists = k <= std::max(settings_.extruders, 1) ||
+                                std::any_of(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) { return m.id == k; });
+            paint_slots_.push_back(exists ? k : 0);
+        }
+    }
+    if (!on) {
+        std::replace(paint_slots_.begin(), paint_slots_.end(), extruder, 0);
+    } else {
+        const auto free = std::find(paint_slots_.begin(), paint_slots_.end(), 0);
+        if (free == paint_slots_.end()) {
+            if (paint_slots_.size() >= kPaintMaxMark)
+                return false;
+            paint_slots_.push_back(extruder);
+        } else {
+            *free = extruder;
+        }
+    }
+    paint_dirty_ = true;
+    plate_changed();
+    return true;
+}
+
 std::uint32_t App::extruder_rgb(int extruder) const {
     if (extruder >= 1 && extruder <= std::max(settings_.extruders, 1))
         return hex_rgb(filament_color(extruder));
@@ -13873,7 +13953,7 @@ void App::update_color_view() {
                         return;
                     const std::uint8_t mark = tree[at++];
                     if (mark != Painting::kSplit) {
-                        put(mark == 0 ? colour : colour_of(mark), p, q, r, n);
+                        put(mark == 0 || slot_extruder(mark) == 0 ? colour : colour_of(slot_extruder(mark)), p, q, r, n);
                         return;
                     }
                     const auto mid = [](const Vec3f& u, const Vec3f& v) {
@@ -13912,7 +13992,7 @@ void App::update_paint_view() {
     std::vector<Renderer::PaintGroup> groups;
     for (const PaintMesh::Group& g : m.groups)
         groups.push_back({g.first, g.count,
-                          vec(paint_channel_ == PaintChannel::Color ? extruder_rgb(g.mark)
+                          vec(paint_channel_ == PaintChannel::Color ? extruder_rgb(slot_extruder(g.mark))
                               : g.mark == kPaintBlock              ? theme_.paint_mark_block
                                                                    : theme_.paint_mark_enforce)});
     renderer_.set_paint(m.vertices, groups);
@@ -15088,7 +15168,10 @@ void App::rebuild_design() {
         design_error_ = design_missing_text();
         return;
     }
-    const cad::Design copy = design_;
+    cad::Design copy = design_;
+    // Rolled back on the timeline (CD27): what comes after the marker waits.
+    for (std::size_t k = design_rollback_; k < copy.features.size(); ++k)
+        copy.features[k].suppressed = true;
     const std::filesystem::path exe = solidcraft_.exe;
     const cad::MeshQuality quality = cad::quality_for(settings_.cad_chord_tolerance, cad::nominal_size(copy));
     if (!design_session_ || design_session_->exe() != exe)
@@ -15417,7 +15500,12 @@ void App::design_toolbar() {
                     {Group{T::DesignGroupInspect, "design_group_inspect", 2,
                            {soon("design_measure_tool", "measure", T::DesignMeasureTool), soon("design_section", "section", T::DesignSectionTool)}}}});
     tabs.push_back({T::DesignTabUtilities,
-                    {Group{T::DesignGroupUtilities, "design_group_utilities", 1, {soon("design_tool_search", "search", T::DesignToolSearch)}}}});
+                    {Group{T::DesignGroupUtilities, "design_group_utilities", 1,
+                           {{"design_tool_search", "search", tr(T::DesignToolSearch), tr(T::DesignTipSearch), "S", true, false,
+                             [this] { tool_search_open_ = true, tool_search_[0] = 0; }}}}}});
+    // S opens the tool search (rule 11 octies), when no field takes the keys.
+    if (plate_keys() && !ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false) && !tool_search_open_)
+        tool_search_open_ = true, tool_search_[0] = 0;
     // A sketch opens its tab; leaving it, back to Sólido.
     static bool was_sketching = false;
     if (sketching && !was_sketching)
@@ -15499,7 +15587,7 @@ void App::design_toolbar() {
             tool_tip(tool);
             ImGui::PopID();
             if (hit && tool.ready)
-                chosen = tool.act;
+                chosen = tool.act, last_design_tool_ = tool.id;
         }
         // Its name and the arrow with all of them.
         const std::string head = std::string(tr(group.name)) + "##" + group.id;
@@ -15536,13 +15624,173 @@ void App::design_toolbar() {
                                                         dim, tr(T::ComingSoon));
                 ImGui::PopID();
                 if (hit && tool.ready) {
-                    chosen = tool.act;
+                    chosen = tool.act, last_design_tool_ = tool.id;
                     ImGui::CloseCurrentPopup();
                 }
             }
             ImGui::EndPopup();
         }
     }
+    // The tool search: what is typed filters every tool by its name; Enter
+    // starts the first one that can be used (CD29).
+    if (tool_search_open_) {
+        ImGui::OpenPopup("##tool_search");
+        tool_search_open_ = false;
+        ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + 120.0f * scale_), ImGuiCond_Always,
+                                ImVec2(0.5f, 0.0f));
+    }
+    if (ImGui::BeginPopup("##tool_search")) {
+        const auto folded = [](std::string text) {
+            std::string out;
+            for (std::size_t i = 0; i < text.size(); ++i) {
+                const unsigned char ch = static_cast<unsigned char>(text[i]);
+                if (ch == 0xC3 && i + 1 < text.size()) { // á é í ó ú ñ and their capitals, as plain letters
+                    const unsigned char n = static_cast<unsigned char>(text[++i]);
+                    const char* plain = "aaaaaaaceeeeiiiidnooooo/ouuuuyty";
+                    out += (n >= 0x80 && n < 0xA0) ? char(std::tolower(static_cast<unsigned char>(plain[n - 0x80])))
+                           : (n >= 0xA0 && n < 0xC0) ? plain[n - 0xA0] : '?';
+                } else {
+                    out += char(std::tolower(ch));
+                }
+            }
+            return out;
+        };
+        ImGui::SetNextItemWidth(260.0f * scale_);
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        const bool enter = ImGui::InputTextWithHint("##search", tr(T::DesignToolSearch), tool_search_, sizeof tool_search_,
+                                                    ImGuiInputTextFlags_EnterReturnsTrue);
+        note_rect("design_tool_search_field");
+        const std::string want = folded(tool_search_);
+        const Tool* first = nullptr;
+        int shown = 0;
+        for (const auto& [tab, tab_groups] : tabs)
+            for (const Group& grp : tab_groups)
+                for (const Tool& tool : grp.tools) {
+                    if (tool.id == "design_tool_search" || (!want.empty() && folded(tool.label).find(want) == std::string::npos) ||
+                        shown >= 12)
+                        continue;
+                    ++shown;
+                    if (!first && tool.ready)
+                        first = &tool;
+                    ImGui::PushID(tool.id.c_str());
+                    const ImVec2 at = ImGui::GetCursorScreenPos();
+                    const float small = ImGui::GetFrameHeight();
+                    const bool hit = ImGui::Selectable("##found", first == &tool, tool.ready ? 0 : ImGuiSelectableFlags_Disabled,
+                                                       ImVec2(260.0f * scale_, small));
+                    note_rect("design_found_" + tool.id.substr(std::min<std::size_t>(7, tool.id.size())));
+                    cad_icon(ImGui::GetWindowDrawList(), tool.icon, ImVec2(at.x + 2.0f, at.y + 2.0f), small - 4.0f, tool.ready ? ink : dim);
+                    ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + small + 8.0f * scale_, at.y + (small - ImGui::GetFontSize()) * 0.5f),
+                                                        tool.ready ? ink : dim, tool.label.c_str());
+                    ImGui::PopID();
+                    if (hit && tool.ready) {
+                        chosen = tool.act, last_design_tool_ = tool.id;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+        if (shown == 0)
+            loc::TextDisabled("%s", tr(T::DesignSearchNothing));
+        if (enter && first) {
+            chosen = first->act, last_design_tool_ = first->id;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    // The radial menu: the most used tools round the click, the last one
+    // first as Repeat; under it, what can be done with the last step.
+    if (design_radial_) {
+        ImGui::OpenPopup("##design_radial");
+        const float r = 96.0f * scale_, room = r + 44.0f * scale_;
+        ImGui::SetNextWindowPos(ImVec2(design_radial_->x - room, design_radial_->y - room));
+        ImGui::SetNextWindowSize(ImVec2(2.0f * room, 0.0f));
+        design_radial_.reset();
+    }
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.panel, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(theme_.panel, 0.0f));
+    if (ImGui::BeginPopup("##design_radial", ImGuiWindowFlags_NoMove)) {
+        const auto find = [&](const std::string& id) -> const Tool* {
+            for (const auto& [tab, tab_groups] : tabs)
+                for (const Group& grp : tab_groups)
+                    for (const Tool& tool : grp.tools)
+                        if (tool.id == id)
+                            return &tool;
+            return nullptr;
+        };
+        const Tool* repeat = last_design_tool_.empty() ? nullptr : find(last_design_tool_);
+        Tool remove{"design_radial_delete", "split", tr(T::DesignTimelineDelete), tr(T::DesignTipDeleteLast), "Supr",
+                    !design_.features.empty(), false, [this] {
+                        if (!design_.features.empty()) {
+                            design_.features.pop_back();
+                            rebuild_design();
+                        }
+                    }};
+        Tool again{"design_radial_repeat", repeat ? repeat->icon : "search",
+                   repeat ? format(tr(T::DesignRepeat), repeat->label.c_str()) : std::string(tr(T::DesignRepeatNone)),
+                   tr(T::DesignTipRepeat), "", repeat && repeat->ready, false, repeat ? repeat->act : std::function<void()>{}};
+        Tool extrude = soon("design_radial_extrude", "press_pull", T::SketchExtrude);
+        std::vector<const Tool*> ring{&again, find("design_sketch"), &extrude, find("design_op_fillet"), find("design_op_move"),
+                                      find("design_measure_tool"), &remove};
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const float r = 96.0f * scale_, button = 44.0f * scale_, room = r + 44.0f * scale_;
+        const ImVec2 centre(ImGui::GetWindowPos().x + room, ImGui::GetWindowPos().y + room);
+        // Over everything: the ring is wider than the window's own clip.
+        ImDrawList* rd = ImGui::GetForegroundDrawList();
+        rd->AddCircleFilled(centre, r + button * 0.7f, ImGui::GetColorU32(rgb(theme_.panel, 0.92f)), 48);
+        rd->AddCircle(centre, 8.0f * scale_, ImGui::GetColorU32(rgb(theme_.text_dim)), 16, 1.5f);
+        for (std::size_t k = 0; k < ring.size(); ++k) {
+            const Tool* tool = ring[k];
+            if (!tool)
+                continue;
+            const float ang = -1.5708f + float(k) * 6.28318f / float(ring.size());
+            const ImVec2 at(centre.x + r * std::cos(ang) - button * 0.5f, centre.y + r * std::sin(ang) - button * 0.5f);
+            ImGui::SetCursorScreenPos(at);
+            ImGui::PushID(tool->id.c_str());
+            ImGui::BeginDisabled(!tool->ready);
+            const bool hit = ImGui::InvisibleButton("##radial", ImVec2(button, button));
+            ImGui::EndDisabled();
+            note_rect(tool->id == "design_radial_repeat" || tool->id == "design_radial_delete" || tool->id == "design_radial_extrude"
+                          ? tool->id
+                          : "design_radial_" + tool->id.substr(std::min<std::size_t>(7, tool->id.size())));
+            const bool hover = ImGui::IsItemHovered();
+            rd->AddCircleFilled(ImVec2(at.x + button * 0.5f, at.y + button * 0.5f), button * 0.5f,
+                                ImGui::GetColorU32(hover && tool->ready ? rgb(theme_.accent, 0.6f) : rgb(theme_.panel)), 24);
+            cad_icon(rd, tool->icon, ImVec2(at.x + button * 0.2f, at.y + button * 0.2f), button * 0.6f, tool->ready ? ink : dim);
+            tool_tip(*tool);
+            ImGui::PopID();
+            if (hit && tool->ready) {
+                chosen = tool->act;
+                if (tool->id != "design_radial_repeat" && tool->id != "design_radial_delete")
+                    last_design_tool_ = tool->id;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        // The last step's own entries, under the ring.
+        ImGui::SetCursorScreenPos(ImVec2(origin.x, centre.y + r + button * 0.8f));
+        if (!design_.features.empty()) {
+            const std::size_t last = design_.features.size() - 1;
+            cad::Feature& f = design_.features[last];
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, rgb(theme_.panel));
+            ImGui::BeginChild("##radial_context", ImVec2(0, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Borders);
+            loc::TextDisabled("%s", f.name.c_str());
+            if (ImGui::Selectable(tr(f.suppressed ? T::DesignTimelineUnsuppress : T::DesignTimelineSuppress))) {
+                f.suppressed = !f.suppressed;
+                chosen = [this] { rebuild_design(); };
+                ImGui::CloseCurrentPopup();
+            }
+            note_rect("design_radial_suppress");
+            if (ImGui::Selectable(tr(T::DesignTimelineRename))) {
+                design_rename_ = int(last);
+                design_rename_focus_ = true;
+                design_scroll_to_ = std::to_string(last + 1);
+                std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor(2);
     view_top_inset_ = ImGui::GetWindowSize().y;
     g_menu_rects["design_toolbar"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
                                             ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
@@ -15552,6 +15800,135 @@ void App::design_toolbar() {
     ImGui::PopStyleVar(2);
     if (chosen)
         chosen();
+}
+
+
+// The design's timeline (cad_design.md, rule 11 quater): an icon for each
+// feature in order, red with its reason when it fails, grey while it waits
+// or is suppressed; a click takes the history to it, a double click names
+// it, a right click suppresses, renames or deletes it; the marker at the
+// end goes back in the history while it is dragged (CD27), and back to the
+// end what waits builds again.
+void App::design_timeline() {
+    const float h = 50.0f * scale_, margin = 12.0f * scale_, icon_w = 34.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + view_size_.y - h - margin));
+    ImGui::SetNextWindowSize(ImVec2(std::max(view_size_.x - 2.0f * margin, 200.0f * scale_), h));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f * scale_, 6.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##design_timeline", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_HorizontalScrollbar);
+    g_menu_rects["design_timeline"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                             ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                             ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const std::size_t n = design_.features.size();
+    const std::size_t end = std::min(design_rollback_, n);
+    const ImU32 ink = ImGui::GetColorU32(rgb(theme_.text)), grey = ImGui::GetColorU32(rgb(theme_.text_dim, 0.4f)),
+                red = IM_COL32(229, 72, 77, 255), accent = ImGui::GetColorU32(rgb(theme_.accent_hover));
+    if (n == 0) {
+        ImGui::AlignTextToFramePadding();
+        loc::TextDisabled("%s", tr(T::DesignTimelineEmpty));
+    }
+    std::vector<float> slots; // each feature's left edge, and the end
+    bool changed = false;
+    std::optional<std::size_t> erase;
+    for (std::size_t i = 0; i < n; ++i) {
+        cad::Feature& f = design_.features[i];
+        if (i > 0)
+            ImGui::SameLine(0, 4.0f * scale_);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        slots.push_back(at.x);
+        ImGui::PushID(int(i) + 7000);
+        ImGui::InvisibleButton("##feature", ImVec2(icon_w, icon_w));
+        const bool hover = ImGui::IsItemHovered();
+        const bool fails = design_failed_ && *design_failed_ == i && !f.suppressed && i < end;
+        const bool waits = i >= end || f.suppressed || (design_failed_ && i > *design_failed_);
+        if (hover)
+            dl->AddRectFilled(at, ImVec2(at.x + icon_w, at.y + icon_w), ImGui::GetColorU32(rgb(theme_.accent, 0.3f)), 5.0f * scale_);
+        const char* icon = f.type == cad::Feature::Type::Sketch      ? "sketch"
+                           : f.type == cad::Feature::Type::Operation ? operation_icon(f.op.kind)
+                                                                     : primitive_id(f.kind);
+        cad_icon(dl, icon, ImVec2(at.x + icon_w * 0.15f, at.y + icon_w * 0.15f), icon_w * 0.7f, fails ? red : waits ? grey : ink);
+        note_rect("design_timeline_" + std::to_string(i + 1));
+        if (hover) {
+            ImGui::BeginTooltip();
+            loc::Text("%s", f.name.c_str());
+            if (fails && !design_failure_.empty())
+                loc::TextColored(rgb(0xE5484D), "%s", design_failure_.c_str());
+            else if (i >= end)
+                loc::TextDisabled("%s", tr(T::DesignTimelineWaits));
+            ImGui::EndTooltip();
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+            design_scroll_to_ = std::to_string(i + 1);
+        if (hover && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            design_rename_ = int(i);
+            design_rename_focus_ = true;
+            design_scroll_to_ = std::to_string(i + 1);
+            std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+            timeline_menu_ = int(i);
+            ImGui::OpenPopup("##timeline_menu");
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::BeginPopup("##timeline_menu")) {
+        if (timeline_menu_ >= 0 && std::size_t(timeline_menu_) < n) {
+            cad::Feature& f = design_.features[std::size_t(timeline_menu_)];
+            if (ImGui::MenuItem(tr(f.suppressed ? T::DesignTimelineUnsuppress : T::DesignTimelineSuppress)))
+                f.suppressed = !f.suppressed, changed = true;
+            note_rect("design_timeline_suppress");
+            if (ImGui::MenuItem(tr(T::DesignTimelineRename))) {
+                design_rename_ = timeline_menu_;
+                design_rename_focus_ = true;
+                design_scroll_to_ = std::to_string(timeline_menu_ + 1);
+                std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+            }
+            if (ImGui::MenuItem(tr(T::DesignTimelineDelete)))
+                erase = std::size_t(timeline_menu_);
+            note_rect("design_timeline_delete");
+        }
+        ImGui::EndPopup();
+    }
+    // The marker: before the first feature that waits, dragged along them.
+    if (n > 0) {
+        ImGui::SameLine(0, 4.0f * scale_);
+        slots.push_back(ImGui::GetCursorScreenPos().x);
+        const float top = ImGui::GetCursorScreenPos().y;
+        const float x = slots[end] - 2.0f * scale_;
+        ImGui::SetCursorScreenPos(ImVec2(x - 6.0f * scale_, top));
+        ImGui::InvisibleButton("##marker", ImVec2(12.0f * scale_, icon_w));
+        note_rect("design_timeline_marker");
+        dl->AddRectFilled(ImVec2(x - 1.5f * scale_, top), ImVec2(x + 1.5f * scale_, top + icon_w), accent);
+        dl->AddTriangleFilled(ImVec2(x - 6.0f * scale_, top), ImVec2(x + 6.0f * scale_, top), ImVec2(x, top + 8.0f * scale_), accent);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignTimelineMarker));
+        if (ImGui::IsItemActive()) {
+            // The nearest place between two features to the mouse.
+            const float mx = ImGui::GetIO().MousePos.x;
+            std::size_t best = 0;
+            for (std::size_t k = 1; k < slots.size(); ++k)
+                if (std::abs(slots[k] - mx) < std::abs(slots[best] - mx))
+                    best = k;
+            const std::size_t to = best >= n ? SIZE_MAX : best;
+            if (to != design_rollback_)
+                design_rollback_ = to, changed = true;
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    if (erase) {
+        design_.features.erase(design_.features.begin() + std::ptrdiff_t(*erase));
+        changed = true;
+    }
+    if (design_rollback_ != SIZE_MAX && design_rollback_ >= design_.features.size())
+        design_rollback_ = SIZE_MAX;
+    if (changed)
+        rebuild_design();
 }
 
 void App::design_panel() {
@@ -15630,6 +16007,115 @@ void App::design_panel() {
                 command_focus_ = true;
             }
         ImGui::EndPopup();
+    }
+
+    // The navigator (cad_design.md, rule 11 ter): the origin's planes and
+    // axes, the sketches, the bodies, the construction and the parameters;
+    // each step with an eye, a click takes the history to it, a double
+    // click edits a sketch, a right click opens its menu.
+    {
+        bool nav_changed = false;
+        std::optional<std::size_t> nav_erase;
+        const auto eye = [&](bool shown) {
+            const float h = ImGui::GetTextLineHeight();
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const bool hit = ImGui::InvisibleButton("##eye", ImVec2(h * 1.4f, h));
+            ImDrawList* d = ImGui::GetWindowDrawList();
+            const ImU32 c = ImGui::GetColorU32(shown ? rgb(theme_.text) : rgb(theme_.text_dim, 0.5f));
+            d->AddEllipse(ImVec2(at.x + h * 0.7f, at.y + h * 0.5f), ImVec2(h * 0.6f, h * 0.32f), c, 0.0f, 20, 1.3f);
+            if (shown)
+                d->AddCircleFilled(ImVec2(at.x + h * 0.7f, at.y + h * 0.5f), h * 0.18f, c);
+            else
+                d->AddLine(ImVec2(at.x + h * 0.15f, at.y + h * 0.9f), ImVec2(at.x + h * 1.25f, at.y + h * 0.1f), c, 1.3f);
+            ImGui::SameLine();
+            return hit;
+        };
+        const auto step_row = [&](std::size_t i) {
+            cad::Feature& f = design_.features[i];
+            ImGui::PushID(int(i) + 9000);
+            if (eye(!f.suppressed))
+                f.suppressed = !f.suppressed, nav_changed = true;
+            const bool fails = design_failed_ && *design_failed_ == i && !f.suppressed;
+            if (fails)
+                ImGui::PushStyleColor(ImGuiCol_Text, rgb(0xE5484D));
+            else if (f.suppressed)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            const bool picked = ImGui::Selectable(f.name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
+            if (fails || f.suppressed)
+                ImGui::PopStyleColor();
+            rect_of(("design_nav_" + std::to_string(i + 1)).c_str());
+            if (picked) {
+                design_scroll_to_ = std::to_string(i + 1);
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && f.type == cad::Feature::Type::Sketch)
+                    edit_sketch(i);
+            }
+            if (ImGui::BeginPopupContextItem("##nav_menu")) {
+                if (ImGui::MenuItem(tr(f.suppressed ? T::DesignTimelineUnsuppress : T::DesignTimelineSuppress)))
+                    f.suppressed = !f.suppressed, nav_changed = true;
+                if (ImGui::MenuItem(tr(T::DesignTimelineRename))) {
+                    design_rename_ = int(i);
+                    design_rename_focus_ = true;
+                    design_scroll_to_ = std::to_string(i + 1);
+                    std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+                }
+                if (f.type == cad::Feature::Type::Sketch && ImGui::MenuItem(tr(T::EditSketch)))
+                    edit_sketch(i);
+                if (ImGui::MenuItem(tr(T::DesignTimelineDelete)))
+                    nav_erase = i;
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+        };
+        section(T::DesignNavigator);
+        rect_of("design_navigator");
+        if (ImGui::TreeNodeEx(tr(T::DesignNavOrigin), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+            for (const cad::SketchPlane plane : {cad::SketchPlane::XY, cad::SketchPlane::XZ, cad::SketchPlane::YZ}) {
+                // A click on a plane starts a sketch on it.
+                if (ImGui::Selectable(plane_label(plane), false, can_sketch ? 0 : ImGuiSelectableFlags_Disabled))
+                    start_sketch(plane);
+                if (ImGui::IsItemHovered())
+                    loc::SetTooltip("%s", tr(T::DesignNavPlaneTip));
+            }
+            for (const char* axis : {"X", "Y", "Z"})
+                loc::TextDisabled("%s %s", tr(T::DesignAxisTool), axis);
+            ImGui::TreePop();
+        }
+        const auto group = [&](T title, auto&& wanted) {
+            std::size_t count = 0;
+            for (const cad::Feature& f : design_.features)
+                count += wanted(f);
+            const std::string head = std::string(tr(title)) + " (" + std::to_string(count) + ")###" + std::to_string(int(title));
+            if (ImGui::TreeNodeEx(head.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                for (std::size_t i = 0; i < design_.features.size(); ++i)
+                    if (wanted(design_.features[i]))
+                        step_row(i);
+                ImGui::TreePop();
+            }
+        };
+        group(T::DesignNavSketches, [](const cad::Feature& f) { return f.type == cad::Feature::Type::Sketch; });
+        group(T::DesignNavBodies, [](const cad::Feature& f) { return f.type != cad::Feature::Type::Sketch; });
+        if (ImGui::TreeNodeEx(tr(T::DesignNavConstruction), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+            loc::TextDisabled("%s", tr(T::ComingSoon));
+            ImGui::TreePop();
+        }
+        {
+            const cad::ParameterValues values = cad::evaluate_parameters(design_.parameters);
+            const std::string head = std::string(tr(T::DesignSecParameters)) + " (" + std::to_string(design_.parameters.size()) + ")###nav_params";
+            if (ImGui::TreeNodeEx(head.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                for (const cad::Parameter& prm : design_.parameters) {
+                    const auto v = values.values.find(prm.name);
+                    if (v != values.values.end())
+                        loc::Text("%s = %.2f", prm.name.c_str(), v->second.value);
+                    else
+                        loc::TextColored(rgb(0xE5484D), "%s = %s", prm.name.c_str(), prm.expression.c_str());
+                }
+                ImGui::TreePop();
+            }
+        }
+        if (nav_erase)
+            design_.features.erase(design_.features.begin() + std::ptrdiff_t(*nav_erase)), nav_changed = true;
+        if (nav_changed)
+            rebuild_design();
     }
 
     // Boceto: the tools and the toggles while a sketch is being drawn.
@@ -21106,7 +21592,8 @@ void App::config_window() {
 void App::design_command_line() {
     const float margin = 12.0f * scale_, height = 36.0f * scale_;
     const float left = view_pos_.x + margin;
-    ImGui::SetNextWindowPos(ImVec2(left, view_pos_.y + view_size_.y - height - margin));
+    // Above the timeline (rule 11 quater).
+    ImGui::SetNextWindowPos(ImVec2(left, view_pos_.y + view_size_.y - height - margin - 62.0f * scale_));
     ImGui::SetNextWindowSize(ImVec2(std::max(view_pos_.x + view_size_.x - margin - left, 200.0f * scale_), height));
     ImGui::SetNextWindowBgAlpha(0.95f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * scale_);
@@ -23766,7 +24253,7 @@ void App::layout() {
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
-            design_command_line();
+            design_command_line(), design_timeline();
             if (sketch_edit_) {
                 sketch_strip();
                 sketch_cursor_input();
@@ -26428,6 +26915,19 @@ void App::script_input() {
             return fail_step("no such triangle");
         smart_angle_ = angle;
         smart_fill(i, *seed);
+        next();
+    } else if (step.verb == "mix-paint") { // blend I (from 0) for painting or not: "I on|off"
+        const std::size_t i = std::size_t(std::atoi(step.key.c_str()));
+        if (i >= mixes_.size())
+            return fail_step("no such blend");
+        if (!set_for_painting(mixes_[i].id, step.value != "off"))
+            notify(tr(T::MixPaintFull));
+        next();
+    } else if (step.verb == "expect-paint-slot") { // the extruder paint mark K stands for: "K E"
+        const int k = std::atoi(step.key.c_str()), want = std::atoi(step.value.c_str()), got = slot_extruder(k);
+        std::printf("ui-script: expect-paint-slot %d: %s%d\n", k, got == want ? "ok, " : "got ", got);
+        if (got != want)
+            return fail_step("mark " + std::to_string(k) + " stands for " + std::to_string(got));
         next();
     } else if (step.verb == "paint-color") { // the Paint tool's colour channel, with extruder or blend N
         paint_channel_ = PaintChannel::Color;

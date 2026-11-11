@@ -1,0 +1,26 @@
+# The right button's radial menu in Design (cad_design.md, rule 11 septies;
+# CD28): Repeat, Sketch, Extrude, Fillet, Move/Copy, Measure and Delete round
+# the click, and the last step's entries under them. Repeat makes another
+# box; Delete takes it away.
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-design 8000
+mouse right 0.6 0.55 0 0
+wait 2
+expect-control design_radial_repeat
+expect-control design_radial_sketch
+expect-control design_radial_extrude
+expect-control design_radial_op_fillet
+expect-control design_radial_op_move
+expect-control design_radial_measure_tool
+expect-control design_radial_delete
+expect-control design_radial_suppress
+menu design_radial_repeat
+wait 30
+expect-control design_timeline_2
+mouse right 0.6 0.55 0 0
+wait 2
+menu design_radial_delete
+wait 30
+expect-no-control design_timeline_2

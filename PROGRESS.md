@@ -13372,3 +13372,55 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   placa nombrada). Falta: las 12 `rule` con nombre (sus pasos están en el `note` de cada fila de la tabla publicada;
   hoy van a `skipped`) y que la interfaz aplique `translate_settings` al abrir.
 
+## 2026-11-11 — interfaz: la línea de tiempo de Diseño (cad_design.md, regla 11 quater; CD27)
+
+- **Hecho:** abajo de la vista, a todo el ancho, un ícono por paso del diseño en orden (los mismos dibujos de la
+  barra): rojo con el motivo al pasar el mouse si falla, gris si espera o está suprimido; un clic lleva el historial
+  a él, doble clic lo renombra, clic derecho suprime/vuelve a usar, renombra o borra. La marca al final se arrastra
+  para volver atrás: lo de después espera (se construye sin eso) hasta que vuelve al final (CD27). La línea de
+  comandos queda arriba de la línea de tiempo.
+- **Pruebas:** `design_timeline_marker.txt` (caja y vaciado: 3904 mm³; la marca antes del vaciado, 8000; al final,
+  3904 de nuevo); pasan las 31 de Diseño.
+- **Sigue:** el navegador a la izquierda (11 ter) con el editor de lo elegido, los cuadros flotantes (11 quinquies).
+
+## 2026-11-11 — interfaz: pintar con más de 16 mezclas (color_mixing_plus.md, «Pintar con mezclas»: MX33)
+
+- **Hecho** (con `Project::paint_slots` y `with_color_slots` del motor, cf42945): cada mezcla tiene «Para pintar» en el
+  diálogo; por defecto valen las primeras 16 por número (la tabla vacía: cada marca es su número, como antes).
+  Destildar una deja su marca libre; tildar otra la toma; con las 16 en uso avisa «La pintura admite 16 colores:
+  destildá otra mezcla para usar esta» y no la marca. Los colores de Pintar, la vista y el laminado leen la tabla; el
+  proyecto la guarda; al renumerar mezclas (MX30) la tabla las sigue y la pintura no se toca.
+- **Pruebas:** `mix_paint_slots.txt` (órdenes nuevas `mix-paint`, `expect-paint-slot`); pasan las 66 de pintura,
+  mezclas, paleta, deshacer y proyecto. No laminado entero ni impreso.
+
+## 2026-11-11 — interfaz: el navegador de Diseño (cad_design.md, regla 11 ter)
+
+- **Hecho:** arriba del panel de Diseño, un árbol: **Origen** (planos XY, XZ e YZ, que con un clic empiezan un boceto
+  en ese plano, y los ejes), **Bocetos**, **Cuerpos** (cada uno con su ojo para mostrar u ocultar, un clic lleva el
+  historial a él, doble clic edita un boceto, clic derecho: suprimir, renombrar, editar boceto, borrar),
+  **Construcción** («Próximamente») y **Parámetros** con su valor. El historial con los campos de cada paso sigue
+  debajo hasta que los cuadros flotantes (11 quinquies) lo reemplacen.
+- **Pruebas:** pasan las 31 de Diseño; captura revisada.
+
+## 2026-11-11 — interfaz: buscar herramienta en Diseño (cad_design.md, regla 11 octies; CD29)
+
+- **Hecho:** la tecla S (o Utilidades › Buscar herramienta) abre un buscador arriba de la vista: filtra todas las
+  herramientas de la barra al escribir (sin distinguir mayúsculas ni tildes), con su ícono; Enter empieza la primera
+  que se puede usar. Falta fijar las más usadas a la barra.
+- **Pruebas:** `design_tool_search.txt` (CD29: «redo» muestra Redondeo y no Chaflán; Enter la empieza y pide las
+  aristas); pasan las 32 de Diseño.
+
+## 2026-11-11 — interfaz: el menú radial de Diseño (cad_design.md, regla 11 septies; CD28) y un arreglo del componente
+
+- **Hecho:** clic derecho en la vista de Diseño abre un menú en anillo alrededor del clic: Repetir (la última
+  herramienta usada, con su nombre), Boceto, Extruir («Próximamente» hasta los cuadros flotantes), Redondeo,
+  Mover/Copiar, Medir («Próximamente») y Borrar (el último paso: todavía no hay selección de cuerpos en Diseño); debajo,
+  el último paso con Suprimir y Renombrar.
+- **Arreglado:** la carpeta donde la sesión de SolidCraft puede escribir se nombraba con `std::rand()` sin semilla:
+  todas las ejecuciones probaban los mismos nombres, y después de 100 carpetas sobrantes en el temporal la sesión
+  arrancaba sin carpeta permitida y toda construcción fallaba (lo encontraron las pruebas). Ahora va con el número
+  del proceso y la hora, y se borra al salir. Quedaron 100 carpetas viejas vacías en el `/tmp` de esta sesión (no se
+  pudieron borrar desde acá).
+- **Pruebas:** `design_radial.txt` (CD28: los siete del anillo y lo del último paso; Repetir hace otra caja, Borrar
+  la saca); pasan las 39 de Diseño.
+
