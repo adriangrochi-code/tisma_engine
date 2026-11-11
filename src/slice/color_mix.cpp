@@ -442,7 +442,13 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
         layers.push_back({z, z + h});
         z += h;
     }
-    const std::vector<int> cycle = mix_layers(mix, layers, std::vector<char>(layers.size(), 1));
+    // The step (rule 9) as the slicing takes it on even layers: off at the
+    // layer height, and by layer when finer than every layer without sublayers.
+    double by_height = o.step > 0.0 && std::abs(o.step - o.layer_height) > 1e-9 ? o.step : 0.0;
+    if (by_height > 0.0 && !o.subdivide && !mix.gradient &&
+        by_height < std::min(o.first_layer_height, o.layer_height) - 1e-9)
+        by_height = 0.0;
+    const std::vector<int> cycle = mix_layers(mix, layers, std::vector<char>(layers.size(), 1), by_height);
     // The passes of a subdivided layer, as the slicing makes them.
     std::vector<std::pair<int, double>> parts;
     double total = 0.0;

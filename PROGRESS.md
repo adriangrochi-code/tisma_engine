@@ -12728,6 +12728,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
+- **Búsqueda profunda: el estimado de cambios ignoraba `mixing.step`** (2026-11-11, reglas 9 y 12). Con capas de
+  0,2 mm y paso 0,4 el estimado decía 49 cambios en un cubo de 10 mm y el laminado hace 24 (16 con paso 0,6).
+  `MixChangeOptions::step` y el estimado toma el paso como el laminado: apagado a la altura de capa, por capa si es más
+  fino que las capas sin subcapas. Prueba `[mixing]` con pasos 0,4, 0,6 y 0,1 contra el G-code. Falta: el paso con
+  `subdivide` (pasadas por paso) en el estimado; la interfaz tiene que llenar `step`.
 - **Full Spectrum, reglas 22 y 24: nombres de colores y paleta rápida** (2026-11-11, bloque nocturno; MX18).
   `color_name(hex)` en `src/slice/color_mix.*`: lista propia en inglés y español sobre CIELAB (croma < 10: blanco,
   gris claro, gris, gris oscuro, negro por L*; si no, una banda del tono h_ab: rojo, naranja, amarillo, verde, cian,

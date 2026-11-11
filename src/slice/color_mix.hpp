@@ -126,6 +126,10 @@ struct MixChangeOptions {
     // as the slicing lays them, when nothing else on the plate stops it.
     bool cadence_heights = false;
     double height_a = 0.0, height_b = 0.0;
+    // The height the cycle is counted in (`mixing.step`, rule 9), on even
+    // layers: 0, or the layer height, by layer; finer than the layers
+    // without `subdivide`, by layer too, as the slicing does.
+    double step = 0.0;
 };
 int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOptions& options);
 

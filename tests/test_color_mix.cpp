@@ -1160,3 +1160,18 @@ TEST_CASE("color mixing plus: the estimate before slicing with each filament's o
     o.height_b = s.mix_height_b;
     CHECK(mix_changes_estimate(half, 10.0, o) == counted);
 }
+
+TEST_CASE("color mixing plus: the estimate before slicing follows mixing.step (rules 9 and 12)", "[mixing]") {
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    for (const double step : {0.4, 0.6, 0.1}) { // coarser, coarser, and finer than the layers (by layer)
+        Settings s = base();
+        s.mix_step = step;
+        const int counted = changes(gcode_of(sliced(box(3), s, {half}), s));
+        MixChangeOptions o;
+        o.first_layer_height = s.first_layer_height;
+        o.layer_height = s.layer_height;
+        o.step = s.mix_step;
+        INFO("step " << step);
+        CHECK(mix_changes_estimate(half, 10.0, o) == counted);
+    }
+}
