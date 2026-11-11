@@ -253,6 +253,7 @@
     <string name="err_incomplete">%1$s arrived incomplete: try again.</string>
     <string name="manage_plan_web">Pay on the web instead</string>
     <string name="plan_buy">Subscribe</string>
+    <string name="cal_range_bad">Fill in the start, the end and a step above 0 (start and end different), or leave all three empty for the usual range.</string>
     <string name="plate_share">Share the G-code</string>
     <string name="plate_send_to">Send to</string>
     <string name="plate_print">Print</string>

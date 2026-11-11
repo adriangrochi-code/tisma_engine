@@ -186,9 +186,12 @@ fun CalibrateScreen(slice: SliceViewModel, nav: Navigator) {
             }
         }
         error?.let { Text(ctx().appMessage(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cal_error")) }
+        val rangeBad = stringResource(R.string.cal_range_bad)
         Button(onClick = {
-            val r = listOf(start, end, step).map { it.replace(',', '.').toDoubleOrNull() }
-            val range = if (r.all { it != null } && kind !in CALIBRATIONS_WITHOUT_VALUE) r.map { it!! }.toDoubleArray() else null
+            val typed = listOf(start, end, step)
+            val range = if (kind in CALIBRATIONS_WITHOUT_VALUE) null else calibrationRange(typed)
+            // A range typed in part, or one that cannot run, is said: never the default range in silence.
+            if (kind !in CALIBRATIONS_WITHOUT_VALUE && range == null && typed.any { it.isNotBlank() }) { error = rangeBad; return@Button }
             busy = true; error = null
             slice.calibrate(kind, range) { e -> busy = false; error = e; if (e == null) nav.select(Section.PLATE) }
         }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("cal_make")) {
@@ -205,14 +208,14 @@ fun CalibrationCard(c: net.tisma.app.engine.Calibrating, slice: SliceViewModel) 
     TismaCard(Modifier.testTag("calibration")) {
         Text(context.calibrationName(c.kind), style = MaterialTheme.typography.titleMedium)
         c.segments.forEach { (z0, z1, v) ->
-            Text(stringResource(R.string.cal_segment, fmt(z0), fmt(z1), fmt(v), c.unit), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.cal_segment, shown(z0), shown(z1), shown(v), c.unit), style = MaterialTheme.typography.bodySmall)
         }
         if (c.kind !in CALIBRATIONS_WITHOUT_VALUE && c.segments.isNotEmpty()) {
             Text(stringResource(R.string.cal_best), style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 c.segments.map { it.third }.distinct().forEach { v ->
                     androidx.compose.material3.OutlinedButton(onClick = { slice.applyCalibration(v) },
-                        modifier = Modifier.testTag("cal_value_${fmt(v)}")) { Text("${fmt(v)} ${c.unit}") }
+                        modifier = Modifier.testTag("cal_value_${fmt(v)}")) { Text("${shown(v)} ${c.unit}") }
                 }
             }
         } else Text(stringResource(R.string.cal_by_eye), style = MaterialTheme.typography.bodySmall)
@@ -221,3 +224,19 @@ fun CalibrationCard(c: net.tisma.app.engine.Calibrating, slice: SliceViewModel) 
 }
 
 private fun fmt(v: Double) = if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.ROOT, "%.3f", v).trimEnd('0').trimEnd('.')
+
+/** A number as the person reads it: a decimal comma in Spanish («0,95»). */
+internal fun shown(v: Double): String {
+    val sep = java.text.DecimalFormatSymbols.getInstance(java.util.Locale.getDefault()).decimalSeparator
+    return fmt(v).replace('.', sep)
+}
+
+/**
+ * The typed range of a calibration (start, end, step, with a comma or a point), or null when it is not all there or
+ * cannot run: a step of 0 or less, or a start equal to the end.
+ */
+internal fun calibrationRange(typed: List<String>): DoubleArray? {
+    val r = typed.map { it.trim().replace(',', '.').toDoubleOrNull() ?: return null }
+    if (r.size != 3 || r[2] <= 0.0 || r[0] == r[1]) return null
+    return r.toDoubleArray()
+}

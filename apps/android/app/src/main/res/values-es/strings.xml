@@ -238,6 +238,7 @@
     <string name="err_incomplete">%1$s llegó incompleto: probá de nuevo.</string>
     <string name="manage_plan_web">Pagar por la web</string>
     <string name="plan_buy">Suscribirme</string>
+    <string name="cal_range_bad">Completá inicio, fin y un paso mayor que 0 (inicio y fin distintos), o dejá los tres vacíos para el rango de siempre.</string>
     <string name="plate_share">Compartir el G-code</string>
     <string name="plate_send_to">Mandar a</string>
     <string name="plate_print">Imprimir</string>
