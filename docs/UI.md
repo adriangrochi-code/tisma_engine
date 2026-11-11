@@ -233,7 +233,10 @@ boceto (`L`, `C`, `REC`…) contestan «Próximamente» hasta la etapa D2.
 
 Las piezas las construye el componente de diseño, `solidcraft-cli` (SolidCraft 0.30.0), que el paquete lleva en la
 carpeta `solidcraft/` junto al programa (`--solidcraft <ruta>` usa otro; las pruebas usan un sustituto). Si falta o
-no responde, la pestaña dice «Falta el componente de diseño» y el resto del programa sigue igual. Un objeto que
+no responde, la pestaña dice «Falta el componente de diseño», con su versión y la carpeta donde lo buscó, y el resto
+del programa sigue igual. Una compilación propia no lo trae: `-DTISMA_SOLIDCRAFT=ON` lo baja (la versión fija, con su
+SHA-256 de `THIRD_PARTY.md`) y lo pone en `solidcraft/` junto a `tisma`, con sus licencias; está apagado por defecto
+porque las pruebas usan su sustituto. Un objeto que
 salió de Diseño tiene «Editar en Diseño» en su menú: al mandarlo de nuevo reemplaza su malla y conserva el lugar, los
 ajustes, los modificadores y lo pintado. En Preparar, Boceto y Primitiva (tira de herramientas y menú de la placa)
 abren Diseño. La preferencia «Pestaña Diseño» (`ui.cad_design`) la oculta.

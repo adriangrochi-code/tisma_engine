@@ -871,6 +871,7 @@ private:
     void add_model(const std::filesystem::path& path);
     void add_mesh(TriangleMesh mesh, const std::filesystem::path& name);
     void split_into_parts();
+    std::string design_missing_text() const;
     // A gradient between two points (color_mixing_plus.md, rule 3: MX31):
     // which one the next click on a part places (1 start, 2 end, 0 none),
     // the place of a click in the part's own measures, and the spheres and
@@ -14808,6 +14809,14 @@ std::string lower_ascii(std::string s) {
 
 } // namespace
 
+// What is missing and where it was looked for (the owner's request,
+// 2026-11-11: say what is missing when the build does not bring it).
+std::string App::design_missing_text() const {
+    const std::filesystem::path where = !options_.solidcraft.empty() ? std::filesystem::path(from_utf8(options_.solidcraft)).parent_path()
+                                                                     : cad::executable_dir() / "solidcraft";
+    return format(tr(T::DesignMissing), cad::kSolidCraftVersion, utf8(where).c_str());
+}
+
 void App::start_solidcraft_probe() {
     const std::filesystem::path exe = !options_.solidcraft.empty()
                                           ? std::filesystem::path(from_utf8(options_.solidcraft))
@@ -15065,7 +15074,7 @@ void App::rebuild_design() {
         return;
     design_dirty_ = false;
     if (!solidcraft_.available) {
-        design_error_ = tr(T::DesignMissing);
+        design_error_ = design_missing_text();
         return;
     }
     const cad::Design copy = design_;
@@ -15207,7 +15216,7 @@ void App::design_panel() {
     if (!solidcraft_probed_) {
         loc::TextDisabled("%s", tr(T::DesignChecking));
     } else if (!solidcraft_.available) { // rule 22 bis
-        loc::TextColored(rgb(0xE5484D), "%s", tr(T::DesignMissing));
+        loc::TextColored(rgb(0xE5484D), "%s", design_missing_text().c_str());
         rect_of("design_missing");
         // The component's own words (in English, for a problem report) only
         // on the line's tooltip: one line in the chosen language (TR22).

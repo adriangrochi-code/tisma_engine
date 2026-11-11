@@ -1484,7 +1484,7 @@
       "Ctrl+Shift+P: the part goes to Prepare as an object; if it came from there, it replaces it and keeps its place, settings and painting") \
     X(DesignNeedsSolid, "Hacé un sólido primero.", "Make a solid first.") \
     X(DesignRestarted, "El componente de diseño se cerró y se abrió de nuevo.", "The design component closed and was opened again.") \
-    X(DesignMissing, "Falta el componente de diseño: reinstalá Tisma para usar Diseño.", "The design component is missing: reinstall Tisma to use Design.") \
+    X(DesignMissing, "Falta el componente de diseño (solidcraft-cli %s) en %s. Los paquetes de Tisma lo traen; una compilación propia lo baja con -DTISMA_SOLIDCRAFT=ON.", "The design component (solidcraft-cli %s) is missing from %s. Tisma's packages carry it; a build of your own downloads it with -DTISMA_SOLIDCRAFT=ON.") \
     X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
     X(DesignBuilding, "Construyendo…", "Building…") \
     X(DesignVolume, "Volumen", "Volume") \

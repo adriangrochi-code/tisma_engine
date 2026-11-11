@@ -13284,3 +13284,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   las comparaciones de OpenGL con Vulkan. Captura con un modelo elegido revisada.
 - **Decisión:** esto cambia lo de la ficha en `spec/next` («el color de la pieza no cambia»): lo pidió el dueño.
 
+## 2026-11-11 — interfaz: el componente de diseño en una compilación propia (pedido del dueño)
+
+- **Hecho:** «Falta el componente de diseño» salía en toda compilación propia: solo los paquetes (release y nightly)
+  traen `solidcraft-cli`. Ahora el aviso dice qué falta y dónde lo buscó («solidcraft-cli 0.30.0 en
+  <carpeta>/solidcraft») y cómo tenerlo; y la opción de CMake `TISMA_SOLIDCRAFT=ON` baja la versión fija, comprueba su
+  SHA-256 (los de `THIRD_PARTY.md`) y la copia con sus licencias junto a `tisma`. Queda apagada por defecto: las
+  pruebas usan su sustituto y no conviene bajar 43 a 96 MB en cada CI.
+- **Probado:** en Linux, configurar con la opción baja y copia `solidcraft-cli` y sus cuatro archivos de licencia; la
+  pestaña Diseño ya no muestra el aviso. En Windows no se probó (el mismo zip que usa el paquete).
+
