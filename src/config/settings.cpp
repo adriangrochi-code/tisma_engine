@@ -1481,7 +1481,7 @@ Settings parse_checked(std::string_view text) {
     // Sublayers in the blends' zones (color_mixing_plus.md, rules 10 and 11).
     read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill", "cadence_heights", "height_a",
                                 "height_b", "step", "surface_only", "surface_depth",
-                                "extra_walls", "purge_into_infill"},
+                                "extra_walls", "purge_into_infill", "purge_infill_max"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
         if (n == "extra_walls") { // rule 14
@@ -1518,6 +1518,12 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_boolean())
                 fail(k, "must be true or false");
             s.mix_cadence_heights = v.get<bool>();
+            return;
+        }
+        if (n == "purge_infill_max") { // rule 35
+            if (!v.is_number() || !(v.get<double>() >= 0.0 && v.get<double>() <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.mix_purge_infill_max = v.get<double>();
             return;
         }
         if (n == "purge_into_infill") { // rule 33
@@ -3538,6 +3544,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"mixing.surface_depth", num(s.mix_surface_depth)},
         {"mixing.extra_walls", std::to_string(s.mix_extra_walls)},
         {"mixing.purge_into_infill", flag(s.mix_purge_into_infill)},
+        {"mixing.purge_infill_max", num(s.mix_purge_infill_max)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -4106,7 +4113,8 @@ std::string settings_json(const Settings& s) {
           {"surface_only", s.mix_surface_only},
           {"surface_depth", s.mix_surface_depth},
           {"extra_walls", s.mix_extra_walls},
-          {"purge_into_infill", s.mix_purge_into_infill}}},
+          {"purge_into_infill", s.mix_purge_into_infill},
+          {"purge_infill_max", s.mix_purge_infill_max}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},

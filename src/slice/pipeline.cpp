@@ -16,6 +16,8 @@
 #include "slice/belt.hpp"
 #include "slice/painted.hpp"
 #include "slice/variable_layers.hpp"
+#include "slice/wipe_tower.hpp"
+#include "infill/rectilinear.hpp"
 #include "support/support.hpp"
 #include "geom/distance.hpp"
 #include "geom/polyholes.hpp"
@@ -814,6 +816,55 @@ void bias_walls(SlicedModel& model, const ColorMix& mix, const std::vector<int>&
     }
 }
 
+// Infill that absorbs more (color_mixing_plus.md, rule 35): on one nozzle,
+// a layer whose change purges more than its sparse infill holds gets that
+// infill denser, up to mixing.purge_infill_max, so the purge fits in it.
+// Only where the blend's part holds all the layer's sparse infill. Own design
+// (PROVENANCE.md): the density in proportion to the purge, the layer's
+// sparse region filled again with fill_layer.
+void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector<int>& filament, const Settings& s) {
+    if (!s.single_extruder_mmu || !s.mix_purge_into_infill || !(s.mix_purge_infill_max > s.infill_density) ||
+        !(s.infill_density > 0.0))
+        return;
+    const auto volume = [](const std::vector<Toolpath>& paths, double h) {
+        double v = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t k = 1; k < t.points.size(); ++k)
+                v += 0.5 * (t.points[k - 1].width + t.points[k].width) * h *
+                     std::hypot(t.points[k].p.x - t.points[k - 1].p.x, t.points[k].p.y - t.points[k - 1].p.y);
+        return v;
+    };
+    int previous = 0;
+    for (std::size_t l = 0; l < model.layers.size() && l < filament.size(); ++l) {
+        const int now = filament[l];
+        if (now <= 0)
+            continue;
+        const int from = previous;
+        previous = now;
+        if (from <= 0 || from == now || l >= model.fills.size() || l >= model.surfaces.size())
+            continue;
+        std::vector<Toolpath>& sparse = model.fills[l].sparse;
+        if (sparse.empty() || std::any_of(sparse.begin(), sparse.end(), [&](const Toolpath& t) { return t.tool != mix.id; }))
+            continue;
+        const double h = model.layers[l].top - model.layers[l].bottom;
+        const double need = purge_volume(s, from, now) - per_extruder(s.min_purge_on_tower, std::size_t(now - 1));
+        const double have = volume(sparse, h);
+        if (!(have > 0.0) || need <= have)
+            continue;
+        FillParams params{s.wall_width, std::min(s.mix_purge_infill_max, s.infill_density * need / have) / 100.0,
+                          s.infill_angle, s.infill_pattern, s.top_pattern};
+        params.sparse_width = sparse.front().points.empty() ? 0.0 : sparse.front().points.front().width;
+        LayerSurfaces only;
+        only.sparse = model.surfaces[l].sparse;
+        LayerFill denser = fill_layer(only, l, params, model.layers[l].top);
+        if (denser.sparse.empty())
+            continue;
+        for (Toolpath& t : denser.sparse)
+            t.tool = std::uint8_t(mix.id);
+        sparse = std::move(denser.sparse);
+    }
+}
+
 void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
     for (const ColorMix& mix : mixes) {
         mix_shell(model, mix, settings);
@@ -857,6 +908,7 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
                     last = filament[l];
             }
         bias_walls(model, mix, filament);
+        denser_for_purge(model, mix, filament, settings);
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
             for (Toolpath& t : paths)
                 if (t.tool == mix.id && l < filament.size() && filament[l] > 0)

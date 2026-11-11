@@ -635,7 +635,7 @@ TEST_CASE("color mixing plus: the cycle counted in height (rule 9, MX28, MX29)",
 TEST_CASE("color mixing plus: the blend only in the shell (rule 13, MX11, MX12)", "[mixing]") {
     Settings s = base();
     s.wall_count = 3;
-    s.infill_density = 0.2;
+    s.infill_density = 20.0;
     s.mix_surface_only = true;
     s.mix_surface_depth = 0.8;
     const ColorMix most = blend(3, {{1, 0.25}, {2, 0.75}}); // 2 is the larger share
@@ -781,7 +781,7 @@ TEST_CASE("color mixing plus: blends on one nozzle purge into the infill by defa
     Settings s = base();
     s.single_extruder_mmu = true;
     s.wipe_tower = true;
-    s.infill_density = 0.2;
+    s.infill_density = 20.0;
     const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
     const auto tower = [](const SlicedModel& m, const Settings& t, std::size_t& sinks) {
         const ToolPlan plan = plan_tools(m, t);
@@ -818,7 +818,7 @@ TEST_CASE("color mixing plus: no purge into a see-through filament's part (rule 
     Settings s = base();
     s.single_extruder_mmu = true;
     s.wipe_tower = true;
-    s.infill_density = 0.2;
+    s.infill_density = 20.0;
     s.transmission_distance = {2.0, 15.0}; // filament 2 lets the light through 15 mm
     Plate p;
     add_box(p.mesh, 90, 90, 0, 110, 110, 10);
@@ -843,7 +843,7 @@ TEST_CASE("color mixing plus: after a change on one nozzle the part starts with 
     Settings s = base();
     s.single_extruder_mmu = true;
     s.wipe_tower = true;
-    s.infill_density = 0.2;
+    s.infill_density = 20.0;
     s.mix_purge_into_infill = false; // the order alone, not the purge's own infill
     // For each layer with a change: its first kind in the part, and whether it has sparse infill.
     struct Changed {
@@ -886,4 +886,45 @@ TEST_CASE("color mixing plus: after a change on one nozzle the part starts with 
     const std::vector<Changed> plain = changed_layers(gcode_of(sliced(p, s, {}), s));
     REQUIRE_FALSE(plain.empty());
     CHECK(std::none_of(plain.begin(), plain.end(), [](const Changed& c) { return c.first == "Internal infill"; }));
+}
+
+TEST_CASE("color mixing plus: the infill grows denser to take the purge (rule 35, MX23)", "[mixing]") {
+    Settings s = base();
+    s.single_extruder_mmu = true;
+    s.wipe_tower = true;
+    s.infill_density = 20.0;
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    const auto sparse = [](const SlicedModel& m, std::size_t l) {
+        double v = 0.0;
+        const double h = m.layers[l].top - m.layers[l].bottom;
+        for (const Toolpath& t : m.fills[l].sparse)
+            for (std::size_t k = 1; k < t.points.size(); ++k)
+                v += t.points[k].width * h * std::hypot(t.points[k].p.x - t.points[k - 1].p.x, t.points[k].p.y - t.points[k - 1].p.y);
+        return v;
+    };
+    const auto tower = [](const SlicedModel& m, const Settings& t) {
+        const ToolPlan plan = plan_tools(m, t);
+        double v = 0.0;
+        for (const auto& layer : plan.tower_purge)
+            for (const double p : layer)
+                v += p;
+        return v;
+    };
+    const SlicedModel plain = sliced(box(3), s, {half});
+    Settings more = s;
+    more.mix_purge_infill_max = 60.0;
+    const SlicedModel dense = sliced(box(3), more, {half});
+    // A layer with a change in the middle: its sparse infill about 3 times
+    // as much (20 % to 60 %: 140 mm3 of purge does not fit in either).
+    const double before = sparse(plain, 20), after = sparse(dense, 20);
+    INFO(before << " mm3 to " << after << " mm3");
+    REQUIRE(before > 0.0);
+    CHECK(after > 2.0 * before); // whole lines in a bounded region: not exactly 3
+    CHECK(after < 3.5 * before);
+    CHECK(tower(dense, more) < tower(plain, s));
+    gcode_of(dense, more);
+    // Off (0) or on several nozzles: as before.
+    Settings tools = more;
+    tools.single_extruder_mmu = false;
+    CHECK_THAT(sparse(sliced(box(3), tools, {half}), 20), WithinRel(before, 1e-9));
 }

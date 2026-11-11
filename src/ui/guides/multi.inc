@@ -207,6 +207,13 @@
      "With mixes on a single-nozzle printer, after each filament change the purge prints as the parts' inside "
      "infill, with the new filament. The infill stays hidden, so it does not show, and less filament goes to the "
      "tower.\n\nExample: on."},
+    {"mixing.purge_infill_max",
+     "Si la purga de un cambio no entra en el relleno de su capa, el relleno de esa capa se hace más denso, hasta este "
+     "porcentaje, para que entre y no se tire. La pieza pesa más, pero se gasta menos en la torre. 0 lo apaga.\n\n"
+     "Ejemplo: 60 %.",
+     "If a change's purge does not fit in its layer's infill, that layer's infill gets denser, up to this percentage, "
+     "so that it fits and is not thrown away. The part weighs more, but less goes to the tower. 0 turns it off."
+     "\n\nExample: 60 %."},
     {"mixing.height_b",
      "El alto de las capas del segundo filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
      "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,15 mm.",

@@ -12723,6 +12723,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 35: relleno que absorbe más** (2026-11-11, bloque nocturno; MX23). `mixing.purge_infill_max`
+  (%, 0 apagado). `denser_for_purge` en `apply_mixes`: en una boquilla, una capa con cambio cuyo relleno disperso
+  tiene menos volumen que la purga (el par menos `min_purge_on_tower`) se vuelve a llenar con `fill_layer` a la
+  densidad × purga / volumen, hasta el máximo. Solo donde todo el relleno disperso de la capa es de la mezcla
+  (decisión propia). Prueba `[mixing]` MX23: 20 % a 60 % da ×2,4 de volumen (líneas enteras en una región acotada)
+  y menos purga a la torre; con varias boquillas no cambia. Error propio corregido: en MX11, MX22 y la prueba de la
+  regla 34 había puesto `infill_density = 0.2` (es %, o sea 0,2 %). Ahora es 20 y las pruebas pasan igual.
+  Siguiente: reglas 36 (lo que no entra va al descarte), 38 (sugerencias del aviso), 39 (ciclos alineados), 40
+  (informe).
 - **Full Spectrum, regla 33: purgar en el relleno por defecto** (2026-11-11, bloque nocturno; MX22). Con mezclas en
   una boquilla (`multi.single_extruder_mmu`), todas las piezas de la placa dejan purgar en su relleno disperso
   (`wipe_into_infill`, multi_extruder.md regla 13). Las purgas se imprimen justo después del cambio con el filamento
