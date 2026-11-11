@@ -63,6 +63,9 @@ struct TranslationRow {
     // there names `with_of`, the row it helps, and is not written by itself.
     std::vector<std::string> with;
     std::string with_of;
+    // The key's PrusaSlicer name ("prusaslicer"), which the named rules and
+    // "with" use; empty when it is the key itself.
+    std::string prusaslicer;
 };
 // The OrcaSlicer family's bed temperatures by plate (PF14): each plate's
 // pair of source keys (bed, first layer), the project keys that name the

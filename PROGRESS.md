@@ -13530,3 +13530,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `machine.flavor_choices` como «unknown setting» en las 617 corridas de impresoras de Cura). La lista de claves del
   paquete sale de `describe`, que no escribe la lista vacía; ahora la conoce. Prueba `[pack]` PF15.
 
+- **Beta, ítem 4: las reglas con nombre de la tabla de traducción** (2026-11-11; `profile_pack_format.md`, «Tabla de
+  traducción», con la nota de cada fila de las tablas publicadas en `pack-2026.11.11-e304f80`, leídas como datos).
+  Cada regla lee las claves del proyecto por su nombre de PrusaSlicer (campo `prusaslicer` de la fila, que ahora se
+  lee; así nombra `with` las claves que ayudan) y escribe una o más claves del motor, validadas con `parse_settings`.
+  Hechas: `acceleration` (extruyendo si no es 0; el viaje en 0 toma el de extruir), `junction_deviation` (solo con
+  marlin2), `fans` (enfriamiento apagado y ventilador no siempre prendido: 0 y 0), `gap_fill` (velocidad 0 o apagado:
+  sin relleno de huecos), `wall_width` (el primero dado; si no, 1,125 boquillas), `xy_gap` (mm, o «N%» que el motor ya
+  toma del ancho del perímetro externo), `extruders` (cantidad por las boquillas, la lista si difieren, los desfases si
+  alguno no es 0), `filament_overrides` («nil»: el de la impresora) y `thumbnails`. También `role_width` en
+  PrusaSlicer: «N%» del alto de capa. Quedan para después y siguen nombradas en `skipped`: `gcode_template` (pide
+  traducir las variables del G-code), `ramming`, `correction` y `resin_notes`. Prueba `[project_import]`: las nueve
+  reglas en filas como las de OrcaSlicer y PrusaSlicer.

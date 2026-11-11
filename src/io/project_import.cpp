@@ -10,7 +10,10 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
+#include <map>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -178,6 +181,8 @@ TranslationTable parse_translation(std::string_view text) {
             if (row.contains("prusaslicer_values") && row.at("prusaslicer_values").is_object())
                 for (const auto& [from, to] : row.at("prusaslicer_values").items())
                     r.renamed[from] = text(to);
+            if (row.contains("prusaslicer") && row.at("prusaslicer").is_string())
+                r.prusaslicer = row.at("prusaslicer").get<std::string>();
             if (row.contains("percent_of") && row.at("percent_of").is_string())
                 r.percent_of = row.at("percent_of").get<std::string>();
             if (row.contains("with") && row.at("with").is_array())
@@ -424,6 +429,18 @@ ProjectSettings translate_settings(const TranslationTable& table,
                 return std::nullopt;
             return *n / 100.0 * b->get<double>();
         };
+        // PrusaSlicer's widths: "N%" of the layer height, as the source computes them.
+        if (row.rule == "role_width" && row.percent_of.empty())
+            if (const auto n = percent("nozzle")) {
+                double h = base.layer_height;
+                for (const auto& [k, w] : settings)
+                    if (k == "layer_height")
+                        if (const auto d = number_of(w); d && *d > 0.0)
+                            h = *d;
+                std::ostringstream text;
+                text << *n / nozzle * h;
+                v = text.str();
+            }
         if (!row.percent_of.empty())
             if (const auto mm = percent(row.percent_of)) {
                 std::ostringstream text;
@@ -581,6 +598,276 @@ ProjectSettings translate_settings(const TranslationTable& table,
         (void)key;
         return true;
     };
+    // Named rules (profile_pack_format.md, «Tabla de traducción»): each one
+    // reads the project's keys by their PrusaSlicer name, the one its "with"
+    // gives, and writes one or more engine keys.
+    std::map<std::string, std::string> source; // PrusaSlicer name -> value
+    for (const auto& [key, value] : settings) {
+        const TranslationRow* row = row_of(table, key);
+        source[row && !row->prusaslicer.empty() ? row->prusaslicer : key] = value;
+    }
+    const auto raw = [&](const std::string& name) -> std::optional<std::string> {
+        const auto f = source.find(name);
+        if (f == source.end() || trimmed(f->second).empty())
+            return std::nullopt;
+        return trimmed(f->second);
+    };
+    // The first extruder's value ("nil": none).
+    const auto first = [&](const std::string& name) -> std::optional<std::string> {
+        const auto v = raw(name);
+        if (!v)
+            return std::nullopt;
+        std::string t = trimmed(std::string_view(*v).substr(0, v->find(',')));
+        if (t.empty() || t == "nil")
+            return std::nullopt;
+        return t;
+    };
+    const auto first_number = [&](const std::string& name) { return first(name) ? number_of(*first(name)) : std::nullopt; };
+    const auto flag = [&](const std::string& name) -> std::optional<bool> {
+        const auto v = first(name);
+        if (!v)
+            return std::nullopt;
+        const std::string t = lower(*v);
+        if (t == "1" || t == "true")
+            return true;
+        if (t == "0" || t == "false")
+            return false;
+        return std::nullopt;
+    };
+    // Writes one engine key; the engine checks it, and a value it refuses
+    // leaves the key as it was.
+    const auto assign = [&](const std::string& engine, nlohmann::json to) {
+        nlohmann::json* node = node_of(root, engine);
+        bool made = false;
+        if (!node)
+            if (const std::size_t dot = engine.rfind('.'); dot != std::string::npos)
+                if (nlohmann::json* group = node_of(root, engine.substr(0, dot)); group && group->is_object()) {
+                    node = &((*group)[engine.substr(dot + 1)] = nlohmann::json());
+                    made = true;
+                }
+        if (!node)
+            return false;
+        if (node->is_number_integer() && to.is_number())
+            to = static_cast<long long>(std::llround(to.get<double>()));
+        const nlohmann::json before = *node;
+        *node = std::move(to);
+        try {
+            out.settings = parse_settings(root.dump());
+        } catch (const std::exception&) {
+            if (made) {
+                const std::size_t dot = engine.rfind('.');
+                node_of(root, engine.substr(0, dot))->erase(engine.substr(dot + 1));
+            } else {
+                *node = before;
+            }
+            return false;
+        }
+        return true;
+    };
+    // A width as the source computes it: mm, or "N%" of the nozzle (when the
+    // row says so) or of the layer height; 0 or none: nullopt.
+    const auto width_of = [&](const std::string& name) -> std::optional<double> {
+        const auto v = first(name);
+        if (!v)
+            return std::nullopt;
+        std::optional<double> mm;
+        if (v->back() == '%') {
+            const auto n = number_of(std::string_view(*v).substr(0, v->size() - 1));
+            const TranslationRow* row = nullptr;
+            for (const auto& [key, value] : settings)
+                if (const TranslationRow* r = row_of(table, key); r && (r->prusaslicer == name || (r->prusaslicer.empty() && key == name)))
+                    row = r;
+            double of = row && row->percent_of == "nozzle" ? nozzle : 0.0;
+            if (of == 0.0) {
+                const auto h = first_number("layer_height");
+                of = h ? *h : base.layer_height;
+            }
+            if (n)
+                mm = *n / 100.0 * of;
+        } else {
+            mm = number_of(*v);
+        }
+        if (!mm || !(*mm > 0.0))
+            return std::nullopt;
+        return mm;
+    };
+    // Each rule: true when it wrote what it had to (or the project leaves it
+    // to the engine), false when the engine refused a value.
+    const auto rule = [&](const std::string& name) -> std::optional<bool> {
+        if (name == "acceleration") {
+            // Extruding only when not 0; travel falls back to extruding.
+            const auto e = first_number("machine_max_acceleration_extruding");
+            auto t = first_number("machine_max_acceleration_travel");
+            bool good = true;
+            if (e && *e > 0.0)
+                good = assign("machine.acceleration", *e) && good;
+            if ((!t || *t <= 0.0) && e && *e > 0.0)
+                t = e;
+            if (t && *t > 0.0)
+                good = assign("machine.travel_acceleration", *t) && good;
+            return good;
+        }
+        if (name == "junction_deviation") {
+            // Only with marlin2, the one flavor the source programs send it to.
+            const auto f = first("gcode_flavor");
+            const auto d = first_number("machine_max_junction_deviation");
+            if (!d || !f || lower(*f) != "marlin2")
+                return true;
+            return assign("machine.junction_deviation", *d);
+        }
+        if (name == "fans") {
+            const auto cooling = flag("cooling"), always = flag("fan_always_on");
+            if (cooling == false && always != true)
+                return assign("cooling.fan_min", 0.0) && assign("cooling.fan_max", 0.0);
+            bool good = true;
+            if (const auto lo = first_number("min_fan_speed"))
+                good = assign("cooling.fan_min", *lo) && good;
+            if (const auto hi = first_number("max_fan_speed"))
+                good = assign("cooling.fan_max", *hi) && good;
+            return good;
+        }
+        if (name == "gap_fill") {
+            const auto speed = first_number("gap_fill_speed");
+            const auto on = flag("gap_fill_enabled");
+            if (on == false || (speed && *speed == 0.0))
+                return assign("walls.gap_fill", false);
+            bool good = assign("walls.gap_fill", true);
+            if (speed)
+                good = assign("speed.gap_fill", *speed) && good;
+            return good;
+        }
+        if (name == "wall_width") {
+            auto w = width_of("perimeter_extrusion_width");
+            if (!w)
+                w = width_of("extrusion_width");
+            return assign("walls.width", w ? *w : 1.125 * nozzle);
+        }
+        if (name == "xy_gap") {
+            // In mm, or "N%" of the outer wall width, which walls.outer_width
+            // (role_width) already carries as the source computes it.
+            const auto v = first("support_material_xy_spacing");
+            if (!v)
+                return true;
+            if (v->back() == '%')
+                return number_of(std::string_view(*v).substr(0, v->size() - 1)) ? assign("support.xy_gap", *v) : false;
+            const auto d = number_of(*v);
+            return d && assign("support.xy_gap", *d);
+        }
+        if (name == "extruders") {
+            // As many extruders as nozzle_diameter has values; the nozzles as a
+            // list when they differ; the offsets when one is not 0.
+            const auto list = [](const std::string& v) {
+                std::vector<std::string> items;
+                std::size_t start = 0;
+                while (start <= v.size()) {
+                    const std::size_t comma = std::min(v.find(',', start), v.size());
+                    items.push_back(trimmed(std::string_view(v).substr(start, comma - start)));
+                    start = comma + 1;
+                }
+                return items;
+            };
+            const auto nozzles = raw("nozzle_diameter");
+            if (!nozzles)
+                return true;
+            std::vector<double> d;
+            for (const std::string& n : list(*nozzles))
+                if (const auto x = number_of(n); x && *x > 0.0)
+                    d.push_back(*x);
+                else
+                    return false;
+            bool good = assign("machine.extruders", double(d.size()));
+            if (std::adjacent_find(d.begin(), d.end(), std::not_equal_to<>()) != d.end())
+                good = assign("machine.nozzle_diameter", d) && good;
+            else
+                good = assign("machine.nozzle_diameter", d.front()) && good;
+            if (const auto offsets = raw("extruder_offset")) {
+                nlohmann::json xy = nlohmann::json::array();
+                bool any = false;
+                for (const std::string& p : list(*offsets)) {
+                    const std::size_t x = p.find('x');
+                    const auto a = x == std::string::npos ? std::nullopt : number_of(std::string_view(p).substr(0, x));
+                    const auto b = x == std::string::npos ? std::nullopt : number_of(std::string_view(p).substr(x + 1));
+                    if (!a || !b)
+                        return false;
+                    any = any || *a != 0.0 || *b != 0.0;
+                    xy.push_back({*a, *b});
+                }
+                if (any)
+                    good = assign("machine.extruder_offset", xy) && good;
+            }
+            return good;
+        }
+        if (name == "filament_overrides") {
+            // The filament's own retraction and travel values; "nil": the printer's.
+            static const std::pair<const char*, const char*> names[] = {
+                {"filament_retract_length", "retraction.length"},
+                {"filament_retract_speed", "retraction.speed"},
+                {"filament_deretract_speed", "retraction.unretract_speed"},
+                {"filament_retract_restart_extra", "retraction.restart_extra"},
+                {"filament_retract_lift", "retraction.lift"},
+                {"filament_retract_lift_above", "retraction.lift_above"},
+                {"filament_retract_lift_below", "retraction.lift_below"},
+                {"filament_retract_before_travel", "retraction.min_travel"},
+                {"filament_retract_layer_change", "retraction.on_layer_change"},
+                {"filament_wipe", "retraction.wipe"},
+                {"filament_retract_before_wipe", "retraction.before_wipe"},
+                {"filament_travel_ramping_lift", "travel.ramping_lift"},
+                {"filament_travel_slope", "travel.slope"},
+                {"filament_travel_max_lift", "travel.max_lift"}};
+            bool good = true;
+            for (const auto& [from, to] : names) {
+                auto v = first(from);
+                if (!v)
+                    continue;
+                if (v->back() == '%')
+                    v->pop_back();
+                const std::string field(to);
+                const bool is_flag = field == "retraction.on_layer_change" || field == "retraction.wipe" || field == "travel.ramping_lift";
+                nlohmann::json value;
+                if (is_flag) {
+                    const auto b = flag(from);
+                    if (!b) {
+                        good = false;
+                        continue;
+                    }
+                    value = *b;
+                } else if (const auto d = number_of(*v)) {
+                    value = *d;
+                } else {
+                    good = false;
+                    continue;
+                }
+                const std::size_t dot = field.find('.');
+                good = assign("extrusion." + field.substr(0, dot) + "." + field.substr(dot + 1), value) && good;
+            }
+            return good;
+        }
+        if (name == "thumbnails") {
+            // "WxH/FORMAT" list; a size without a format takes thumbnails_format.
+            const auto v = raw("thumbnails");
+            if (!v)
+                return true;
+            std::string format = first("thumbnails_format").value_or("");
+            for (char& c : format)
+                c = char(std::toupper(static_cast<unsigned char>(c)));
+            std::string text;
+            std::size_t start = 0;
+            while (start <= v->size()) {
+                const std::size_t comma = std::min(v->find(',', start), v->size());
+                std::string item = trimmed(std::string_view(*v).substr(start, comma - start));
+                start = comma + 1;
+                if (item.empty())
+                    continue;
+                if (item.find('/') == std::string::npos && !format.empty())
+                    item += "/" + format;
+                text += (text.empty() ? "" : ",") + item;
+            }
+            return assign("gcode.thumbnails", text);
+        }
+        return std::nullopt; // not done yet
+    };
+    std::set<std::string> ruled;
+    std::map<std::string, std::optional<bool>> rule_result;
     // The rows that take an "N%" of another setting last, so they see the
     // project's value of it.
     for (const int pass : {0, 1})
@@ -593,8 +880,14 @@ ProjectSettings translate_settings(const TranslationTable& table,
             if (!row->with_of.empty())
                 continue; // read by its row's rule
             if (row->how == "rule" && row->rule != "plate_temperature" && row->rule != "role_width") {
-                if (pass == 0)
-                    out.skipped.push_back(key + " = " + value); // a named rule not done yet
+                if (pass == 0) {
+                    const bool first_time = ruled.insert(row->rule).second;
+                    if (first_time)
+                        rule_result[row->rule] = rule(row->rule);
+                    const std::optional<bool>& r = rule_result[row->rule];
+                    if (!r || !*r)
+                        out.skipped.push_back(key + " = " + value); // not done yet, or refused
+                }
                 continue;
             }
             const bool late = row->how == "percent_of" || (!row->percent_of.empty() && row->percent_of != "nozzle");

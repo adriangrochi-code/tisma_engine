@@ -6,6 +6,7 @@
 #include "io/zip.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <nlohmann/json.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <filesystem>
@@ -423,4 +424,124 @@ TEST_CASE("project import: the pack's own rows (profiles/next, PF12 to PF14)", "
     CHECK(bed({{"curr_bed_type", "Textured PEI Plate"}}).find("\"65\"") != std::string::npos);
     CHECK(bed({{"curr_bed_type", "0"}, {"default_bed_type", "Textured PEI Plate"}}).find("\"55\"") != std::string::npos);
     CHECK(bed({}).find("\"55\"") != std::string::npos);
+}
+
+TEST_CASE("project import: the named rules of the translation table (profile_pack_format.md)", "[project_import]") {
+    // OrcaSlicer rows that name a rule; "with" and the rules use the keys'
+    // PrusaSlicer names.
+    const TranslationTable orca = parse_translation(R"({"format": "tisma-pack-translation", "version": 1,
+      "dialect": "orcaslicer", "kinds": {"print": {
+       "gap_infill_speed": {"engine": "speed.gap_fill, walls.gap_fill", "group": "translated", "prusaslicer": "gap_fill_speed",
+                            "conversion": {"how": "rule", "rule": "gap_fill"}, "with": ["gap_fill_enabled"]},
+       "inner_wall_line_width": {"engine": "walls.width", "group": "similar", "prusaslicer": "perimeter_extrusion_width",
+                                 "percent_of": "nozzle", "conversion": {"how": "rule", "rule": "wall_width"}, "with": ["extrusion_width"]},
+       "line_width": {"engine": "walls.width", "group": "similar", "prusaslicer": "extrusion_width",
+                      "percent_of": "nozzle", "conversion": {"how": "rule", "rule": "wall_width"}, "with": ["perimeter_extrusion_width"]},
+       "support_object_xy_distance": {"engine": "support.xy_gap", "group": "translated", "prusaslicer": "support_material_xy_spacing",
+                                      "conversion": {"how": "rule", "rule": "xy_gap"}}},
+      "filament": {
+       "fan_min_speed": {"engine": "cooling.fan_min, cooling.fan_max", "group": "translated", "prusaslicer": "min_fan_speed",
+                         "conversion": {"how": "rule", "rule": "fans"}, "with": ["cooling", "fan_always_on", "max_fan_speed"]},
+       "fan_max_speed": {"engine": "cooling.fan_min, cooling.fan_max", "group": "translated", "prusaslicer": "max_fan_speed",
+                         "conversion": {"how": "rule", "rule": "fans"}, "with": ["cooling", "fan_always_on", "min_fan_speed"]},
+       "filament_retraction_length": {"engine": "extrusion.retraction, extrusion.travel", "group": "translated",
+                                      "prusaslicer": "filament_retract_length", "conversion": {"how": "rule", "rule": "filament_overrides"}},
+       "filament_z_hop": {"engine": "extrusion.retraction, extrusion.travel", "group": "translated",
+                          "prusaslicer": "filament_retract_lift", "conversion": {"how": "rule", "rule": "filament_overrides"}}},
+      "printer": {
+       "machine_max_acceleration_extruding": {"engine": "machine.acceleration, machine.travel_acceleration", "group": "translated",
+                                              "conversion": {"how": "rule", "rule": "acceleration"}, "with": ["machine_max_acceleration_travel"]},
+       "machine_max_junction_deviation": {"engine": "machine.junction_deviation", "group": "translated",
+                                          "conversion": {"how": "rule", "rule": "junction_deviation"}, "with": ["gcode_flavor"]},
+       "extruder_offset": {"engine": "machine.extruders, machine.nozzle_diameter, machine.extruder_offset", "group": "translated",
+                           "conversion": {"how": "rule", "rule": "extruders"}},
+       "machine_start_gcode": {"engine": "machine.start_gcode, machine.end_gcode", "group": "translated", "prusaslicer": "start_gcode",
+                               "conversion": {"how": "rule", "rule": "gcode_template"}}}}})");
+    Settings base;
+    base.nozzle_diameter = 0.4;
+    const auto json_of = [](const ProjectSettings& p) { return nlohmann::json::parse(settings_json(p.settings)); };
+    const ProjectSettings p = translate_settings(orca,
+                                                 {{"nozzle_diameter", "0.4,0.6"},
+                                                  {"extruder_offset", "0x0,25x0"},
+                                                  {"gap_infill_speed", "40"},
+                                                  {"inner_wall_line_width", "110%"},
+                                                  {"line_width", "0.42"},
+                                                  {"support_object_xy_distance", "0.35"},
+                                                  {"fan_min_speed", "20,20"},
+                                                  {"fan_max_speed", "80,80"},
+                                                  {"filament_retraction_length", "1.2"},
+                                                  {"filament_z_hop", "nil"},
+                                                  {"machine_max_acceleration_extruding", "4000,1000"},
+                                                  {"machine_max_acceleration_travel", "0,0"},
+                                                  {"machine_max_junction_deviation", "0.02,0.01"},
+                                                  {"gcode_flavor", "marlin2"},
+                                                  {"machine_start_gcode", "G28 ; {if x}"}},
+                                                 base);
+    const nlohmann::json j = json_of(p);
+    CHECK(j["machine"]["extruders"] == 2);
+    CHECK(j["machine"]["nozzle_diameter"] == nlohmann::json::array({0.4, 0.6})); // they differ: a list
+    CHECK(j["machine"]["extruder_offset"] == nlohmann::json::array({{0.0, 0.0}, {25.0, 0.0}}));
+    CHECK(j["walls"]["gap_fill"] == true);
+    CHECK(j["speed"]["gap_fill"] == 40.0);
+    CHECK_THAT(j["walls"]["width"].get<double>(), Catch::Matchers::WithinAbs(0.44, 1e-9)); // 110 % of the first nozzle
+    CHECK(j["support"]["xy_gap"] == 0.35);
+    CHECK(j["cooling"]["fan_min"] == 20.0);
+    CHECK(j["cooling"]["fan_max"] == 80.0);
+    CHECK(j["extrusion"]["retraction"] == nlohmann::json{{"length", 1.2}}); // "nil": the printer's lift
+    CHECK(j["machine"]["acceleration"] == 4000.0);
+    CHECK(j["machine"]["travel_acceleration"] == 4000.0); // travel 0 falls back to extruding
+    CHECK(j["machine"]["junction_deviation"] == 0.02);
+    // gcode_template is not done yet: named, once per key.
+    CHECK(p.skipped == std::vector<std::string>{"machine_start_gcode = G28 ; {if x}"});
+
+    // Cooling off and fan not always on: both 0; no gap fill; no wall width
+    // given: 1.125 nozzles; the deviation only with marlin2.
+    const TranslationTable prusa = parse_translation(R"({"format": "tisma-pack-translation", "version": 1,
+      "dialect": "prusaslicer", "kinds": {"print": {
+       "gap_fill_enabled": {"engine": "speed.gap_fill, walls.gap_fill", "group": "translated",
+                            "conversion": {"how": "rule", "rule": "gap_fill"}, "with": ["gap_fill_speed"]},
+       "perimeter_extrusion_width": {"engine": "walls.width", "group": "similar",
+                                     "conversion": {"how": "rule", "rule": "wall_width"}, "with": ["extrusion_width"]},
+       "support_material_xy_spacing": {"engine": "support.xy_gap", "group": "translated", "conversion": {"how": "rule", "rule": "xy_gap"}}},
+      "filament": {
+       "cooling": {"engine": "cooling.fan_min, cooling.fan_max", "group": "translated", "conversion": {"how": "rule", "rule": "fans"},
+                   "with": ["fan_always_on", "min_fan_speed", "max_fan_speed"]}},
+      "printer": {
+       "machine_max_junction_deviation": {"engine": "machine.junction_deviation", "group": "translated",
+                                          "conversion": {"how": "rule", "rule": "junction_deviation"}, "with": ["gcode_flavor"]},
+       "thumbnails": {"engine": "gcode.thumbnails", "group": "translated", "conversion": {"how": "rule", "rule": "thumbnails"},
+                      "with": ["thumbnails_format"]}}}})");
+    const ProjectSettings q = translate_settings(prusa,
+                                                 {{"gap_fill_enabled", "0"},
+                                                  {"perimeter_extrusion_width", "0"},
+                                                  {"extrusion_width", "150%"},
+                                                  {"layer_height", "0.2"},
+                                                  {"support_material_xy_spacing", "60%"},
+                                                  {"cooling", "0"},
+                                                  {"fan_always_on", "0"},
+                                                  {"min_fan_speed", "35"},
+                                                  {"machine_max_junction_deviation", "0.02"},
+                                                  {"gcode_flavor", "klipper"},
+                                                  {"thumbnails", "16x16/QOI, 220x124"},
+                                                  {"thumbnails_format", "png"}},
+                                                 base);
+    const nlohmann::json k = json_of(q);
+    CHECK(k["walls"]["gap_fill"] == false);
+    CHECK_THAT(k["walls"]["width"].get<double>(), Catch::Matchers::WithinAbs(0.3, 1e-9)); // 150 % of the layer height
+    CHECK(k["support"]["xy_gap"] == "60.0%"); // the engine writes its own way
+    CHECK(k["cooling"]["fan_min"] == 0.0);
+    CHECK(k["cooling"]["fan_max"] == 0.0);
+    CHECK(k["machine"]["junction_deviation"] == 0.0); // klipper: not sent
+    CHECK(k["gcode"]["thumbnails"] == "16x16/QOI,220x124/PNG");
+    CHECK(q.skipped.empty());
+    // role_width in PrusaSlicer: "N%" of the layer height.
+    const TranslationTable outer = parse_translation(R"({"format": "tisma-pack-translation", "version": 1,
+      "dialect": "prusaslicer", "kinds": {"print": {
+       "external_perimeter_extrusion_width": {"engine": "walls.outer_width", "group": "translated",
+                                              "conversion": {"how": "rule", "rule": "role_width"}, "with": ["extrusion_width"]}}}})");
+    const ProjectSettings o = translate_settings(outer, {{"external_perimeter_extrusion_width", "200%"}, {"layer_height", "0.2"}}, base);
+    CHECK_THAT(o.settings.outer_wall_width, Catch::Matchers::WithinAbs(0.4, 1e-9));
+    CHECK(o.skipped.empty());
+    const ProjectSettings none = translate_settings(prusa, {{"perimeter_extrusion_width", "0"}}, base);
+    CHECK_THAT(json_of(none)["walls"]["width"].get<double>(), Catch::Matchers::WithinAbs(0.45, 1e-9));
 }
