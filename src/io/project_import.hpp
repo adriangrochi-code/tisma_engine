@@ -4,6 +4,8 @@
 // Own design from the public 3MF specification and black-box samples; see
 // PROVENANCE.md.
 
+#include "config/settings.hpp"
+
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -41,6 +43,16 @@ enum class SettingGroup { Translated, Similar, None };
 struct TranslationRow {
     std::string engine; // "" when the row has none
     SettingGroup group = SettingGroup::None;
+    // How the value becomes the engine's (profile_pack_format.md, «Tabla de
+    // traducción», rules 2 and 3): `how` (number, flag, factor, map,
+    // percent_of, absolute_only, number_strip_percent, first_item; another
+    // is not converted yet), its factor, its map, its base key; in the
+    // dialects other than prusaslicer, the values renamed first and what an
+    // "N%" is of ("nozzle" or an engine key, PF12 and PF13).
+    std::string how;
+    double factor = 1.0;
+    std::map<std::string, std::string> values, renamed;
+    std::string base, percent_of;
 };
 struct TranslationTable {
     std::string dialect;
@@ -64,11 +76,25 @@ struct SettingSort {
     std::vector<std::pair<std::string, SettingGroup>> detail;
 };
 // The project's own settings, as saved (rule 6): for the PrusaSlicer family
-// the "; key = value" lines of Metadata/Slic3r_PE.config, in order. Empty for
-// the other families until their samples are measured, or with no settings.
+// the "; key = value" lines of Metadata/Slic3r_PE.config, in order; for the
+// OrcaSlicer family the keys of the JSON object in
+// Metadata/project_settings.config, a list's items joined by commas. Empty
+// for Cura until its samples are measured, or with no settings.
 // Throws ZipError when the package is not a readable ZIP.
 std::vector<std::pair<std::string, std::string>> project_settings(std::string_view package);
 
 SettingSort sort_settings(const TranslationTable& table, const std::vector<std::pair<std::string, std::string>>& settings);
+
+// A project's settings over `base` (rules 6 and 8: the translated and similar
+// ones, converted by their row, as changes by hand). A value that does not
+// convert, or that the engine refuses, is left out and named in `skipped`
+// ("key = value"). An "N%" of another setting or of the nozzle takes the
+// project's value of it, else `base`'s.
+struct ProjectSettings {
+    Settings settings;
+    std::vector<std::string> skipped;
+};
+ProjectSettings translate_settings(const TranslationTable& table,
+                                   const std::vector<std::pair<std::string, std::string>>& settings, const Settings& base);
 
 } // namespace tisma

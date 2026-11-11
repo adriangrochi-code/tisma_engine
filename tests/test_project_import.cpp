@@ -6,6 +6,7 @@
 #include "io/zip.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -249,4 +250,56 @@ TEST_CASE("project import: a PrusaSlicer project's kinds of part (rule 4, pi4)",
     const BoundingBox cube = m.mesh.bounding_box();
     CHECK(b.max.x > cube.min.x); // it overlaps the cube's side, as placed
     CHECK(b.min.z < cube.max.z);
+}
+
+TEST_CASE("project import: a project's settings translated over the profile (rules 6, 8 and 11; PF12, PF13)",
+          "[project_import]") {
+    // OrcaSlicer rows (shape as profile_pack_format.md rule 3 describes them):
+    // widths in % of the nozzle, an acceleration in % of the default one, a
+    // renamed value, a factor, a flag.
+    const TranslationTable orca = parse_translation(R"({"format": "tisma-pack-translation", "version": 1,
+      "dialect": "orcaslicer", "kinds": {"print": {
+       "outer_wall_line_width": {"engine": "walls.outer_width", "group": "similar", "prusaslicer": "external_perimeter_extrusion_width",
+                                 "percent_of": "nozzle", "conversion": {"how": "absolute_only"}},
+       "default_acceleration": {"engine": "acceleration.default", "group": "translated", "conversion": {"how": "number"}},
+       "bridge_acceleration": {"engine": "acceleration.bridges", "group": "similar", "percent_of": "acceleration.default",
+                               "conversion": {"how": "number"}},
+       "layer_height": {"engine": "layers.height", "group": "translated", "conversion": {"how": "number"}},
+       "seam_position": {"engine": "walls.seam", "group": "translated", "prusaslicer_values": {"back": "rear"},
+                         "conversion": {"how": "map", "values": {}}},
+       "thin_walls": {"engine": null, "group": "none"}},
+      "filament": {
+       "filament_flow_ratio": {"engine": "extrusion.flow", "group": "translated", "conversion": {"how": "factor", "factor": 100}}},
+      "printer": {
+       "nozzle_diameter": {"engine": "machine.nozzle_diameter", "group": "translated", "conversion": {"how": "first_item"}}}}})");
+    Settings base;
+    base.nozzle_diameter = 0.4;
+    const ProjectSettings p = translate_settings(orca, {{"nozzle_diameter", "0.6,0.6"},
+                                                        {"outer_wall_line_width", "105%"},
+                                                        {"bridge_acceleration", "50%"},
+                                                        {"default_acceleration", "5000"},
+                                                        {"layer_height", "0.16"},
+                                                        {"seam_position", "back"},
+                                                        {"filament_flow_ratio", "0.98"},
+                                                        {"thin_walls", "1"}},
+                                                 base);
+    CHECK_THAT(p.settings.nozzle_diameter, Catch::Matchers::WithinAbs(0.6, 1e-9));
+    CHECK_THAT(p.settings.outer_wall_width, Catch::Matchers::WithinAbs(0.63, 1e-9)); // PF12: 105 % of 0.6, not of the layer
+    CHECK_THAT(p.settings.accel_default, Catch::Matchers::WithinAbs(5000, 1e-9));
+    CHECK_THAT(p.settings.accel_bridges, Catch::Matchers::WithinAbs(2500, 1e-9)); // PF13, the default given after it
+    CHECK_THAT(p.settings.layer_height, Catch::Matchers::WithinAbs(0.16, 1e-9));
+    CHECK_THAT(p.settings.flow, Catch::Matchers::WithinAbs(98.0, 1e-9));
+    CHECK(settings_json(p.settings).find("\"rear\"") != std::string::npos);
+    CHECK(p.skipped.empty()); // thin_walls has no equivalent: not tried
+    // A value that does not convert, or that the engine refuses, is named.
+    const ProjectSettings bad = translate_settings(orca, {{"layer_height", "thick"}, {"default_acceleration", "-5"}}, base);
+    CHECK(bad.settings.layer_height == base.layer_height);
+    CHECK(bad.skipped == std::vector<std::string>{"layer_height = thick", "default_acceleration = -5"});
+    // An OrcaSlicer project's settings: a JSON object, lists joined.
+    const std::string package = write_zip_stored(
+        {{"3D/3dmodel.model", "<model/>"},
+         {"Metadata/project_settings.config", R"({"layer_height": "0.16", "nozzle_diameter": ["0.6", "0.6"]})"}});
+    const auto read = project_settings(package);
+    REQUIRE(read.size() == 2);
+    CHECK(read[1] == std::pair<std::string, std::string>{"nozzle_diameter", "0.6,0.6"});
 }

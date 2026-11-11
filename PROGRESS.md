@@ -13347,4 +13347,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   (un filamento dos veces por capa) queda para después: pide pasadas con número propio en el plan de herramientas,
   la torre, el escritor y el verificador, y la ficha marca el paso «a confirmar»; hoy esa capa va por altura con un
   aviso. Full Spectrum queda así en el motor; sigue el ítem 4 de la beta (PF12 a PF14, IR8).
+- **Beta, ítem 4: los ajustes de un proyecto de otro programa se traducen** (2026-11-11; `project_import.md` reglas 6,
+  8 y 11; `profile_pack_format.md` «Tabla de traducción», spec/next). `TranslationRow` lleva la conversión de la fila
+  (`how`, `factor`, `values`, `base`), `prusaslicer_values` y `percent_of`; `translate_settings(tabla, ajustes, base)`
+  pone los traducidos y parecidos sobre los ajustes elegidos y nombra en `skipped` los que no convierten o el motor
+  rechaza. Conversiones: number, flag, factor, map, percent_of con `base`, absolute_only, number_strip_percent y
+  first_item; `"N%"` de la boquilla (PF12: OrcaSlicer 0,6 y "105%" → 0,63 mm) o de otra clave del motor (PF13: 50 % de
+  `acceleration.default` 5000 → 2500, la base leída del proyecto aunque venga después). `project_settings` lee
+  también la familia OrcaSlicer (`Metadata/project_settings.config`, JSON; las listas unidas con comas). Prueba
+  `[project_import]`. Falta: PF14 (`plate_temperature`; pedí su forma JSON), `at_least`, `points`, `number_or_percent`
+  y las `rule` con nombre (pedí su semántica), y que la interfaz aplique `translate_settings` al abrir (aviso a esa
+  sesión). La forma de `percent_of` a nivel de fila es la que entiendo de la ficha; se confirma con la respuesta.
 
