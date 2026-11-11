@@ -127,6 +127,9 @@ desventajas».
    Una dirección IPv6 se bloquea por su red /64 (los primeros 64 bits), porque una conexión hogareña recibe un /64 y
    puede cambiar de dirección dentro de él: la huella se calcula sobre el /64 y el par compara la huella del /64 de la
    dirección que ve. IPv4 (también escrita `::ffff:a.b.c.d`) sigue por dirección (11-11-2026).
+   La huella es SHA-256(sal del día + texto), con el texto exacto: para IPv6, la red en forma comprimida de RFC 5952,
+   en minúsculas, seguida de `/64` (de `2800:A4:1234:5600:abcd::9` queda `2800:a4:1234:5600::/64`); para IPv4, la
+   dirección con puntos (`200.40.10.7`). Otra forma de escribirla da otra huella y el bloqueo no coincide.
 
 ## Privacidad
 
