@@ -13053,3 +13053,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   filamento nuevo (#3 con 4 filamentos); los nombres de color del motor mezclan mayúscula y minúscula inicial.
 - **Sigue:** la pieza de muestras (`palette_piece`, CM8) en la placa, el eje del degradé y
   `MixChangeOptions::extent` cuando llegue a209135; después selección múltiple y barra de vista.
+
+## 2026-11-11 — interfaz: conectores del corte (model_tools.md, regla 18)
+
+- **Hecho:** la herramienta Cortar tiene «Conectores»: espiga fija o pasador, redondo o cuadrado, tamaño,
+  profundidad y tolerancia; un clic sobre el plano del corte pone uno, el clic derecho saca el más cercano; sin
+  ninguno, uno en el medio de la sección. La espiga se suma a la mitad de abajo (o a la de arriba con «Invertir
+  plano», que se da vuelta para que apunte hacia arriba) y el hueco del otro lado es un volumen negativo, más ancho y
+  más hondo por la tolerancia; el pasador hace el hueco en las dos y sale como un modelo aparte de doble largo. La
+  mitad que lleva la espiga no se da vuelta aunque se pida. Órdenes de guion: `cut`, `expect-model`.
+- **Pruebas:** `cut_connectors.txt` (MT22: mitad de 8 mm con la espiga, hueco de 4,2 × 3,1 mm) y `cut_pin.txt`
+  (MT23 y la espiga invertida). No laminado con los conectores ni impreso: «not tested on hardware».
+- **Sigue:** plano libre, encastre a presión, cola de milano, base hexagonal, el resultado en dos partes (MT24).

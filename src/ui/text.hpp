@@ -2549,6 +2549,19 @@
       "How a blend's colour is foreseen; the spectral one uses each filament's TD") \
     X(MixPredictorMixer, "Simple", "Simple") \
     X(MixPredictorSpectral, "Espectral (con la TD)", "Spectral (with the TD)") \
+    X(CutConnectors, "Conectores", "Connectors") \
+    X(CutConnectorNone, "Sin conectores", "No connectors") \
+    X(CutConnectorDowel, "Espiga fija", "Fixed dowel") \
+    X(CutConnectorPin, "Pasador", "Pin") \
+    X(CutShapeRound, "Redondo", "Round") \
+    X(CutShapeSquare, "Cuadrado", "Square") \
+    X(CutConnectorSize, "Tamaño", "Size") \
+    X(CutConnectorDepth, "Profundidad", "Depth") \
+    X(CutConnectorTolerance, "Tolerancia", "Tolerance") \
+    X(CutInvert, "Invertir plano (la espiga arriba)", "Flip the plane (the dowel above)") \
+    X(CutConnectorCount, "%d puestos (clic en el plano; clic derecho saca). Sin ninguno, uno en el medio", \
+      "%d placed (click on the plane; right click removes). With none, one in the middle") \
+    X(CutPinName, "pasador", "pin") \
     X(ColorSought, "Color buscado", "Colour sought") \
     X(FindBlend, "Buscar la mezcla", "Find the blend") \
     X(ColorNotReached, "Ese color no se alcanza con estos filamentos", "That colour cannot be reached with these filaments") \

@@ -1216,6 +1216,14 @@ private:
     // the bed, and whether the part below is turned over onto its cut face.
     double cut_height_ = 5.0;
     bool cut_flip_lower_ = false;
+    // The cut's connectors (model_tools.md, rule 18): 0 none, 1 a fixed dowel,
+    // 2 a loose pin; round or square; size, depth and tolerance in mm; where
+    // they go on the cut plane (x, y on the plate; none: the section's middle);
+    // inverted, the dowel goes on the upper half.
+    int cut_connector_ = 0;
+    bool cut_square_ = false, cut_invert_ = false;
+    double cut_size_ = 4.0, cut_depth_ = 3.0, cut_tolerance_ = 0.1;
+    std::vector<std::array<double, 2>> cut_points_;
     // The Measure tool (rule 20): what was picked on which object, and the
     // distance it should be.
     std::vector<MeasureFeature> measure_picks_;
@@ -10739,7 +10747,37 @@ void App::viewport() {
         ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
     }
     const bool on_gizmo = gizmo(editing && !painting);
-    if (editing && !painting && !on_gizmo && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    // The Cut tool's connectors (model_tools.md, rule 18): a click on the cut
+    // plane, within the chosen model, places one; a right click takes the
+    // nearest away.
+    bool cut_click = false;
+    if (editing && tool_ == PlateTool::Cut && cut_connector_ != 0 && selected_ >= 0 &&
+        std::size_t(selected_) < placed_meshes_.size() && ImGui::IsItemHovered() &&
+        (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))) {
+        const BoundingBox box = placed_meshes_[std::size_t(selected_)].bounding_box();
+        const Vec3 e = camera_.eye(), d = mouse_ray();
+        const float z = box.min.z + float(cut_height_);
+        if (!box.empty && std::abs(d.z) > 1e-6f) {
+            const float t = (z - e.z) / d.z;
+            const Vec3 p = e + d * t;
+            if (t > 0.0f && p.x >= box.min.x && p.x <= box.max.x && p.y >= box.min.y && p.y <= box.max.y) {
+                cut_click = true;
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    cut_points_.push_back({double(p.x), double(p.y)});
+                } else if (!cut_points_.empty()) {
+                    std::size_t nearest = 0;
+                    double best = 1e300;
+                    for (std::size_t k = 0; k < cut_points_.size(); ++k) {
+                        const double dd = std::hypot(cut_points_[k][0] - p.x, cut_points_[k][1] - p.y);
+                        if (dd < best)
+                            best = dd, nearest = k;
+                    }
+                    cut_points_.erase(cut_points_.begin() + std::ptrdiff_t(nearest));
+                }
+            }
+        }
+    }
+    if (editing && !painting && !on_gizmo && !cut_click && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         pressed_object_ = -1;
         dragged_ = false;
         const Vec3 d = mouse_ray(), e = camera_.eye();
@@ -10900,6 +10938,7 @@ void App::viewport() {
     // rule 10); on the plate, add a model or a shape, or arrange them (own
     // design, the owner's request).
     if (tab_ == Tab::Prepare && !calibration_ && !viewer_ && ImGui::IsItemHovered() &&
+        !(tool_ == PlateTool::Cut && cut_connector_ != 0) &&
         ImGui::IsMouseReleased(ImGuiMouseButton_Right) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f) {
         const auto hit = editing ? pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()) : std::nullopt;
         if (hit) {
@@ -12018,6 +12057,42 @@ void App::plate_tools() {
         ImGui::DragScalar("##cut_z", ImGuiDataType_Double, &cut_height_, 0.1f, &lo, &tall, field_text("##cut_z", "%.2f mm", cut_height_),
                           ImGuiSliderFlags_AlwaysClamp);
         ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
+        // Connectors (model_tools.md, rule 18): a click on the plane adds one,
+        // a right click takes the nearest away; none placed, one in the middle.
+        ImGui::SeparatorText(tr(T::CutConnectors));
+        {
+            const T kinds[] = {T::CutConnectorNone, T::CutConnectorDowel, T::CutConnectorPin};
+            ImGui::SetNextItemWidth(field + 60.0f * scale_);
+            if (ImGui::BeginCombo("##connector", tr(kinds[std::clamp(cut_connector_, 0, 2)]))) {
+                for (int k = 0; k < 3; ++k)
+                    if (ImGui::Selectable(tr(kinds[k]), k == cut_connector_))
+                        cut_connector_ = k;
+                ImGui::EndCombo();
+            }
+            note_rect("cut_connector");
+        }
+        if (cut_connector_ != 0) {
+            int shape = cut_square_ ? 1 : 0;
+            ImGui::RadioButton(tr(T::CutShapeRound), &shape, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton(tr(T::CutShapeSquare), &shape, 1);
+            cut_square_ = shape == 1;
+            const auto connector_field = [&](T label, const char* id, double& v, double min, double max, const char* fmt, float speed) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(tr(label));
+                ImGui::SameLine(110.0f * scale_);
+                ImGui::SetNextItemWidth(field);
+                ImGui::DragScalar(id, ImGuiDataType_Double, &v, speed, &min, &max, field_text(id, fmt, v), ImGuiSliderFlags_AlwaysClamp);
+            };
+            connector_field(T::CutConnectorSize, "##cut_size", cut_size_, 0.5, 50.0, "%.1f mm", 0.05f);
+            connector_field(T::CutConnectorDepth, "##cut_depth", cut_depth_, 0.5, 50.0, "%.1f mm", 0.05f);
+            connector_field(T::CutConnectorTolerance, "##cut_tol", cut_tolerance_, 0.0, 2.0, "%.2f mm", 0.005f);
+            if (cut_connector_ == 1)
+                ImGui::Checkbox(tr(T::CutInvert), &cut_invert_);
+            loc::TextDisabled("%s", format(tr(T::CutConnectorCount), int(cut_points_.size())).c_str());
+            if (!cut_points_.empty() && ImGui::SmallButton(tr(T::ResetSettings)))
+                cut_points_.clear();
+        }
         ImGui::BeginDisabled(!(cut_height_ > 0.0 && cut_height_ < tall));
         if (ImGui::Button(tr(T::CutButton), ImVec2(120.0f * scale_, 0)))
             cut = true;
@@ -12152,19 +12227,76 @@ void App::cut_selected() {
     CutResult halves = cut_mesh(placed_mesh(o), cut_height_);
     if (halves.below.empty() || halves.above.empty())
         return;
-    if (cut_flip_lower_)
+    // The connectors (model_tools.md, rule 18): a fixed dowel added to one
+    // half and a hole in the other; a pin, a hole in both and the pin apart.
+    // Each hole is a negative volume its tolerance wider all round and deeper.
+    const BoundingBox below_box = halves.below.bounding_box(), above_box = halves.above.bounding_box();
+    std::vector<std::array<double, 2>> points = cut_points_;
+    if (cut_connector_ != 0 && points.empty())
+        points.push_back({0.5 * (double(above_box.min.x) + above_box.max.x), 0.5 * (double(above_box.min.y) + above_box.max.y)});
+    if (cut_connector_ == 0)
+        points.clear();
+    const double size = cut_size_, depth = cut_depth_, tol = cut_tolerance_;
+    const double z_cut = double(above_box.min.z);
+    const auto prism = [&](double h) { return cut_square_ ? make_box(size, size, h) : make_cylinder(size / 2.0, h, 48); };
+    const auto hole = [&](const BoundingBox& box, double x, double y, double z, bool mirrored) {
+        const double cx = 0.5 * (double(box.min.x) + box.max.x), cy = 0.5 * (double(box.min.y) + box.max.y);
+        return PlateVolume{PlateVolume::Kind::Negative, cut_square_ ? PlateVolume::Shape::Box : PlateVolume::Shape::Cylinder,
+                           {x - cx, mirrored ? cy - y : y - cy, z}, {size + 2.0 * tol, size + 2.0 * tol, depth + tol}, {}};
+    };
+    const bool dowel = cut_connector_ == 1, dowel_above = dowel && cut_invert_;
+    // The lower half lies on its cut face when asked, unless it carries the dowel.
+    const bool flip_below = cut_flip_lower_ && !(dowel && !dowel_above);
+    std::vector<PlateVolume> below_holes, above_holes;
+    for (const auto& [x, y] : points) {
+        if (dowel && !dowel_above) {
+            TriangleMesh d = prism(depth);
+            d.translate(float(x), float(y), float(z_cut));
+            for (std::size_t t = 0; t < d.triangle_count(); ++t)
+                halves.below.add_triangle(d.corner(t, 0), d.corner(t, 1), d.corner(t, 2));
+        } else if (dowel_above) {
+            TriangleMesh d = prism(depth);
+            d.translate(float(x), float(y), float(z_cut - depth));
+            for (std::size_t t = 0; t < d.triangle_count(); ++t)
+                halves.above.add_triangle(d.corner(t, 0), d.corner(t, 1), d.corner(t, 2));
+        }
+        if (!(dowel && !dowel_above)) // the hole at the lower half's cut face: its top, or its bottom when turned
+            below_holes.push_back(hole(below_box, x, y,
+                                       flip_below ? 0.0 : double(below_box.max.z - below_box.min.z) - (depth + tol), flip_below));
+        if (!dowel_above) // at the upper half's cut face, its bottom
+            above_holes.push_back(hole(above_box, x, y, 0.0, false));
+    }
+    if (flip_below)
         rotate_mesh(halves.below, 180.0, 0.0, 0.0); // its cut face down on the bed
+    if (dowel_above)
+        rotate_mesh(halves.above, 180.0, 0.0, 0.0); // the dowel up
     // The halves keep the object's extruder; its painting was by triangle and
     // stays with the whole.
     PlateObject below{o.name + " (1)", std::move(halves.below), {}, {}};
     PlateObject above{o.name + " (2)", std::move(halves.above), {}, {}};
-    for (PlateObject* half : {&below, &above}) {
-        half->extruder = o.extruder;
-        half->wipe_into_infill = o.wipe_into_infill, half->wipe_into_object = o.wipe_into_object;
-        half->settings = o.settings;
+    below.volumes = std::move(below_holes);
+    above.volumes = std::move(above_holes);
+    std::vector<PlateObject> made;
+    made.push_back(std::move(below));
+    made.push_back(std::move(above));
+    if (cut_connector_ == 2 && !points.empty()) { // the pins, to print apart: one for each place
+        TriangleMesh pins;
+        for (std::size_t k = 0; k < points.size(); ++k) {
+            TriangleMesh pin = prism(2.0 * depth);
+            pin.translate(float(k) * float(size + 3.0), 0.0f, 0.0f);
+            for (std::size_t t = 0; t < pin.triangle_count(); ++t)
+                pins.add_triangle(pin.corner(t, 0), pin.corner(t, 1), pin.corner(t, 2));
+        }
+        made.push_back(PlateObject{o.name + " (" + tr(T::CutPinName) + ")", std::move(pins), {}, {}});
+    }
+    for (PlateObject& half : made) {
+        half.extruder = o.extruder;
+        half.wipe_into_infill = o.wipe_into_infill, half.wipe_into_object = o.wipe_into_object;
+        half.settings = o.settings;
     }
     objects_.erase(objects_.begin() + std::ptrdiff_t(index));
-    objects_.insert(objects_.begin() + std::ptrdiff_t(index), {std::move(below), std::move(above)});
+    objects_.insert(objects_.begin() + std::ptrdiff_t(index), std::make_move_iterator(made.begin()), std::make_move_iterator(made.end()));
+    cut_points_.clear();
     tool_ = PlateTool::Select;
     arrange_plate();
 }
@@ -12197,6 +12329,17 @@ void App::cut_plane_overlay() {
     dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
     dl->AddConvexPolyFilled(c, 4, ImGui::GetColorU32(rgb(theme_.accent, 0.28f)));
     dl->AddPolyline(c, 4, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.9f)), 2.0f * scale_, ImDrawFlags_Closed);
+    // The connectors' places on the plane.
+    if (cut_connector_ != 0)
+        for (const auto& [x, y] : cut_points_) {
+            ImVec2 at;
+            if (!project(float(x), float(y), z, at))
+                continue;
+            ImVec2 edge;
+            const float r = project(float(x) + float(cut_size_) / 2.0f, float(y), z, edge) ? std::hypot(edge.x - at.x, edge.y - at.y) : 6.0f;
+            dl->AddCircleFilled(at, std::max(r, 3.0f * scale_), IM_COL32(255, 255, 255, 200));
+            dl->AddCircle(at, std::max(r, 3.0f * scale_), ImGui::GetColorU32(rgb(theme_.accent)), 0, 2.0f * scale_);
+        }
     dl->PopClipRect();
 }
 
@@ -25046,6 +25189,38 @@ void App::script_input() {
         std::printf("ui-script: expect-apart %s %s: %s\n", step.key.c_str(), step.value.c_str(), apart ? "ok" : "they overlap");
         if (!apart)
             return fail_step("they overlap");
+        next();
+    } else if (step.verb == "cut") { // the last model cut at a height, with connectors: "HEIGHT [none|dowel|pin SIZE DEPTH TOL [invert]]"
+        double height = 0.0, size = 4.0, depth = 3.0, tol = 0.1;
+        char kind[16] = "none", invert[16] = "";
+        std::sscanf((step.key + " " + step.value).c_str(), "%lf %15s %lf %lf %lf %15s", &height, kind, &size, &depth, &tol, invert);
+        if (objects_.empty())
+            return fail_step("no model on the plate");
+        selected_ = int(objects_.size()) - 1;
+        cut_height_ = height;
+        cut_connector_ = std::string(kind) == "dowel" ? 1 : std::string(kind) == "pin" ? 2 : 0;
+        cut_size_ = size, cut_depth_ = depth, cut_tolerance_ = tol;
+        cut_invert_ = std::string(invert) == "invert";
+        cut_selected();
+        next();
+    } else if (step.verb == "expect-model") { // model I's height (mm) and its negative volumes' size: "I HEIGHT [W D H]"
+        std::size_t i = 0;
+        double height = 0.0, w = 0.0, dd = 0.0, h = 0.0;
+        const int n = std::sscanf((step.key + " " + step.value).c_str(), "%zu %lf %lf %lf %lf", &i, &height, &w, &dd, &h);
+        if (i >= objects_.size())
+            return fail_step("no such model");
+        const std::array<double, 3> got = model_size(objects_[i]);
+        std::string holes;
+        bool hole_ok = n < 5;
+        for (const PlateVolume& v : objects_[i].volumes)
+            if (v.kind == PlateVolume::Kind::Negative) {
+                holes += format(" %.2f×%.2f×%.2f", v.size[0], v.size[1], v.size[2]);
+                hole_ok |= std::abs(v.size[0] - w) < 1e-6 && std::abs(v.size[1] - dd) < 1e-6 && std::abs(v.size[2] - h) < 1e-6;
+            }
+        const bool ok = std::abs(got[2] - height) < 0.01 && hole_ok;
+        std::printf("ui-script: expect-model %zu: %s (height %.2f, holes%s)\n", i, ok ? "ok" : "no", got[2], holes.c_str());
+        if (!ok)
+            return fail_step("model " + std::to_string(i) + " is not so");
         next();
     } else if (step.verb == "expect-objects") { // this many models on the plate, the last one's name with VALUE
         const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
