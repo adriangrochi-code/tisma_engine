@@ -2564,6 +2564,8 @@
     X(CutConnectorCount, "%d puestos (clic en el plano; clic derecho saca). Sin ninguno, uno en el medio", \
       "%d placed (click on the plane; right click removes). With none, one in the middle") \
     X(CutPinName, "pasador", "pin") \
+    X(CutConnectorsMoved, "Los conectores pasaron a la otra mitad para que apoye plana", \
+      "The connectors went to the other half so that it lies flat") \
     X(ColorSought, "Color buscado", "Colour sought") \
     X(FindBlend, "Buscar la mezcla", "Find the blend") \
     X(ColorNotReached, "Ese color no se alcanza con estos filamentos", "That colour cannot be reached with these filaments") \

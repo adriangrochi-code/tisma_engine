@@ -1225,7 +1225,8 @@ private:
     // The cut's connectors (model_tools.md, rule 18): 0 none, 1 a fixed dowel,
     // 2 a loose pin; round or square; size, depth and tolerance in mm; where
     // they go on the cut plane (x, y on the plate; none: the section's middle);
-    // inverted, the dowel goes on the upper half.
+    // inverted, the dowel is asked on the upper half (which lies on its cut
+    // face, so it goes back with a notice: rule 18, MT32).
     int cut_connector_ = 0;
     bool cut_square_ = false, cut_invert_ = false;
     double cut_size_ = 4.0, cut_depth_ = 3.0, cut_tolerance_ = 0.1;
@@ -12252,32 +12253,34 @@ void App::cut_selected() {
         return PlateVolume{PlateVolume::Kind::Negative, cut_square_ ? PlateVolume::Shape::Box : PlateVolume::Shape::Cylinder,
                            {x - cx, mirrored ? cy - y : y - cy, z}, {size + 2.0 * tol, size + 2.0 * tol, depth + tol}, {}};
     };
-    const bool dowel = cut_connector_ == 1, dowel_above = dowel && cut_invert_;
-    // The lower half lies on its cut face when asked, unless it carries the dowel.
-    const bool flip_below = cut_flip_lower_ && !(dowel && !dowel_above);
+    // A half that lies on its cut face never carries the dowel and is never
+    // turned for it (rule 18, MT32): the upper half always lies on it, so the
+    // dowel goes to the lower one; when that one lies on its face too, the
+    // dowel becomes a loose pin. Either way a notice says so.
+    int connector = cut_connector_;
+    const bool flip_below = cut_flip_lower_;
+    if (connector == 1 && !points.empty() && (cut_invert_ || flip_below)) {
+        if (flip_below)
+            connector = 2;
+        notify(tr(T::CutConnectorsMoved));
+    }
+    const bool dowel = connector == 1;
     std::vector<PlateVolume> below_holes, above_holes;
     for (const auto& [x, y] : points) {
-        if (dowel && !dowel_above) {
+        if (dowel) { // on the lower half, standing on its cut face
             TriangleMesh d = prism(depth);
             d.translate(float(x), float(y), float(z_cut));
             for (std::size_t t = 0; t < d.triangle_count(); ++t)
                 halves.below.add_triangle(d.corner(t, 0), d.corner(t, 1), d.corner(t, 2));
-        } else if (dowel_above) {
-            TriangleMesh d = prism(depth);
-            d.translate(float(x), float(y), float(z_cut - depth));
-            for (std::size_t t = 0; t < d.triangle_count(); ++t)
-                halves.above.add_triangle(d.corner(t, 0), d.corner(t, 1), d.corner(t, 2));
-        }
-        if (!(dowel && !dowel_above)) // the hole at the lower half's cut face: its top, or its bottom when turned
+        } else { // the pin's hole at the lower half's cut face: its top, or its bottom when turned
             below_holes.push_back(hole(below_box, x, y,
                                        flip_below ? 0.0 : double(below_box.max.z - below_box.min.z) - (depth + tol), flip_below));
-        if (!dowel_above) // at the upper half's cut face, its bottom
-            above_holes.push_back(hole(above_box, x, y, 0.0, false));
+        }
+        above_holes.push_back(hole(above_box, x, y, 0.0, false)); // at the upper half's cut face, its bottom
     }
     if (flip_below)
         rotate_mesh(halves.below, 180.0, 0.0, 0.0); // its cut face down on the bed
-    if (dowel_above)
-        rotate_mesh(halves.above, 180.0, 0.0, 0.0); // the dowel up
+
     // The halves keep the object's extruder; its painting was by triangle and
     // stays with the whole.
     PlateObject below{o.name + " (1)", std::move(halves.below), {}, {}};
@@ -12287,7 +12290,7 @@ void App::cut_selected() {
     std::vector<PlateObject> made;
     made.push_back(std::move(below));
     made.push_back(std::move(above));
-    if (cut_connector_ == 2 && !points.empty()) { // the pins, to print apart: one for each place
+    if (connector == 2 && !points.empty()) { // the pins, to print apart: one for each place
         TriangleMesh pins;
         for (std::size_t k = 0; k < points.size(); ++k) {
             TriangleMesh pin = prism(2.0 * depth);

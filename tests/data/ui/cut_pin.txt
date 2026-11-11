@@ -7,9 +7,11 @@ expect-objects 3 pasador
 expect-model 0 5 4.2 4.2 3.1
 expect-model 1 5 4.2 4.2 3.1
 expect-model 2 6
-# Inverted, the dowel goes on the upper half, turned so it points up: the
-# 6 mm pin cut at 3 mm with a 2 mm dowel 1 mm deep.
+# MT32: the upper half lies on its cut face, so an inverted dowel goes back to
+# the lower half, with a notice: the 6 mm pin cut at 3 mm with a 2 mm dowel
+# 1 mm deep.
 cut 3 dowel 2 1 0.1 invert
 expect-objects 4
-expect-model 2 3 2.2 2.2 1.1
-expect-model 3 4
+expect-model 2 4
+expect-model 3 3 2.2 2.2 1.1
+expect-toast para que apoye plana
