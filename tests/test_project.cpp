@@ -212,6 +212,42 @@ TEST_CASE("a project keeps a model's own settings, volumes and height ranges (mo
     CHECK(qb.models.front().volumes[0].lattice_diameter == 1.25);
 }
 
+TEST_CASE("a project keeps a model's parts, each with its extruder, and slices them apart (formats.md, rule 7)",
+          "[project]") {
+    Project p = sample();
+    p.models.front().parts = {{"base", 0, 3, 0}, {"muestra", 3, 1, 5}};
+    for (const std::string& bytes : {write_project(p), write_project_3mf(p)}) {
+        const Project back = read_project(bytes);
+        REQUIRE(back.models.front().parts.size() == 2);
+        CHECK(back.models.front().parts[1].name == "muestra");
+        CHECK(back.models.front().parts[1].first == 3);
+        CHECK(back.models.front().parts[1].count == 1);
+        CHECK(back.models.front().parts[1].extruder == 5);
+        CHECK(back.models.front().parts[0].extruder == 0);
+        CHECK(back.models[1].parts.empty());
+    }
+    // Parts that leave triangles out are not read.
+    Project gap = sample();
+    gap.models.front().parts = {{"base", 0, 2, 0}};
+    CHECK_THROWS(read_project(write_project(gap)));
+    // The slice gets each part as an object of its own, with its extruder.
+    std::vector<ProjectModel> models = p.models;
+    const std::vector<ui::PlateObject> objects = ui::project_objects(models);
+    std::vector<TriangleMesh> placed;
+    for (const ui::PlateObject& o : objects)
+        placed.push_back(o.mesh);
+    const ui::PlateSlice plate = ui::plate_slice(objects, placed, Settings{});
+    REQUIRE(plate.objects.size() == 3);
+    CHECK(plate.by_object);
+    CHECK(plate.objects[0].count == 3);
+    CHECK(plate.objects[0].extruder == 1);
+    CHECK(plate.objects[1].first == 3);
+    CHECK(plate.objects[1].extruder == 5);
+    CHECK(plate.objects[1].object == 0);
+    CHECK(plate.objects[2].first == 4);
+    CHECK(plate.objects[2].object == 1);
+}
+
 TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine reads it all back (formats.md, rule 11)",
           "[project]") {
     Project p = sample();

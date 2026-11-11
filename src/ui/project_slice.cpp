@@ -81,6 +81,8 @@ std::vector<PlateObject> project_objects(std::vector<ProjectModel>& models) {
                                  v.offset, v.size, v.settings, v.turn, v.lattice_cell, v.lattice_diameter});
         for (const ProjectRange& r : m.ranges)
             o.ranges.push_back({r.from, r.to, r.settings});
+        for (const ProjectPart& part : m.parts)
+            o.parts.push_back({part.name, part.first, part.count, part.extruder});
         // The conditions move with the mesh when it is baked; otherwise they
         // stay in the part's coordinates, as the mesh.
         o.engineering = std::move(m.engineering);
@@ -99,12 +101,24 @@ PlateSlice plate_slice(const std::vector<PlateObject>& objects, const std::vecto
     PlateSlice out;
     out.painting = plate_painting(objects);
     // Each model's triangles in the plate's mesh, as plate_mesh joins them.
+    // Each part apart, with its own extruder (formats.md, rule 7), when the
+    // object has parts.
+    bool parts = false;
     for (std::size_t i = 0, first = 0; i < objects.size() && i < placed.size(); ++i) {
-        out.objects.push_back({objects[i].name, first, placed[i].triangle_count(), i, 0, objects[i].extruder,
-                               objects[i].wipe_into_infill, objects[i].wipe_into_object, objects[i].settings});
-        for (const PlateRange& r : objects[i].ranges)
-            out.objects.back().ranges.push_back({r.from, r.to, r.settings});
-        first += placed[i].triangle_count();
+        const PlateObject& o = objects[i];
+        const std::size_t count = placed[i].triangle_count();
+        std::vector<PlatePart> runs = o.parts;
+        if (runs.empty() || runs.back().first + runs.back().count > count)
+            runs = {{o.name, 0, count, 0}};
+        parts = parts || runs.size() > 1;
+        for (const PlatePart& run : runs) {
+            out.objects.push_back({runs.size() > 1 ? o.name + " / " + run.name : o.name, first + run.first, run.count, i, 0,
+                                   run.extruder != 0 ? run.extruder : o.extruder, o.wipe_into_infill, o.wipe_into_object,
+                                   o.settings});
+            for (const PlateRange& r : o.ranges)
+                out.objects.back().ranges.push_back({r.from, r.to, r.settings});
+        }
+        first += count;
     }
     // Its modifiers and negative volumes, where the objects stand (model_tools.md, rules 2 and 3).
     for (std::size_t i = 0; i < objects.size() && i < placed.size(); ++i) {
@@ -122,7 +136,7 @@ PlateSlice plate_slice(const std::vector<PlateObject>& objects, const std::vecto
     }
     // The objects go to the slicer when there are several, or when each may
     // print with its own extruder or a mixed colour.
-    out.by_object = out.objects.size() > 1 || settings.extruders > 1 || !out.volumes.empty() ||
+    out.by_object = parts || out.objects.size() > 1 || settings.extruders > 1 || !out.volumes.empty() ||
                     std::any_of(objects.begin(), objects.end(),
                                 [](const PlateObject& o) { return !o.settings.empty() || !o.ranges.empty(); });
     return out;

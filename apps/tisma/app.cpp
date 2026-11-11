@@ -911,6 +911,13 @@ private:
     void brush_stroke(std::size_t object, ImVec2 at, bool joined = false);
     void brush_drag(std::size_t object);
     void update_paint_view();
+    // The plate in its print colours before slicing (color_mixing_plus.md,
+    // rule 17): each part in its filament's or blend's colour, the colour
+    // paint over it, drawn with the paint's pieces. The key of what is in
+    // the view's paint now (empty: something else, as the brush's marks).
+    void update_color_view();
+    bool color_view_wanted() const;
+    std::vector<std::string> color_view_key_;
     Vec3 mouse_ray() const;
     // CAD navigation (interface.md, «Navegación de la vista 3D»).
     std::optional<ImVec2> screen_of(Vec3 p) const;
@@ -1612,6 +1619,11 @@ private:
     std::string color_target_ = "#808080";     // the mixing dialog's colour sought (color_mixing_plus.md, rule 4)
     std::vector<MixMatch> color_matches_;
     std::size_t palette_count_ = 0;            // the samples of the last quick palette (rule 22)
+    // Each sample's extruder (a filament or a blend's number) and name, in
+    // the palette's order, for its sample card (calibration_models.md, CM8).
+    std::vector<int> palette_extruders_;
+    std::vector<std::string> palette_names_;
+    void load_palette_piece();
     bool camera_framed_ = false; // the camera is as the last framing left it (no orbit, pan or zoom since)
     bool last_coarse_ = false; // the last frame drew the coarse copy (--ui-script's expect-coarse)
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
@@ -5083,6 +5095,8 @@ Project App::current_project() const {
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
         p.models.back().engineering = objects_[i].engineering;
         p.models.back().printable = objects_[i].printable;
+        for (const PlatePart& part : objects_[i].parts)
+            p.models.back().parts.push_back({part.name, part.first, part.count, part.extruder});
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
@@ -5148,7 +5162,7 @@ void App::reload_from_disk() {
             if (file.mesh.empty())
                 throw std::runtime_error(o.source + ": the file has no triangles");
             if (file.mesh.triangle_count() != o.mesh.triangle_count())
-                o.painting = {};
+                o.painting = {}, o.parts.clear();
             o.mesh = std::move(file.mesh);
             done += (done.empty() ? "" : ", ") + o.name;
         } catch (const std::exception& e) {
@@ -12722,6 +12736,29 @@ std::string App::filament_color(int extruder) const {
 // the left, each with its colour and shares; on the right the filaments and
 // their two-colour blends, a click adds one at 1 : 1; below, the blend being
 // edited, with a slider between two filaments and its layers.
+// The palette's sample card (calibration_models.md, CM8; color_mixing_plus.md,
+// rule 22): one model, the base a part with filament 1 and each sample a part
+// with its blend, so the slicing prints each with its own.
+void App::load_palette_piece() {
+    if (palette_extruders_.empty())
+        return;
+    const PalettePiece piece = palette_piece(palette_extruders_.size());
+    TriangleMesh mesh = piece.base;
+    std::vector<PlatePart> parts{{tr(T::PalettePieceBase), 0, piece.base.triangle_count(), 1}};
+    for (std::size_t k = 0; k < piece.samples.size() && k < palette_extruders_.size(); ++k) {
+        const TriangleMesh& s = piece.samples[k];
+        parts.push_back({std::to_string(k + 1) + " " + (k < palette_names_.size() ? palette_names_[k] : std::string()),
+                         mesh.triangle_count(), s.triangle_count(), palette_extruders_[k]});
+        for (std::size_t t = 0; t < s.triangle_count(); ++t)
+            mesh.add_triangle(s.corner(t, 0), s.corner(t, 1), s.corner(t, 2));
+    }
+    add_mesh(std::move(mesh), tr(T::PalettePieceName));
+    if (objects_.empty())
+        return;
+    objects_.back().parts = std::move(parts);
+    plate_changed();
+}
+
 void App::mixing_dialog() {
     if (!mixing_open_)
         return;
@@ -12889,13 +12926,36 @@ void App::mixing_dialog() {
                         mixes_.push_back(std::move(m));
                 }
                 palette_count_ = samples.size();
+                // Each sample's extruder: its filament, or the blend in the list.
+                palette_extruders_.clear();
+                palette_names_.clear();
+                for (const PaletteSample& p : samples) {
+                    int extruder = p.mix.components.empty() ? 1 : p.mix.components.front().extruder;
+                    if (p.mix.components.size() >= 2 || !p.mix.pattern.empty())
+                        for (const ColorMix& o : mixes_)
+                            if (o.components == p.mix.components && o.pattern == p.mix.pattern)
+                                extruder = o.id;
+                    palette_extruders_.push_back(extruder);
+                    palette_names_.push_back(language() == Language::Spanish ? p.name.es : p.name.en);
+                }
             }
             note_rect(key);
             ImGui::SameLine();
         }
         ImGui::NewLine();
-        if (palette_count_ > 0)
+        if (palette_count_ > 0) {
             loc::TextDisabled("%s", format(tr(T::QuickPaletteAdded), int(palette_count_)).c_str());
+            // Its sample card on the plate (calibration_models.md, CM8), and
+            // the name of each numbered sample.
+            if (ImGui::Button(tr(T::PalettePieceLoad)))
+                load_palette_piece();
+            note_rect("palette_piece");
+            if (ImGui::TreeNode(tr(T::PalettePieceNames))) {
+                for (std::size_t k = 0; k < palette_names_.size(); ++k)
+                    loc::Text("%zu  %s", k + 1, palette_names_[k].c_str());
+                ImGui::TreePop();
+            }
+        }
     }
     ImGui::SeparatorText(tr(T::TwoColorBlends));
     for (int a = 1; a <= filaments; ++a)
@@ -13207,6 +13267,102 @@ void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
     }
 }
 
+// The colours are worth showing with more than one filament or with blends.
+bool App::color_view_wanted() const {
+    if (settings_.extruders < 2 && mixes_.empty())
+        return false;
+    std::size_t triangles = 0; // a copy of the plate: not for the largest ones
+    for (const TriangleMesh& m : placed_meshes_)
+        triangles += m.triangle_count();
+    return triangles <= 2000000;
+}
+
+void App::update_color_view() {
+    // What it depends on: the plate, the extruders and the colours.
+    std::vector<std::string> key{std::to_string(plate_version_), std::to_string(settings_.extruders)};
+    for (const PlateObject& o : objects_) {
+        std::string k = std::to_string(o.extruder);
+        for (const PlatePart& part : o.parts)
+            k += "," + std::to_string(part.extruder);
+        key.push_back(k + ":" + std::to_string(o.painting.size(PaintChannel::Color)));
+    }
+    for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
+        key.push_back(filament_color(e));
+    for (const ColorMix& m : mixes_)
+        key.push_back(std::to_string(m.id) + m.color);
+    if (key == color_view_key_)
+        return;
+    const auto colour_of = [&](int extruder) {
+        if (extruder >= 1 && extruder <= std::max(settings_.extruders, 1))
+            return hex_rgb(filament_color(extruder));
+        for (const ColorMix& m : mixes_)
+            if (m.id == extruder)
+                return hex_rgb(m.color);
+        return theme_.model;
+    };
+    std::map<std::uint32_t, std::vector<float>> by_colour;
+    const auto put = [&](std::uint32_t colour, const Vec3f& a, const Vec3f& b, const Vec3f& c, const Vec3f& n) {
+        std::vector<float>& v = by_colour[colour];
+        for (const Vec3f* q : {&a, &b, &c})
+            v.insert(v.end(), {q->x, q->y, q->z, n.x, n.y, n.z});
+    };
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        const PlateObject& o = objects_[i];
+        const TriangleMesh& m = placed_meshes_[i];
+        std::vector<PlatePart> runs = o.parts;
+        if (runs.empty() || runs.back().first + runs.back().count > m.triangle_count())
+            runs = {{o.name, 0, m.triangle_count(), 0}};
+        const Painting& paint = o.painting;
+        for (const PlatePart& run : runs) {
+            const std::uint32_t colour = colour_of(run.extruder != 0 ? run.extruder : o.extruder);
+            for (std::size_t t = run.first; t < run.first + run.count; ++t) {
+                const Vec3f a = m.corner(t, 0), b = m.corner(t, 1), c = m.corner(t, 2);
+                const Vec3f e1{b.x - a.x, b.y - a.y, b.z - a.z}, e2{c.x - a.x, c.y - a.y, c.z - a.z};
+                Vec3f n{e1.y * e2.z - e1.z * e2.y, e1.z * e2.x - e1.x * e2.z, e1.x * e2.y - e1.y * e2.x};
+                const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+                if (len > 0.0f)
+                    n = Vec3f{n.x / len, n.y / len, n.z / len};
+                const Painting::Tree& tree = t < paint.size(PaintChannel::Color) ? paint.tree(PaintChannel::Color, t)
+                                                                                  : Painting::Tree{};
+                if (tree.empty()) {
+                    put(colour, a, b, c, n);
+                    continue;
+                }
+                // Each leaf of its paint tree: the mark's colour, or the part's.
+                std::size_t at = 0;
+                const auto walk = [&](auto&& self, const Vec3f& p, const Vec3f& q, const Vec3f& r) -> void {
+                    if (at >= tree.size())
+                        return;
+                    const std::uint8_t mark = tree[at++];
+                    if (mark != Painting::kSplit) {
+                        put(mark == 0 ? colour : colour_of(mark), p, q, r, n);
+                        return;
+                    }
+                    const auto mid = [](const Vec3f& u, const Vec3f& v) {
+                        return Vec3f{0.5f * (u.x + v.x), 0.5f * (u.y + v.y), 0.5f * (u.z + v.z)};
+                    };
+                    const Vec3f pq = mid(p, q), qr = mid(q, r), rp = mid(r, p);
+                    self(self, p, pq, rp);
+                    self(self, pq, q, qr);
+                    self(self, rp, qr, r);
+                    self(self, pq, qr, rp);
+                };
+                walk(walk, a, b, c);
+            }
+        }
+    }
+    std::vector<float> vertices;
+    std::vector<Renderer::PaintGroup> groups;
+    for (const auto& [colour, v] : by_colour) {
+        groups.push_back({vertices.size() / 6, v.size() / 6, vec(colour)});
+        vertices.insert(vertices.end(), v.begin(), v.end());
+    }
+    renderer_.set_paint(vertices, groups);
+    vk_view_.set_paint(vertices, groups);
+    paint_dirty_ = true; // the brush's marks are made again when it is used
+    color_view_key_ = std::move(key);
+}
+
 // The view's copy of the painted pieces of the channel in use.
 void App::update_paint_view() {
     if (!paint_dirty_ && !paint_stroked_)
@@ -13220,6 +13376,7 @@ void App::update_paint_view() {
         groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_mark_block : theme_.paint_mark_enforce)});
     renderer_.set_paint(m.vertices, groups);
     vk_view_.set_paint(m.vertices, groups);
+    color_view_key_.clear();
 }
 
 namespace {
@@ -16992,6 +17149,7 @@ void App::update_aero_view() {
         show_in_view(TriangleMesh(std::move(corners)));
         renderer_.set_paint(surface, groups);
         vk_view_.set_paint(surface, groups);
+        color_view_key_.clear();
         aero_map_in_view_ = true;
         aero_map_shown_ = aero_map_kind_;
     } else if (!want && aero_map_in_view_) {
@@ -17641,6 +17799,7 @@ void App::paint_structural_map() {
     }
     renderer_.set_paint(m.surface, groups);
     vk_view_.set_paint(m.surface, groups);
+    color_view_key_.clear();
 }
 
 void App::update_structural_view() {
@@ -22966,8 +23125,13 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     const bool preview = (tab_ == Tab::Preview && result_) || calibration_preview;
     f.show_model = has_plate_ && !preview;
     f.show_paint = f.show_model && tab_ == Tab::Prepare && tool_ == PlateTool::Paint;
-    if (f.show_paint)
+    if (f.show_paint) {
         update_paint_view();
+    } else if (f.show_model && tab_ == Tab::Prepare && !structural_map_in_view_ && !aero_map_in_view_ &&
+               color_view_wanted()) {
+        update_color_view();
+        f.show_paint = !color_view_key_.empty();
+    }
     // The Structural map is drawn as paint over the voxels' outside (rule 12).
     if (structural_map_in_view_ && tab_ == Tab::Structural)
         f.show_paint = true;
@@ -25386,6 +25550,23 @@ void App::script_input() {
         cut_size_ = size, cut_depth_ = depth, cut_tolerance_ = tol;
         cut_invert_ = std::string(invert) == "invert";
         cut_selected();
+        next();
+    } else if (step.verb == "expect-parts") { // model I's parts and, in order, their extruders: "I N [E1 E2 ...]"
+        std::istringstream in(step.key + " " + step.value);
+        std::size_t i = 0, n = 0;
+        in >> i >> n;
+        if (i >= objects_.size())
+            return fail_step("no such model");
+        const std::vector<PlatePart>& parts = objects_[i].parts;
+        std::string got;
+        for (const PlatePart& part : parts)
+            got += " " + std::to_string(part.extruder);
+        bool ok = parts.size() == n;
+        for (std::size_t k = 0, e = 0; ok && in >> e; ++k)
+            ok = k < parts.size() && parts[k].extruder == int(e);
+        std::printf("ui-script: expect-parts %zu: %zu parts,%s\n", i, parts.size(), got.c_str());
+        if (!ok)
+            return fail_step("the model has " + std::to_string(parts.size()) + " parts:" + got);
         next();
     } else if (step.verb == "expect-model") { // model I's height (mm) and its negative volumes' size: "I HEIGHT [W D H]"
         std::size_t i = 0;
