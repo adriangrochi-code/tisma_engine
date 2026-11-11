@@ -1266,6 +1266,11 @@ private:
     // how wide; the model a stroke started on; where the brush is now.
     PaintChannel paint_channel_ = PaintChannel::Support;
     std::uint8_t paint_mark_ = kPaintEnforce;
+    // The smart fill (model_tools.md, rule 27; MT30): a click paints the
+    // neighbouring faces while the bend between them stays under the angle.
+    bool smart_fill_ = false;
+    float smart_angle_ = 30.0f;
+    void smart_fill(std::size_t object, std::size_t triangle);
     float brush_radius_ = 2.0f;
     int painting_object_ = -1;
     bool painted_ = false;     // the stroke changed something
@@ -10762,7 +10767,12 @@ void App::viewport() {
             painting_object_ = int(hit->object);
             last_stroke_ = io.MousePos;
             last_dab_.reset();
-            brush_stroke(hit->object, io.MousePos);
+            if (smart_fill_) {
+                smart_fill(hit->object, hit->triangle);
+                painting_object_ = -1; // a fill, not a stroke
+            } else {
+                brush_stroke(hit->object, io.MousePos);
+            }
         }
     } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
                (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
@@ -13463,8 +13473,21 @@ void App::paint_card(ImVec2 at) {
             paint_mark_ = kPaintBlock;
         swatch(theme_.paint_mark_block);
     }
-    ImGui::SetNextItemWidth(170.0f * scale_);
-    ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, field_text(tr(T::BrushSize), "%.1f mm", brush_radius_), ImGuiSliderFlags_Logarithmic);
+    // The brush or the smart fill (rule 27).
+    int shape = smart_fill_ ? 1 : 0;
+    ImGui::RadioButton(tr(T::BrushRound), &shape, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton(tr(T::BrushSmartFill), &shape, 1);
+    note_rect("smart_fill");
+    smart_fill_ = shape == 1;
+    if (smart_fill_) {
+        ImGui::SetNextItemWidth(170.0f * scale_);
+        ImGui::SliderFloat(tr(T::SmartFillAngle), &smart_angle_, 1.0f, 90.0f, field_text(tr(T::SmartFillAngle), "%.0f°", smart_angle_));
+    } else {
+        ImGui::SetNextItemWidth(170.0f * scale_);
+        ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, field_text(tr(T::BrushSize), "%.1f mm", brush_radius_),
+                           ImGuiSliderFlags_Logarithmic);
+    }
     const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
     ImGui::BeginDisabled(!chosen || objects_[std::size_t(std::max(selected_, 0))].painting.empty(paint_channel_));
     if (ImGui::Button(tr(T::PaintClear))) {
@@ -13488,6 +13511,17 @@ void App::paint_card(ImVec2 at) {
 // the one before (Brush::stroke), so a fast mouse on a slow computer still
 // leaves one line and not separate dots (the testers' UI37 and BH44, the
 // owner's video of 31-10-2026), with few dabs a frame.
+void App::smart_fill(std::size_t object, std::size_t triangle) {
+    PlateObject& o = objects_[object];
+    const std::uint8_t mark = ImGui::GetIO().KeyShift                ? kPaintNone
+                              : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
+                                                                      : paint_mark_;
+    for (const std::uint32_t t : face_region(o.mesh, std::uint32_t(triangle), double(smart_angle_)))
+        o.painting.set_tree(paint_channel_, t, mark == kPaintNone ? Painting::Tree{} : Painting::Tree{mark});
+    painted_ = true;
+    paint_dirty_ = true;
+}
+
 void App::brush_drag(std::size_t object) {
     const ImVec2 to = ImGui::GetIO().MousePos;
     const float dx = to.x - last_stroke_.x, dy = to.y - last_stroke_.y;
@@ -18884,23 +18918,23 @@ void App::more_menu() {
         }
         // Numbered, newest first; one no longer there is dropped when chosen.
         if (ImGui::BeginMenu(tr(T::RecentProjects), !recent_projects_.empty())) {
-            std::optional<std::filesystem::path> open;
+            std::optional<std::filesystem::path> recent;
             for (std::size_t i = 0; i < recent_projects_.size(); ++i) {
                 const std::string label = std::to_string(i + 1) + "  " + utf8(recent_projects_[i].filename()) +
                                           "##recent" + std::to_string(i);
                 if (ImGui::MenuItem(label.c_str()))
-                    open = recent_projects_[i];
+                    recent = recent_projects_[i];
                 note_rect("recent_" + std::to_string(i + 1));
                 ImGui::SetItemTooltip("%s", utf8(recent_projects_[i]).c_str());
             }
             ImGui::EndMenu();
-            if (open) {
+            if (recent) {
                 std::error_code ec;
-                if (std::filesystem::exists(*open, ec))
-                    open_project(*open);
+                if (std::filesystem::exists(*recent, ec))
+                    open_project(*recent);
                 else {
-                    std::erase(recent_projects_, *open);
-                    fail(T::CannotOpen, utf8(*open));
+                    std::erase(recent_projects_, *recent);
+                    fail(T::CannotOpen, utf8(*recent));
                 }
             }
         }
@@ -25751,6 +25785,31 @@ void App::script_input() {
         if (passes > most)
             return fail_step(std::to_string(passes) + " were computed");
         next();
+    } else if (step.verb == "add-cylinder") { // the gallery's cylinder, 10 mm round and 20 mm high
+        add_shape(make_cylinder(10.0, 20.0, 48), T::ShapeCylinder);
+        next();
+    } else if (step.verb == "smart-fill") { // the smart fill from model I's first side or top triangle: "I side|top [ANGLE]"
+        std::size_t i = 0;
+        char where[8] = "";
+        float angle = smart_angle_;
+        std::sscanf((step.key + " " + step.value).c_str(), "%zu %7s %f", &i, where, &angle);
+        if (i >= objects_.size() || i >= placed_meshes_.size())
+            return fail_step("no such model");
+        const TriangleMesh& m = placed_meshes_[i];
+        std::optional<std::size_t> seed;
+        for (std::size_t t = 0; t < m.triangle_count() && !seed; ++t) {
+            const Vec3f a = m.corner(t, 0), b = m.corner(t, 1), c = m.corner(t, 2);
+            const Vec3f u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+            const double nx = double(u.y) * v.z - double(u.z) * v.y, ny = double(u.z) * v.x - double(u.x) * v.z,
+                         nz = double(u.x) * v.y - double(u.y) * v.x, len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (len > 0.0 && (std::string(where) == "top" ? nz / len > 0.9 : std::abs(nz / len) < 0.1))
+                seed = t;
+        }
+        if (!seed)
+            return fail_step("no such triangle");
+        smart_angle_ = angle;
+        smart_fill(i, *seed);
+        next();
     } else if (step.verb == "paint-color") { // the Paint tool's colour channel, with extruder or blend N
         paint_channel_ = PaintChannel::Color;
         paint_mark_ = std::uint8_t(std::clamp(std::atoi(step.key.c_str()), 1, int(kPaintMaxMark)));
@@ -25770,7 +25829,7 @@ void App::script_input() {
             io.AddMouseButtonEvent(0, false);
         else if (f >= 8)
             next();
-    } else if (step.verb == "expect-paint-area") { // the painted pieces of the channel in use cover at least VALUE mm2
+    } else if (step.verb == "expect-paint-area") { // the painted pieces of the channel in use cover at least MIN mm2 [and at most MAX]
         double area = 0.0;
         for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
             const IndexedMesh m = weld_exact(placed_meshes_[i]);
@@ -25783,8 +25842,10 @@ void App::script_input() {
             }
         }
         const double want = std::atof(step.key.c_str());
-        std::printf("ui-script: expect-paint-area %s: %s%.2f\n", step.key.c_str(), area >= want ? "ok, " : "got ", area);
-        if (area < want)
+        const double most = step.value.empty() ? 1e300 : std::atof(step.value.c_str());
+        const bool ok = area >= want && area <= most;
+        std::printf("ui-script: expect-paint-area %s %s: %s%.2f\n", step.key.c_str(), step.value.c_str(), ok ? "ok, " : "got ", area);
+        if (!ok)
             return fail_step("the paint covers " + std::to_string(area) + " mm2");
         next();
     } else if (step.verb == "expect-config-covers") { // every option the preferences keep has a control (PF7)

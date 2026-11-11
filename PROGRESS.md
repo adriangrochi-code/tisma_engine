@@ -13182,3 +13182,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   1252/1253); se repite sin correr pruebas con Xvfb mientras tanto.
 - **Sigue:** relleno inteligente (MT30), deshacer de la pintura y del corte (MT31).
 
+## 2026-11-11 — interfaz: relleno inteligente de la pintura (model_tools.md, regla 27: MT30)
+
+- **Hecho:** la herramienta Pintar elige «Pincel» o «Relleno inteligente» con su ángulo (30° por defecto): un clic
+  pinta las caras vecinas mientras el doblez entre ellas no pase el ángulo (con `face_region`); Shift borra. Vale para
+  todos los canales.
+- **Pruebas:** `smart_fill.txt` (MT30: en un cilindro de 10 × 20 mm, el costado, unos 1257 mm², sin las tapas; la
+  tapa sola, unos 314). Órdenes nuevas `add-cylinder` y `smart-fill`; `expect-paint-area` acepta un máximo.
+- **CI local** de f84cc40: gcc 1252/1254, las dos que fallaron por «Xvfb failed to start» (carrera de pantallas entre
+  pruebas paralelas) pasan solas; clang y ASan se corren aparte.
+
