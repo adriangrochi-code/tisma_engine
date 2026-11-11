@@ -1105,6 +1105,46 @@ TEST_CASE("color mixing plus: mixing.predictor chooses how the colour sought is 
     CHECK(spectral.front().mix.components != plain.front().mix.components);
 }
 
+TEST_CASE("color mixing plus: colour names and the quick palette (rules 22, 24, MX18)", "[mixing]") {
+    CHECK(color_name("#ffffff").en == "White");
+    CHECK(color_name("#000000").es == "Negro");
+    CHECK(color_name("#808080").en == "Grey");
+    CHECK(color_name("#ff0000").en == "Red");
+    CHECK(color_name("#ff8000").en == "Orange");
+    CHECK(color_name("#ffff00").en == "Light yellow");
+    CHECK(color_name("#00a000").en == "Green");
+    CHECK(color_name("#00ffff").en == "Light cyan");
+    CHECK(color_name("#0000ff").en == "Dark blue");
+    CHECK(color_name("#8000c0").en == "Dark purple");
+    CHECK(color_name("#a040e0").en == "Purple");
+    CHECK(color_name("#ff80c0").en == "Pink");
+    CHECK(color_name("#ffc0e0").es == "rosa claro");
+    CHECK(color_name("#603010").en == "Brown");
+    // MX18: 4 filaments, cycles of up to 2 layers: 10 samples, each named.
+    const std::vector<std::string> four = {"#00ffff", "#ff00ff", "#ffff00", "#ffffff"};
+    const auto ten = quick_palette(four, 2, 5);
+    REQUIRE(ten.size() == 10);
+    std::set<std::string> seen;
+    for (std::size_t k = 0; k < ten.size(); ++k) {
+        CHECK(ten[k].mix.id == 5 + int(k));
+        CHECK_FALSE(ten[k].name.en.empty());
+        CHECK_FALSE(ten[k].name.es.empty());
+        CHECK(ten[k].mix.name == ten[k].name.en);
+        CHECK(ten[k].color == ten[k].mix.color);
+        std::string key;
+        for (const auto& c : ten[k].mix.components)
+            key += std::to_string(c.extruder) + ":" + std::to_string(c.share) + " ";
+        CHECK(seen.insert(key).second);
+    }
+    CHECK(ten[0].mix.components.size() == 1);
+    CHECK(ten[0].color == "#00ffff");
+    // Up to 3 layers: 26.
+    CHECK(quick_palette(four, 3, 5).size() == 26);
+    // Spectral colours with the TDs.
+    const auto spectral = quick_palette(four, 2, 5, {5.0, 5.0, 5.0, 5.0});
+    CHECK(spectral[4].color == mix_color_spectral({four[0], four[1]}, {0.5, 0.5}, {5.0, 5.0}));
+}
+
 TEST_CASE("color mixing plus: the estimate before slicing with each filament's own height (rules 8 and 12)", "[mixing]") {
     Settings s = base();
     s.mix_cadence_heights = true;

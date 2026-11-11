@@ -12728,6 +12728,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
+- **Full Spectrum, reglas 22 y 24: nombres de colores y paleta rápida** (2026-11-11, bloque nocturno; MX18).
+  `color_name(hex)` en `src/slice/color_mix.*`: lista propia en inglés y español sobre CIELAB (croma < 10: blanco,
+  gris claro, gris, gris oscuro, negro por L*; si no, una banda del tono h_ab: rojo, naranja, amarillo, verde, cian,
+  azul, violeta, rosa; marrón para rojo, naranja o amarillo oscuros; «claro» u «oscuro» por L*).
+  `quick_palette(colores, ciclo_max, primer_id, TD)`: una muestra por filamento y cada mezcla de 2 y 3 con ciclo de
+  hasta `ciclo_max` capas (sin repetir un ciclo más corto), con su color (mezclador o espectral) y su nombre. Con 4
+  filamentos: 10 con ciclos de 2 (MX18) y 26 con ciclos de 3. Prueba `[mixing]`. Falta: la pieza de prueba impresa
+  (una muestra por mezcla con su nombre, en `calibration_models.md`) y la corrección del color a mano (interfaz).
 - **Full Spectrum, reglas 20 y 21: ajuste `mixing.predictor`** (2026-11-11, bloque nocturno). `"mixer"` (por
   defecto) o `"spectral"`; otro valor se rechaza. `match_color(..., transmission)`: con las TD de los filamentos, el
   color de cada mezcla candidata sale de `mix_color_spectral`; sin ellas, de `mix_color`. Prueba `[mixing]`: el

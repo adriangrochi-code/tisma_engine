@@ -684,3 +684,97 @@ std::string mix_color_spectral(const std::vector<std::string>& colors, const std
 }
 
 } // namespace tisma
+
+namespace tisma {
+
+ColorName color_name(const std::string& hex) {
+    const auto lab = lab_of(hex);
+    const double l = lab[0], chroma = std::hypot(lab[1], lab[2]);
+    if (chroma < 10.0) {
+        if (l > 90.0)
+            return {"White", "Blanco"};
+        if (l > 65.0)
+            return {"Light grey", "Gris claro"};
+        if (l > 40.0)
+            return {"Grey", "Gris"};
+        if (l > 20.0)
+            return {"Dark grey", "Gris oscuro"};
+        return {"Black", "Negro"};
+    }
+    double h = std::atan2(lab[2], lab[1]) * 180.0 / 3.14159265358979323846;
+    if (h < 0.0)
+        h += 360.0;
+    struct Band {
+        double from;
+        const char *en, *es;
+        bool warm; // dark ones are brown
+    };
+    static const Band bands[] = {{25.0, "red", "rojo", true},       {50.0, "orange", "naranja", true},
+                                 {75.0, "yellow", "amarillo", true}, {110.0, "green", "verde", false},
+                                 {165.0, "cyan", "cian", false},     {230.0, "blue", "azul", false},
+                                 {315.0, "purple", "violeta", false}, {340.0, "pink", "rosa", false}};
+    const Band* band = &bands[7]; // from 340 round to 25
+    for (const Band& b : bands)
+        if (h >= b.from)
+            band = &b;
+    if (band->warm && l < 45.0)
+        return {l < 25.0 ? "Dark brown" : "Brown", l < 25.0 ? "Marrón oscuro" : "Marrón"};
+    std::string en = band->en, es = band->es;
+    if (l > 70.0)
+        return {"Light " + en, es + " claro"};
+    if (l < 35.0)
+        return {"Dark " + en, es + " oscuro"};
+    en[0] = char(std::toupper(static_cast<unsigned char>(en[0])));
+    es[0] = char(std::toupper(static_cast<unsigned char>(es[0])));
+    return {en, es};
+}
+
+std::vector<PaletteSample> quick_palette(const std::vector<std::string>& colors, int max_cycle, int first_id,
+                                         const std::vector<double>& transmission) {
+    std::vector<PaletteSample> out;
+    const int n = int(colors.size());
+    max_cycle = std::clamp(max_cycle, 1, 64);
+    int id = first_id;
+    const auto add = [&](const std::vector<int>& filaments, const std::vector<int>& counts) {
+        int common = 0, sum = 0;
+        for (const int c : counts) {
+            common = std::gcd(common, c);
+            sum += c;
+        }
+        if (common != 1 || sum > max_cycle)
+            return;
+        PaletteSample s;
+        s.mix.id = id++;
+        std::vector<std::string> cs;
+        std::vector<double> shares, tds;
+        for (std::size_t k = 0; k < filaments.size(); ++k) {
+            const auto f = std::size_t(filaments[k]);
+            s.mix.components.push_back({filaments[k] + 1, double(counts[k]) / sum});
+            cs.push_back(colors[f]);
+            shares.push_back(double(counts[k]) / sum);
+            tds.push_back(f < transmission.size() ? transmission[f] : 0.0);
+        }
+        s.color = transmission.empty() ? mix_color(cs, shares) : mix_color_spectral(cs, shares, tds);
+        s.mix.color = s.color;
+        s.name = color_name(s.color);
+        s.mix.name = s.name.en;
+        out.push_back(std::move(s));
+    };
+    for (int i = 0; i < n; ++i)
+        add({i}, {1});
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j)
+            for (int a = 1; a < max_cycle; ++a)
+                for (int b = 1; a + b <= max_cycle; ++b)
+                    add({i, j}, {a, b});
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j)
+            for (int k = j + 1; k < n; ++k)
+                for (int a = 1; a < max_cycle; ++a)
+                    for (int b = 1; a + b < max_cycle; ++b)
+                        for (int c = 1; a + b + c <= max_cycle; ++c)
+                            add({i, j, k}, {a, b, c});
+    return out;
+}
+
+} // namespace tisma

@@ -183,6 +183,30 @@ std::vector<MixMatch> match_color(const std::string& target, const std::vector<s
                                   const std::vector<double>& transmission = {});
 inline bool color_reached(const std::vector<MixMatch>& m) { return !m.empty() && m.front().distance <= 10.0; }
 
+// A colour's name (color_mixing_plus.md, rules 6 and 24): the engine's own
+// list, in English and Spanish. Own design on CIELAB (D65): chroma under 10
+// is white, light grey, grey, dark grey or black by L*; otherwise a hue band
+// of h_ab (red, orange, yellow, green, cyan, blue, purple, pink), brown for a
+// dark red, orange or yellow, and "Light" or "Dark" by L*.
+struct ColorName {
+    std::string en, es;
+};
+ColorName color_name(const std::string& hex);
+
+// The quick palette (color_mixing_plus.md, rule 22, MX18): one sample per
+// filament, then every blend of 2 and of 3 filaments whose cycle has at most
+// `max_cycle` layers (a shorter cycle once), each with its colour (the
+// mixer, or the spectral prediction with `transmission`) and its name. With
+// 4 filaments: 10 samples with cycles of up to 2 layers, 26 with up to 3.
+// Blends are numbered from `first_id`; a filament's sample is a blend of one.
+struct PaletteSample {
+    ColorMix mix;
+    std::string color;
+    ColorName name;
+};
+std::vector<PaletteSample> quick_palette(const std::vector<std::string>& filament_colors, int max_cycle, int first_id,
+                                         const std::vector<double>& transmission = {});
+
 // The purge between two filaments by their colours ("#rrggbb"), mm3
 // (color_mixing_plus.md, rule 37; own design): 0 for the same colour, else
 // 60 plus 1.6 a point of lightness gained (CIELAB L*, D65) plus 0.6 a point
