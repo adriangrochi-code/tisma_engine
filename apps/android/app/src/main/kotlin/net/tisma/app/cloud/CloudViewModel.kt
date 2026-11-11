@@ -311,20 +311,25 @@ class CloudViewModel(
         _state.update { it.copy(notice = Notice.Saved(name)) }
     }
 
+    /** Which preview asked last: only that one opens, so two quick taps never open a file the other one removed. */
+    private val previewSeq = java.util.concurrent.atomic.AtomicInteger()
+
     /** Downloads a slice's G-code to the cache and gives its path, for the preview (rule 9, MA10). */
     fun previewResult(id: String, onReady: (String) -> Unit) {
         var path: String? = null
+        val seq = previewSeq.incrementAndGet()
         launchRequest(onDone = { path?.let(onReady) }) {
             val dir = java.io.File(cacheDir, "results").apply { mkdirs() }
-            val f = java.io.File(dir, "job-" + id.filter { it.isLetterOrDigit() || it == '-' } + ".gcode")
-            // Only the result on screen is kept: results go up to 1 GB, and the cache is not emptied on its own.
-            dir.listFiles()?.filter { it != f }?.forEach { it.delete() }
+            val f = java.io.File(dir, "job-" + id.filter { it.isLetterOrDigit() || it == '-' } + "-" + seq + ".gcode")
             try {
                 f.outputStream().use { client.download(id, it) }
             } catch (e: Exception) {
                 f.delete() // a cut download is not left half there
                 throw e
             }
+            if (seq != previewSeq.get()) { f.delete(); return@launchRequest } // a later tap won
+            // Only the result on screen is kept: results go up to 1 GB, and the cache is not emptied on its own.
+            dir.listFiles()?.filter { it != f }?.forEach { it.delete() }
             path = f.path
         }
     }

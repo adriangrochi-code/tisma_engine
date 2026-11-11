@@ -131,6 +131,27 @@ class CloudScreensTest {
     }
 
     @Test
+    fun `two quick preview taps open only the last one, and its file is there`() {
+        val cache = java.nio.file.Files.createTempDirectory("results").toFile()
+        val v = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5, cacheDir = cache)
+        v.signIn("ana@example.com", "password1")
+        waitState { v.state.value.signedIn }
+        val client = CloudClient(server.url).apply { login("ana@example.com", "password1", "t") }
+        val bytes = cube3mf()
+        fun job() = client.submit(JobRequest.Slice, "cube.3mf", bytes.size.toLong()) { bytes.inputStream() }
+            .also { j -> repeat(3) { client.job(j.id) } }
+        val a = job(); val b = job()
+        val shown = java.util.Collections.synchronizedList(mutableListOf<String>())
+        v.previewResult(a.id) { shown += it }
+        v.previewResult(b.id) { shown += it }
+        waitState { shown.isNotEmpty() }
+        repeat(40) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+        assertEquals(1, shown.size)
+        assertTrue(java.io.File(shown[0]).isFile)
+        assertTrue(java.io.File(shown[0]).name.startsWith("job-" + b.id.filter { it.isLetterOrDigit() || it == '-' }))
+    }
+
+    @Test
     fun `MA10 a cloud slice opens in the preview`() {
         compose.runOnIdle { vm.signIn("ana@example.com", "password1") }
         waitState { vm.state.value.signedIn }
