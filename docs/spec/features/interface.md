@@ -178,6 +178,10 @@ se copian íconos ni imágenes de otro programa). Vale igual en Impresión 3D, e
    Autodesk («Navigate the canvas»):
    - **clic izquierdo:** elige; arrastrar con el izquierdo desde un lugar vacío hace una selección con un rectángulo
      (de izquierda a derecha, lo que queda adentro; de derecha a izquierda, también lo que toca); Ctrl o Mayús suman;
+     el rectángulo de izquierda a derecha se dibuja con línea continua y el de derecha a izquierda, punteado (como en
+     Fusion 360, según su ayuda pública); con la placa en modo de un solo modelo, elige el que más se acerque al punto
+     donde empezó, entre los que entran según el sentido; donde no hay nada que elegir (Vista previa), arrastrar con
+     el izquierdo desde vacío no hace nada: no gira ni desplaza;
    - **rueda apretada y arrastrar:** desplaza la vista;
    - **Mayús + rueda apretada y arrastrar:** gira la vista alrededor del punto de la pieza bajo el mouse (sin pieza
      bajo el mouse, alrededor del centro de lo elegido o de la cama);
