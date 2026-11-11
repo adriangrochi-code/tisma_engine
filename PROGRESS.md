@@ -13192,3 +13192,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **CI local** de f84cc40: gcc 1252/1254, las dos que fallaron por «Xvfb failed to start» (carrera de pantallas entre
   pruebas paralelas) pasan solas; clang y ASan se corren aparte.
 
+## 2026-11-11 — interfaz: deshacer el corte, la pintura y los cambios de la placa (model_tools.md, regla 29: MT31)
+
+- **Hecho:** Ctrl+Z y Ctrl+Y ahora también deshacen y rehacen cortar, separar (en piezas o en partes), espejar,
+  borrar un modelo, cada trazo o relleno de pintura y «Borrar todo» de la pintura, además de mover (UI45). Cada paso
+  guarda una copia de la placa antes del cambio; un trazo que no pinta nada no deja paso. Las copias se limitan a 5
+  millones de triángulos entre todas (las más viejas se sueltan).
+- **Pruebas:** `undo_plate.txt` (MT31: pintar, cortar y mover; tres Ctrl+Z vuelven a la pieza entera, sin pintura,
+  en su lugar; Ctrl+Y rehace). `place_undo` y `more_cards` siguen pasando. Orden nueva `expect-models`.
+- **Falta** de la regla 29: la lista de pasos al lado de los botones.
+

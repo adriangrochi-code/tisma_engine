@@ -693,7 +693,7 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   abajo como voladizo, con los voladizos de `walls_extra.md`) y las paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`
 - [ ] Pintar los colores (con `multi_extruder.md`); volúmenes bloqueadores y forzadores (SM12); relleno inteligente de
   una cara y deshacer. Hecho (2026-11-11): el canal Colores con dos filamentos o mezclas, un color por filamento y por
-  mezcla (hasta el número 16), las marcas con su color; el relleno inteligente con su ángulo (MT30)
+  mezcla (hasta el número 16), las marcas con su color; el relleno inteligente con su ángulo (MT30); deshacer la pintura y el corte (MT31)
 - [x] Ayuda (pedido del dueño, 2026-10-26): asistente, consejos de la primera vez y botón (i) en cada ajuste
   (`docs/UI.md`, «Ayuda»)
 - [ ] Ayuda, lo que sigue: el texto de los ajustes en inglés; señalar en la pantalla lo que cada paso del asistente

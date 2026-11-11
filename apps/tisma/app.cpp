@@ -1414,10 +1414,16 @@ private:
     // Undo and redo of where the models are (Ctrl+Z, Ctrl+Y; the spec team's
     // UI45): each step is a model's placement before a drag or an edit, kept
     // while the plate has the same models.
+    // A step may instead hold the whole plate before a cut, a split, a
+    // mirror, a deletion or a stroke of paint (model_tools.md, rule 29: MT31).
     struct PlaceStep {
         std::size_t object = 0, count = 0; // which model, of how many on the plate
         Placement place;
+        std::shared_ptr<const std::vector<PlateObject>> plate{};
+        int selected = -1;
     };
+    void remember_plate();
+    bool paint_step_ = false; // the stroke under way has its step
     std::vector<PlaceStep> place_undo_, place_redo_;
     Placement press_place_;    // the pressed model's placement when the bed drag began
     bool card_editing_ = false; // the tool card's edit already has its undo step
@@ -10763,6 +10769,8 @@ void App::viewport() {
         painting_object_ = -1;
         painted_ = false;
         if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
+            remember_plate(); // taken back below when the stroke paints nothing
+            paint_step_ = true;
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
             last_stroke_ = io.MousePos;
@@ -10783,7 +10791,10 @@ void App::viewport() {
             ++revision_.model;
             if (result_ && !viewer_)
                 stale_ = true;
+        } else if (paint_step_ && !place_undo_.empty() && place_undo_.back().plate) {
+            place_undo_.pop_back();
         }
+        paint_step_ = false;
         painting_object_ = -1;
         painted_ = false;
     }
@@ -12292,6 +12303,7 @@ void App::split_selected() {
         notify(tr(T::SplitOnePiece));
         return;
     }
+    remember_plate();
     std::vector<PlateObject> parts;
     for (std::size_t k = 0; k < pieces.size(); ++k) {
         PlateObject p{o.name + " (" + std::to_string(k + 1) + ")", std::move(pieces[k]), {}, {}};
@@ -12311,12 +12323,13 @@ void App::split_selected() {
 // each where it was. The paint and the Engineering data stay when the
 // triangles keep their order.
 void App::split_into_parts() {
-    PlateObject& o = objects_[std::size_t(selected_)];
-    std::vector<TriangleMesh> pieces = split_mesh(o.mesh);
+    std::vector<TriangleMesh> pieces = split_mesh(objects_[std::size_t(selected_)].mesh);
     if (pieces.size() < 2) {
         notify(tr(T::SplitOnePiece));
         return;
     }
+    remember_plate();
+    PlateObject& o = objects_[std::size_t(selected_)];
     TriangleMesh whole;
     std::vector<PlatePart> parts;
     for (std::size_t k = 0; k < pieces.size(); ++k) {
@@ -12335,6 +12348,7 @@ void App::split_into_parts() {
 }
 
 void App::mirror_selected(int axis) {
+    remember_plate();
     PlateObject& o = objects_[std::size_t(selected_)];
     const BoundingBox from = o.mesh.bounding_box();
     // Its modifiers and negative volumes go where the mirror puts them: the
@@ -12369,10 +12383,11 @@ void App::mirror_selected(int axis) {
 
 void App::cut_selected() {
     const std::size_t index = std::size_t(selected_);
-    const PlateObject& o = objects_[index];
-    CutResult halves = cut_mesh(placed_mesh(o), cut_height_);
+    CutResult halves = cut_mesh(placed_mesh(objects_[index]), cut_height_);
     if (halves.below.empty() || halves.above.empty())
         return;
+    remember_plate();
+    const PlateObject& o = objects_[index];
     // One object with two parts (rule 18: MT24): where they were, together,
     // each part able to take settings of its own; no connectors.
     if (cut_parts_) {
@@ -13491,6 +13506,7 @@ void App::paint_card(ImVec2 at) {
     const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
     ImGui::BeginDisabled(!chosen || objects_[std::size_t(std::max(selected_, 0))].painting.empty(paint_channel_));
     if (ImGui::Button(tr(T::PaintClear))) {
+        remember_plate();
         objects_[std::size_t(selected_)].painting.clear(paint_channel_);
         paint_dirty_ = true;
         ++revision_.model;
@@ -18809,6 +18825,34 @@ void App::undo_engineering(bool redo) {
     structural_part_ = int(step.object);
 }
 
+// The plate as it is, before a change of its models or their paint.
+// Each copy holds every mesh: past 5 million triangles in all the steps
+// (some 180 MB), the oldest copies are let go.
+void App::remember_plate() {
+    place_undo_.push_back({0, objects_.size(), {}, std::make_shared<const std::vector<PlateObject>>(objects_), selected_});
+    if (place_undo_.size() > 100)
+        place_undo_.erase(place_undo_.begin());
+    place_redo_.clear();
+    const auto triangles = [](const PlaceStep& step) {
+        std::size_t n = 0;
+        if (step.plate)
+            for (const PlateObject& o : *step.plate)
+                n += o.mesh.triangle_count();
+        return n;
+    };
+    std::size_t total = 0;
+    for (const PlaceStep& step : place_undo_)
+        total += triangles(step);
+    for (auto it = place_undo_.begin(); total > 5000000 && it + 1 < place_undo_.end();) {
+        if (it->plate) {
+            total -= triangles(*it);
+            it = place_undo_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 // Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
 // Ctrl+Shift+Z) moves it again. Steps from a plate with other models are
 // dropped: their numbers no longer name the same models.
@@ -18817,6 +18861,7 @@ void App::undo_engineering(bool redo) {
 void App::delete_selected(bool keep_choice) {
     if (selected_ < 0 || selected_ >= int(objects_.size()))
         return;
+    remember_plate();
     objects_.erase(objects_.begin() + selected_);
     selected_ = keep_choice && !objects_.empty() ? std::min(selected_, int(objects_.size()) - 1) : -1;
     if (objects_.empty()) {
@@ -19222,12 +19267,25 @@ void App::send_gcode() {
 void App::undo_place(bool redo) {
     std::vector<PlaceStep>& from = redo ? place_redo_ : place_undo_;
     std::vector<PlaceStep>& to = redo ? place_undo_ : place_redo_;
-    while (!from.empty() && (from.back().count != objects_.size() || from.back().object >= objects_.size()))
+    while (!from.empty() && !from.back().plate &&
+           (from.back().count != objects_.size() || from.back().object >= objects_.size()))
         from.pop_back();
     if (from.empty())
         return;
     const PlaceStep step = from.back();
     from.pop_back();
+    if (step.plate) { // the whole plate back, and the one undone kept for redo
+        to.push_back({0, objects_.size(), {}, std::make_shared<const std::vector<PlateObject>>(std::move(objects_)), selected_});
+        objects_ = *step.plate;
+        selected_ = step.selected < int(objects_.size()) ? step.selected : -1;
+        gizmo_drag_.reset();
+        paint_dirty_ = true;
+        ++revision_.model;
+        if (result_ && !viewer_)
+            stale_ = true;
+        plate_changed();
+        return;
+    }
     PlateObject& o = objects_[step.object];
     to.push_back({step.object, step.count, o.place});
     o.place = step.place;
@@ -25924,6 +25982,12 @@ void App::script_input() {
             return fail_step("no such part");
         objects_[i].parts[k].extruder = e;
         objects_material_changed();
+        next();
+    } else if (step.verb == "expect-models") { // how many models the plate has
+        const std::size_t want = std::size_t(std::atoi(step.key.c_str()));
+        std::printf("ui-script: expect-models %zu: %s%zu\n", want, objects_.size() == want ? "ok, " : "got ", objects_.size());
+        if (objects_.size() != want)
+            return fail_step("the plate has " + std::to_string(objects_.size()) + " models");
         next();
     } else if (step.verb == "expect-parts") { // model I's parts and, in order, their extruders: "I N [E1 E2 ...]"
         std::istringstream in(step.key + " " + step.value);
