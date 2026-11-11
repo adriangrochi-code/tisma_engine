@@ -40,7 +40,8 @@ std::string read_file(const fs::path& p, const char* what) {
 
 // Written whole, then put in place: a cut never leaves half a file.
 void write_file(const fs::path& p, std::string_view data) {
-    fs::create_directories(p.parent_path());
+    if (!p.parent_path().empty()) // a bare name goes in the current folder (BH57)
+        fs::create_directories(p.parent_path());
     const fs::path tmp = p.string() + ".part";
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);

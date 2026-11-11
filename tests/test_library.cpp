@@ -126,6 +126,14 @@ TEST_CASE("library: printed, delete, export and import; unsafe files refused who
     CHECK(p.at("printed")[0].at("photo") == "photos/1.jpg");
     CHECK(slurp(lib / id / "photos" / "1.jpg") == "JPG");
     library_export(lib, id, in / "hook.tismalib");
+    // A bare file name, in the current folder (BH57: "cannot create directories").
+    {
+        const fs::path was = fs::current_path();
+        fs::current_path(in);
+        CHECK_NOTHROW(library_export(lib, id, "bare.tismalib"));
+        fs::current_path(was);
+        CHECK(fs::exists(in / "bare.tismalib"));
+    }
     const json imported = library_import(in / "hook.tismalib", other, LibraryImport::Ask);
     CHECK(imported.at("name") == "Hook");
     CHECK(slurp(other / id / "photos" / "1.jpg") == "JPG");

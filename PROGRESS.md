@@ -12616,7 +12616,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 | Perfiles y configuración (paquete) | revisado (parcial) | 10-11 | `compatible_prints`, cambio de filamento | regla nueva |
 | Conexión con impresoras / página de la impresora | revisado (parcial) | 11-11 | nombres de archivo al subir (PrusaLink, OctoPrint, Moonraker) | BH53 |
 | Lo propio de Tisma (curvas, altura variable, cúspide) | revisado (parcial) | 10-11 | altura variable con soporte | `support.z_gap` contado en capas nominales: con capas de 0,1 quedaba a 0,1 mm |
-| Servicios (nube, nodos, biblioteca) | pendiente | | | |
+| Servicios (nube, nodos, biblioteca) | revisado (parcial) | 11-11 | biblioteca: identificadores raros, nombres con símbolos, fechas, exportar e importar | BH57 |
 | Interfaz: menús, diálogos, preferencias | revisado (parcial) | 10-11 | auditoría de interface.md (tabla de arriba), Imprimible, vaso | vaso con modelos no imprimibles |
 | Interfaz: calibraciones | revisado (parcial) | 11-11 | valores de las torres por la línea de comandos (subida, bajada, paso 0, negativo, fuera de rango) | BH55 |
 | Línea de comandos | revisado (parcial) | 11-11 | `profile` por nombre de impresora y filamento, `--copies` | BH51 (nombre sin marca ambiguo) |
@@ -12703,6 +12703,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- BH57 (búsqueda profunda, servicios): `library export --entry e1 -o e1.tismalib`, con el archivo en la carpeta
+  actual, fallaba con «cannot create directories: Invalid argument []» (la carpeta madre vacía). Ahora un nombre suelto
+  va a la carpeta actual. Prueba `[library]`, que falla sin el arreglo. Visto sin cambio: los identificadores con `..`
+  o `/` se rechazan; un nombre con comillas, barra y ñ se guarda tal cual. A consultar: `printed --date` acepta
+  cualquier texto («ayer», «2026-13-45»).
 - `slice --mixes <mezclas.json> --mix <n>` (pedido de la sesión de spec para la caja negra de MX8): las mezclas en el
   JSON del proyecto (`color_mixing.md`, regla 15) y la que imprime el modelo, desde la línea de comandos. Antes solo
   entraban con un proyecto. Prueba `[cli]`.
