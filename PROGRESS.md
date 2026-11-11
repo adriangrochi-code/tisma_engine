@@ -12731,6 +12731,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
+- **Cola de baja prioridad (después del orden de la beta; spec/next, 2026-11-11):** `ironing.md`, `ironing.angle`
+  (desplazamiento sobre el relleno de arriba, 45 por defecto, negativo = por defecto) e `ironing.angle_fixed` (ángulo
+  absoluto), prueba IR8. Ningún perfil del paquete plancha con ángulo hoy.
 - **Para P2 (sesión de especificaciones, 2026-11-11):** el puente de impresoras (`cloud.md` reglas 12 a 17) manda dos
   veces la misma impresora si la ve por red y por USB; tiene que mandar una por id, la de red si están las dos.
   Y `p2p_library.md` regla 8 quinquies (spec/next): una IPv6 bloqueada es la huella de su /64 (SHA-256 de sal + /64);
