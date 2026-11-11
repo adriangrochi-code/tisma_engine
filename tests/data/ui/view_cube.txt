@@ -1,0 +1,13 @@
+# The view cube (interface.md, «Navegación de la vista 3D», rule 2; the spec
+# team's UI18): its top face looks from above, «Inicio» goes back.
+wait 3
+expect-control view_cube
+cube top
+expect-camera top
+cube home
+expect-camera home
+cube front
+expect-camera front
+# A corner: from the left, the front and above at once.
+cube left-front-top
+expect-control view_home

@@ -2504,7 +2504,14 @@
     X(MaxBedTemp, "Cama máxima", "Bed maximum") \
     X(VariablesRow, "Variables del G-code", "G-code variables") \
     X(ListCount, "%d en la lista", "%d in the list") \
-    X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)")
+    X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)") \
+    X(ViewHome, "Inicio", "Home") \
+    X(NavigationPref, "Navegación", "Navigation") \
+    X(NavigationFusion, "Fusion 360", "Fusion 360") \
+    X(NavigationRightOrbits, "Botón derecho gira", "Right button turns") \
+    X(NavigationClassic, "Clásica", "Classic") \
+    X(NavigationNote, "Rueda: desplaza; Mayús + rueda: gira; doble clic con la rueda: encuadra", \
+      "Wheel: moves; Shift + wheel: turns; double click with the wheel: frames")
 
 #include <cstdarg>
 #include <optional>

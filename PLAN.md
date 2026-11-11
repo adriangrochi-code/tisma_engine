@@ -738,6 +738,29 @@ Va antes que lo demás de P1:
   y el apoyo en paralelo, y V6: 159 en vez de 672 ms por cuadro al mover la vista)
 - [ ] Lo de «Modelos grandes, lo que sigue» (P1) y V3 a V6 de la vista Vulkan, en ese orden de peso
 
+### Interfaz al estilo de Fusion 360 (pedido del dueño, 2026-11-10; segunda sesión del motor)
+
+Fichas en `spec/next` (pasan `tools/check_spec.py`): `interface.md` «Navegación de la vista 3D» (UI17, UI18) y
+`cad_design.md` «Diseño visual y forma de uso» (reglas 11 bis a 11 decies, CD26 a CD29). Después, los huecos de P1:
+cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y el panel de ayuda.
+- [x] Navegación por defecto de Fusion 360 (rueda desplaza, Mayús + rueda gira alrededor del punto bajo el mouse,
+  rueda acerca hacia el mouse, doble clic con la rueda encuadra, clic derecho = menú) y preferencia «Navegación»
+  (Fusion 360, Botón derecho gira, Clásica) (2026-11-11)
+- [x] Cubo de vistas arriba a la derecha (caras, aristas y esquinas, arrastre, «Inicio», animación corta) (2026-11-11)
+- [x] Rectángulo de selección con el izquierdo desde un lugar vacío (2026-11-11; la placa elige un solo modelo:
+  el más cercano al punto de partida)
+- [x] Punto del centro de giro mientras se gira (2026-11-11)
+- [ ] Selección de varios modelos (Ctrl/Mayús suman; el rectángulo elige todos)
+- [ ] Barra de vista abajo al centro (girar, desplazar, acercar, encuadrar, perspectiva/ortogonal, estilo)
+- [ ] Aspecto: degradé gris claro en el tema claro, grilla con líneas cada 10 mm marcadas
+- [ ] Diseño: barra de herramientas con pestañas y grupos (11 bis, CD26)
+- [ ] Diseño: navegador a la izquierda (11 ter)
+- [ ] Diseño: línea de tiempo abajo con marca arrastrable (11 quater, CD27)
+- [ ] Diseño: cuadros de operación flotantes con manipuladores (11 quinquies)
+- [ ] Diseño: boceto de frente con «Terminar boceto» y paleta (11 sexies)
+- [ ] Diseño: menú radial (11 septies, CD28) y buscador con la tecla S (11 octies, CD29)
+- [ ] Diseño: herramientas que faltan, en gris «Próximamente» (11 novies) y tema claro (11 decies)
+
 ### Pedidos del dueño sobre la interfaz (2026-10-28, por el equipo de fichas)
 
 El dueño probó la aplicación en Windows. Los errores que informó están arreglados (ver `PROGRESS.md`); quedan sus

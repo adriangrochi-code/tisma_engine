@@ -887,6 +887,13 @@ private:
     void brush_drag(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
+    // CAD navigation (interface.md, «Navegación de la vista 3D»).
+    std::optional<ImVec2> screen_of(Vec3 p) const;
+    Vec3 orbit_pivot_at(ImVec2 m);
+    void box_select(ImVec2 a, ImVec2 b);
+    void view_cube();
+    void turn_view_to(float yaw, float pitch, bool frame);
+    void home_view();
     Vec3 ray_at(ImVec2 at) const;
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
@@ -1552,6 +1559,21 @@ private:
     std::uint64_t coarse_version_ = 0;
     std::vector<std::size_t> coarse_object_vertices_;
     int moved_frame_ = -100; // the last frame the camera moved (ImGui::GetFrameCount)
+    // ui.navigation: 0 Fusion 360 (default), 1 the right button turns, 2 the
+    // classic one (left turns, right and middle move).
+    int navigation_ = 0;
+    std::optional<Vec3> orbit_pivot_; // the point the view turns about, while it turns
+    bool box_selecting_ = false;      // a left drag from an empty place draws a rectangle
+    // A short turn of the view (the view cube): from, to and when it began.
+    struct ViewTurn {
+        float yaw0, pitch0, yaw1, pitch1;
+        double start;
+        bool frame;
+    };
+    std::optional<ViewTurn> view_turn_;
+    bool cube_drag_ = false;
+    std::map<std::string, ImVec2> cube_spots_; // script: where each face, edge and corner of the cube is
+    OrbitCamera camera_mark_;                  // script: the camera at camera-mark
     bool camera_framed_ = false; // the camera is as the last framing left it (no orbit, pan or zoom since)
     bool last_coarse_ = false; // the last frame drew the coarse copy (--ui-script's expect-coarse)
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
@@ -4104,6 +4126,8 @@ void App::load_preferences(const std::filesystem::path& from) {
         if (j.contains("ui") && j.at("ui").is_object()) {
             const nlohmann::json& ui = j.at("ui");
             cad_design_ = ui.value("cad_design", true);
+            const std::string nav = ui.value("navigation", std::string("fusion"));
+            navigation_ = nav == "right_orbits" ? 1 : nav == "classic" ? 2 : 0;
             view_level_ = view_level_from(ui.value("level", std::string("normal")));
             // The Custom view: its keys, the level it started from, and the
             // keys there were then (settings_panel.md, rules 15 to 18).
@@ -4200,6 +4224,7 @@ void App::save_preferences(const std::filesystem::path& to) {
         j["ui"]["bed_type"] = bed_type_;
         j["ui"]["orthographic"] = camera_.orthographic;
         j["ui"]["cad_design"] = cad_design_;
+        j["ui"]["navigation"] = navigation_ == 1 ? "right_orbits" : navigation_ == 2 ? "classic" : "fusion";
         j["ui"]["graphics_api"] = graphics_api_;
         j["ui"]["view_quality"] = view_quality_;
         j["ui"]["max_fps"] = max_fps_;
@@ -4570,6 +4595,224 @@ Vec3 App::ray_at(ImVec2 m) const {
     const float ny = 1.0f - (m.y - view_pos_.y) / view_size_.y * 2.0f;
     const float half = std::tan(0.5f * camera_.lens_fov()), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
     return normalize(camera_.forward() + camera_.right() * (nx * half * aspect) + camera_.up() * (ny * half));
+}
+
+std::optional<ImVec2> App::screen_of(Vec3 p) const {
+    const Mat4 vp = camera_.projection(view_size_.x / std::max(view_size_.y, 1.0f)) * camera_.view();
+    const float cx = vp[0] * p.x + vp[4] * p.y + vp[8] * p.z + vp[12];
+    const float cy = vp[1] * p.x + vp[5] * p.y + vp[9] * p.z + vp[13];
+    const float w = vp[3] * p.x + vp[7] * p.y + vp[11] * p.z + vp[15];
+    if (!(w > 1e-6f))
+        return std::nullopt;
+    return ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+}
+
+// The point a turn goes about (interface.md, navigation, rule 1): the model
+// under the mouse; else the centre of the chosen model; else the bed's.
+Vec3 App::orbit_pivot_at(ImVec2 m) {
+    const Vec3 e = camera_.eye(), d = ray_at(m);
+    if (tab_ != Tab::Preview && !placed_meshes_.empty())
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d))
+            return e + d * float(hit->distance);
+    if (selected_ >= 0 && std::size_t(selected_) < placed_meshes_.size() && !placed_meshes_[std::size_t(selected_)].empty()) {
+        const BoundingBox box = placed_meshes_[std::size_t(selected_)].bounding_box();
+        if (!box.empty)
+            return Vec3{(box.min.x + box.max.x) * 0.5f, (box.min.y + box.max.y) * 0.5f, (box.min.z + box.max.z) * 0.5f};
+    }
+    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    bool any = false;
+    for (const auto& p : settings_.bed) {
+        x0 = any ? std::min(x0, p[0]) : p[0], x1 = any ? std::max(x1, p[0]) : p[0];
+        y0 = any ? std::min(y0, p[1]) : p[1], y1 = any ? std::max(y1, p[1]) : p[1];
+        any = true;
+    }
+    return Vec3{float(x0 + x1) * 0.5f, float(y0 + y1) * 0.5f, 0.0f};
+}
+
+// The rectangle of a left drag from an empty place (rule 1): left to right
+// chooses what is wholly inside, right to left also what it touches. The
+// plate keeps one chosen model for now: the nearest of those to the press.
+void App::box_select(ImVec2 a, ImVec2 b) {
+    const ImVec2 lo(std::min(a.x, b.x), std::min(a.y, b.y)), hi(std::max(a.x, b.x), std::max(a.y, b.y));
+    const bool touching = b.x < a.x;
+    int best = -1;
+    float best_d = 0.0f;
+    for (std::size_t i = 0; i < placed_meshes_.size() && i < objects_.size(); ++i) {
+        if (placed_meshes_[i].empty())
+            continue;
+        const BoundingBox box = placed_meshes_[i].bounding_box();
+        if (box.empty)
+            continue;
+        ImVec2 s0(1e30f, 1e30f), s1(-1e30f, -1e30f);
+        bool behind = false;
+        for (int k = 0; k < 8; ++k) {
+            const auto p = screen_of({k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z});
+            if (!p) {
+                behind = true;
+                break;
+            }
+            s0 = ImVec2(std::min(s0.x, p->x), std::min(s0.y, p->y)), s1 = ImVec2(std::max(s1.x, p->x), std::max(s1.y, p->y));
+        }
+        if (behind)
+            continue;
+        const bool inside = s0.x >= lo.x && s1.x <= hi.x && s0.y >= lo.y && s1.y <= hi.y;
+        const bool touches = s1.x >= lo.x && s0.x <= hi.x && s1.y >= lo.y && s0.y <= hi.y;
+        if (!(touching ? touches : inside))
+            continue;
+        const float d = std::hypot(0.5f * (s0.x + s1.x) - a.x, 0.5f * (s0.y + s1.y) - a.y);
+        if (best < 0 || d < best_d)
+            best = int(i), best_d = d;
+    }
+    selected_ = best;
+}
+
+// Turns the view to those angles in a short animation (the view cube, rule 2).
+void App::turn_view_to(float yaw, float pitch, bool frame) {
+    constexpr float kTwoPi = 6.28318531f;
+    // The shorter way round.
+    float from = camera_.yaw;
+    while (yaw - from > kTwoPi * 0.5f)
+        yaw -= kTwoPi;
+    while (from - yaw > kTwoPi * 0.5f)
+        yaw += kTwoPi;
+    view_turn_ = ViewTurn{from, camera_.pitch, yaw, pitch, glfwGetTime(), frame};
+    camera_framed_ = false;
+}
+
+void App::home_view() {
+    OrbitCamera iso = camera_;
+    iso.set_view(StandardView::Iso);
+    turn_view_to(iso.yaw, iso.pitch, true);
+}
+
+// The view cube at the top right of the view (interface.md, navigation,
+// rule 2): its faces, edges and corners turn the view to look at them; a drag
+// on it turns the view; «Inicio» goes back to the starting view. It follows
+// the camera. Own drawing, with the theme's colours.
+void App::view_cube() {
+    if (view_turn_) { // the animation: an ease over 0.25 s
+        const double t = std::clamp((glfwGetTime() - view_turn_->start) / 0.25, 0.0, 1.0);
+        const float k = float(t * t * (3.0 - 2.0 * t));
+        camera_.yaw = view_turn_->yaw0 + (view_turn_->yaw1 - view_turn_->yaw0) * k;
+        camera_.pitch = view_turn_->pitch0 + (view_turn_->pitch1 - view_turn_->pitch0) * k;
+        moved_frame_ = ImGui::GetFrameCount();
+        if (t >= 1.0) {
+            if (view_turn_->frame)
+                frame_all();
+            view_turn_.reset();
+        }
+    }
+    const float size = 108.0f * scale_, half = 0.5f * size;
+    const ImVec2 centre(view_pos_.x + view_size_.x - half - 18.0f * scale_, view_pos_.y + half + 56.0f * scale_);
+    ImGui::SetNextWindowPos(ImVec2(centre.x - half - 4.0f * scale_, centre.y - half - 4.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(size + 8.0f * scale_, size + 34.0f * scale_));
+    ImGui::Begin("##view_cube", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                     ImGuiWindowFlags_NoScrollWithMouse);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // The cube's corners seen by the camera (orthographic, its rotation only).
+    const Vec3 r = camera_.right(), u = camera_.up(), f = camera_.forward();
+    const float s = 0.31f * size;
+    const auto at = [&](Vec3 p) { return ImVec2(centre.x + dot(p, r) * s, centre.y - dot(p, u) * s); };
+    struct Face {
+        Vec3 n;
+        T name;
+        const char* key;
+    };
+    const Face faces[] = {{{0, -1, 0}, T::ViewFront, "front"}, {{0, 1, 0}, T::ViewBack, "back"},
+                          {{-1, 0, 0}, T::ViewLeft, "left"},   {{1, 0, 0}, T::ViewRight, "right"},
+                          {{0, 0, 1}, T::ViewTop, "top"},      {{0, 0, -1}, T::ViewBottom, "bottom"}};
+    const ImVec2 m = ImGui::GetIO().MousePos;
+    ImGui::SetCursorScreenPos(ImVec2(centre.x - half, centre.y - half));
+    ImGui::InvisibleButton("##cube", ImVec2(size, size));
+    const bool hovered = ImGui::IsItemHovered();
+    // What the mouse is on: a face's centre third, an edge or a corner, as a
+    // sum of face normals (one, two or three of them).
+    Vec3 aim{0, 0, 0};
+    cube_spots_.clear();
+    const auto edge_name = [](Vec3 v) {
+        std::string k;
+        for (const auto& [axis, neg, pos] : {std::tuple{v.x, "left", "right"}, std::tuple{v.y, "front", "back"}, std::tuple{v.z, "bottom", "top"}})
+            if (axis != 0.0f)
+                k += std::string(k.empty() ? "" : "-") + (axis < 0 ? neg : pos);
+        return k;
+    };
+    for (const Face& face : faces) {
+        if (dot(face.n, f) >= -0.02f) // facing away
+            continue;
+        // The face's 3x3 grid: centre, edges and corners.
+        const Vec3 a = std::abs(face.n.x) > 0.5f ? Vec3{0, 1, 0} : Vec3{1, 0, 0};
+        const Vec3 b = cross(face.n, a);
+        for (int i = -1; i <= 1; ++i)
+            for (int j = -1; j <= 1; ++j) {
+                const float x0 = float(i) * 2.0f / 3.0f - 1.0f / 3.0f, y0 = float(j) * 2.0f / 3.0f - 1.0f / 3.0f;
+                const ImVec2 q[4] = {at(face.n + a * x0 + b * y0), at(face.n + a * (x0 + 2.0f / 3.0f) + b * y0),
+                                     at(face.n + a * (x0 + 2.0f / 3.0f) + b * (y0 + 2.0f / 3.0f)),
+                                     at(face.n + a * x0 + b * (y0 + 2.0f / 3.0f))};
+                const Vec3 v = face.n + a * float(i) + b * float(j);
+                const std::string key = edge_name(v);
+                const ImVec2 mid((q[0].x + q[2].x) * 0.5f, (q[0].y + q[2].y) * 0.5f);
+                if (!cube_spots_.contains(key))
+                    cube_spots_[key] = mid;
+                // Inside this cell (a convex quad: the same side of each edge).
+                bool in = hovered;
+                for (int e = 0; e < 4 && in; ++e) {
+                    const ImVec2 p0 = q[e], p1 = q[(e + 1) % 4];
+                    const float c = (p1.x - p0.x) * (m.y - p0.y) - (p1.y - p0.y) * (m.x - p0.x);
+                    const float c_ref = (p1.x - p0.x) * (mid.y - p0.y) - (p1.y - p0.y) * (mid.x - p0.x);
+                    in = c * c_ref >= 0.0f;
+                }
+                if (in)
+                    aim = v;
+                // Between the panel's colour and the text's, shaded by how
+                // squarely the face looks at the camera.
+                const float light = 0.70f + 0.30f * std::max(0.0f, -dot(face.n, f));
+                const ImVec4 p = rgb(theme_.panel), t = rgb(theme_.text);
+                const float mix = theme_.dark ? 0.40f : 0.12f;
+                ImVec4 col(((1.0f - mix) * p.x + mix * t.x) * light, ((1.0f - mix) * p.y + mix * t.y) * light,
+                           ((1.0f - mix) * p.z + mix * t.z) * light, 0.95f);
+                if (in)
+                    col = rgb(theme_.accent, 0.85f);
+                dl->AddQuadFilled(q[0], q[1], q[2], q[3], ImGui::GetColorU32(col));
+            }
+        const ImVec2 c0 = at(face.n + a + b), c1 = at(face.n - a + b), c2 = at(face.n - a - b), c3 = at(face.n + a - b);
+        dl->AddQuad(c0, c1, c2, c3, ImGui::GetColorU32(rgb(theme_.text, 0.55f)), 1.0f * scale_);
+        // The face's name, small enough to fit its width; none on a face seen
+        // too much sideways.
+        const char* label = tr(face.name);
+        const float font = ImGui::GetFontSize() * 0.78f;
+        const ImVec2 ts = ImGui::GetFont()->CalcTextSizeA(font, FLT_MAX, 0.0f, label);
+        const ImVec2 fc = at(face.n);
+        if (-dot(face.n, f) > 0.45f)
+            dl->AddText(ImGui::GetFont(), font, ImVec2(fc.x - ts.x * 0.5f, fc.y - ts.y * 0.5f), ImGui::GetColorU32(rgb(theme_.text)), label);
+    }
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f)) {
+        cube_drag_ = true; // a drag on the cube turns the view
+        camera_.orbit(ImGui::GetIO().MouseDelta.x, ImGui::GetIO().MouseDelta.y);
+        view_turn_.reset();
+        moved_frame_ = ImGui::GetFrameCount();
+        camera_framed_ = false;
+    }
+    if (ImGui::IsItemDeactivated()) {
+        if (!cube_drag_ && (aim.x != 0.0f || aim.y != 0.0f || aim.z != 0.0f)) {
+            float yaw = camera_.yaw, pitch = camera_.pitch;
+            OrbitCamera::angles_for(aim * -1.0f, yaw, pitch);
+            if (aim.x == 0.0f && aim.y == 0.0f) // straight up or down: the front at the bottom
+                yaw = 0.0f;
+            turn_view_to(yaw, pitch, false);
+        }
+        cube_drag_ = false;
+    }
+    if (hovered && aim.x == 0.0f && aim.y == 0.0f && aim.z == 0.0f)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    g_menu_rects["view_cube"] = ImVec4(centre.x - half, centre.y - half, centre.x + half, centre.y + half);
+    // «Inicio», under the cube.
+    ImGui::SetCursorScreenPos(ImVec2(centre.x - half, centre.y + half + 4.0f * scale_));
+    if (ImGui::SmallButton(tr(T::ViewHome)))
+        home_view();
+    note_rect("view_home");
+    ImGui::End();
 }
 
 void App::load_gcode(const std::filesystem::path& path) {
@@ -10430,20 +10673,67 @@ void App::viewport() {
                 dragged_ = true;
             }
         } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && !(sketch_edit_ && sketch_edit_->drag) && !arrow_drag_ &&
-                   ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
+                   !cube_drag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
                    !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             // Not on the press itself: its frame's delta is where the pointer
             // came from, not a drag (UI50: a click right after a jump of the
             // pointer turned the view to the top, now and then).
-            camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
+            if (navigation_ == 2) {
+                camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
+                moved_frame_ = ImGui::GetFrameCount();
+                camera_framed_ = false;
+            } else if (editing && tool_ != PlateTool::Paint && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f)) {
+                box_selecting_ = true; // a rectangle from an empty place (rule 1)
+            }
+        }
+        // The middle button moves the view; with Shift it turns it about the
+        // point under the mouse. With the right button turning, its drag turns.
+        // The classic navigation: right and middle move, left turns (above).
+        const auto dragging = [&](ImGuiMouseButton b) {
+            return ImGui::IsMouseDragging(b, b == ImGuiMouseButton_Right && navigation_ == 1 ? 4.0f : 0.0f) &&
+                   !ImGui::IsMouseClicked(b);
+        };
+        const bool turn = navigation_ == 0   ? dragging(ImGuiMouseButton_Middle) && io.KeyShift
+                          : navigation_ == 1 ? dragging(ImGuiMouseButton_Right)
+                                             : false;
+        const bool move = navigation_ == 2 ? dragging(ImGuiMouseButton_Right) || dragging(ImGuiMouseButton_Middle)
+                                           : dragging(ImGuiMouseButton_Middle) && !turn;
+        if (turn) {
+            if (!orbit_pivot_)
+                orbit_pivot_ = orbit_pivot_at(io.MouseClickedPos[navigation_ == 1 ? ImGuiMouseButton_Right : ImGuiMouseButton_Middle]);
+            camera_.orbit_about(*orbit_pivot_, io.MouseDelta.x, io.MouseDelta.y);
+        } else if (move) {
+            camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
+        }
+        if (turn || move) {
+            view_turn_.reset();
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
         }
-        if ((ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) && !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) ||
-            (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f) && !ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
-            camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
-            moved_frame_ = ImGui::GetFrameCount();
-            camera_framed_ = false;
+        if (!turn)
+            orbit_pivot_.reset();
+    } else {
+        orbit_pivot_.reset();
+    }
+    if (orbit_pivot_)
+        if (const auto at = screen_of(*orbit_pivot_)) { // the centre of the turn, a small dot (rule 4)
+            ImGui::GetWindowDrawList()->AddCircleFilled(*at, 4.0f * scale_, ImGui::GetColorU32(rgb(theme_.accent)));
+            ImGui::GetWindowDrawList()->AddCircle(*at, 4.0f * scale_, IM_COL32(255, 255, 255, 220), 0, 1.5f * scale_);
+        }
+    if (box_selecting_) {
+        const ImVec2 a = io.MouseClickedPos[ImGuiMouseButton_Left], b = io.MousePos;
+        // Left to right: what is inside (a solid line); right to left: also
+        // what it touches (dashed in CAD programs; here a lighter fill).
+        const bool touching = b.x < a.x;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 lo(std::min(a.x, b.x), std::min(a.y, b.y)), hi(std::max(a.x, b.x), std::max(a.y, b.y));
+        ImVec4 fill = rgb(theme_.accent);
+        fill.w = touching ? 0.10f : 0.18f;
+        dl->AddRectFilled(lo, hi, ImGui::GetColorU32(fill));
+        dl->AddRect(lo, hi, ImGui::GetColorU32(rgb(theme_.accent)), 0.0f, (touching ? 1.0f : 1.5f) * scale_);
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            box_select(a, b);
+            box_selecting_ = false;
         }
     }
     if (ImGui::IsItemDeactivated() && editing) {
@@ -10451,7 +10741,7 @@ void App::viewport() {
             remember_place(pressed_object_, press_place_);
             plate_changed(); // the move is over: now the slice is out of date
         }
-        else if (pressed_object_ < 0 && !on_gizmo && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
+        else if (pressed_object_ < 0 && !on_gizmo && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint && !box_selecting_ &&
                  ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
                  std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
             selected_ = -1; // a click on the empty bed
@@ -10460,13 +10750,22 @@ void App::viewport() {
     }
     if (ImGui::IsItemHovered()) {
         if (io.MouseWheel != 0.0f) {
-            camera_.zoom(io.MouseWheel);
+            // CAD navigation: toward the mouse, and as Fusion 360 does by
+            // default, the wheel turned back (toward the person) comes nearer
+            // (Autodesk's help, Preferences › General › Reverse zoom direction).
+            if (navigation_ == 2)
+                camera_.zoom(io.MouseWheel);
+            else
+                camera_.zoom_toward(-io.MouseWheel, mouse_ray());
+            view_turn_.reset();
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
         }
         // A double click frames the plate, but not while marking a part in
-        // Structural: the view stays where it was (UI50).
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !(tab_ == Tab::Structural && structural_tool_ > 0))
+        // Structural: the view stays where it was (UI50). In CAD navigation
+        // the double click is the wheel's (rule 1).
+        if (navigation_ == 2 ? ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !(tab_ == Tab::Structural && structural_tool_ > 0)
+                             : ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Middle))
             frame_all();
     }
     // A right click, not a drag: on a model, its menu (settings_levels.md,
@@ -17246,8 +17545,11 @@ void App::update_view_hold() {
         lowered_ = false;
     }
     ao_hold_seen_ = std::max(ao_hold_seen_, ao_hold_);
+    // The still frame draws the whole picture: the window wakes for it. Not a
+    // new framing, which put the camera back where the last one left it while
+    // the person turned or moved the view on a slow machine.
     if (ao_hold_ != before)
-        frame_pending_ = true; // the still frame draws the whole picture
+        glfwPostEmptyEvent();
     // The first time the automatic quality lowers something, a short notice (rule 8).
     if (ao_hold_ != 0 && !painting && view_quality_ == "automatic" && !lowered_notice_shown_) {
         lowered_notice_shown_ = true;
@@ -18780,6 +19082,15 @@ void App::config_window() {
         }
     });
     row(1, T::PanelFolded, "ui.panel_folded", toggle(panel_folded_), tr(T::PanelFoldedNote));
+    row(1, T::NavigationPref, "ui.navigation", [&] {
+        const T names[] = {T::NavigationFusion, T::NavigationRightOrbits, T::NavigationClassic};
+        if (ImGui::BeginCombo("##v", tr(names[std::clamp(navigation_, 0, 2)]))) {
+            for (int k = 0; k < 3; ++k)
+                if (ImGui::Selectable(tr(names[k]), k == navigation_))
+                    navigation_ = k;
+            ImGui::EndCombo();
+        }
+    }, tr(T::NavigationNote));
     row(1, T::DesignPref, "ui.cad_design", [&] {
         if (ImGui::Checkbox("##v", &cad_design_) && !cad_design_ && engineering_tab(tab_))
             set_tab(Tab::Prepare);
@@ -21631,6 +21942,8 @@ void App::layout() {
             help_panel();
         status_bar();
         view_tools();
+        if (tab_ != Tab::Calibration && tab_ != Tab::Device)
+            view_cube();
         if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_) {
             plate_tools();
             volumes_overlay();
@@ -23581,6 +23894,103 @@ void App::script_input() {
             io.AddMouseButtonEvent(0, false);
         else if (k >= n + 5)
             next();
+    } else if (step.verb == "mouse") { // a drag in the view: "BUTTON X Y DX DY [shift]", X Y as 0..1 of the view, DX DY in pixels
+        float x = 0.5f, y = 0.5f, dx = 0.0f, dy = 0.0f;
+        char shift[16] = "";
+        std::sscanf(step.value.c_str(), "%f %f %f %f %15s", &x, &y, &dx, &dy, shift);
+        const int button = step.key == "right" ? 1 : step.key == "middle" ? 2 : 0;
+        const bool with_shift = std::string(shift) == "shift";
+        const ImVec2 p(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
+        constexpr int kSteps = 10; // 0: there, 1: pressed, 2..11: moving, 12: let go
+        if (f == 0) {
+            io.AddMousePosEvent(p.x, p.y);
+            if (with_shift)
+                io.AddKeyEvent(ImGuiMod_Shift, true), io.AddKeyEvent(ImGuiKey_LeftShift, true);
+        } else if (f == 1) {
+            io.AddMouseButtonEvent(button, true);
+        } else if (f <= kSteps + 1) {
+            const float t = float(f - 1) / float(kSteps);
+            io.AddMousePosEvent(p.x + dx * t, p.y + dy * t);
+        } else if (f == kSteps + 2) {
+            io.AddMouseButtonEvent(button, false);
+        } else if (f == kSteps + 3) {
+            if (with_shift)
+                io.AddKeyEvent(ImGuiMod_Shift, false), io.AddKeyEvent(ImGuiKey_LeftShift, false);
+        } else if (f >= kSteps + 6) {
+            next();
+        }
+    } else if (step.verb == "mouse-double") { // a double click in the view: "BUTTON X Y"
+        float x = 0.5f, y = 0.5f;
+        std::sscanf(step.value.c_str(), "%f %f", &x, &y);
+        const int button = step.key == "right" ? 1 : step.key == "middle" ? 2 : 0;
+        if (f == 0)
+            io.AddMousePosEvent(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
+        else if (f == 1 || f == 3)
+            io.AddMouseButtonEvent(button, true);
+        else if (f == 2 || f == 4)
+            io.AddMouseButtonEvent(button, false);
+        else if (f >= 8)
+            next();
+    } else if (step.verb == "wheel") { // the wheel turned over the view: "X Y STEPS" (> 0: away from the person)
+        float x = 0.5f, y = 0.5f, n = 1.0f;
+        std::sscanf((step.key + " " + step.value).c_str(), "%f %f %f", &x, &y, &n);
+        if (f == 0)
+            io.AddMousePosEvent(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
+        else if (f == 1)
+            io.AddMouseWheelEvent(0.0f, n);
+        else if (f >= 4)
+            next();
+    } else if (step.verb == "cube") { // a click on the view cube's face, edge or corner ("top", "left-front-top") or "home"
+        const bool home = step.key == "home";
+        const auto spot = cube_spots_.find(step.key);
+        const auto home_rect = g_menu_rects.find("view_home");
+        if (f == 0) {
+            if (home ? home_rect == g_menu_rects.end() : spot == cube_spots_.end())
+                return script_frame_ < 30 ? void() : fail_step("the view cube does not show it");
+            const ImVec2 p = home ? ImVec2(0.5f * (home_rect->second.x + home_rect->second.z), 0.5f * (home_rect->second.y + home_rect->second.w))
+                                  : spot->second;
+            io.AddMousePosEvent(p.x, p.y);
+            script_frame_ = 100;
+        } else if (f == 101) {
+            io.AddMouseButtonEvent(0, true);
+        } else if (f == 102) {
+            io.AddMouseButtonEvent(0, false);
+        } else if (f >= 103 && !view_turn_ && !frame_pending_) {
+            next();
+        } else if (f > 200) {
+            fail_step("the view did not settle");
+        }
+    } else if (step.verb == "camera-mark") { // remember the camera, for expect-camera
+        camera_mark_ = camera_;
+        next();
+    } else if (step.verb == "expect-camera") { // since camera-mark: moved | turned | nearer | farther | same; or top | home
+        constexpr float kDegrees = 3.14159265f / 180.0f;
+        const OrbitCamera& a = camera_mark_;
+        const OrbitCamera& b = camera_;
+        const bool angles_same = std::abs(a.yaw - b.yaw) < 1e-4f && std::abs(a.pitch - b.pitch) < 1e-4f;
+        const bool distance_same = std::abs(a.distance - b.distance) < 1e-3f * a.distance;
+        const bool target_same = length(a.target - b.target) < 1e-3f;
+        OrbitCamera iso = camera_;
+        iso.set_view(StandardView::Iso);
+        const float two_pi = 2.0f * 3.14159265f;
+        const float yaw_off = std::abs(std::remainder(b.yaw - iso.yaw, two_pi));
+        const bool ok = step.key == "moved"     ? angles_same && distance_same && !target_same
+                        : step.key == "turned"  ? !angles_same && distance_same
+                        : step.key == "nearer"  ? angles_same && b.distance < a.distance * 0.999f
+                        : step.key == "farther" ? angles_same && b.distance > a.distance * 1.001f
+                        : step.key == "same"    ? angles_same && distance_same && target_same
+                        : step.key == "top"     ? b.pitch > 89.5f * kDegrees && std::abs(std::remainder(b.yaw, two_pi)) < 1e-3f
+                        : step.key == "front"   ? std::abs(b.pitch) < 1e-3f && std::abs(std::remainder(b.yaw, two_pi)) < 1e-3f
+                        : step.key == "home"    ? std::abs(b.pitch - iso.pitch) < 1e-3f && yaw_off < 1e-3f
+                                                : false;
+        std::printf("ui-script: expect-camera %s: %s (yaw %.1f, pitch %.1f, distance %.1f, target %.1f %.1f %.1f; "
+                    "was %.1f, %.1f, %.1f, %.1f %.1f %.1f)\n",
+                    step.key.c_str(), ok ? "ok" : "no", b.yaw / kDegrees, b.pitch / kDegrees, b.distance, b.target.x,
+                    b.target.y, b.target.z, a.yaw / kDegrees, a.pitch / kDegrees, a.distance, a.target.x, a.target.y,
+                    a.target.z);
+        if (!ok)
+            return fail_step("the camera is not " + step.key);
+        next();
     } else if (step.verb == "expect-place") {
         // The chosen model's x, y (mm), scale (%) or turn_x, turn_y, turn_z
         // (degrees, as the Rotate card shows them): within 1, or in A..B.
@@ -23885,6 +24295,8 @@ void App::script_input() {
             cad_design_ = step.value != "0";
             if (!cad_design_ && engineering_tab(tab_))
                 set_tab(Tab::Prepare);
+        } else if (step.key == "navigation") { // fusion | right_orbits | classic
+            navigation_ = step.value == "right_orbits" ? 1 : step.value == "classic" ? 2 : 0;
         } else if (step.key == "view_quality") { // as chosen in Configuración › Video
             apply_quality(step.value);
         } else {
@@ -24125,7 +24537,7 @@ void App::script_input() {
     } else if (step.verb == "expect-config-covers") { // every option the preferences keep has a control (PF7)
         static const char* const kOptionKeys[] = {
             "language", "theme", "render", "msaa", "fxaa", "moire_filter", "ao_strength", "tips", "assistant.tutorials",
-            "assistant.glossary_tips", "assistant.material_tips", "ui.level", "ui.orthographic", "ui.cad_design",
+            "assistant.glossary_tips", "assistant.material_tips", "ui.level", "ui.orthographic", "ui.cad_design", "ui.navigation",
             "ui.graphics_api", "ui.view_quality", "ui.max_fps", "ui.vsync", "ui.lower_while_moving", "ui.battery_saver",
             "ui.show_frame_time", "compute.gpu", "ui.panel_folded"};
         std::string missing;
