@@ -13505,4 +13505,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `tests/data/settings.json` (los ajustes de los números de QA), 4 núcleos: 0,51 a 0,59 s, 240 capas, 1 h 11 min 30 s,
   3943 mm de filamento; con `gpu` `auto` igual (solo llvmpipe, que el motor no usa). Firmware: Marlin 2 (`marlin`) y
   Marlin 1 (`marlin_legacy`) ya son dos opciones en el motor y en la interfaz («Marlin 2», «Marlin 1»).
+- **PF15, `machine.flavor_choices`** (spec/next e80c11f; dueño: «de Marlin marquemos los dos»). Lista de firmwares
+  (nombres de `flavor`) que la impresora puede tener cuando la fuente no los distingue: el paquete trae
+  `["marlin_legacy", "marlin"]` en las impresoras de Cura. Se lee, se valida y se guarda (solo si no está vacía);
+  `flavor` sigue siendo el que se usa. Prueba `[settings]` PF15. La interfaz ya separa «Marlin 1» y «Marlin 2»; le
+  toca ofrecer solo los de la lista cuando la hay (aviso a esa sesión).
 

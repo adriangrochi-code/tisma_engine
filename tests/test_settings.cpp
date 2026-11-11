@@ -683,3 +683,14 @@ TEST_CASE("walls.spread_count and walls.transition_length (perimeters.md)", "[se
     CHECK_THROWS_AS(parse_settings(R"({"walls": {"spread_count": 0}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"walls": {"transition_length": "x%"}})"), SettingsError);
 }
+
+TEST_CASE("settings: machine.flavor_choices, the firmwares a printer may run (profile_pack_format.md, PF15)", "[settings]") {
+    const Settings s = parse_settings(R"({"machine": {"flavor": "marlin", "flavor_choices": ["marlin_legacy", "marlin"]}})");
+    CHECK(s.flavor == GcodeFlavor::Marlin);
+    CHECK(s.flavor_choices == std::vector<GcodeFlavor>{GcodeFlavor::MarlinLegacy, GcodeFlavor::Marlin});
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(back.flavor_choices == s.flavor_choices);
+    CHECK(settings_json(parse_settings("{}")).find("flavor_choices") == std::string::npos); // none: not written
+    CHECK_THROWS_AS(parse_settings(R"({"machine": {"flavor_choices": ["marlin3"]}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"machine": {"flavor_choices": "marlin"}})"), SettingsError);
+}

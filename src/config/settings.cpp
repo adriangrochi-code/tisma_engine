@@ -1967,7 +1967,7 @@ Settings parse_checked(std::string_view text) {
         }
     };
     read_group(root, "machine",
-               {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
+               {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "flavor_choices", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
                 "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
                 "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "heat_rate_nozzle", "heat_rate_bed",
@@ -2158,6 +2158,17 @@ Settings parse_checked(std::string_view text) {
                                                  : s.max_chamber_temp) = d;
                    } else if (n == "flavor") {
                        s.flavor = choice<GcodeFlavor>(g, n, k, flavors());
+                   } else if (n == "flavor_choices") {
+                       if (!v.is_array())
+                           fail(k, "must be a list of firmware names");
+                       s.flavor_choices.clear();
+                       for (const json& f : v) {
+                           const auto it = f.is_string() ? flavors().find(f.get<std::string>()) : flavors().end();
+                           if (it == flavors().end())
+                               fail(k, "must name firmwares that machine.flavor takes");
+                           if (std::find(s.flavor_choices.begin(), s.flavor_choices.end(), it->second) == s.flavor_choices.end())
+                               s.flavor_choices.push_back(it->second);
+                       }
                    } else if (n == "strict_parser") {
                        s.strict_parser = choice<StrictParser>(
                            g, n, k, {{"none", StrictParser::None}, {"anycubic", StrictParser::Anycubic}});
@@ -4483,6 +4494,12 @@ std::string settings_json(const Settings& s) {
     };
     if (!s.machine_macros.empty())
         root["machine"]["macros"] = machine_macros_json(s.machine_macros);
+    if (!s.flavor_choices.empty()) {
+        ordered_json choices = ordered_json::array();
+        for (const GcodeFlavor f : s.flavor_choices)
+            choices.push_back(flavor_name(f));
+        root["machine"]["flavor_choices"] = choices;
+    }
     return root.dump(2) + "\n";
 }
 

@@ -372,6 +372,10 @@ struct Settings {
     double filament_diameter = 1.75; // mm
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;
+    // The firmwares the printer may run when its source does not tell them
+    // apart (profile_pack_format.md, PF15: ["marlin_legacy", "marlin"]): the
+    // interface offers them; `flavor` is the one used if nobody chooses.
+    std::vector<GcodeFlavor> flavor_choices;
     std::string start_gcode, end_gcode;
     MachineMacros machine_macros; // machine.macros
     // Not a setting: the input file's name without its folder and extension,
