@@ -30,6 +30,8 @@ data class Account(
     val remotePrinters: Int = 0,
     /** False for an account made with Google only. */
     val hasPassword: Boolean = true,
+    /** cloud.md 5c: the store subscription that gives the plan, or null. */
+    val subscription: Subscription? = null,
 ) {
     companion object {
         fun from(o: JsonObject) = Account(
@@ -45,9 +47,21 @@ data class Account(
             unlimited = o.bool("unlimited"),
             remotePrinters = o.number("remote_printers").toInt(),
             hasPassword = (o["has_password"] as? JsonPrimitive)?.booleanOrNull ?: true,
+            subscription = (o["subscription"] as? JsonObject)?.let(Subscription::from),
         )
     }
 }
+
+/** cloud.md 5c: `subscription` of `GET /v1/me`. */
+data class Subscription(val store: String, val productId: String, val expires: String, val autoRenew: Boolean) {
+    companion object {
+        fun from(o: JsonObject) = Subscription(o.text("store"), o.text("product_id"), o.text("expires"), o.bool("auto_renew"))
+    }
+}
+
+/** cloud.md 5c: what a store gave as the proof of a purchase. */
+data class StorePurchase(val store: String, val productId: String, val purchaseToken: String = "",
+                         val signedTransaction: String = "", val storeIdKey: String = "")
 
 /** An open session of the account, `GET /v1/me/sessions`. */
 data class AccountSession(val id: String, val device: String, val createdAt: String, val lastUsed: String, val current: Boolean) {
@@ -65,6 +79,8 @@ data class Plan(
     val priceCents: Long,
     val currency: String,
     val classes: List<String>,
+    /** cloud.md 5c: the plan's product in each store where it is sold. */
+    val storeProducts: Map<String, String> = emptyMap(),
 ) {
     fun includes(jobClass: String) = jobClass in classes
 
@@ -76,6 +92,9 @@ data class Plan(
             priceCents = o.number("price_cents").toLong(),
             currency = o.text("currency"),
             classes = o.texts("classes"),
+            storeProducts = (o["store_products"] as? JsonObject)?.mapNotNull { (k, v) ->
+                (v as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { k to it }
+            }?.toMap().orEmpty(),
         )
     }
 }

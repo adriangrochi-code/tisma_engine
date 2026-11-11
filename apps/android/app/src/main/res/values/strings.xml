@@ -252,6 +252,7 @@
     <string name="err_engine_stopped">The engine stopped (code %1$d).</string>
     <string name="err_incomplete">%1$s arrived incomplete: try again.</string>
     <string name="manage_plan_web">Pay on the web instead</string>
+    <string name="plan_buy">Subscribe</string>
     <string name="plate_share">Share the G-code</string>
     <string name="plate_send_to">Send to</string>
     <string name="plate_print">Print</string>

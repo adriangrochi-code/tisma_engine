@@ -83,6 +83,8 @@ class CloudViewModel(
     private val pollMs: Long = POLL_MS,
     /** Where downloaded results go for the preview. */
     private val cacheDir: java.io.File = java.io.File(System.getProperty("java.io.tmpdir")),
+    /** The phone's store, when there is one to buy with (cloud.md 5c). */
+    val billing: StoreBilling? = null,
 ) : ViewModel() {
 
     private var client = clientFor(settings.server, secrets.get(TOKEN))
@@ -130,6 +132,29 @@ class CloudViewModel(
         keep(client.login(email.trim(), password, device))
         AppLog.line("cloud: signed in")
         refreshAccount()
+        restorePurchases()
+    }
+
+    /** cloud.md 5c: buys the plan's product in the phone's store and has the server verify it. */
+    fun buy(plan: net.tisma.cloud.Plan) {
+        val b = billing ?: return
+        val product = plan.storeProducts[b.store] ?: return
+        viewModelScope.launch {
+            val proof = runCatching { b.buy(product) }.onFailure { AppLog.line("store: ${it.message}") }.getOrNull() ?: return@launch
+            val account = request { client.purchase(proof) } ?: return@launch
+            _state.update { it.copy(account = account) }
+        }
+    }
+
+    /** «Restaurar compras»: the store's active purchases go to the server again, so a new phone gets the plan. */
+    private fun restorePurchases() {
+        val b = billing ?: return
+        viewModelScope.launch {
+            val list = runCatching { b.active() }.getOrDefault(emptyList())
+            var account: net.tisma.cloud.Account? = null
+            for (p in list) request(quiet = true) { client.purchase(p) }?.let { account = it }
+            account?.let { a -> _state.update { it.copy(account = a) } }
+        }
     }
 
     fun register(email: String, password: String, plan: String?) = launchRequest {
@@ -407,4 +432,18 @@ class CloudViewModel(
             n
         }
     }
+}
+
+
+/**
+ * cloud.md 5c: the phone's store. The purchase itself needs the store's library (Google Play Billing), which waits for
+ * the owner's decision on its licence; until then there is none and plans are not offered for purchase in the app.
+ */
+interface StoreBilling {
+    /** `google_play`, `app_store` or `microsoft_store`. */
+    val store: String
+    /** Buys [productId] in the store's own sheet; the proof, or null when the person cancelled. */
+    suspend fun buy(productId: String): net.tisma.cloud.StorePurchase?
+    /** The store's active purchases of this app, sent again at sign-in («restaurar compras»). */
+    suspend fun active(): List<net.tisma.cloud.StorePurchase>
 }

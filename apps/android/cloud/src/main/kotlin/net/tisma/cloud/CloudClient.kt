@@ -88,6 +88,17 @@ class CloudClient(
     /** `GET /v1/me`. */
     fun account(): Account = Account.from(getObject("/v1/me"))
 
+    /**
+     * cloud.md 5c: a store purchase for the server to verify (402 not confirmed, 409 another account's, 422 a field
+     * missing; the same purchase twice gives the same answer). Returns the account with its new plan.
+     */
+    fun purchase(p: StorePurchase): Account = Account.from(postObject("/v1/me/purchases", buildJsonObject {
+        put("store", p.store); put("product_id", p.productId)
+        if (p.purchaseToken.isNotBlank()) put("purchase_token", p.purchaseToken)
+        if (p.signedTransaction.isNotBlank()) put("signed_transaction", p.signedTransaction)
+        if (p.storeIdKey.isNotBlank()) put("store_id_key", p.storeIdKey)
+    }))
+
     /** `GET /v1/me/sessions`: where the account is signed in. */
     fun sessions(): List<AccountSession> = list(get("/v1/me/sessions"), "sessions").map(AccountSession::from)
 

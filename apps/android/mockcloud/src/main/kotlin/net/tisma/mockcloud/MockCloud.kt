@@ -39,6 +39,8 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         val priceCents: Long,
         val classes: List<String>,
         val public: Boolean = true,
+        /** cloud.md 5c: store → product id. */
+        val storeProducts: Map<String, String> = emptyMap(),
     )
 
     class AccountDef(
@@ -48,7 +50,13 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         var verified: Boolean = true,
         var disabled: Boolean = false,
         var grantedHours: Double = 0.0,
+        /** cloud.md 5c: store, product id, expiry. */
+        var subscription: Triple<String, String, String>? = null,
     )
+
+    /** cloud.md 5c: the store's answer for a proof (true confirmed); and which account each purchase belongs to. */
+    @Volatile var storeConfirms: (store: String, proof: String) -> Boolean = { _, proof -> proof.startsWith("ok") }
+    private val purchaseOwner = mutableMapOf<String, String>()
 
     class JobDef(
         val id: String,
@@ -76,7 +84,8 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
     val plans = mutableListOf(
         PlanDef("Free", 1.0, 1, 0, listOf("slice")),
         PlanDef("Maker", 5.0, 2, 900, listOf("slice", "fea", "orient")),
-        PlanDef("Pro", 20.0, 4, 2900, listOf("slice", "slice_large", "fea", "fea_optimize", "aero", "orient")),
+        PlanDef("Pro", 20.0, 4, 2900, listOf("slice", "slice_large", "fea", "fea_optimize", "aero", "orient"),
+            storeProducts = mapOf("google_play" to "pro_month", "app_store" to "net.tismaservidores.tisma.pro_month")),
         PlanDef("Staff", 1000.0, 16, 0, listOf("slice", "slice_large", "fea", "fea_optimize", "aero", "orient"),
             public = false),
     )
@@ -203,6 +212,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
                 val t = bearer(ex); auth(ex); synchronized(lock) { tokens.remove(t) }; ok(buildJsonObject { put("ok", true) })
             }
             method == "GET" && r == listOf("me") -> ok(meJson(auth(ex)))
+            method == "POST" && r == listOf("me", "purchases") -> purchase(ex, auth(ex))
             method == "GET" && r == listOf("me", "sessions") -> sessions(ex, auth(ex))
             method == "DELETE" && r.size == 3 && r[0] == "me" && r[1] == "sessions" -> {
                 val a = auth(ex)
@@ -363,6 +373,24 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         put("price_cents", p.priceCents)
         put("currency", "usd")
         put("classes", buildJsonArray { p.classes.forEach { add(JsonPrimitive(it)) } })
+        if (p.storeProducts.isNotEmpty()) put("store_products", buildJsonObject { p.storeProducts.forEach { (k, v) -> put(k, v) } })
+    }
+
+    private fun purchase(ex: HttpExchange, a: AccountDef): Reply {
+        val b = readJson(ex)
+        fun s(k: String) = (b[k] as? JsonPrimitive)?.content.orEmpty()
+        val store = s("store"); val product = s("product_id")
+        val proof = when (store) { "google_play" -> s("purchase_token"); "app_store" -> s("signed_transaction"); else -> s("store_id_key") }
+        if (store.isEmpty() || product.isEmpty() || proof.isEmpty()) throw Stop(422, "Missing store, product_id or the store's proof")
+        val plan = synchronized(lock) { plans.firstOrNull { it.storeProducts[store] == product } } ?: throw Stop(422, "Unknown product")
+        if (!storeConfirms(store, proof)) throw Stop(402, "The store did not confirm this purchase")
+        synchronized(lock) {
+            val owner = purchaseOwner.getOrPut(store + ":" + proof) { a.email }
+            if (owner != a.email) throw Stop(409, "This purchase belongs to another account")
+            a.plan = plan.name
+            a.subscription = Triple(store, product, "2026-12-11T00:00:00Z")
+        }
+        return ok(meJson(a))
     }
 
     private fun meJson(a: AccountDef): JsonObject = synchronized(lock) {
@@ -382,6 +410,10 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
             put("unlimited", false)
             put("remote_printers", if (p.name == "Pro") 3 else 0)
             put("has_password", true)
+            val sub = a.subscription
+            if (sub == null) put("subscription", null as String?) else put("subscription", buildJsonObject {
+                put("store", sub.first); put("product_id", sub.second); put("expires", sub.third); put("auto_renew", true)
+            })
         }
     }
 

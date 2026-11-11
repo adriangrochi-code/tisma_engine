@@ -237,6 +237,7 @@
     <string name="err_engine_stopped">El motor se detuvo (código %1$d).</string>
     <string name="err_incomplete">%1$s llegó incompleto: probá de nuevo.</string>
     <string name="manage_plan_web">Pagar por la web</string>
+    <string name="plan_buy">Suscribirme</string>
     <string name="plate_share">Compartir el G-code</string>
     <string name="plate_send_to">Mandar a</string>
     <string name="plate_print">Imprimir</string>

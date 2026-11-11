@@ -49,7 +49,7 @@ fun AccountScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
     ScreenColumn {
         if (state.signedIn) AccountCard(state, cloud) else LoginCard(state, cloud, nav)
         if (state.signedIn) SessionsCard(state, cloud)
-        PlansCard(state)
+        PlansCard(state, cloud)
     }
 }
 
@@ -147,7 +147,7 @@ private fun SessionsCard(state: CloudState, cloud: CloudViewModel) {
 
 /** The public plans as the server sends them, with the current one marked (rule 5a, CC13). */
 @Composable
-private fun PlansCard(state: CloudState) {
+private fun PlansCard(state: CloudState, cloud: CloudViewModel? = null) {
     val context = ctx()
     Text(stringResource(R.string.plans_title), style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(top = 8.dp))
@@ -155,11 +155,16 @@ private fun PlansCard(state: CloudState) {
         Text(stringResource(R.string.no_plans), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     val current = state.account?.plan
-    state.plans.forEach { p -> PlanRow(context, p, p.name == current) }
+    // cloud.md 5c: a plan is offered for purchase only with a product in this phone's store.
+    val store = cloud?.billing
+    state.plans.forEach { p ->
+        PlanRow(context, p, p.name == current,
+            buy = if (store != null && state.signedIn && p.name != current && p.storeProducts[store.store] != null) ({ cloud.buy(p) }) else null)
+    }
 }
 
 @Composable
-private fun PlanRow(context: Context, p: Plan, current: Boolean) {
+private fun PlanRow(context: Context, p: Plan, current: Boolean, buy: (() -> Unit)? = null) {
     val colors = if (current) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     else CardDefaults.cardColors()
     Card(colors = colors, modifier = Modifier.fillMaxWidth().testTag("plan_" + p.name)) {
@@ -177,6 +182,7 @@ private fun PlanRow(context: Context, p: Plan, current: Boolean) {
                 Text(stringResource(R.string.plan_includes, p.classes.joinToString(", ") { context.classText(it) }),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            buy?.let { OutlinedButton(onClick = it, modifier = Modifier.testTag("plan_buy_" + p.name)) { Text(stringResource(R.string.plan_buy)) } }
         }
     }
 }
