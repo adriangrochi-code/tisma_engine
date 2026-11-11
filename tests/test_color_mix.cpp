@@ -1680,3 +1680,35 @@ TEST_CASE("painted colours stop at the painted border, not a line width past it 
     CHECK(before == std::set<int>{2});
     CHECK(past == std::set<int>{1});
 }
+
+TEST_CASE("painted colours: through a thin wall, not along it past the painted border (multi_extruder.md rule 18, ME17)",
+          "[mixing][paint]") {
+    // A 0.8 mm wall from two boxes, y 90 to 100 and 100 to 110; the +X side of
+    // the first one painted with 2. Past y = 100 the wall is the part's own.
+    Plate p;
+    add_box(p.mesh, 99.6, 90, 0, 100.4, 100, 10);
+    add_box(p.mesh, 99.6, 100, 0, 100.4, 110, 10);
+    p.objects = {{"wall", 0, 24, 0, 0, 1}};
+    Painting paint;
+    for (std::size_t t = 0; t < 12; ++t) {
+        bool on = true;
+        for (int k = 0; k < 3; ++k)
+            on = on && p.mesh.corner(t, k).x > 100.3f;
+        if (on)
+            paint.set_tree(PaintChannel::Color, t, {2});
+    }
+    Settings s = base(3);
+    const SlicedModel m = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, &paint, &p.objects, nullptr);
+    std::set<int> before, past;
+    for (const auto* list : {&m.walls[20].toolpaths, &m.fills[20].sparse, &m.fills[20].solid})
+        for (const Toolpath& t : *list)
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const double y = 0.5 * (t.points[i].p.y + t.points[i - 1].p.y);
+                if (y > 95 && y < 99.8)
+                    before.insert(std::max<int>(t.tool, 1));
+                if (y > 100.2 && y < 105)
+                    past.insert(std::max<int>(t.tool, 1));
+            }
+    CHECK(before == std::set<int>{2});
+    CHECK(past == std::set<int>{1});
+}

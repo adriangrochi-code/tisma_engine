@@ -118,6 +118,9 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
     // Each mark's band at the outline, by layer: its side faces' band, and its
     // tops' and bottoms' areas carried down and up into the part.
     std::vector<std::pair<std::uint8_t, std::vector<Polygons>>> bands;
+    // And how far across a thin wall its side faces reach (ME17), square at
+    // the painted border: a thin wall takes the colour through, not along.
+    std::vector<std::vector<Polygons>> across;
     for (int m = 1; m < Painting::kSplit; ++m) {
         if (!painting.has(PaintChannel::Color, std::uint8_t(m)))
             continue;
@@ -153,6 +156,7 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
                 }
             }
         };
+        across.push_back(painted_areas(sides, layers, 2.1 * step, true));
         carry(tops, true, top_layers);
         carry(bottoms, false, bottom_layers);
         bands.push_back({std::uint8_t(m), std::move(band)});
@@ -167,14 +171,15 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
             return;
         // The labels: 0 (the part's own, unpainted faces) and each mark.
         std::vector<std::uint8_t> marks{0};
-        std::vector<Polygons> zone{};
+        std::vector<Polygons> zone{}, reach{{}};
         Polygons painted;
-        for (const auto& [m, by_layer] : bands)
-            if (l < by_layer.size() && !by_layer[l].empty()) {
+        for (std::size_t b = 0; b < bands.size(); ++b)
+            if (const auto& [m, by_layer] = bands[b]; l < by_layer.size() && !by_layer[l].empty()) {
                 Polygons z = Clipper2Lib::Intersect(by_layer[l], region, Clipper2Lib::FillRule::NonZero);
                 if (z.empty())
                     continue;
                 marks.push_back(m);
+                reach.push_back(l < across[b].size() ? across[b][l] : Polygons{});
                 painted = Clipper2Lib::Union(painted, z, Clipper2Lib::FillRule::NonZero);
                 zone.push_back(std::move(z));
             }
@@ -217,7 +222,7 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
         if (!thin.empty()) {
             const std::vector<Polygons> grown = zone;
             for (std::size_t k = 1; k < zone.size(); ++k) {
-                Polygons more = Clipper2Lib::Intersect(thin, offset(grown[k], 2.0 * step), Clipper2Lib::FillRule::NonZero);
+                Polygons more = Clipper2Lib::Intersect(thin, reach[k], Clipper2Lib::FillRule::NonZero);
                 for (std::size_t o = 1; o < zone.size(); ++o)
                     if (o != k)
                         more = Clipper2Lib::Difference(more, grown[o], Clipper2Lib::FillRule::NonZero);
