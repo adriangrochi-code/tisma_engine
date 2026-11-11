@@ -13423,4 +13423,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   pudieron borrar desde acá).
 - **Pruebas:** `design_radial.txt` (CD28: los siete del anillo y lo del último paso; Repetir hace otra caja, Borrar
   la saca); pasan las 39 de Diseño.
+- **P2: Moonraker encontrado en la red** (2026-11-11; `printer_connections.md` «Búsqueda en la red», con lo que QA leyó
+  de su documentación: un solo tipo DNS-SD, `_moonraker._tcp`; TXT `uuid`, `https_port`, `version`, `route_prefix`; solo
+  con `[zeroconf]` encendido). `MdnsService::url()` suma `route_prefix`; `confirm_moonraker(candidatos)` deja los que
+  contestan `GET /server/info`, cada dirección una vez, con lo que dice el servidor. Prueba `[device]` contra el
+  Moonraker simulado. Falta: que la interfaz busque `_moonraker._tcp.local` junto a `_octoprint._tcp.local` y pase los
+  resultados por `confirm_moonraker` (aviso a esa sesión). No probado con una impresora real.
 

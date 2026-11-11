@@ -92,9 +92,12 @@ void put_name(std::vector<std::uint8_t>& out, const std::string& name) {
 
 std::string MdnsService::url() const {
     std::string where = address.empty() ? host : address;
+    // OctoPrint's «path»; Moonraker's «route_prefix», its API's prefix
+    // (printer_connections.md, «Búsqueda en la red»).
     std::string path = "/";
-    if (const auto it = txt.find("path"); it != txt.end() && !it->second.empty())
-        path = it->second.front() == '/' ? it->second : "/" + it->second;
+    for (const char* key : {"path", "route_prefix"})
+        if (const auto it = txt.find(key); it != txt.end() && !it->second.empty())
+            path = it->second.front() == '/' ? it->second : "/" + it->second;
     return "http://" + where + (port > 0 && port != 80 ? ":" + std::to_string(port) : std::string()) + path;
 }
 

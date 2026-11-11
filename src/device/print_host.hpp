@@ -13,6 +13,8 @@
 // rr_disconnect). Own design; see PROVENANCE.md.
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -69,6 +71,16 @@ struct HostLimits : HostResult {
     nlohmann::json toolhead, settings;
 };
 HostLimits host_limits(const HostConfig& host);
+
+// Moonraker found on the network (printer_connections.md, «Búsqueda en la
+// red»: its `_moonraker._tcp` services, each confirmed by GET /server/info):
+// of the candidates (the service's instance name and address), the ones that
+// answer, each address once, with what the server says it is.
+struct FoundHost {
+    std::string name, url, server;
+};
+std::vector<FoundHost> confirm_moonraker(const std::vector<std::pair<std::string, std::string>>& candidates,
+                                         int timeout_s = 3);
 
 // The engine's words for a host kind ("octoprint", "moonraker", "prusalink",
 // "duet"); false for another word.

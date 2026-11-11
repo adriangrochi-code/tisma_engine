@@ -665,4 +665,24 @@ HostResult host_cancel(const HostConfig& host) {
     return result_of(net::perform(r));
 }
 
+std::vector<FoundHost> confirm_moonraker(const std::vector<std::pair<std::string, std::string>>& candidates,
+                                         int timeout_s) {
+    std::vector<FoundHost> out;
+    for (const auto& [name, url] : candidates) {
+        std::string base = url;
+        while (base.size() > 8 && base.back() == '/')
+            base.pop_back();
+        if (std::any_of(out.begin(), out.end(), [&](const FoundHost& f) { return f.url == base; }))
+            continue; // one printer once (rule 2)
+        HostConfig host;
+        host.kind = HostKind::Moonraker;
+        host.url = base;
+        host.timeout_s = timeout_s;
+        if (const HostVersion v = host_version(host); v.ok)
+            out.push_back({name, base, v.server});
+    }
+    return out;
+}
+
 } // namespace tisma::device
+

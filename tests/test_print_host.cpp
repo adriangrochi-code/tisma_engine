@@ -586,3 +586,27 @@ TEST_CASE("print host: Duet (RepRapFirmware standalone), session, upload and pri
     CHECK(fake.sessions == 0); // every session closed
     std::filesystem::remove(g);
 }
+
+#include "device/mdns.hpp"
+
+TEST_CASE("print host: Moonraker found on the network, confirmed by its server info (printer_connections.md)",
+          "[device][net]") {
+    FakeMoonraker fake;
+    // The service's address with its route prefix.
+    MdnsService service;
+    service.instance = "Moonraker @ voron._moonraker._tcp.local";
+    service.address = "127.0.0.1";
+    service.port = 7125;
+    service.txt = {{"uuid", "1234abcd"}, {"route_prefix", ""}, {"https_port", ""}, {"version", "v0.9.3"}};
+    CHECK(service.url() == "http://127.0.0.1:7125/");
+    service.txt["route_prefix"] = "/klipper";
+    CHECK(service.url() == "http://127.0.0.1:7125/klipper");
+    // The one that answers, once; one where nothing listens is left out.
+    const std::vector<FoundHost> found = confirm_moonraker(
+        {{"Moonraker @ voron", fake.url() + "/"}, {"Moonraker @ voron", fake.url()}, {"Moonraker @ gone", "http://127.0.0.1:1"}},
+        2);
+    REQUIRE(found.size() == 1);
+    CHECK(found[0].name == "Moonraker @ voron");
+    CHECK(found[0].url == fake.url());
+    CHECK(found[0].server == "Moonraker v0.9.3 (Klipper ready)");
+}

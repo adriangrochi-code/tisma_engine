@@ -642,7 +642,8 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
   `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05), y en la
   página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). También el botón
   principal «Mandar a la impresora» y el diálogo de envío con nombre, con «Subir y simular» en Duet (reglas 19 y 20).
-  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05). Falta la de Moonraker (nombres `.local` y su API)
+  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05); la de Moonraker en el motor (2026-11-11: `_moonraker._tcp`,
+  `route_prefix`, `confirm_moonraker` con `/server/info`); falta llamarla desde la interfaz
 - [ ] Probado con una impresora real por USB (necesita al dueño)
 - [ ] Leer los límites de la impresora (`printer_connections.md`, reglas 1 a 8): hecho el núcleo (`src/device/printer_limits.*`,
   2026-11-05: Marlin M115 y M503, Klipper `toolhead` y `configfile`, llenar solo lo vacío). Al conectar por USB ya se
