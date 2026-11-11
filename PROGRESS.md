@@ -13270,3 +13270,17 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **CI local** (ASan de abaaed6): 1254/1256; `ui_script_cut_parts` falló porque cambié su guion durante la corrida,
   y la de Vulkan es la arreglada acá.
 
+## 2026-11-11 — interfaz: pedidos del dueño (16:16): abrir desde la placa vacía, selección más visible, Supr
+
+- **Hecho:**
+  - en la placa vacía, «Abrir un archivo, o arrastrar un STL o un G-code acá» es un botón: un clic abre el diálogo de
+    archivo (se ilumina al pasar el mouse, con la mano);
+  - la selección se ve mucho más: el modelo elegido se aclara (vuelve el tinte) y cada elegido lleva un contorno de
+    3 px del acento con un brillo de 8 px debajo (más tenue donde está tapado). El tinte es para el elegido principal:
+    la vista pinta un solo tramo con otro color; los demás elegidos llevan el contorno;
+  - Supr borra lo elegido desde un atajo global (antes vivía en la columna de herramientas, que no corre con una
+    calibración o el visor), mientras no se escriba en un campo.
+- **Pruebas:** `open_hint.txt` (orden nueva `expect-file-dialog`), `delete_one.txt`; pasan los 203 `ui_`, incluidas
+  las comparaciones de OpenGL con Vulkan. Captura con un modelo elegido revisada.
+- **Decisión:** esto cambia lo de la ficha en `spec/next` («el color de la pieza no cambia»): lo pidió el dueño.
+

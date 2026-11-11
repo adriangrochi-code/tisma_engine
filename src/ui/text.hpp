@@ -1016,7 +1016,7 @@
     X(RaySamples, "Muestras: %d de %d", "Samples: %d of %d")                                                          \
     X(RayPreparing, "Preparando la escena para los rayos…", "Preparing the scene for the rays…")                     \
     X(RayTooBig, "La escena es demasiado grande para el ray tracing en esta GPU", "The scene is too large for ray tracing on this GPU") \
-    X(DropHint, "Arrastrá un STL o un G-code acá, o usá Abrir", "Drop an STL or G-code file here, or use Open")      \
+    X(DropHint, "Abrir un archivo, o arrastrar un STL o un G-code acá", "Open a file, or drop an STL or G-code file here")      \
     X(KindTravel, "Viajes", "Travel")                                                                                 \
     X(KindOuterWall, "Pared externa", "Outer wall")                                                                   \
     X(KindInnerWall, "Pared interna", "Inner wall")                                                                   \

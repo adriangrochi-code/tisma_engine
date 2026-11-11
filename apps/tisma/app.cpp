@@ -12005,8 +12005,6 @@ void App::plate_tools() {
                 selected_ = -1;
             tool_ = PlateTool::Select;
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen && !ImGui::GetIO().KeyCtrl) // Ctrl+Del: all
-            delete_selected();
         // + and − add or take away an instance (interface.md, «Menús»).
         if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false) ||
                        (ImGui::IsKeyPressed(ImGuiKey_Equal, false) && ImGui::GetIO().KeyShift)))
@@ -12662,7 +12660,8 @@ void App::selection_outline() {
     ImGui::BringWindowToDisplayBack(ImGui::GetCurrentWindow());
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
-    const ImU32 bright = ImGui::GetColorU32(rgb(theme_.accent_hover)), faint = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.35f));
+    const ImU32 bright = ImGui::GetColorU32(rgb(theme_.accent_hover)), faint = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.45f)),
+                glow = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.28f));
     for (const int i : chosen) {
         if (std::size_t(i) >= placed_meshes_.size())
             continue;
@@ -12726,7 +12725,9 @@ void App::selection_outline() {
                 if (const auto hit = pick(placed_meshes_, indexes, eye, to * (1.0f / dist)))
                     hidden = float(hit->distance) < dist - std::max(0.02f * dist, 0.2f);
             }
-            dl->AddLine(*sa, *sb, hidden ? faint : bright, 2.0f * scale_);
+            if (!hidden) // a soft glow under the line
+                dl->AddLine(*sa, *sb, glow, 8.0f * scale_);
+            dl->AddLine(*sa, *sb, hidden ? faint : bright, 3.0f * scale_);
         }
     }
     dl->PopClipRect();
@@ -14106,11 +14107,23 @@ void App::empty_hint() {
     ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
     ImGui::Begin("##hint", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav);
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav);
+    // A click on it opens the file dialog (the owner's request, 2026-11-11).
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const bool open = ImGui::InvisibleButton("##open_hint", size);
+    const bool hovered = ImGui::IsItemHovered();
+    if (hovered)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    g_menu_rects["open_hint"] = ImVec4(at.x, at.y, at.x + size.x, at.y + size.y);
+    ImGui::SetCursorScreenPos(at);
     ImGui::PushFont(nullptr, kTitleSize);
-    loc::TextColored(rgb(theme_.text_dim), "%s", text);
+    loc::TextColored(rgb(hovered ? theme_.accent_hover : theme_.text_dim), "%s", text);
     ImGui::PopFont();
     ImGui::End();
+    if (open) {
+        purpose_ = Purpose::Open;
+        browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
+    }
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
 }
@@ -23624,6 +23637,11 @@ void App::layout() {
     if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
         delete_all();
+    // Delete takes the chosen models away wherever the focus is, but in a
+    // field being typed in (the owner's request, 2026-11-11).
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput && no_popup() && selected_ >= 0 &&
+        selected_ < int(objects_.size()) && ImGui::Shortcut(ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
+        delete_selected();
     // Window's tabs (Ctrl+1 to Ctrl+6), Fullscreen (F11), Collapse Sidebar
     // (Shift+Tab, not while a field takes Tab).
     if (no_popup()) {
@@ -23686,8 +23704,9 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.background_bottom = vec(theme_.view_bottom);
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);
-    // The chosen models keep their colour: an outline marks them (interface.md, «Navegación», rule 1).
-    f.model_selected = f.model;
+    // The chosen model lights up and an outline with a glow marks every one
+    // chosen (the owner's request, 2026-11-11: much more visible, as Fusion 360).
+    f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
     if (tab_ == Tab::Prepare && tool_ == PlateTool::Paint) // the marks stand out on a light part (UI35)
         f.model = f.model_selected = vec(theme_.paint_part);
     if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&
@@ -26218,6 +26237,12 @@ void App::script_input() {
                     tour_pointed_ == step.key ? "" : tour_pointed_.c_str());
         if (tour_pointed_ != step.key)
             return fail_step("it outlines " + (tour_pointed_.empty() ? std::string("nothing") : tour_pointed_));
+        next();
+    } else if (step.verb == "expect-file-dialog") { // the file dialog is open: "yes|no"
+        const bool want = step.key != "no", got = browser_.is_open();
+        std::printf("ui-script: expect-file-dialog %s: %s\n", step.key.c_str(), got == want ? "ok" : "not so");
+        if (got != want)
+            return fail_step(got ? "the file dialog is open" : "the file dialog is not open");
         next();
     } else if (step.verb == "expect-selected") { // how many models are chosen
         const std::size_t want = std::size_t(std::atoi(step.key.c_str())), got = all_selected().size();
