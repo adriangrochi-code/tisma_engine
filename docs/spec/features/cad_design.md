@@ -180,7 +180,8 @@ reemplaza la disposición de la regla 3 en lo que se contradiga.
 11 novies. **Herramientas que faltan o se priorizan:** **Presionar/Tirar** (arrastrar una cara para extruir o cortar),
     **Mover/Copiar** con manipulador, **Medir** entre caras, aristas y puntos, **Sección** de la vista y **Apariencia**
     del cuerpo. Una herramienta que todavía no está se ve apagada con «Próximamente», nunca escondida.
-11 decies. **Aspecto:** tema claro por defecto en Diseño (fondo gris claro con degradé, grilla fina), cuerpos con
+11 decies. **Aspecto:** el tema oscuro de Tisma, como el resto del programa (dueño, 11-11-2026; el tema claro queda como
+    opción en Preferencias), con fondo en degradé y grilla fina, cuerpos con
     sombreado suave y aristas visibles, lo elegido en violeta, animaciones cortas al cambiar de vista; todo con los
     tamaños, márgenes y tipografía de `interface.md`.
 
