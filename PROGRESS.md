@@ -12679,7 +12679,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 5 | Pares automáticos | parcial: `auto_pair_mixes` (MX1); falta `mixing.auto_pairs` y crearlos en la interfaz |
   | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
   | 8–9 | Alto por filamento, paso | pendiente |
-  | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: los cambios se cuentan solos en el plan de herramientas, falta el aviso antes de laminar |
+  | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: el motor estima los cambios antes de laminar (`mix_changes_estimate`); falta que la interfaz los muestre en el aviso |
   | 13–14 | Solo la superficie, paredes de más | pendiente |
   | 15 | Sesgo | pendiente |
   | 16 | Pintado con mezcla | parcial: las trayectorias pintadas toman el ciclo; falta con las reglas 10–15 |
@@ -12723,6 +12723,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 12: cambios antes de laminar** (2026-11-11). `mix_changes_estimate(mezcla, alto, opciones)` en
+  `src/slice/color_mix.*` cuenta los cambios de filamento sin laminar: capas uniformes del alto, el ciclo de la mezcla
+  y, con `mixing.subdivide`, una pasada por filamento en el mismo orden que el laminado. La prueba compara con los
+  cambios del G-code en 8 casos (con y sin subcapas, primera capa, 50/50 y 1:2): iguales. Falta: que la interfaz lo
+  use en el aviso de costo (sesión de la interfaz, avisada).
 - **Full Spectrum, paso 2: subcapas** (`color_mixing_plus.md` reglas 10 y 11; MX8 a MX10). Grupo nuevo `mixing`:
   `subdivide`, `sub_min_height` (0,04), `sub_first_layer`, `sub_infill`. En las capas con una mezcla por proporción o
   secuencia, cada trayectoria de la mezcla se imprime una vez por filamento, de abajo hacia arriba, con su parte del

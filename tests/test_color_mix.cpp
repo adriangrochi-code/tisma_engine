@@ -494,3 +494,35 @@ TEST_CASE("color mixing plus: half the box without the blend prints once a layer
         whole += !t.wavy;
     CHECK(whole > 0); // the plain half's walls, not split
 }
+
+TEST_CASE("color mixing plus: the changes a blend asks for, counted before slicing (rule 12)", "[mixing]") {
+    Settings s = base();
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    const ColorMix third = blend(3, {{1, 1.0}, {2, 2.0}});
+    const auto estimate = [&](const ColorMix& m, const Settings& t) {
+        MixChangeOptions o;
+        o.first_layer_height = t.first_layer_height;
+        o.layer_height = t.layer_height;
+        o.subdivide = t.mix_subdivide;
+        o.sub_first_layer = t.mix_sub_first_layer;
+        o.sub_min_height = t.mix_sub_min_height;
+        return mix_changes_estimate(m, 10.0, o);
+    };
+    for (const bool sub : {false, true})
+        for (const bool first : {false, true})
+            for (const ColorMix& m : {half, third}) {
+                s.mix_subdivide = sub;
+                s.mix_sub_first_layer = first;
+                const int counted = changes(gcode_of(sliced(box(3), s, {m}), s));
+                INFO("subdivide " << sub << ", first layer " << first << ", shares " << m.components[0].share);
+                CHECK(estimate(m, s) == counted);
+            }
+    // Nothing to print, nothing to change.
+    CHECK(mix_changes_estimate(half, 0.0, {}) == 0);
+    // Sublayers ask for more changes than a 1:2 cycle (a 50/50 one already
+    // changes every layer).
+    MixChangeOptions o;
+    o.subdivide = true;
+    MixChangeOptions cycle;
+    CHECK(mix_changes_estimate(third, 10.0, o) > mix_changes_estimate(third, 10.0, cycle));
+}

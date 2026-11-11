@@ -100,6 +100,21 @@ bool mix_usable(const ColorMix& mix, int extruders);
 std::vector<ColorMix> parse_color_mixes(std::string_view json);
 std::string color_mixes_json(const std::vector<ColorMix>& mixes, const std::vector<std::string>& filament_colors);
 
+// How many filament changes a part `height` mm tall printed with `mix`
+// asks for, before slicing (color_mixing_plus.md, rules 12 and 32): its
+// layers (the first `first_layer_height`, the rest `layer_height`) in the
+// blend's cycle; with `subdivide`, each layer past the first (unless
+// `sub_first_layer`) one pass per filament, so k filaments make k - 1 changes
+// a layer, the next layer starting with the filament the last one ended
+// with. A layer whose thinnest pass would be under `sub_min_height` goes by
+// the cycle, as the slicing does; a gradient always does.
+struct MixChangeOptions {
+    double first_layer_height = 0.2, layer_height = 0.2;
+    bool subdivide = false, sub_first_layer = false;
+    double sub_min_height = 0.04;
+};
+int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOptions& options);
+
 // The colour a blend shows from afar (rule 8): its filaments' colours mixed
 // by their shares, by the Yule-Nielsen relation (n = 2) on each channel.
 // An approximation: the colours real filaments give were not measured.

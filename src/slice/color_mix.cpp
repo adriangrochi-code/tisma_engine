@@ -391,4 +391,48 @@ std::string mix_color(const std::vector<std::string>& colors, const std::vector<
     return text;
 }
 
+int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOptions& o) {
+    if (!(height > 0.0) || !(o.layer_height > 0.0) || !(o.first_layer_height > 0.0))
+        return 0;
+    std::vector<Layer> layers;
+    for (double z = 0.0; z < height - 1e-9 && layers.size() < 100000;) {
+        const double h = layers.empty() ? o.first_layer_height : o.layer_height;
+        layers.push_back({z, z + h});
+        z += h;
+    }
+    const std::vector<int> cycle = mix_layers(mix, layers, std::vector<char>(layers.size(), 1));
+    // The passes of a subdivided layer, as the slicing makes them.
+    std::vector<std::pair<int, double>> parts;
+    double total = 0.0;
+    if (!mix.gradient)
+        for (const ColorMix::Component& c : mix.pattern.empty() ? mix.components : pattern_mix(mix.id, mix.pattern).components)
+            if (c.share > 0.0)
+                parts.push_back({c.extruder, c.share}), total += c.share;
+    int changes = 0, last = 0;
+    const auto use = [&](int f) {
+        if (f <= 0)
+            return;
+        changes += last != 0 && f != last;
+        last = f;
+    };
+    for (std::size_t l = 0; l < layers.size(); ++l) {
+        const double h = layers[l].top - layers[l].bottom;
+        bool split = o.subdivide && parts.size() >= 2 && total > 0.0 && (l > 0 || o.sub_first_layer);
+        for (const auto& p : parts)
+            split = split && p.second / total * h >= o.sub_min_height - 1e-9;
+        if (!split) {
+            use(l < cycle.size() ? cycle[l] : 0);
+            continue;
+        }
+        // The filament the layer below ended with first.
+        std::vector<std::pair<int, double>> order = parts;
+        if (const auto it = std::find_if(order.begin(), order.end(), [&](const auto& p) { return p.first == last; });
+            it != order.end())
+            std::rotate(order.begin(), it, it + 1);
+        for (const auto& p : order)
+            use(p.first);
+    }
+    return changes;
+}
+
 } // namespace tisma
