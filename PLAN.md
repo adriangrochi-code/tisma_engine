@@ -768,7 +768,8 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
 - [ ] Mezclas, cuando el motor lo suba: selector `mixing.predictor` con las TD a `match_color` y a la vista previa
   (reglas 20 y 21); pestaña «Color buscado» (regla 4); paleta rápida con `quick_palette` y `color_name` (regla 22) y
   la pieza de muestras `palette_piece` (CM8) cargada en la placa con sus mezclas y la lista de nombres
-- [ ] Selección de varios modelos (Ctrl/Mayús suman; el rectángulo elige todos)
+- [x] Selección de varios modelos (Ctrl/Mayús suman; el rectángulo elige todos) y el contorno de lo elegido, también a
+  través de otras piezas (2026-11-11; mover varios juntos falta)
 - [ ] Barra de vista abajo al centro (girar, desplazar, acercar, encuadrar, perspectiva/ortogonal, estilo)
 - [ ] Aspecto: degradé gris claro en el tema claro, grilla con líneas cada 10 mm marcadas
 - [ ] Diseño: barra de herramientas con pestañas y grupos (11 bis, CD26)

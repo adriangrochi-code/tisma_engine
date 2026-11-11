@@ -13211,3 +13211,18 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   revisada.
 - **Falta:** el texto de los ajustes en inglés (la ayuda (i) lee `docs/CONFIG.md`, que está en español).
 
+## 2026-11-11 — interfaz: elegir varios modelos y el contorno de lo elegido (interface.md, «Navegación», regla 1)
+
+- **Hecho** (ficha en `spec/next`, pasa `check_spec.py`): el rectángulo elige todos los modelos que toma (de izquierda
+  a derecha los de adentro, de derecha a izquierda los que toca), y las herramientas actúan sobre el más cercano al
+  punto de partida; Ctrl o Mayús con un clic suman un modelo o sacan uno elegido, y con el rectángulo suman; un clic
+  en la cama vacía suelta todos; Supr borra todos los elegidos. Lo elegido ya no cambia de color: lleva un contorno
+  de 2 px del color de acento por su silueta (las aristas entre una cara que mira al ojo y otra que no, y las
+  abiertas), más tenue donde otra pieza lo tapa (un rayo al medio de la arista; hasta 3000 aristas). Con más de
+  400 000 triángulos, el contorno es su caja. Así también se ve con la vista de colores.
+- **Pruebas:** `multi_select.txt` (órdenes nuevas `expect-selected`); pasan los 155 `ui_` sin las de Vulkan, OpenGL,
+  Estructural y Aerodinámica. Capturas revisadas.
+- **Falta:** mover, girar y escalar varios juntos (hoy actúan sobre uno).
+- **CI local** (clang de 9a1a7c4): 1253/1255; las dos fallaron por pantallas (una «Xvfb failed to start», la otra pasa
+  sola); ASan en curso.
+
