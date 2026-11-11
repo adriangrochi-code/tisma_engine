@@ -594,6 +594,13 @@ capas del segundo filamento van `bias` × la mitad de su ancho más adentro; con
 (regla 37, MX25): 60 mm³, más 1,6 por punto de claridad que se gana (CIELAB L*), más 0,6 por punto de diferencia de
 color, hasta 300; de negro a blanco, 220, y de blanco a negro, 60.
 
+Un degradé (regla 3) es `"kind": "gradient"` con la `"position"` de cada filamento (0 a 1) en vez de `"ratio"`. En Z
+va de abajo arriba de la pieza, o entre `"minz"` y `"maxz"` (mm) si están: `{"id": 3, "kind": "gradient", "minz": 0,
+"maxz": 10, "components": [{"extruder": 1, "position": 0}, {"extruder": 2, "position": 1}]}`. Con `"axis": "x"` o
+`"axis": "y"` va a lo largo de ese eje, sobre lo que la pieza imprime con la mezcla: `{"id": 3, "kind": "gradient",
+"axis": "x", "components": [{"extruder": 1, "position": 0}, {"extruder": 2, "position": 1}]}`; cada franja de unos 5 mm
+(de 2 a 11 franjas) toma la proporción de su lugar redondeada al 10 % y sigue su ciclo capa por capa. Sin `"axis"`, Z.
+
 ### `curved`
 
 De la ficha `docs/spec/features/nonplanar.md`: capas curvas en una impresora de 3 ejes. Cada capa es la superficie
