@@ -233,4 +233,24 @@ class BlockListTest {
         compose.runOnIdle { shared.report("m1", null, "rights") }
         compose.waitUntil(10_000) { ShadowLooper.idleMainLooper(); compose.onAllNodes(hasTestTag("shared_report_failed")).fetchSemanticsNodes().isNotEmpty() }
     }
+
+    @Test
+    fun `a network lost between a list and its signature keeps the good kept pair`() {
+        val dir = tmp.newFolder("p2p")
+        val old = list(4)
+        File(dir, "key").writeBytes(keyJson())
+        File(dir, "blocklist.json").writeBytes(old)
+        File(dir, "blocklist.json.sig").writeBytes(sign(library, old))
+        val fresh = list(5)
+        // The new list arrives, its signature does not.
+        val server = FakeServer(mapOf("key" to keyJson(), "blocklist.json" to fresh))
+        val shared = SharedViewModel(dir, projectKey, server)
+        shared.refresh()
+        val deadline = System.currentTimeMillis() + 10_000
+        while (shared.state.value.list == null && shared.state.value.problem == null && System.currentTimeMillis() < deadline) {
+            ShadowLooper.idleMainLooper(); Thread.sleep(10)
+        }
+        assertNull(shared.state.value.problem)
+        assertEquals(4L, shared.state.value.list?.sequence)
+    }
 }

@@ -67,6 +67,21 @@ class SharedViewModel(
         return fresh ?: kept(name).takeIf { it.isFile }?.readBytes()
     }
 
+    /**
+     * A file and its signature, both fresh or both kept: a network lost between the two must not pair a new file
+     * with the old signature (refused, though the kept pair is good). Null when neither pair is there.
+     */
+    private fun fetchPair(name: String): Pair<ByteArray, ByteArray>? {
+        val s = server
+        if (s != null) {
+            val fresh = runCatching { s.file(name) to s.file("$name.sig") }.onFailure { AppLog.line("p2p: $name ${it.message}") }.getOrNull()
+            if (fresh != null) return fresh
+        }
+        val json = kept(name).takeIf { it.isFile }?.readBytes() ?: return null
+        val sig = kept("$name.sig").takeIf { it.isFile }?.readBytes() ?: return null
+        return json to sig
+    }
+
     private fun keep(name: String, b: ByteArray) = kept(name).apply { parentFile?.mkdirs(); writeBytes(b) }
 
     /** Rule 6: on opening the library (and every 6 h while sharing): the key, the list (applied), then the index. */
@@ -78,16 +93,14 @@ class SharedViewModel(
                     val key = LibraryKey.read(keyJson, projectKey)
                     keep("key", keyJson)
                     val lastList = saved?.p2pListSequence ?: -1L
-                    val list = fetchOrKept("blocklist.json")?.let { json ->
-                        val sig = fetchOrKept("blocklist.json.sig") ?: throw BlockList.BadList("The block list has no signature")
+                    val list = fetchPair("blocklist.json")?.let { (json, sig) ->
                         BlockList.read(json, sig, key, lastList).also {
                             keep("blocklist.json", json); keep("blocklist.json.sig", sig)
                             saved?.p2pListSequence = it.sequence
                         }
                     }
                     val removed = list?.let { copies.apply(it) }.orEmpty()
-                    val index = fetchOrKept("index.json")?.let { json ->
-                        val sig = fetchOrKept("index.json.sig") ?: throw LibraryIndex.BadIndex("The index has no signature")
+                    val index = fetchPair("index.json")?.let { (json, sig) ->
                         LibraryIndex.read(json, sig, key, saved?.p2pIndexSequence ?: -1L).also {
                             keep("index.json", json); keep("index.json.sig", sig)
                             saved?.p2pIndexSequence = it.sequence
