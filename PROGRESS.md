@@ -12723,6 +12723,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Búsqueda profunda (06:20): reglas 13 y 35 juntas.** Con `surface_only`, el relleno disperso pasa al filamento
+  dominante antes de `denser_for_purge`, que solo aceptaba caminos de la mezcla, así que `purge_infill_max` no hacía
+  nada. Ahora `mix_shell` dice cuántos caminos pasó en cada capa y con qué filamento, y el relleno más denso queda
+  con ese filamento. Prueba `[mixing]` («rules 13 and 35»), que falla sin el arreglo.
 - **Full Spectrum, regla 35: relleno que absorbe más** (2026-11-11, bloque nocturno; MX23). `mixing.purge_infill_max`
   (%, 0 apagado). `denser_for_purge` en `apply_mixes`: en una boquilla, una capa con cambio cuyo relleno disperso
   tiene menos volumen que la purga (el par menos `min_purge_on_tower`) se vuelve a llenar con `fill_layer` a la

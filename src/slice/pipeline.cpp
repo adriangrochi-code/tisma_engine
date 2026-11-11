@@ -711,9 +711,17 @@ bool subdivide_layer(SlicedModel& model, std::size_t l, const ColorMix& mix, con
 // the outline) and its sparse infill take its largest filament; the outer
 // walls, the gaps between them and the solid surfaces keep the blend. A
 // gradient keeps it all. Own design (PROVENANCE.md).
-void mix_shell(SlicedModel& model, const ColorMix& mix, const Settings& s) {
+// What mix_shell moved off the blend: each layer's sparse paths it gave to
+// `filament` (the blend's largest), for the denser infill of rule 35.
+struct ShellMoved {
+    int filament = 0;
+    std::vector<std::size_t> sparse; // by layer
+};
+
+ShellMoved mix_shell(SlicedModel& model, const ColorMix& mix, const Settings& s) {
+    ShellMoved moved;
     if (!s.mix_surface_only || mix.gradient)
-        return;
+        return moved;
     const ColorMix shares = mix.pattern.empty() ? mix : pattern_mix(mix.id, mix.pattern);
     int dominant = 0;
     double most = 0.0;
@@ -721,7 +729,9 @@ void mix_shell(SlicedModel& model, const ColorMix& mix, const Settings& s) {
         if (c.share > most + 1e-12)
             most = c.share, dominant = c.extruder;
     if (dominant <= 0)
-        return;
+        return moved;
+    moved.filament = dominant;
+    moved.sparse.assign(model.fills.size(), 0);
     const auto walls = [&](std::vector<Toolpath>& paths) {
         std::map<int, double> width; // each bead index's width
         for (const Toolpath& t : paths)
@@ -746,10 +756,14 @@ void mix_shell(SlicedModel& model, const ColorMix& mix, const Settings& s) {
     };
     for (LayerWalls& w : model.walls)
         walls(w.toolpaths);
-    for (LayerFill& f : model.fills)
-        inside(f.sparse);
+    for (std::size_t l = 0; l < model.fills.size(); ++l) {
+        for (const Toolpath& t : model.fills[l].sparse)
+            moved.sparse[l] += t.tool == mix.id;
+        inside(model.fills[l].sparse);
+    }
     for (ThickLayer& t : model.thick)
         walls(t.walls), inside(t.fill.sparse);
+    return moved;
 }
 
 // The bias of a blend of two (color_mixing_plus.md, rule 15): on the layers
@@ -822,7 +836,8 @@ void bias_walls(SlicedModel& model, const ColorMix& mix, const std::vector<int>&
 // Only where the blend's part holds all the layer's sparse infill. Own design
 // (PROVENANCE.md): the density in proportion to the purge, the layer's
 // sparse region filled again with fill_layer.
-void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector<int>& filament, const Settings& s) {
+void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector<int>& filament, const Settings& s,
+                      const ShellMoved& shell) {
     if (!s.single_extruder_mmu || !s.mix_purge_into_infill || !(s.mix_purge_infill_max > s.infill_density) ||
         !(s.infill_density > 0.0))
         return;
@@ -844,8 +859,13 @@ void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector
         if (from <= 0 || from == now || l >= model.fills.size() || l >= model.surfaces.size())
             continue;
         std::vector<Toolpath>& sparse = model.fills[l].sparse;
-        if (sparse.empty() || std::any_of(sparse.begin(), sparse.end(), [&](const Toolpath& t) { return t.tool != mix.id; }))
+        // All the layer's sparse infill the blend's: its own paths, or the
+        // ones mix_shell gave its largest filament (rule 13).
+        const std::size_t given = l < shell.sparse.size() ? shell.sparse[l] : 0;
+        const auto own = std::size_t(std::count_if(sparse.begin(), sparse.end(), [&](const Toolpath& t) { return t.tool == mix.id; }));
+        if (sparse.empty() || own + given != sparse.size())
             continue;
+        const int tool = given > 0 ? shell.filament : mix.id;
         const double h = model.layers[l].top - model.layers[l].bottom;
         const double need = purge_volume(s, from, now) - per_extruder(s.min_purge_on_tower, std::size_t(now - 1));
         const double have = volume(sparse, h);
@@ -860,14 +880,14 @@ void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector
         if (denser.sparse.empty())
             continue;
         for (Toolpath& t : denser.sparse)
-            t.tool = std::uint8_t(mix.id);
+            t.tool = std::uint8_t(tool);
         sparse = std::move(denser.sparse);
     }
 }
 
 void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
     for (const ColorMix& mix : mixes) {
-        mix_shell(model, mix, settings);
+        const ShellMoved shell = mix_shell(model, mix, settings);
         std::vector<char> present(model.layers.size(), 0);
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
             if (l < present.size() && !present[l])
@@ -908,7 +928,7 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
                     last = filament[l];
             }
         bias_walls(model, mix, filament);
-        denser_for_purge(model, mix, filament, settings);
+        denser_for_purge(model, mix, filament, settings, shell);
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
             for (Toolpath& t : paths)
                 if (t.tool == mix.id && l < filament.size() && filament[l] > 0)

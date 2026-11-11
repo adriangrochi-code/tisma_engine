@@ -928,3 +928,31 @@ TEST_CASE("color mixing plus: the infill grows denser to take the purge (rule 35
     tools.single_extruder_mmu = false;
     CHECK_THAT(sparse(sliced(box(3), tools, {half}), 20), WithinRel(before, 1e-9));
 }
+
+TEST_CASE("color mixing plus: the denser infill also with the blend only in the shell (rules 13 and 35)", "[mixing]") {
+    Settings s = base();
+    s.single_extruder_mmu = true;
+    s.wipe_tower = true;
+    s.infill_density = 20.0;
+    s.mix_surface_only = true;
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    const auto sparse = [](const SlicedModel& m, std::size_t l) {
+        double v = 0.0;
+        for (const Toolpath& t : m.fills[l].sparse)
+            for (std::size_t k = 1; k < t.points.size(); ++k)
+                v += t.points[k].width * std::hypot(t.points[k].p.x - t.points[k - 1].p.x, t.points[k].p.y - t.points[k - 1].p.y);
+        return v;
+    };
+    const SlicedModel plain = sliced(box(3), s, {half});
+    Settings more = s;
+    more.mix_purge_infill_max = 60.0;
+    const SlicedModel dense = sliced(box(3), more, {half});
+    // The layers where the shell's filament changes get the denser infill, in the blend's largest filament.
+    double before = 0.0, after = 0.0;
+    for (std::size_t l = 10; l < 40; ++l)
+        before += sparse(plain, l), after += sparse(dense, l);
+    CHECK(after > 1.3 * before);
+    for (const Toolpath& t : dense.fills[20].sparse)
+        CHECK(t.tool == 1);
+    gcode_of(dense, more);
+}
