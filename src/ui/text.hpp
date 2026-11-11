@@ -2575,6 +2575,11 @@
     X(QuickPaletteSmall, "Ciclos de hasta 2 capas", "Cycles of up to 2 layers") \
     X(QuickPaletteLarge, "Ciclos de hasta 3 capas", "Cycles of up to 3 layers") \
     X(QuickPaletteAdded, "%d muestras en la paleta; sus mezclas están en la lista", "%d samples in the palette; their blends are in the list") \
+    X(GradientBlend, "Degradé", "Gradient") \
+    X(GradientAxis, "Eje", "Axis") \
+    X(GradientPlace, "en el %d %%", "at %d %%") \
+    X(GradientAddFilament, "Añadir filamento", "Add filament") \
+    X(GradientSteps, "Sin subcapas, un degradé en X o Y cambia en escalones de una capa", "Without sublayers, a gradient in X or Y changes in steps of one layer") \
     X(TransmissionRow, "Distancia de transmisión (TD)", "Transmission distance (TD)") \
     X(TransmissionTip, "El espesor en el que el filamento deja pasar casi nada de luz; 0: desconocida. Por encima de 10 mm se ve lo de adentro y no se purga en su relleno", \
       "The thickness through which the filament lets almost no light pass; 0: unknown. Above 10 mm what is inside shows, so no purge into its infill")

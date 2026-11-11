@@ -13088,3 +13088,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Hecho:** la mitad de arriba siempre apoya plana, así que una espiga con «Invertir» pasa a la de abajo; con «Dar
   vuelta la de abajo» la espiga pasa a pasador. Un aviso lo dice. Ninguna mitad se gira con la espiga.
 - **Pruebas:** `ctest -R "ui_script_cut_(connectors|pin)"` pasa (6/6 de corte y mezcla).
+
+## 2026-11-11 — interfaz: el degradé en el diálogo de mezclas (color_mixing_plus.md, reglas 3 y 17)
+
+- **Hecho:** la mezcla que se edita tiene «Degradé»: eje Z, X o Y, cada filamento con su lugar (0 a 100 %), hasta 4,
+  y en lugar de la secuencia de capas la tira de su color de punta a punta. Antes de laminar se ve con el color del
+  medio (regla 17). El costo antes de laminar le pasa al motor el ancho de la pieza en su eje (`extent`). En X o Y
+  sin subcapas avisa que cambia en escalones de una capa. En la lista: «Degradé X: 1 - 2».
+- **Medido:** el cubo de 10 mm con 1 : 1 son unos 49 cambios; en degradé Z, 25; en X, 41 (con dos filamentos el
+  ancho no cambia la cuenta: cada capa tiene los dos en alguna franja).
+- **Pruebas:** `mix_gradient.txt` (órdenes nuevas `mix-gradient`, `expect-mix-changes`). No laminado ni impreso.
+- **Sigue:** la pieza de muestras `palette_piece` (CM8) en la placa.

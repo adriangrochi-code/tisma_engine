@@ -755,6 +755,8 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
 - [x] Punto del centro de giro mientras se gira (2026-11-11)
 - [x] Costo de las mezclas antes de laminar, purga por colores y lo que la baja (`color_mixing_plus.md`, reglas 12, 37 y
   38) (2026-11-11)
+- [x] Degradé en el diálogo de mezclas (regla 3): eje X, Y o Z, de 2 a 4 filamentos con su lugar, la tira de su
+  color, el color del medio antes de laminar (regla 17) y su costo con el ancho de la pieza (`extent`) (2026-11-11)
 - [ ] Mezclas, cuando el motor lo suba: selector `mixing.predictor` con las TD a `match_color` y a la vista previa
   (reglas 20 y 21); pestaña «Color buscado» (regla 4); paleta rápida con `quick_palette` y `color_name` (regla 22) y
   la pieza de muestras `palette_piece` (CM8) cargada en la placa con sus mezclas y la lista de nombres
