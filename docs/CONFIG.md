@@ -574,6 +574,12 @@ en el perfil de impresión.
 | `sub_first_layer` | booleano | `false` | | `false`: la primera capa no se divide (MX10) |
 | `sub_infill` | booleano | `false` | | `false`: el relleno disperso de la zona va una vez, con el filamento de la última pasada |
 
+Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). Desde la línea de comandos, `slice <modelo>
+--config <ajustes.json> --mixes <mezclas.json> --mix <n>` lee las mezclas en ese mismo JSON (`{"version": 1,
+"virtual_extruders": [{"id": 3, "kind": "fullspectrum", "components": [{"extruder": 1, "ratio": 0.5}, {"extruder": 2,
+"ratio": 0.5}]}]}`) y lamina el modelo con la mezcla `n`, que tiene que poder imprimirse en la máquina (su número
+después de los filamentos reales y sus filamentos entre ellos). `object.extruder` sigue siendo solo un extrusor real.
+
 ### `curved`
 
 De la ficha `docs/spec/features/nonplanar.md`: capas curvas en una impresora de 3 ejes. Cada capa es la superficie

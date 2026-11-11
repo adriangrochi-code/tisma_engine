@@ -524,6 +524,35 @@ TEST_CASE("slice runs the post-processing scripts once confirmed (rules 16 and 1
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("slice --mixes and --mix: a blend from the command line (color_mixing.md, rule 15)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_mixes";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json", mixes = dir / "mixes.json", gcode = dir / "mix.gcode";
+    std::ofstream(config) << R"({"machine": {"max_feed_x": 200, "max_feed_y": 200, "max_feed_z": 12, "max_feed_e": 120,
+                                             "corner_speed": 10, "extruders": 2, "bed": [[0, 0], [200, 0], [200, 200], [0, 200]]},
+                                 "speed": {"walls": 60, "outer_wall": "50%", "infill": 80, "solid_infill": 80,
+                                           "top_solid_infill": 15, "support": 80, "travel": 130, "first_layer": 30},
+                                 "retraction": {"speed": 40}, "cooling": {"min_speed": 10}})";
+    std::ofstream(mixes) << R"({"version": 1, "virtual_extruders": [{"id": 3, "kind": "fullspectrum", "color": "#808080",
+                               "components": [{"extruder": 1, "ratio": 0.5}, {"extruder": 2, "ratio": 0.5}]}]})";
+    Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--mixes", mixes.string(), "--mix", "3",
+                 "-o", gcode.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    std::ifstream f(gcode);
+    const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    CHECK_THAT(text, ContainsSubstring("\nT0\n"));
+    CHECK_THAT(text, ContainsSubstring("\nT1\n"));
+    // A blend the file does not have, or not a number.
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--mixes", mixes.string(), "--mix", "4",
+               "-o", gcode.string()})
+              .code == kExitUsage);
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--mix", "x", "-o", gcode.string()}).code ==
+          kExitUsage);
+    std::filesystem::remove_all(dir);
+}
+
 TEST_CASE("slice --copies: as many as fit, with the skirt around them on the bed too (BH52)", "[cli]") {
     const auto dir = test_temp_dir() / "tisma_test_copies_fit";
     std::filesystem::remove_all(dir);

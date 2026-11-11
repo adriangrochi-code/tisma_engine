@@ -12703,6 +12703,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- `slice --mixes <mezclas.json> --mix <n>` (pedido de la sesión de spec para la caja negra de MX8): las mezclas en el
+  JSON del proyecto (`color_mixing.md`, regla 15) y la que imprime el modelo, desde la línea de comandos. Antes solo
+  entraban con un proyecto. Prueba `[cli]`.
 - BH56, PF10 y PF11 (perfiles, `validate.py --reader`, 19000 corridas; spec/next 653d6cd): `extrusion.travel` de un
   filamento (4831 veces) se dejaba afuera como «unknown setting»; ahora se lee como `extrusion.retraction`.
   `resin.bottom_layers` de una impresión de resina (35 impresiones) se dejaba afuera como «filament setting»; ahora va

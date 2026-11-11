@@ -37,6 +37,7 @@
 #include "perimeters/sites.hpp"
 #include "perimeters/transitions.hpp"
 #include "slice/layers.hpp"
+#include "slice/color_mix.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
 #include "slice/transform.hpp"
@@ -108,6 +109,8 @@ constexpr std::string_view kUsage =
     "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
     "                     [--summary <summary.json>]   (the nodes' summary: print time, filament, layers)\n"
     "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
+    "                     [--mixes <mixes.json> --mix <n>]   (the blends, as a project keeps them, and the one the model prints\n"
+    "                      with: docs/spec/features/color_mixing.md, rule 15)\n"
     "                     [--align-to-y-axis]   (the copies in one column along Y)\n"
     "                     [--strict]   (a warning is an error: no G-code, exit code 4)\n"
     "                     [--ground-largest-face | --ground-face-normal X,Y,Z | --ground-face-point X,Y,Z]\n"
@@ -168,6 +171,9 @@ struct SliceArgs {
     std::string statistics;
     std::string export_settings;
     bool align_y = false;
+    // Blends (color_mixing.md, rule 15) and the one the model prints with.
+    std::string mixes;
+    int mix = 0;
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -255,6 +261,20 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
                 return std::nullopt;
             }
             out.copies = std::size_t(v);
+        } else if (a == "--mixes" && !analyze) {
+            if (!value(out.mixes))
+                return std::nullopt;
+        } else if (a == "--mix" && !analyze) {
+            std::string n;
+            if (!value(n))
+                return std::nullopt;
+            char* end = nullptr;
+            const long v = std::strtol(n.c_str(), &end, 10);
+            if (n.empty() || *end != '\0' || v < 2 || v > 255) {
+                err << "error: --mix needs a blend's number, from 2 to 255\n";
+                return std::nullopt;
+            }
+            out.mix = int(v);
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
             return std::nullopt;
@@ -797,6 +817,33 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
             followers.add_triangle(more->corner(t, 0), more->corner(t, 1), more->corner(t, 2));
     if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &followers, parsed->align_y))
         return kExitUsage;
+    // The blends and the one the model prints with (color_mixing.md, rule 15).
+    std::vector<ColorMix> mixes;
+    if (!parsed->mixes.empty()) {
+        std::ifstream in(parsed->mixes, std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        if (!in) {
+            err << "error: cannot read '" << parsed->mixes << "'\n";
+            return kExitInput;
+        }
+        try {
+            mixes = parse_color_mixes(text.str());
+        } catch (const ColorMixError& e) {
+            err << "error: " << parsed->mixes << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+    }
+    if (parsed->mix != 0) {
+        const auto it = std::find_if(mixes.begin(), mixes.end(), [&](const ColorMix& m) { return m.id == parsed->mix; });
+        if (it == mixes.end() || !mix_usable(*it, settings.extruders)) {
+            err << "error: --mix " << parsed->mix << ": no blend with that number in --mixes that this machine ("
+                << settings.extruders << " extruders) can print\n";
+            return kExitUsage;
+        }
+        for (MeshObject& o : objects)
+            o.extruder = parsed->mix;
+    }
     const auto piece = [&](std::size_t from, std::size_t to) {
         TriangleMesh m;
         for (std::size_t t = from; t < to && t < followers.triangle_count(); ++t)
@@ -854,14 +901,14 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         warnings.push_back({"speed_fallback", -1, 0.0,
                             "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
-        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, mixes.empty() ? nullptr : &mixes, cut,
                              nullptr, &support_volumes);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, mixes.empty() ? nullptr : &mixes, cut,
                              nullptr, &support_volumes);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
