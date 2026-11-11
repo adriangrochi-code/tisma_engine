@@ -12252,6 +12252,7 @@ static MixChangeOptions mix_change_options(const Settings& s) {
     options.cadence_heights = s.mix_cadence_heights;
     options.height_a = s.mix_height_a;
     options.height_b = s.mix_height_b;
+    options.step = s.mix_step;
     return options;
 }
 
