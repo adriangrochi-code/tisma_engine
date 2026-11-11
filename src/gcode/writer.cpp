@@ -4029,6 +4029,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         };
         for (std::size_t group_index = 0; group_index < order.size(); ++group_index) {
             const int tool = order[group_index];
+            // After a change on one nozzle with blends, each part's sparse
+            // infill first: the transition's mixed plastic stays inside and
+            // the walls come out clean (color_mixing_plus.md, rule 34).
+            const bool infill_first = s.infill_before_walls || (s.single_extruder_mmu && model.blended &&
+                                                                group_index < change_from.size() && change_from[group_index] > 0);
             const bool first_group = group_index == 0;
             if (tower_layer && change_from[group_index] > 0 && next_block < tower_layer->blocks.size()) {
                 // An MMU's ramming first, by the leaving filament, each piece
@@ -4285,11 +4290,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 const auto fills = [&] {
                     constexpr std::array<std::size_t, 7> kFirstSparse = {4, 0, 1, 2, 3, 5, 6};
                     for (std::size_t j = 0; j < 7; ++j) {
-                        const std::size_t k = s.infill_before_walls ? kFirstSparse[j] : j;
+                        const std::size_t k = infill_first ? kFirstSparse[j] : j;
                         group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
                     }
                 };
-                if (s.infill_before_walls)
+                if (infill_first)
                     fills();
                 // From the inside out, or with walls.outer_first from the outer
                 // wall in (perimeters.md, rule 4).
@@ -4308,7 +4313,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 // they hang from (walls_extra.md, rule 5).
                 for (Toolpath t : i.overhang_walls)
                     lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
-                if (!s.infill_before_walls)
+                if (!infill_first)
                     fills();
                 // The loops that touch nothing held: a second pass of walls,
                 // after the fills (and the layer's bridges) they rest on.

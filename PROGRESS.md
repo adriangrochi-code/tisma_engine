@@ -12732,8 +12732,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   multiextrusor. Filamento transparente (MX27, mismo día): nuevo `extrusion.transmission_distance` (TD, mm, uno o
   uno por extrusor; también del material). Una pieza cuyo filamento, o algún filamento de su mezcla, pasa de 10 no
   recibe la purga. Prueba `[mixing]` MX27: la mezcla que lleva el filamento claro no la recibe, ni la pieza clara;
-  la opaca sí. Regla 34 (paredes después del relleno en la capa del cambio):
-  falta ver si el orden de la capa la cumple entera.
+  la opaca sí. Regla 34 (mismo día): en una boquilla, con mezclas en la placa, el grupo que llega por un cambio
+  imprime cada pieza empezando por el relleno disperso y después las paredes (`infill_first` en el escritor, la misma
+  vía que `infill.before_walls`; `SlicedModel::blended`). Sin mezclas, el G-code no cambia (regla 19). Prueba
+  `[mixing]`, regla 34: toda capa con cambio que tiene relleno disperso empieza por él, con la purga en el relleno
+  apagada para ver solo el orden. Una placa de dos filamentos sin mezclas sigue con las paredes primero. Pasan las
+  pruebas del escritor, del orden y de multiextrusor. Siguiente: regla 35 (`purge_infill_max`, MX23).
 - **Búsqueda profunda (05:15): mezclas nuevas combinadas.** Probé sesgo con solo la superficie, paredes de más con
   alto por filamento, solo la superficie con subcapas, un degradé con paso y subcapas, sesgo con paso y subcapas, y
   sesgo con jarrón. El G-code pasa el control en todos. Hallazgo: `mixing.step` más fino que las capas y sin

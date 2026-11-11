@@ -91,6 +91,9 @@ struct SlicedModel {
     // sublayers (color_mixing_plus.md, rule 10): the lowest first. Empty, or
     // an empty layer: any order (plan_tools's own).
     std::vector<std::vector<int>> tool_order;
+    // Whether a blend prints on the plate (color_mixing_plus.md): a layer with
+    // a change on one nozzle then starts each part with its sparse infill (rule 34).
+    bool blended = false;
     // Curved layers (nonplanar.md): the field the layers were sliced
     // through; the layers above are flat in its space, and the G-code puts
     // every point back on its curve.

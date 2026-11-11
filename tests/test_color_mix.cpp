@@ -838,3 +838,52 @@ TEST_CASE("color mixing plus: no purge into a see-through filament's part (rule 
     for (const SlicedObject& o : all_clear.objects)
         CHECK_FALSE(o.wipe_into_infill);
 }
+
+TEST_CASE("color mixing plus: after a change on one nozzle the part starts with its infill (rule 34)", "[mixing]") {
+    Settings s = base();
+    s.single_extruder_mmu = true;
+    s.wipe_tower = true;
+    s.infill_density = 0.2;
+    s.mix_purge_into_infill = false; // the order alone, not the purge's own infill
+    // For each layer with a change: its first kind in the part, and whether it has sparse infill.
+    struct Changed {
+        std::string first;
+        bool sparse = false;
+    };
+    const auto changed_layers = [](const std::string& g) {
+        std::vector<Changed> out;
+        std::istringstream in(g);
+        int tools = 0;
+        bool changed = false, open = false;
+        for (std::string line; std::getline(in, line);) {
+            if (line.rfind(";LAYER_CHANGE", 0) == 0)
+                changed = false, open = false;
+            if (line.size() == 2 && line[0] == 'T' && line[1] >= '0' && line[1] <= '9' && ++tools > 1)
+                changed = true;
+            if (!changed || line.rfind(";TYPE:", 0) != 0 || line == ";TYPE:Wipe tower" || line == ";TYPE:Custom")
+                continue;
+            if (!open)
+                out.push_back({line.substr(6)}), open = true;
+            out.back().sparse = out.back().sparse || line == ";TYPE:Internal infill";
+        }
+        return out;
+    };
+    const SlicedModel model = sliced(box(3), s, {blend(3, {{1, 0.5}, {2, 0.5}})});
+    const std::vector<Changed> layers = changed_layers(gcode_of(model, s));
+    REQUIRE(layers.size() > 30);
+    int with_sparse = 0;
+    for (const Changed& c : layers)
+        if (c.sparse) {
+            ++with_sparse;
+            CHECK(c.first == "Internal infill");
+        }
+    CHECK(with_sparse > 10);
+    // A plate without blends keeps the walls first.
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 10);
+    add_box(p.mesh, 40, 40, 0, 60, 60, 10);
+    p.objects = {{"one", 0, 12, 0, 0, 1}, {"two", 12, 12, 1, 0, 2}};
+    const std::vector<Changed> plain = changed_layers(gcode_of(sliced(p, s, {}), s));
+    REQUIRE_FALSE(plain.empty());
+    CHECK(std::none_of(plain.begin(), plain.end(), [](const Changed& c) { return c.first == "Internal infill"; }));
+}

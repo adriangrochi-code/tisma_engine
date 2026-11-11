@@ -434,6 +434,7 @@ void append_object(SlicedModel& out, SlicedModel&& part, SlicedObject object) {
     object.brim = std::move(part.brim);
     const auto add = [](auto& to, auto& from) { to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end())); };
     // The sublayers' extruder order, by layer (color_mixing_plus.md, rule 10).
+    out.blended = out.blended || part.blended;
     if (!part.tool_order.empty() || !out.tool_order.empty()) {
         out.tool_order.resize(offset);
         part.tool_order.resize(part.layers.size());
@@ -823,6 +824,7 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
         });
         if (std::none_of(present.begin(), present.end(), [](char c) { return c != 0; }))
             continue;
+        model.blended = true;
         // The step (rule 9): 0, or the layer height with layers all of it, by layer.
         const double step =
             settings.mix_step > 0.0 &&
