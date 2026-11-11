@@ -2961,6 +2961,14 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 f = LayerFill{};
             }
         }
+        // A hole or several pieces (vase_mode.md, rule 7, VA5): those loops
+        // are flat turns, not the spiral; said once.
+        for (std::size_t l = bottom; l < out.walls.size(); ++l)
+            if (std::count_if(out.walls[l].toolpaths.begin(), out.walls[l].toolpaths.end(),
+                              [](const Toolpath& t) { return !t.points.empty(); }) > 1) {
+                out.notices.push_back("Vase mode with holes or several pieces: those turns are not a spiral and leave a seam");
+                break;
+            }
     }
     if (settings.zaa) {
         ZaaParams zp;
