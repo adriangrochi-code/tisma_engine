@@ -1,13 +1,21 @@
-# The cost of the blends before slicing (color_mixing_plus.md, rule 12): with
-# one nozzle for two filaments and the cube in a 1 : 1 blend, turning the
-# mixing on says how many filament changes the plate will take, and so does
-# its card once it is on.
+# The cost of the blends before slicing (color_mixing_plus.md, rules 12 and
+# 38): with one nozzle for two filaments and the cube in a 1 : 1 blend,
+# turning the mixing on says how many filament changes the plate will take
+# and, past half the filament in purge, what lowers it; so does its card once
+# it is on. The purge comes from the filaments' colours until the person
+# writes the pairs (rule 37).
 wait 3
 set machine.extruders 2
 set machine.single_extruder_mmu true
 add-mix 1 2
 click multi.color_mixing
 expect-text unos 49 cambios de filamento
+expect-text Lo que la baja
+expect-control mix_suggest.surface_only
 key escape
 set multi.color_mixing true
 expect-control mix_changes_planned
+set wipe_tower.enabled true
+pref level advanced
+click wipe_tower.extra_flow
+expect-control purge_pairs

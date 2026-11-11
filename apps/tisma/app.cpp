@@ -27,6 +27,7 @@
 #include "cad/sketch_io.hpp"
 #include "cad/view_dxf.hpp"
 #include "slice/belt.hpp"
+#include "slice/wipe_tower.hpp"
 #include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
@@ -883,6 +884,18 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     int mix_changes_planned() const;
+    // The plate's blends before slicing (color_mixing_plus.md, rules 12 and 38).
+    struct MixCost {
+        int changes = 0;
+        double purge_share = 0.0; // of all the filament, the blend that purges most
+        std::vector<MixSuggestion> suggestions;
+    };
+    MixCost mix_cost() const;
+    void mix_cost_lines(const MixCost& cost);
+    // The purge between filaments by their colours (rule 37), for the ones in use.
+    std::vector<std::vector<double>> color_purge_table() const;
+    Settings with_color_purge(const Settings& s) const;
+    void purge_pairs_popup();
     void objects_material_changed();
     void brush_stroke(std::size_t object, ImVec2 at, bool joined = false);
     void brush_drag(std::size_t object);
@@ -6707,7 +6720,8 @@ void App::start_slice() {
         placed = translated(placed, offset_);
     // A test prints with its own settings: no supports under the resin tests
     // or the bridges, for one (calibration_print_settings).
-    const Settings settings = calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_;
+    // The purge between filaments, by their colours when unset (color_mixing_plus.md, rule 37).
+    const Settings settings = with_color_purge(calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_);
     PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
     Painting painting = std::move(plate.painting);
     std::vector<MeshObject> objects = std::move(plate.objects);
@@ -9580,15 +9594,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
             }
             // What the blends on the plate will cost, before slicing (rule 12).
             if (color_mixing_offered(s) && s.single_extruder_mmu)
-                if (const int changes = mix_changes_planned(); changes > 0) {
-                    loc::TextDisabled("%s", format(tr(T::MixChangesPlanned), changes).c_str());
+                if (const MixCost cost = mix_cost(); cost.changes > 0) {
+                    ImGui::PushTextWrapPos(0.0f);
+                    mix_cost_lines(cost);
+                    ImGui::PopTextWrapPos();
                     note_rect("mix_changes_planned");
                 }
             if (ImGui::BeginPopup("##mixing_cost")) {
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
                 ImGui::TextUnformatted(tr(T::ColorMixingCost));
-                if (const int changes = mix_changes_planned(); changes > 0)
-                    loc::TextColored(rgb(theme_.accent_hover), "%s", format(tr(T::MixChangesPlanned), changes).c_str());
+                mix_cost_lines(mix_cost());
                 ImGui::PopTextWrapPos();
                 if (ImGui::Button(tr(T::Cancel)))
                     ImGui::CloseCurrentPopup();
@@ -9711,7 +9726,39 @@ bool App::card_rows(std::string_view id, bool& bed) {
             each = 140.0;
         if (*each < 0.0)
             each.reset();
-        if (each && shown("wipe_tower.purge_volumes")) {
+        if (s.purge_volumes.empty() && shown("wipe_tower.purge_volumes")) { // by the colours (rule 37)
+            // Empty, it says the colours decide; a number written there is
+            // one for every two filaments, as before.
+            label_cell(T::PurgeVolumesRow, tr(T::PurgeByColors));
+            static char typed[32] = "";
+            const float button = ImGui::CalcTextSize(tr(T::PurgePairs)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+            ImGui::SetNextItemWidth(std::max(ImGui::GetContentRegionAvail().x - button - ImGui::GetStyle().ItemSpacing.x, 40.0f));
+            const bool entered = ImGui::InputTextWithHint("##v", tr(T::PurgeByColorsHint), typed, sizeof typed,
+                                                          ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal);
+            if (!g_last_field.empty()) // the field without the button
+                g_field_rects[g_last_field] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                     ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+            if (entered) {
+                std::string text = typed;
+                std::replace(text.begin(), text.end(), ',', '.');
+                if (char* end = nullptr; !text.empty()) {
+                    const double each_typed = std::strtod(text.c_str(), &end);
+                    if (end != text.c_str()) {
+                        s.purge_volumes.assign(std::size_t(kMaxExtruders),
+                                               std::vector<double>(std::size_t(kMaxExtruders), std::clamp(each_typed, 0.0, 10000.0)));
+                        for (std::size_t i = 0; i < s.purge_volumes.size(); ++i)
+                            s.purge_volumes[i][i] = 0.0;
+                        changed = true;
+                    }
+                }
+                typed[0] = '\0';
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(tr(T::PurgePairs)))
+                ImGui::OpenPopup("##purge_pairs");
+            note_rect("purge_pairs");
+            purge_pairs_popup();
+        } else if (each && shown("wipe_tower.purge_volumes")) {
             if (row(T::PurgeVolumesRow, *each, 0.0, 10000.0, "%.0f mm³", 1.0f)) {
                 s.purge_volumes.assign(std::size_t(kMaxExtruders), std::vector<double>(std::size_t(kMaxExtruders), *each));
                 for (std::size_t i = 0; i < s.purge_volumes.size(); ++i)
@@ -9720,6 +9767,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
             }
         } else {
             count(T::PurgeVolumesRow, "wipe_tower.purge_volumes", s.purge_volumes.size());
+        }
+        if (!s.purge_volumes.empty() && shown("wipe_tower.purge_volumes")) {
+            label_cell(T::PurgePairsRow, tr(T::PurgePairsTitle));
+            if (ImGui::Button(tr(T::PurgePairs)))
+                ImGui::OpenPopup("##purge_pairs");
+            note_rect("purge_pairs");
+            purge_pairs_popup();
         }
         mm(T::WipeTowerSpacing, "wipe_tower.extra_spacing", s.wipe_tower_extra_spacing, 50.0, 500.0, "%.0f %%", 0.5f);
         mm(T::WipeTowerFlow, "wipe_tower.extra_flow", s.wipe_tower_extra_flow, 50.0, 500.0, "%.0f %%", 0.5f);
@@ -12178,6 +12232,151 @@ void App::objects_material_changed() {
 // The filament changes the plate's blends will take, before slicing
 // (color_mixing_plus.md, rule 12): each model printed with a blend, by its
 // height. Painted zones and parts with a blend of their own are not counted yet.
+// "#rrggbb" as 0xRRGGBB; mid grey when it cannot be read.
+static std::uint32_t hex_rgb(const std::string& hex) {
+    unsigned v = 0x808080;
+    if (hex.size() == 7 && hex[0] == '#')
+        std::sscanf(hex.c_str() + 1, "%6x", &v);
+    return v;
+}
+
+std::vector<std::vector<double>> App::color_purge_table() const {
+    std::vector<std::string> colors;
+    for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
+        colors.push_back(filament_color(e));
+    return purge_table(colors);
+}
+
+// Unset, the purge between two filaments comes from their colours (rule 37);
+// a table the person wrote stays as it is.
+Settings App::with_color_purge(const Settings& s) const {
+    Settings out = s;
+    if (out.purge_volumes.empty() && out.extruders > 1)
+        out.purge_volumes = color_purge_table();
+    return out;
+}
+
+App::MixCost App::mix_cost() const {
+    MixCost cost;
+    const Settings s = with_color_purge(settings_);
+    MixChangeOptions options;
+    options.first_layer_height = s.first_layer_height;
+    options.layer_height = s.layer_height;
+    options.subdivide = s.mix_subdivide;
+    options.sub_first_layer = s.mix_sub_first_layer;
+    options.sub_min_height = s.mix_sub_min_height;
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        const auto mix = std::find_if(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) { return m.id == objects_[i].extruder; });
+        if (mix == mixes_.end() || placed_meshes_[i].empty())
+            continue;
+        const BoundingBox box = placed_meshes_[i].bounding_box();
+        if (box.empty)
+            continue;
+        const int changes = mix_changes_estimate(*mix, double(box.max.z), options);
+        cost.changes += changes;
+        // A change's purge: the mean over the blend's pairs of filaments.
+        double purge = 0.0;
+        int pairs = 0;
+        for (const ColorMix::Component& a : mix->components)
+            for (const ColorMix::Component& b : mix->components)
+                if (a.extruder != b.extruder)
+                    purge += purge_volume(s, a.extruder, b.extruder), ++pairs;
+        if (pairs == 0)
+            continue;
+        purge /= pairs;
+        const double part = std::abs(placed_meshes_[i].signed_volume());
+        const double share = changes * purge / std::max(changes * purge + part, 1e-9);
+        if (share > cost.purge_share) {
+            cost.purge_share = share;
+            cost.suggestions = mix_purge_suggestions(*mix, double(box.max.z), options, purge, part, s.max_layer_height);
+        }
+    }
+    return cost;
+}
+
+// The changes, and past half the filament in purge, what lowers it (rule 38).
+void App::mix_cost_lines(const MixCost& cost) {
+    if (cost.changes <= 0)
+        return;
+    loc::TextColored(rgb(theme_.accent_hover), "%s", format(tr(T::MixChangesPlanned), cost.changes).c_str());
+    if (cost.suggestions.empty())
+        return;
+    loc::TextWrapped("%s", format(tr(T::MixPurgeShare), 100.0 * cost.purge_share).c_str());
+    for (const MixSuggestion& m : cost.suggestions) {
+        const T what = m.key == "subdivide" ? T::MixSuggestSubdivide : m.key == "cadence_heights" ? T::MixSuggestCadence : T::MixSuggestSurface;
+        loc::BulletText("%s", format(tr(what), m.changes, 100.0 * m.purge_share).c_str());
+        note_rect("mix_suggest." + m.key);
+    }
+}
+
+// The purge between every pair of filaments, mm3 (rule 37): by their colours
+// until the person writes one; then the whole table is theirs.
+void App::purge_pairs_popup() {
+    if (!ImGui::BeginPopup("##purge_pairs"))
+        return;
+    Settings& s = settings_;
+    const int n = std::clamp(s.extruders, 2, kMaxExtruders);
+    const std::vector<std::vector<double>> by_colors = color_purge_table();
+    const auto value = [&](int i, int j) {
+        const auto& t = s.purge_volumes.empty() ? by_colors : s.purge_volumes;
+        return std::size_t(i) < t.size() && std::size_t(j) < t[std::size_t(i)].size() ? t[std::size_t(i)][std::size_t(j)]
+               : i == j                                                                ? 0.0
+                                                                                       : 140.0;
+    };
+    loc::TextDisabled("%s", tr(s.purge_volumes.empty() ? T::PurgeByColors : T::PurgePairsTitle));
+    if (ImGui::BeginTable("##pairs", n + 1, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Borders)) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        for (int j = 0; j < n; ++j) {
+            ImGui::TableNextColumn();
+            ImGui::ColorButton(("##to" + std::to_string(j)).c_str(), rgb(hex_rgb(filament_color(j + 1))), ImGuiColorEditFlags_NoTooltip,
+                               ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
+            ImGui::SameLine();
+            ImGui::Text("%d", j + 1);
+        }
+        for (int i = 0; i < n; ++i) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::ColorButton(("##from" + std::to_string(i)).c_str(), rgb(hex_rgb(filament_color(i + 1))), ImGuiColorEditFlags_NoTooltip,
+                               ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
+            ImGui::SameLine();
+            ImGui::Text("%d", i + 1);
+            for (int j = 0; j < n; ++j) {
+                ImGui::TableNextColumn();
+                if (i == j) {
+                    loc::TextDisabled("—");
+                    continue;
+                }
+                double v = value(i, j);
+                ImGui::SetNextItemWidth(64.0f * scale_);
+                ImGui::PushID(i * 64 + j);
+                if (ImGui::InputDouble("##v", &v, 0.0, 0.0, "%.0f")) {
+                    if (s.purge_volumes.empty()) { // the colours' table becomes the person's
+                        s.purge_volumes.assign(std::size_t(n), std::vector<double>(std::size_t(n), 0.0));
+                        for (int a = 0; a < n; ++a)
+                            for (int b = 0; b < n; ++b)
+                                s.purge_volumes[std::size_t(a)][std::size_t(b)] = value(a, b);
+                    }
+                    if (std::size_t(i) < s.purge_volumes.size() && std::size_t(j) < s.purge_volumes[std::size_t(i)].size())
+                        s.purge_volumes[std::size_t(i)][std::size_t(j)] = std::clamp(v, 0.0, 10000.0);
+                    settings_changed();
+                }
+                note_rect("purge_pair." + std::to_string(i + 1) + "." + std::to_string(j + 1));
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndTable();
+    }
+    ImGui::BeginDisabled(s.purge_volumes.empty());
+    if (ImGui::Button(tr(T::PurgeResetColors))) {
+        s.purge_volumes.clear();
+        settings_changed();
+    }
+    note_rect("purge_reset_colors");
+    ImGui::EndDisabled();
+    ImGui::EndPopup();
+}
+
 int App::mix_changes_planned() const {
     MixChangeOptions options;
     options.first_layer_height = settings_.first_layer_height;
@@ -24352,6 +24551,8 @@ void App::script_input() {
             cad_design_ = step.value != "0";
             if (!cad_design_ && engineering_tab(tab_))
                 set_tab(Tab::Prepare);
+        } else if (step.key == "level") { // basic | normal | advanced, as the panel's chip sets it
+            choose_level(view_level_from(step.value));
         } else if (step.key == "navigation") { // fusion | right_orbits | classic
             navigation_ = step.value == "right_orbits" ? 1 : step.value == "classic" ? 2 : 0;
         } else if (step.key == "view_quality") { // as chosen in Configuración › Video
