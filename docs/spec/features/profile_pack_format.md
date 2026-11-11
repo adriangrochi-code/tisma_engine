@@ -195,6 +195,10 @@ para las impresoras 5 y 9.
    perfiles coincide) y `prusaslicer_values` (mapa de valores, si cambian; también en una clave que conserva su nombre, por ejemplo
    `seam_position` `back` → `rear`). Primero se aplica `prusaslicer_values` y después la conversión; un valor que no
    está en el mapa pasa igual.
+   - `percent_of` (11-11-2026): `"nozzle"` cuando un valor `"N%"` de ese dialecto es un porcentaje de la boquilla (los
+     anchos de OrcaSlicer, por ejemplo `line_width`), y no de la altura de capa como en `prusaslicer`. Al leerlo, el
+     motor pasa `"N%"` a mm con la boquilla del proyecto (o del perfil de impresora) antes de seguir con la conversión
+     de `prusaslicer`; un valor en mm pasa igual (PF12).
 4. **Es la misma traducción** con que el paquete convierte los perfiles: un proyecto y un perfil del mismo programa
    dan los mismos ajustes del motor.
 5. **Cobertura** (09-11-2026, claves de origen / con clave del motor): prusaslicer 806 / 88; orcaslicer 881 / 57;
@@ -255,3 +259,4 @@ para las impresoras 5 y 9.
 | PF9 | Filamento con `extrusion.type` «PLA» | Sin aviso; el tipo queda «PLA» |
 | PF10 | Filamento con `extrusion.travel` `{"ramping_lift": true, "slope": 1, "max_lift": 0.6}` | Sin aviso; los viajes con ese filamento suben en rampa hasta 0,6 mm |
 | PF11 | Impresión de resina con `resin.bottom_layers` 4, resina con 6 | 4 capas de base, sin aviso |
+| PF12 | Proyecto 3MF de OrcaSlicer con boquilla 0,6 y `outer_wall_line_width` "105%" | La pared externa a 0,63 mm (no 105 % de la altura de capa) |
