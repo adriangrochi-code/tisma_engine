@@ -17,6 +17,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -1118,7 +1119,12 @@ TEST_CASE("color mixing plus: colour names and the quick palette (rules 22, 24, 
     CHECK(color_name("#8000c0").en == "Dark purple");
     CHECK(color_name("#a040e0").en == "Purple");
     CHECK(color_name("#ff80c0").en == "Pink");
-    CHECK(color_name("#ffc0e0").es == "rosa claro");
+    CHECK(color_name("#ffc0e0").es == "Rosa claro");
+    CHECK(color_name("#0000ff").es == "Azul oscuro");
+    // Every name starts with a capital (the interface's list, 4 filaments).
+    for (const char* hex : {"#ffffff", "#000000", "#ff0000", "#0000ff", "#800000", "#400060", "#ffc0e0", "#603010"})
+        for (const std::string& n : {color_name(hex).en, color_name(hex).es})
+            CHECK(std::isupper(static_cast<unsigned char>(n[0])));
     CHECK(color_name("#603010").en == "Brown");
     // MX18: 4 filaments, cycles of up to 2 layers: 10 samples, each named.
     const std::vector<std::string> four = {"#00ffff", "#ff00ff", "#ffff00", "#ffffff"};

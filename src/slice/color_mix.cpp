@@ -843,9 +843,10 @@ ColorName color_name(const std::string& hex) {
         return {l < 25.0 ? "Dark brown" : "Brown", l < 25.0 ? "Marrón oscuro" : "Marrón"};
     std::string en = band->en, es = band->es;
     if (l > 70.0)
-        return {"Light " + en, es + " claro"};
-    if (l < 35.0)
-        return {"Dark " + en, es + " oscuro"};
+        en = "Light " + en, es += " claro";
+    else if (l < 35.0)
+        en = "Dark " + en, es += " oscuro";
+    // Every name starts with a capital, in both languages (the hues are ASCII).
     en[0] = char(std::toupper(static_cast<unsigned char>(en[0])));
     es[0] = char(std::toupper(static_cast<unsigned char>(es[0])));
     return {en, es};
