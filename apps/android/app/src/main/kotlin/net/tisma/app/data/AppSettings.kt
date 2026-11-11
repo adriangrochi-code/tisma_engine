@@ -51,6 +51,10 @@ class AppSettings(context: Context) {
     var plateModel: String?
         get() = prefs.getString("plate.model", null)
         set(value) = prefs.edit().putString("plate.model", value).apply()
+    /** True when the plate's model is a part of «Mi biblioteca» (a project file sliced as a part, not its own). */
+    var plateModelPart: Boolean
+        get() = prefs.getBoolean("plate.model_part", false)
+        set(value) = prefs.edit().putBoolean("plate.model_part", value).apply()
     var plateModelName: String?
         get() = prefs.getString("plate.model_name", null)
         set(value) = prefs.edit().putString("plate.model_name", value).apply()

@@ -399,7 +399,7 @@ class SliceViewModel(
 
     init {
         // After Android ended the app: the plate's model, if its copy is still there. Here, after the fields it sets.
-        saved?.plateModel?.let(::File)?.takeIf { it.isFile }?.let { f -> putOnPlate(f, saved.plateModelName ?: f.name) }
+        saved?.plateModel?.let(::File)?.takeIf { it.isFile }?.let { f -> putOnPlate(f, saved.plateModelName ?: f.name, saved.plateModelPart) }
     }
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }
@@ -446,14 +446,15 @@ class SliceViewModel(
      * Puts [copied] on the plate. Its place is kept in the settings: when Android ends the app in the background (the
      * camera, the file manager), the plate comes back with it instead of empty.
      */
-    private fun putOnPlate(copied: File, name: String) {
+    private fun putOnPlate(copied: File, name: String, part: Boolean = false) {
         saved?.plateModel = copied.path
         saved?.plateModelName = name
+        saved?.plateModelPart = part
         model = copied
         original = null; originalFile = null
         lastAnalysis = null
         _state.update {
-            it.copy(modelName = name, fromLibrary = null, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0,
+            it.copy(modelName = name, fromLibrary = null, isProject = !part && copied.extension.equals("3mf", true), result = null, error = null, progress = 0,
                 case = it.case.copy(conditions = emptyList()), marking = null, analysis = null,
                 rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false, calibration = null, stressMap = null, showStress = false)
         }
@@ -976,6 +977,8 @@ class SliceViewModel(
                 }.getOrNull()
             }
             if (copied == null) { _state.update { it.copy(notice = SliceNotice.CannotRead) }; return@launch }
+            // Kept like any plate model, to come back after Android ends the app (as a part, not a project).
+            saved?.plateModel = copied.path; saved?.plateModelName = entry.name; saved?.plateModelPart = true
             model = copied
             original = null; originalFile = null; lastAnalysis = null
             // The recipe's printer and its hand changes; the project is a part with these settings, not its own.

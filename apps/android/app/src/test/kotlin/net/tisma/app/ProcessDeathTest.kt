@@ -48,4 +48,25 @@ class ProcessDeathTest {
         ShadowLooper.idleMainLooper()
         assertNull(third.state.value.modelName)
     }
+
+    @Test
+    fun `a part opened from My library comes back as that part, not as a project`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context)
+        val exe = tmp.newFile("engine.py").apply {
+            writeBytes(ProcessDeathTest::class.java.getResourceAsStream("/fake_library_engine.py")!!.readBytes()); setExecutable(true)
+        }
+        val library = net.tisma.app.engine.Library(exe, tmp.newFolder("library"))
+        val stl = File("../../../tests/data/cube_ascii.stl").absoluteFile
+        val entry = library.save(null, stl, tmp.newFile("c.json").apply { writeText("{}") }, null, emptyMap(), "", tmp.newFolder("s"), name = "Soporte")
+        val work = tmp.newFolder("work")
+        fun vm() = SliceViewModel(EngineRunner(exe, work), work, saved = settings, library = library)
+        val first = vm()
+        first.openFromLibrary(library.show(entry.id))
+        until { first.state.value.modelName == "Soporte" }
+        val again = vm()
+        until { again.state.value.modelName != null }
+        assertEquals("Soporte", again.state.value.modelName)
+        assertEquals(false, again.state.value.isProject)
+    }
 }
