@@ -144,13 +144,19 @@ class MainActivity : ComponentActivity() {
         nav.select(net.tisma.app.ui.Section.PLATE)
     }
 
-    private val nav = net.tisma.app.ui.Navigator()
+    /** The section and screens kept through a turn of the phone (MA4: the screen rearranges, nothing else changes). */
+    class NavHolder : ViewModel() { val nav = net.tisma.app.ui.Navigator() }
+    private val navHolder: NavHolder by viewModels()
+    private val nav get() = navHolder.nav
+    internal val navigator get() = nav
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val app = application as TismaApplication
-        handleShared(intent)
+        // Only the first time: a turn of the phone recreates the activity with the same intent, which would open the
+        // shared file again over what the person did since.
+        if (savedInstanceState == null) handleShared(intent)
         // After an unexpected close: offer to report it, once (problem_reports.md, rule 10).
         if (savedInstanceState == null) app.crash.take()?.let { log ->
             nav.select(net.tisma.app.ui.Section.MORE)

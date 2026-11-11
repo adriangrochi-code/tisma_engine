@@ -34,4 +34,17 @@ class ShareTest {
             Intent(Intent.ACTION_SEND).setType("model/stl").putExtra(Intent.EXTRA_STREAM, Uri.parse("content://none/cube.stl")))
             .setup()
     }
+
+    @Test
+    fun `MA4 turning the phone keeps the section and does not open the shared file again`() {
+        val c = Robolectric.buildActivity(MainActivity::class.java,
+            Intent(Intent.ACTION_SEND).setType("model/stl").putExtra(Intent.EXTRA_STREAM, Uri.parse("content://none/cube.stl")))
+            .setup()
+        val a = c.get()
+        kotlin.test.assertEquals(net.tisma.app.ui.Section.PLATE, a.navigator.section)
+        // The person goes on to the printers, then turns the phone.
+        a.navigator.select(net.tisma.app.ui.Section.PRINTER)
+        val turned = c.recreate().get()
+        kotlin.test.assertEquals(net.tisma.app.ui.Section.PRINTER, turned.navigator.section)
+    }
 }
