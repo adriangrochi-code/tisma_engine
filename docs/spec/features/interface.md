@@ -176,6 +176,9 @@ se copian íconos ni imágenes de otro programa). Vale igual en Impresión 3D, e
 1. **Mouse:** los mismos controles que Fusion 360, por defecto (dueño, 10-11-2026: «que utilice los mismos controles
    que tiene Fusion 360, que es lo más cómodo y lo más conocido por la gente que diseña»), según la ayuda pública de
    Autodesk («Navigate the canvas»):
+   - **cómo se ve lo elegido** (11-11-2026): un contorno de 2 px del color de acento alrededor de la silueta de cada
+     objeto elegido, visible también a través de otros objetos (más tenue donde queda tapado). El color de la pieza
+     no cambia, así sirve igual con la vista de colores de filamentos y mezclas;
    - **clic izquierdo:** elige; arrastrar con el izquierdo desde un lugar vacío hace una selección con un rectángulo
      (de izquierda a derecha, lo que queda adentro; de derecha a izquierda, también lo que toca); Ctrl o Mayús suman;
      el rectángulo de izquierda a derecha se dibuja con línea continua y el de derecha a izquierda, punteado (como en
