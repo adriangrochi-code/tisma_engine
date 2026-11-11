@@ -397,6 +397,11 @@ class SliceViewModel(
     /** The last Engineering run on the plate, to keep it in the library with the part. */
     private var lastAnalysis: EngineRunner.Analysis? = null
 
+    init {
+        // After Android ended the app: the plate's model, if its copy is still there. Here, after the fields it sets.
+        saved?.plateModel?.let(::File)?.takeIf { it.isFile }?.let { f -> putOnPlate(f, saved.plateModelName ?: f.name) }
+    }
+
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
     /** The preview opened the G-code that came in. */
@@ -434,6 +439,16 @@ class SliceViewModel(
             _state.update { it.copy(gcodeToPreview = copied.path) }
             return@launch
         }
+        putOnPlate(copied, name)
+    }
+
+    /**
+     * Puts [copied] on the plate. Its place is kept in the settings: when Android ends the app in the background (the
+     * camera, the file manager), the plate comes back with it instead of empty.
+     */
+    private fun putOnPlate(copied: File, name: String) {
+        saved?.plateModel = copied.path
+        saved?.plateModelName = name
         model = copied
         original = null; originalFile = null
         lastAnalysis = null
@@ -1002,6 +1017,7 @@ class SliceViewModel(
 
     /** mobile_app.md, rule 6: «Quitar» takes the part off the plate. */
     fun removeModel() {
+        saved?.plateModel = null; saved?.plateModelName = null
         model = null; original = null; originalFile = null; lastAnalysis = null
         _state.update {
             it.copy(modelName = null, isProject = false, mesh = null, result = null, error = null, progress = 0, analysis = null,

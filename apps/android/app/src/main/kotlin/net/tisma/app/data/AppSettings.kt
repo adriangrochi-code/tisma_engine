@@ -47,6 +47,14 @@ class AppSettings(context: Context) {
         get() = prefs.getStringSet("cloud.pending_purchases", null)?.toSet() ?: emptySet()
         set(v) = prefs.edit().putStringSet("cloud.pending_purchases", v).apply()
 
+    /** The plate's model (its copy in the app's folder) and its name, to bring it back after Android ends the app. */
+    var plateModel: String?
+        get() = prefs.getString("plate.model", null)
+        set(value) = prefs.edit().putString("plate.model", value).apply()
+    var plateModelName: String?
+        get() = prefs.getString("plate.model_name", null)
+        set(value) = prefs.edit().putString("plate.model_name", value).apply()
+
     /** The server the shared library's sequences and kept files belong to. */
     var p2pOrigin: String
         get() = prefs.getString("p2p.origin", "") ?: ""
