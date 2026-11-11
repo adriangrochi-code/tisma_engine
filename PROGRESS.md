@@ -13172,3 +13172,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `mix_gradient.txt` (orden nueva `gradient-points`).
 - **Falta:** arrastrar las esferas.
 
+## 2026-11-11 — interfaz: pintar colores (multi_extruder.md, regla 1; model_tools.md, regla 27)
+
+- **Hecho:** el canal «Colores» de la herramienta Pintar se abre con más de un filamento o con mezclas (antes estaba
+  apagado); muestra un cuadro por filamento y por mezcla con número hasta 16 (lo que guarda la pintura), y las marcas
+  se ven con el color de su filamento o mezcla. Fuera de la herramienta, la vista de colores ya las mostraba.
+- **Pruebas:** `paint_colors.txt` (orden nueva `paint-color`), los `[ui]`. No laminado ni impreso.
+- **CI local:** la corrida de f2150b7 se cortó en gcc por un Xvfb que no arrancó (pruebas mías corriendo a la vez,
+  1252/1253); se repite sin correr pruebas con Xvfb mientras tanto.
+- **Sigue:** relleno inteligente (MT30), deshacer de la pintura y del corte (MT31).
+
