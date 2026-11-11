@@ -13161,3 +13161,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Sigue:** abrir las partes de un 3MF (FM9, hace falta que la lectura dé los tramos: lo pido a la otra sesión),
   el degradé entre dos puntos (MX31) cuando el motor suba `from`/`to`.
 
+## 2026-11-11 — interfaz: degradé entre dos puntos (color_mixing_plus.md, regla 3: MX31)
+
+- **Hecho:** el eje del degradé ofrece «Entre dos puntos»: inicio y fin en mm de la pieza (X e Y desde su medio, Z
+  desde su base), escritos o con «En la pieza» y un clic sobre ella; en la vista, una esfera con el color de cada
+  punta y una flecha entre ellas sobre cada pieza que usa la mezcla. El costo le pasa al motor el ancho de la pieza a
+  lo largo de la recta en XY. Con dos puntos el eje queda en Z, que es lo que vale para una recta casi vertical.
+- **Medido** (cubo de 10 mm, estimación del motor): de (−5, 0, 5) a (5, 0, 5), 43 cambios; de (0, 0, 0) a
+  (0,5, 0, 10), 25 (como el degradé en Z).
+- **Pruebas:** `mix_gradient.txt` (orden nueva `gradient-points`).
+- **Falta:** arrastrar las esferas.
+

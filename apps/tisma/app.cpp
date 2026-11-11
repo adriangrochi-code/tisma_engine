@@ -871,6 +871,13 @@ private:
     void add_model(const std::filesystem::path& path);
     void add_mesh(TriangleMesh mesh, const std::filesystem::path& name);
     void split_into_parts();
+    // A gradient between two points (color_mixing_plus.md, rule 3: MX31):
+    // which one the next click on a part places (1 start, 2 end, 0 none),
+    // the place of a click in the part's own measures, and the spheres and
+    // arrow over the view.
+    int gradient_pick_ = 0;
+    std::array<double, 3> gradient_point(std::size_t object, Vec3 at) const;
+    void gradient_overlay();
     void rebuild_plate();
     void plate_changed();
     void arrange_plate();
@@ -10803,6 +10810,22 @@ void App::viewport() {
             }
         }
     }
+    // A gradient's point (MX31): the next click on a part places it.
+    if (gradient_pick_ != 0 && mixing_open_ && mix_edit_ >= 0 && mix_edit_ < int(mixes_.size()) && ImGui::IsItemHovered() &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const Vec3 e = camera_.eye(), d = mouse_ray();
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d)) {
+            ColorMix& m = mixes_[std::size_t(mix_edit_)];
+            const std::array<double, 3> at = gradient_point(hit->object, e + d * float(hit->distance));
+            (gradient_pick_ == 1 ? m.from : m.to) = at;
+            if (!m.from)
+                m.from = std::array<double, 3>{0.0, 0.0, 0.0};
+            if (!m.to)
+                m.to = at;
+        }
+        gradient_pick_ = 0;
+        cut_click = true; // the click is not a selection
+    }
     if (editing && !painting && !on_gizmo && !cut_click && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         pressed_object_ = -1;
         dragged_ = false;
@@ -12589,6 +12612,18 @@ static MixChangeOptions mix_change_options(const Settings& s) {
 // A part's options: a gradient in X or Y counts its bands over the part's
 // size along that axis (color_mixing_plus.md, rule 3).
 static MixChangeOptions mix_part_options(MixChangeOptions options, const ColorMix& mix, const BoundingBox& box) {
+    // Between two points (MX31): the part's size along the line's XY
+    // direction; a line nearly upright (under 1 mm across for 10 up) is a
+    // gradient in Z.
+    if (mix.gradient && mix.from && mix.to) {
+        const double dx = (*mix.to)[0] - (*mix.from)[0], dy = (*mix.to)[1] - (*mix.from)[1],
+                     dz = (*mix.to)[2] - (*mix.from)[2];
+        const double across = std::hypot(dx, dy);
+        if (across * 10.0 >= std::abs(dz) && across > 0.0)
+            options.extent = std::abs(dx / across) * double(box.max.x - box.min.x) +
+                             std::abs(dy / across) * double(box.max.y - box.min.y);
+        return options;
+    }
     if (mix.gradient && (mix.axis == 'x' || mix.axis == 'y'))
         options.extent = double(mix.axis == 'x' ? box.max.x - box.min.x : box.max.y - box.min.y);
     return options;
@@ -12617,6 +12652,61 @@ static std::vector<ColorMix::Component> gradient_shares(const ColorMix& m, doubl
         it->share += 1.0 / double(cycle.size());
     }
     return out;
+}
+
+std::array<double, 3> App::gradient_point(std::size_t object, Vec3 at) const {
+    const BoundingBox box = placed_meshes_[object].bounding_box();
+    return {double(at.x) - 0.5 * (double(box.min.x) + box.max.x), double(at.y) - 0.5 * (double(box.min.y) + box.max.y),
+            double(at.z) - double(box.min.z)};
+}
+
+// The gradient being edited, on each model that prints with it: a sphere at
+// its start, one at its end, and an arrow between them.
+void App::gradient_overlay() {
+    if (mix_edit_ < 0 || mix_edit_ >= int(mixes_.size()))
+        return;
+    const ColorMix& m = mixes_[std::size_t(mix_edit_)];
+    if (!m.gradient || !m.from || !m.to)
+        return;
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        bool uses = objects_[i].extruder == m.id;
+        for (const PlatePart& part : objects_[i].parts)
+            uses = uses || part.extruder == m.id;
+        if (!uses)
+            continue;
+        const BoundingBox box = placed_meshes_[i].bounding_box();
+        if (box.empty)
+            continue;
+        const auto bed = [&](const std::array<double, 3>& p) {
+            return Vec3{float(p[0] + 0.5 * (double(box.min.x) + box.max.x)), float(p[1] + 0.5 * (double(box.min.y) + box.max.y)),
+                        float(p[2] + double(box.min.z))};
+        };
+        const auto a = screen_of(bed(*m.from)), b = screen_of(bed(*m.to));
+        if (!a || !b)
+            continue;
+        const ImU32 line = ImGui::GetColorU32(rgb(theme_.accent_hover));
+        dl->AddLine(*a, *b, line, 2.5f * scale_);
+        const float len = std::hypot(b->x - a->x, b->y - a->y);
+        if (len > 1.0f) { // the arrow's head at the end
+            const ImVec2 u((b->x - a->x) / len, (b->y - a->y) / len), n(-u.y, u.x);
+            const float h = 12.0f * scale_;
+            dl->AddTriangleFilled(*b, ImVec2(b->x - u.x * h + n.x * h * 0.5f, b->y - u.y * h + n.y * h * 0.5f),
+                                  ImVec2(b->x - u.x * h - n.x * h * 0.5f, b->y - u.y * h - n.y * h * 0.5f), line);
+        }
+        const auto colour_at = [&](double at) {
+            ColorMix here = m;
+            here.gradient = false;
+            here.components = gradient_shares(m, at);
+            return ImGui::GetColorU32(rgb(hex_rgb(blend_color(here))));
+        };
+        for (const auto& [p, at] : {std::pair{*a, 0.0}, std::pair{*b, 1.0}}) {
+            dl->AddCircleFilled(p, 7.0f * scale_, colour_at(at));
+            dl->AddCircle(p, 7.0f * scale_, IM_COL32(255, 255, 255, 230), 0, 2.0f * scale_);
+        }
+    }
+    dl->PopClipRect();
 }
 
 std::string App::blend_color(const ColorMix& m) const {
@@ -12913,7 +13003,9 @@ void App::mixing_dialog() {
         if (m.gradient) { // its filaments from one end to the other
             std::vector<ColorMix::Component> ends = m.components;
             std::stable_sort(ends.begin(), ends.end(), [](const auto& a, const auto& b) { return a.share < b.share; });
-            shares = std::string(tr(T::GradientBlend)) + " " + char(std::toupper(static_cast<unsigned char>(m.axis))) + ":";
+            shares = std::string(tr(T::GradientBlend)) + " " +
+                     (m.from && m.to ? std::string(tr(T::GradientTwoPoints))
+                                     : std::string(1, char(std::toupper(static_cast<unsigned char>(m.axis))))) + ":";
             for (std::size_t c = 0; c < ends.size(); ++c)
                 shares += (c ? " - " : " ") + std::to_string(ends[c].extruder);
         } else {
@@ -13118,14 +13210,48 @@ void App::mixing_dialog() {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(70.0f * scale_);
             static const char kAxes[] = {'z', 'x', 'y'};
-            const std::string axis_name(1, char(std::toupper(static_cast<unsigned char>(m.axis))));
+            const bool points = m.from && m.to;
+            const std::string axis_name = points ? std::string(tr(T::GradientTwoPoints))
+                                                 : std::string(1, char(std::toupper(static_cast<unsigned char>(m.axis))));
+            ImGui::SetNextItemWidth(150.0f * scale_);
             if (ImGui::BeginCombo(tr(T::GradientAxis), axis_name.c_str())) {
                 for (const char a : kAxes)
-                    if (ImGui::Selectable(std::string(1, char(std::toupper(static_cast<unsigned char>(a)))).c_str(), a == m.axis))
-                        m.axis = a, edited = true;
+                    if (ImGui::Selectable(std::string(1, char(std::toupper(static_cast<unsigned char>(a)))).c_str(), !points && a == m.axis))
+                        m.axis = a, m.from.reset(), m.to.reset(), edited = true;
+                if (ImGui::Selectable(tr(T::GradientTwoPoints), points) && !points) {
+                    // From the bottom to the top of the part, to move from there.
+                    m.axis = 'z'; // what a nearly upright line is
+                    m.from = std::array<double, 3>{0.0, 0.0, 0.0};
+                    m.to = std::array<double, 3>{0.0, 0.0, 10.0};
+                    edited = true;
+                }
                 ImGui::EndCombo();
             }
             note_rect("mix_axis");
+            // Its two points (MX31): typed, in mm of the part (X and Y from its
+            // middle, Z from its bottom), or a click on the part.
+            if (m.from && m.to) {
+                for (int end = 0; end < 2; ++end) {
+                    std::array<double, 3>& at = end == 0 ? *m.from : *m.to;
+                    ImGui::PushID(end + 5000);
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(tr(end == 0 ? T::GradientStart : T::GradientEnd));
+                    for (int c = 0; c < 3; ++c) {
+                        ImGui::SameLine(70.0f * scale_ + float(c) * 74.0f * scale_);
+                        ImGui::SetNextItemWidth(70.0f * scale_);
+                        ImGui::PushID(c);
+                        edited |= ImGui::DragScalar("##at", ImGuiDataType_Double, &at[std::size_t(c)], 0.1f, nullptr, nullptr,
+                                                    c == 0 ? "X %.1f" : c == 1 ? "Y %.1f" : "Z %.1f");
+                        ImGui::PopID();
+                    }
+                    ImGui::SameLine();
+                    const bool picking = gradient_pick_ == end + 1;
+                    if (ImGui::SmallButton(picking ? tr(T::GradientPicking) : tr(T::GradientPick)))
+                        gradient_pick_ = picking ? 0 : end + 1;
+                    note_rect(end == 0 ? "gradient_pick_from" : "gradient_pick_to");
+                    ImGui::PopID();
+                }
+            }
             for (std::size_t c = 0; c < m.components.size(); ++c) {
                 ImGui::PushID(int(c) + 2000);
                 pick("##g", m.components[c].extruder);
@@ -22945,6 +23071,8 @@ void App::layout() {
             object_settings_window();
         }
         mixing_dialog();
+        if (tab_ == Tab::Prepare && mixing_open_)
+            gradient_overlay();
         if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && !engineering_tab(tab_)) // those panels have their own buttons
             empty_hint();
         if (tab_ == Tab::Preview)
@@ -24711,6 +24839,21 @@ void App::script_input() {
         m.color = blend_color(m);
         mix_edit_ = int(mixes_.size()) - 1;
         std::printf("ui-script: mix-gradient %s: %d changes for the plate\n", step.key.c_str(), mix_changes_planned());
+        next();
+    } else if (step.verb == "gradient-points") { // the last blend a gradient between two points: "X Y Z X Y Z" (mm of the part)
+        std::array<double, 3> a{}, b{};
+        if (mixes_.empty() || std::sscanf((step.key + " " + step.value).c_str(), "%lf %lf %lf %lf %lf %lf", &a[0], &a[1], &a[2],
+                                          &b[0], &b[1], &b[2]) != 6)
+            return fail_step("needs a blend and six numbers");
+        ColorMix& m = mixes_.back();
+        m.gradient = true;
+        m.axis = 'z'; // what a nearly upright line is
+        m.from = a, m.to = b;
+        for (std::size_t c = 0; c < m.components.size(); ++c)
+            m.components[c].share = m.components.size() > 1 ? double(c) / double(m.components.size() - 1) : 0.0;
+        m.color = blend_color(m);
+        mix_edit_ = int(mixes_.size()) - 1;
+        std::printf("ui-script: gradient-points: %d changes for the plate\n", mix_changes_planned());
         next();
     } else if (step.verb == "expect-mix-changes") { // the filament changes the plate's blends take: "N"
         const int want = std::atoi(step.key.c_str()), got = mix_changes_planned();

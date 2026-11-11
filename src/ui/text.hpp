@@ -2579,6 +2579,11 @@
     X(GradientBlend, "Degradé", "Gradient") \
     X(GradientAxis, "Eje", "Axis") \
     X(GradientPlace, "en el %d %%", "at %d %%") \
+    X(GradientTwoPoints, "Entre dos puntos", "Between two points") \
+    X(GradientStart, "Inicio", "Start") \
+    X(GradientEnd, "Fin", "End") \
+    X(GradientPick, "En la pieza", "On the part") \
+    X(GradientPicking, "Clic en la pieza…", "Click the part…") \
     X(GradientAddFilament, "Añadir filamento", "Add filament") \
     X(GradientSteps, "Sin subcapas, un degradé en X o Y cambia en escalones de una capa", "Without sublayers, a gradient in X or Y changes in steps of one layer") \
     X(ObjectParts, "Partes", "Parts") \
