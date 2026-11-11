@@ -67,6 +67,26 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
     - cancelar y cambiar de plan se hace en la tienda donde se compró; la app abre esa página;
     - el cobro directo por la web queda solo para quien no tenga ninguna tienda, y apagado por defecto.
 
+5c. **La compra, entre la app y el servidor** (11-11-2026; las tiendas según su documentación pública: Google Play
+    Developer API `purchases.subscriptionsv2`, App Store Server API y StoreKit 2, Microsoft Store collections API):
+    - cada plan de `GET /v1/plans` trae `store_products`: `{"google_play": "<id>", "app_store": "<id>",
+      "microsoft_store": "<id>"}`, solo las tiendas donde se vende (la administración los carga). La app ofrece el
+      producto de su tienda; un plan sin producto en esa tienda no se ofrece ahí;
+    - al terminar la compra, la app manda `POST /v1/me/purchases` (con sesión), JSON: `store` (`google_play`,
+      `app_store` o `microsoft_store`), `product_id` y la prueba de la tienda: `purchase_token` (Google Play),
+      `signed_transaction` (App Store: la transacción firmada de StoreKit 2) o `store_id_key` y `product_id`
+      (Microsoft Store). Responde 200 con la cuenta, como `GET /v1/me`;
+    - el servidor la verifica con la tienda antes de dar el plan: 402 «The store did not confirm this purchase» si la
+      tienda no la confirma, 409 «This purchase belongs to another account» si ya está en otra cuenta (una compra vale
+      para una sola cuenta), 422 si falta un campo. La misma compra mandada dos veces da la misma respuesta;
+    - después, el servidor sigue los avisos de la tienda (Google Play: notificaciones en tiempo real; App Store:
+      notificaciones del servidor, versión 2) y cambia el plan y el vencimiento de la cuenta al renovar, vencer,
+      cancelar o reembolsar, sin la app;
+    - la app manda de nuevo sus compras activas al abrir la sesión («restaurar compras»): así un equipo nuevo con la
+      misma cuenta de la tienda recupera el plan;
+    - `GET /v1/me` trae `subscription`: `store`, `product_id`, `expires` y `auto_renew`, o `null`; con eso la app
+      muestra «Administrar la suscripción» y abre la página de esa tienda (CC21 a CC23).
+
 5a. **Planes a la vista:** el panel de la cuenta muestra los planes de `GET /v1/plans` (no hace falta sesión): `name`,
     `monthly_hours`, `max_concurrent`, `price_cents` y `currency`, tal como los manda el servidor, con el plan actual
     marcado, y `classes`: los cálculos que incluye cada plan (regla 10b). El motor no guarda ni inventa planes: la administración los cambia en el servidor y la lista se pide de nuevo al abrir el
@@ -263,3 +283,6 @@ Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
 | CC18 | `tisma-engine orient` de una pieza en L apoyada de canto | JSON con `rotation`; `cost` no mayor que `cost_before` (regla 1 de `orientation.md`) |
 | CC19 | `tisma-engine slice … --threads 1` en una máquina de 4 núcleos | El proceso no pasa de un núcleo ocupado; el G-code es el mismo que sin la opción |
 | CC20 | Un trabajo `fea` con modo `lightest-infill` (que todavía no corre en la nube) | Falla; `GET /v1/jobs/<id>` da `error` en inglés y en `summary` `code` = `not_in_cloud` y `error_es`; la interfaz en español muestra `error_es` |
+| CC21 | Plan con `store_products.google_play` «pro_month»; compra con un `purchase_token` que la tienda confirma | 200; la cuenta queda en ese plan con el vencimiento de la tienda; `subscription.store` `google_play` |
+| CC22 | La misma compra, mandada otra vez desde otra cuenta / desde la misma | 409 «This purchase belongs to another account» / 200 igual que la primera |
+| CC23 | Aviso de la tienda: reembolso de esa compra | La cuenta vuelve al plan gratuito sin que la app haga nada; `subscription` `null` |
