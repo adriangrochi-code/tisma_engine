@@ -208,6 +208,11 @@ para las impresoras 5 y 9.
      temperatura de cama y la de la primera capa salen de la placa de `curr_bed_type`; si falta, de `default_bed_type`;
      si falta, de la primera con valor en el orden High Temp, Textured PEI, Engineering, Cool, Textured Cool,
      Supertack (como el conversor del paquete) (PF14).
+   - `machine.flavor_choices` (decisión del dueño, 11-11-2026: «de Marlin marquemos los dos, el clásico y el Marlin 2»):
+     solo cuando la fuente no distingue entre los dos (las impresoras de Cura, «RepRap (Marlin/Sprinter)»), la lista
+     `["marlin_legacy", "marlin"]`. `machine.flavor` sigue siendo uno solo, el que se usa si nadie elige (`marlin`,
+     Marlin 2). La interfaz ofrece los dos en el selector de firmware de esa impresora, con el por defecto marcado; lo
+     que elige la persona se guarda en su perfil propio (PF15).
 4. **Es la misma traducción** con que el paquete convierte los perfiles: un proyecto y un perfil del mismo programa
    dan los mismos ajustes del motor.
 5. **Cobertura** (09-11-2026, claves de origen / con clave del motor): prusaslicer 806 / 88; orcaslicer 881 / 57;
@@ -271,3 +276,4 @@ para las impresoras 5 y 9.
 | PF12 | Proyecto 3MF de OrcaSlicer con boquilla 0,6 y `outer_wall_line_width` "105%" | La pared externa a 0,63 mm (no 105 % de la altura de capa) |
 | PF13 | Proyecto 3MF de OrcaSlicer con `default_acceleration` 5000 y `bridge_acceleration` "50%" | Puentes a 2500 mm/s² |
 | PF14 | 3MF de OrcaSlicer con `curr_bed_type` «Textured PEI Plate», `textured_plate_temp` 65 y `hot_plate_temp` 55 / sin `curr_bed_type` ni `default_bed_type` | Cama a 65 °C / a 55 °C (High Temp primero) |
+| PF15 | Impresora de Cura con «RepRap (Marlin/Sprinter)» / de PrusaSlicer con `marlin2` | `machine.flavor` `marlin` y `flavor_choices` con los dos; el selector ofrece Marlin clásico y Marlin 2 / solo `marlin`, sin `flavor_choices` |
