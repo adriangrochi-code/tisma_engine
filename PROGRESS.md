@@ -13045,5 +13045,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   (`App::blend_color`): el mezclador simple o, con `mixing.predictor = "spectral"`, `mix_color_spectral` con la TD
   de cada filamento; se recalcula con cada cambio de ajustes. Guion `mix_settings.txt` (campos con coma decimal, y
   el color de la mezcla cambia al pasar a la predicción espectral con TD 3 mm).
-- **Sigue:** «Color buscado» (`match_color` con las TD), paleta rápida (`quick_palette`, `color_name`) y la pieza
-  de muestras (`palette_piece`), el eje del degradé y `MixChangeOptions::extent` cuando llegue a209135.
+- **Después:** en el diálogo de mezclas, «Color buscado» (regla 4: la elegida y 3 recomendaciones con su distancia
+  CIEDE2000, aviso si no se alcanza; `match_color` con las TD de la predicción) y «Paleta rápida» (regla 22: ciclos
+  de hasta 2 o 3 capas; agrega a la lista las mezclas que faltan, con el nombre de su color). La lista muestra el
+  nombre de cada mezcla. Guion `mix_match.txt` (MX5, MX6, MX18).
+- **Visto y no arreglado:** al subir el número de filamentos, una mezcla ya creada puede quedar con el número de un
+  filamento nuevo (#3 con 4 filamentos); los nombres de color del motor mezclan mayúscula y minúscula inicial.
+- **Sigue:** la pieza de muestras (`palette_piece`, CM8) en la placa, el eje del degradé y
+  `MixChangeOptions::extent` cuando llegue a209135; después selección múltiple y barra de vista.

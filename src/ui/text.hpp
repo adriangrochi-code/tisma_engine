@@ -2549,6 +2549,15 @@
       "How a blend's colour is foreseen; the spectral one uses each filament's TD") \
     X(MixPredictorMixer, "Simple", "Simple") \
     X(MixPredictorSpectral, "Espectral (con la TD)", "Spectral (with the TD)") \
+    X(ColorSought, "Color buscado", "Colour sought") \
+    X(FindBlend, "Buscar la mezcla", "Find the blend") \
+    X(ColorNotReached, "Ese color no se alcanza con estos filamentos", "That colour cannot be reached with these filaments") \
+    X(MatchBest, "Elegida: %s (distancia %.1f)", "Chosen: %s (distance %.1f)") \
+    X(MatchRecommended, "Recomendación: %s (distancia %.1f)", "Recommendation: %s (distance %.1f)") \
+    X(QuickPalette, "Paleta rápida", "Quick palette") \
+    X(QuickPaletteSmall, "Ciclos de hasta 2 capas", "Cycles of up to 2 layers") \
+    X(QuickPaletteLarge, "Ciclos de hasta 3 capas", "Cycles of up to 3 layers") \
+    X(QuickPaletteAdded, "%d muestras en la paleta; sus mezclas están en la lista", "%d samples in the palette; their blends are in the list") \
     X(TransmissionRow, "Distancia de transmisión (TD)", "Transmission distance (TD)") \
     X(TransmissionTip, "El espesor en el que el filamento deja pasar casi nada de luz; 0: desconocida. Por encima de 10 mm se ve lo de adentro y no se purga en su relleno", \
       "The thickness through which the filament lets almost no light pass; 0: unknown. Above 10 mm what is inside shows, so no purge into its infill")

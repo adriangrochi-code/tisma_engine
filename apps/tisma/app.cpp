@@ -1594,6 +1594,9 @@ private:
     std::map<std::string, ImVec2> cube_spots_; // script: where each face, edge and corner of the cube is
     OrbitCamera camera_mark_;                  // script: the camera at camera-mark
     std::string mix_color_mark_;               // script: the blend's colour at mix-color-mark
+    std::string color_target_ = "#808080";     // the mixing dialog's colour sought (color_mixing_plus.md, rule 4)
+    std::vector<MixMatch> color_matches_;
+    std::size_t palette_count_ = 0;            // the samples of the last quick palette (rule 22)
     bool camera_framed_ = false; // the camera is as the last framing left it (no orbit, pan or zoom since)
     bool last_coarse_ = false; // the last frame drew the coarse copy (--ui-script's expect-coarse)
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
@@ -12529,7 +12532,9 @@ void App::mixing_dialog() {
         for (const ColorMix::Component& c : m.components)
             shares += (shares.empty() ? "" : ", ") + std::to_string(c.extruder) + " - " +
                       std::to_string(int(std::lround(c.share * 100.0))) + " %";
-        if (ImGui::Selectable((format(tr(T::VirtualExtruder), m.id) + "\n" + shares).c_str(), mix_edit_ == int(k), 0,
+        // Its name, when it has one (color_mixing_plus.md, rule 6).
+        const std::string title = format(tr(T::VirtualExtruder), m.id) + (m.name.empty() ? "" : " · " + m.name);
+        if (ImGui::Selectable((title + "\n" + shares + "##mix").c_str(), mix_edit_ == int(k), 0,
                               ImVec2(170.0f * scale_, 0)))
             mix_edit_ = int(k);
         ImGui::SameLine();
@@ -12568,6 +12573,92 @@ void App::mixing_dialog() {
         if (e < filaments)
             ImGui::SameLine();
         ImGui::PopID();
+    }
+    // The colour sought (color_mixing_plus.md, rule 4): the closest blend of
+    // 2 or 3 filaments and the next 3, each with its distance; a notice when
+    // the best is more than 10 apart. Cycles of up to 4 layers, no share
+    // under 15 % (the spec's defaults).
+    std::vector<std::string> filament_hexes;
+    for (int e = 1; e <= filaments; ++e)
+        filament_hexes.push_back(filament_color(e));
+    const auto next_id = [&] {
+        int id = filaments + 1;
+        for (const ColorMix& other : mixes_)
+            id = std::max(id, other.id + 1);
+        return id;
+    };
+    const auto name_of_color = [&](const std::string& hex) {
+        const ColorName n = color_name(hex);
+        return language() == Language::Spanish ? n.es : n.en;
+    };
+    if (filaments >= 2) {
+        ImGui::SeparatorText(tr(T::ColorSought));
+        ImVec4 t = color_of(color_target_);
+        float target3[3] = {t.x, t.y, t.z};
+        if (ImGui::ColorEdit3("##target", target3, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
+            char hex[8];
+            std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(target3[0] * 255.0f)),
+                          unsigned(std::lround(target3[1] * 255.0f)), unsigned(std::lround(target3[2] * 255.0f)));
+            color_target_ = hex;
+            color_matches_.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::FindBlend)))
+            color_matches_ = match_color(color_target_, filament_hexes, next_id(), 4, 0.15, filament_transmission());
+        note_rect("find_blend");
+        if (!color_matches_.empty() && !color_reached(color_matches_)) {
+            loc::TextColored(rgb(theme_.paint_block), "%s", tr(T::ColorNotReached));
+            note_rect("color_not_reached");
+        }
+        for (std::size_t k = 0; k < color_matches_.size(); ++k) {
+            const MixMatch& match = color_matches_[k];
+            ImGui::PushID(int(k) + 1000);
+            ImGui::ColorButton("##match", color_of(match.color), ImGuiColorEditFlags_NoTooltip, ImVec2(22.0f * scale_, 22.0f * scale_));
+            ImGui::SameLine();
+            std::string shares;
+            for (const ColorMix::Component& c : match.mix.components)
+                shares += (shares.empty() ? "" : " + ") + std::to_string(c.extruder) + " " +
+                          std::to_string(int(std::lround(c.share * 100.0))) + " %";
+            ImGui::AlignTextToFramePadding();
+            loc::Text("%s", format(tr(k == 0 ? T::MatchBest : T::MatchRecommended), shares.c_str(), match.distance).c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::AddBlend))) {
+                ColorMix m = match.mix;
+                m.id = next_id();
+                m.color = blend_color(m);
+                if (m.name.empty())
+                    m.name = name_of_color(m.color);
+                mixes_.push_back(std::move(m));
+                mix_edit_ = int(mixes_.size()) - 1;
+            }
+            note_rect("add_match." + std::to_string(k));
+            ImGui::PopID();
+        }
+        // The quick palette (rule 22): every blend of up to 2 or 3 layers,
+        // each with the name of its colour, to print as a sample card.
+        ImGui::SeparatorText(tr(T::QuickPalette));
+        for (const auto& [cycle, label, key] : {std::tuple{2, T::QuickPaletteSmall, "quick_palette.2"}, std::tuple{3, T::QuickPaletteLarge, "quick_palette.3"}}) {
+            if (ImGui::Button(tr(label))) {
+                const std::vector<PaletteSample> samples = quick_palette(filament_hexes, cycle, next_id(), filament_transmission());
+                for (const PaletteSample& p : samples) {
+                    if (p.mix.components.size() < 2 && p.mix.pattern.empty())
+                        continue; // a filament on its own is already there
+                    ColorMix m = p.mix;
+                    m.id = next_id();
+                    m.color = p.color;
+                    m.name = language() == Language::Spanish ? p.name.es : p.name.en;
+                    if (std::none_of(mixes_.begin(), mixes_.end(), [&](const ColorMix& o) {
+                            return o.components == m.components && o.pattern == m.pattern; }))
+                        mixes_.push_back(std::move(m));
+                }
+                palette_count_ = samples.size();
+            }
+            note_rect(key);
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
+        if (palette_count_ > 0)
+            loc::TextDisabled("%s", format(tr(T::QuickPaletteAdded), int(palette_count_)).c_str());
     }
     ImGui::SeparatorText(tr(T::TwoColorBlends));
     for (int a = 1; a <= filaments; ++a)
@@ -24020,6 +24111,28 @@ void App::script_input() {
         for (PlateObject& o : objects_)
             o.extruder = m.id;
         std::printf("ui-script: add-mix: %d changes for the plate\n", mix_changes_planned());
+        next();
+    } else if (step.verb == "open-mixing") { // the mixed colours' dialog, as its button opens it
+        mixing_open_ = true;
+        next();
+    } else if (step.verb == "filament-color") { // a filament's colour: "N #rrggbb"
+        const int n = std::atoi(step.key.c_str());
+        if (n < 1)
+            return fail_step("no such filament");
+        if (filament_colors_.size() < std::size_t(n))
+            filament_colors_.resize(std::size_t(n));
+        filament_colors_[std::size_t(n - 1)] = step.value;
+        recolor_mixes();
+        next();
+    } else if (step.verb == "color-target") { // the mixing dialog's colour sought
+        color_target_ = step.key;
+        color_matches_.clear();
+        next();
+    } else if (step.verb == "expect-mixes") { // how many blends the project has
+        const int want = std::atoi(step.key.c_str());
+        std::printf("ui-script: expect-mixes %d: %s%zu\n", want, int(mixes_.size()) == want ? "ok, " : "got ", mixes_.size());
+        if (int(mixes_.size()) != want)
+            return fail_step("the project has " + std::to_string(mixes_.size()) + " blends");
         next();
     } else if (step.verb == "mix-color-mark") { // remember the last blend's colour, for expect-mix-color
         mix_color_mark_ = mixes_.empty() ? std::string() : mixes_.back().color;
