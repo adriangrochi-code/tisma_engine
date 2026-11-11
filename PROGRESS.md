@@ -12290,7 +12290,7 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | Impresoras: Moonraker, OctoPrint, PrusaLink, Duet | Revisado 10-11 | Respuestas sin límite (8ae9128), fin «completo/cancelado» de Klipper y PrusaLink (b1d1090) |
 | Búsqueda en la red, sondeo y cámara en segundo plano | Revisado 10-11 | Seguían en segundo plano (52aa505, 5faf263) |
 | Aviso de fin de impresión (servicio) | Revisado 10-11 | Impresora apagada a mitad: nunca paraba; error no de impresora lo cortaba (75d2a4b) |
-| Nube: cuenta, sesiones, planes | Pendiente | |
+| Nube: cuenta, sesiones, planes | Revisado 11-11 | Al cerrar sesión quedaba la lista de sesiones de esa cuenta para quien entrara después (`SignOutTest`); planes por tienda (5b, 5c) |
 | Nube: trabajos (laminar/analizar), progreso, resultado | Revisado 10-11 | Las vistas previas de resultados (hasta 1 GB) se acumulaban en la caché y una bajada cortada quedaba a medias (este commit, `CloudScreensTest`) |
 | Informar un problema | Revisado 11-11 | Sin hallazgos: nada se manda sin «Enviar»; el registro adjunto (500 líneas) no lleva códigos de acceso, claves ni sesión (revisadas todas las líneas que escribe la app) |
 | Actualizaciones de la app | Revisado 10-11 | Tamaño sin tope y huella en mayúsculas (18d78d2) |
