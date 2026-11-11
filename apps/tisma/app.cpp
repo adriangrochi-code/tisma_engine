@@ -939,6 +939,17 @@ private:
     bool color_view_wanted() const;
     // A filament's or blend's colour as 0xRRGGBB (the model's colour for none).
     std::uint32_t extruder_rgb(int extruder) const;
+    // The colours the paint holds (color_mixing_plus.md, «Pintar con mezclas»:
+    // MX33): slot k is paint mark k, a filament or a blend number (0: unused).
+    // Empty: each mark is its own number, the first 16 by number.
+    std::vector<int> paint_slots_;
+    int slot_extruder(int mark) const {
+        if (paint_slots_.empty())
+            return mark;
+        return mark >= 1 && std::size_t(mark) <= paint_slots_.size() ? paint_slots_[std::size_t(mark - 1)] : 0;
+    }
+    bool for_painting(int extruder) const;
+    bool set_for_painting(int extruder, bool on); // false: no room (16 colours)
     std::vector<std::string> color_view_key_;
     Vec3 mouse_ray() const;
     // CAD navigation (interface.md, «Navegación de la vista 3D»).
@@ -5063,6 +5074,7 @@ void App::load_project_config(const std::filesystem::path& path) {
         chosen_profile_ = p.profiles;
         profiles_checked_.clear();
         filament_colors_ = std::move(p.filament_colors);
+        paint_slots_ = std::move(p.paint_slots);
         fill_speeds();
         bed_changed();
         settings_changed();
@@ -5136,6 +5148,7 @@ void App::open_project(const std::filesystem::path& path) {
     std::erase_if(mixes_, [&](const ColorMix& m) { return !mix_usable(m, settings_.extruders); });
     mix_extruders_ = std::max(settings_.extruders, 1);
     filament_colors_ = std::move(p.filament_colors);
+    paint_slots_ = std::move(p.paint_slots);
     bed_changed();
     settings_changed();
     if (!p.models.empty()) {
@@ -5217,6 +5230,7 @@ Project App::current_project() const {
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
+    p.paint_slots = paint_slots_;
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
     return p;
@@ -6880,7 +6894,8 @@ void App::start_slice() {
     // The purge between filaments, by their colours when unset (color_mixing_plus.md, rule 37).
     const Settings settings = with_color_purge(calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_);
     PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
-    Painting painting = std::move(plate.painting);
+    // The paint's colour marks as the filaments and blends they stand for (MX33).
+    Painting painting = paint_slots_.empty() ? std::move(plate.painting) : with_color_slots(plate.painting, paint_slots_);
     std::vector<MeshObject> objects = std::move(plate.objects);
     SliceVolumes volumes = std::move(plate.volumes);
     const bool by_object = plate.by_object;
@@ -12998,13 +13013,17 @@ void App::renumber_mixes() {
         const auto it = to.find(e);
         return it == to.end() ? e : it->second;
     };
+    for (int& e : paint_slots_)
+        if (e != 0)
+            e = to.contains(e) && to.at(e) == 1 && e > n ? 0 : moved(e);
     for (PlateObject& o : objects_) {
         o.extruder = moved(o.extruder);
         for (PlatePart& part : o.parts)
             if (part.extruder != 0)
                 part.extruder = moved(part.extruder);
-        // The colour painting: its marks are extruder numbers.
-        for (std::size_t t = 0; t < o.painting.size(PaintChannel::Color); ++t) {
+        // The colour painting: its marks are extruder numbers, unless they
+        // are slots of the table (MX33), which moved above.
+        for (std::size_t t = 0; paint_slots_.empty() && t < o.painting.size(PaintChannel::Color); ++t) {
             Painting::Tree tree = o.painting.tree(PaintChannel::Color, t);
             bool changed = false;
             for (std::uint8_t& mark : tree)
@@ -13570,6 +13589,11 @@ void App::mixing_dialog() {
         }
         if (edited)
             recolor(m);
+        // Whether it is one of the paint's 16 colours (MX33).
+        bool paintable = for_painting(m.id);
+        if (ImGui::Checkbox(tr(T::MixForPainting), &paintable) && !set_for_painting(m.id, paintable))
+            notify(tr(T::MixPaintFull));
+        note_rect("mix_paint");
         ImGui::TextUnformatted(tr(T::DisplayColor));
         ImGui::SameLine();
         ImGui::ColorButton("##shown", color_of(m.color), 0, ImVec2(48.0f * scale_, 18.0f * scale_));
@@ -13662,22 +13686,28 @@ void App::paint_card(ImVec2 at) {
     if (paint_channel_ == PaintChannel::Color) {
         // Each filament and each blend the paint can hold (multi_extruder.md,
         // rule 1; color_mixing_plus.md, rule 16), as a swatch to pick.
-        std::vector<int> choices;
-        for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
-            choices.push_back(e);
-        for (const ColorMix& m : mixes_)
-            if (m.id <= kPaintMaxMark && mix_usable(m, settings_.extruders))
-                choices.push_back(m.id);
+        // Each mark with what it prints: the filaments and the blends marked
+        // «Para pintar» (MX33).
+        std::vector<std::pair<int, int>> choices; // mark, extruder
+        for (int k = 1; k <= kPaintMaxMark; ++k) {
+            const int e = slot_extruder(k);
+            const bool exists = e >= 1 && (e <= std::max(settings_.extruders, 1) ||
+                                           std::any_of(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) {
+                                               return m.id == e && mix_usable(m, settings_.extruders);
+                                           }));
+            if (exists)
+                choices.push_back({k, e});
+        }
         const float side = 22.0f * scale_;
         for (std::size_t k = 0; k < choices.size(); ++k) {
-            const int e = choices[k];
+            const auto [mark, e] = choices[k];
             ImGui::PushID(e + 6000);
             if (k % 8 != 0)
                 ImGui::SameLine(0, 4.0f * scale_);
             const std::uint32_t c = extruder_rgb(e);
             if (ImGui::ColorButton("##colour", rgb(c), ImGuiColorEditFlags_NoTooltip, ImVec2(side, side)))
-                paint_mark_ = std::uint8_t(e);
-            if (paint_mark_ == e)
+                paint_mark_ = std::uint8_t(mark);
+            if (paint_mark_ == mark)
                 ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                                                     ImGui::GetColorU32(rgb(theme_.accent_hover)), 3.0f * scale_, 2.5f * scale_);
             loc::SetItemTooltip("%s", e <= settings_.extruders ? format(tr(T::ExtruderItem), e).c_str()
@@ -13819,6 +13849,40 @@ bool App::color_view_wanted() const {
     return triangles <= 2000000;
 }
 
+bool App::for_painting(int extruder) const {
+    if (paint_slots_.empty())
+        return extruder >= 1 && extruder <= kPaintMaxMark;
+    return std::find(paint_slots_.begin(), paint_slots_.end(), extruder) != paint_slots_.end();
+}
+
+bool App::set_for_painting(int extruder, bool on) {
+    if (for_painting(extruder) == on)
+        return true;
+    // The table as it stands: each mark keeps its meaning.
+    if (paint_slots_.empty()) {
+        for (int k = 1; k <= kPaintMaxMark; ++k) {
+            const bool exists = k <= std::max(settings_.extruders, 1) ||
+                                std::any_of(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) { return m.id == k; });
+            paint_slots_.push_back(exists ? k : 0);
+        }
+    }
+    if (!on) {
+        std::replace(paint_slots_.begin(), paint_slots_.end(), extruder, 0);
+    } else {
+        const auto free = std::find(paint_slots_.begin(), paint_slots_.end(), 0);
+        if (free == paint_slots_.end()) {
+            if (paint_slots_.size() >= kPaintMaxMark)
+                return false;
+            paint_slots_.push_back(extruder);
+        } else {
+            *free = extruder;
+        }
+    }
+    paint_dirty_ = true;
+    plate_changed();
+    return true;
+}
+
 std::uint32_t App::extruder_rgb(int extruder) const {
     if (extruder >= 1 && extruder <= std::max(settings_.extruders, 1))
         return hex_rgb(filament_color(extruder));
@@ -13879,7 +13943,7 @@ void App::update_color_view() {
                         return;
                     const std::uint8_t mark = tree[at++];
                     if (mark != Painting::kSplit) {
-                        put(mark == 0 ? colour : colour_of(mark), p, q, r, n);
+                        put(mark == 0 || slot_extruder(mark) == 0 ? colour : colour_of(slot_extruder(mark)), p, q, r, n);
                         return;
                     }
                     const auto mid = [](const Vec3f& u, const Vec3f& v) {
@@ -13918,7 +13982,7 @@ void App::update_paint_view() {
     std::vector<Renderer::PaintGroup> groups;
     for (const PaintMesh::Group& g : m.groups)
         groups.push_back({g.first, g.count,
-                          vec(paint_channel_ == PaintChannel::Color ? extruder_rgb(g.mark)
+                          vec(paint_channel_ == PaintChannel::Color ? extruder_rgb(slot_extruder(g.mark))
                               : g.mark == kPaintBlock              ? theme_.paint_mark_block
                                                                    : theme_.paint_mark_enforce)});
     renderer_.set_paint(m.vertices, groups);
@@ -26567,6 +26631,19 @@ void App::script_input() {
             return fail_step("no such triangle");
         smart_angle_ = angle;
         smart_fill(i, *seed);
+        next();
+    } else if (step.verb == "mix-paint") { // blend I (from 0) for painting or not: "I on|off"
+        const std::size_t i = std::size_t(std::atoi(step.key.c_str()));
+        if (i >= mixes_.size())
+            return fail_step("no such blend");
+        if (!set_for_painting(mixes_[i].id, step.value != "off"))
+            notify(tr(T::MixPaintFull));
+        next();
+    } else if (step.verb == "expect-paint-slot") { // the extruder paint mark K stands for: "K E"
+        const int k = std::atoi(step.key.c_str()), want = std::atoi(step.value.c_str()), got = slot_extruder(k);
+        std::printf("ui-script: expect-paint-slot %d: %s%d\n", k, got == want ? "ok, " : "got ", got);
+        if (got != want)
+            return fail_step("mark " + std::to_string(k) + " stands for " + std::to_string(got));
         next();
     } else if (step.verb == "paint-color") { // the Paint tool's colour channel, with extruder or blend N
         paint_channel_ = PaintChannel::Color;

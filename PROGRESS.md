@@ -13348,3 +13348,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   3904 de nuevo); pasan las 31 de Diseño.
 - **Sigue:** el navegador a la izquierda (11 ter) con el editor de lo elegido, los cuadros flotantes (11 quinquies).
 
+## 2026-11-11 — interfaz: pintar con más de 16 mezclas (color_mixing_plus.md, «Pintar con mezclas»: MX33)
+
+- **Hecho** (con `Project::paint_slots` y `with_color_slots` del motor, cf42945): cada mezcla tiene «Para pintar» en el
+  diálogo; por defecto valen las primeras 16 por número (la tabla vacía: cada marca es su número, como antes).
+  Destildar una deja su marca libre; tildar otra la toma; con las 16 en uso avisa «La pintura admite 16 colores:
+  destildá otra mezcla para usar esta» y no la marca. Los colores de Pintar, la vista y el laminado leen la tabla; el
+  proyecto la guarda; al renumerar mezclas (MX30) la tabla las sigue y la pintura no se toca.
+- **Pruebas:** `mix_paint_slots.txt` (órdenes nuevas `mix-paint`, `expect-paint-slot`); pasan las 66 de pintura,
+  mezclas, paleta, deshacer y proyecto. No laminado entero ni impreso.
+

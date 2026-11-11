@@ -2630,6 +2630,8 @@
     X(CutPartBelow, "Abajo", "Lower") \
     X(CutPartAbove, "Arriba", "Upper") \
     X(PartObjectsExtruder, "El del objeto", "The object's") \
+    X(MixForPainting, "Para pintar", "For painting") \
+    X(MixPaintFull, "La pintura admite 16 colores: destildá otra mezcla para usar esta", "Painting takes 16 colours: untick another blend to use this one") \
     X(PalettePieceLoad, "Poner la pieza de muestras en la placa", "Put the sample card on the plate") \
     X(PalettePieceNames, "Nombre de cada muestra", "Each sample's name") \
     X(PalettePieceName, "Paleta de colores", "Colour palette") \
