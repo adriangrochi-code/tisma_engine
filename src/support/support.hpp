@@ -20,6 +20,10 @@ struct SupportParams {
     // z_gap_layers everywhere.
     const std::vector<int>* gap_above = nullptr;
     int bottom_gap_layers = 0;    // empty layers between the part and the support standing on it
+    // The same, layer by layer (support.bottom_z_gap in mm over the layers'
+    // own thicknesses): the empty layers under support layer l. Null:
+    // bottom_gap_layers everywhere.
+    const std::vector<int>* gap_below = nullptr;
     // Only support that stands on the bed (supports_more.md, rule 2): a zone
     // that rests on the part anywhere goes whole.
     bool buildplate_only = false;

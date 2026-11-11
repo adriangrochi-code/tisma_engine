@@ -293,7 +293,8 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
             // and bottom_gap_layers over the part it stands on (supports_more.md, rule 6).
             out[l] = Clipper2Lib::Difference(simplify(c.outline(), params.bead / 2.0), offset(regions[l], params.xy_gap),
                                              Clipper2Lib::FillRule::NonZero);
-            for (std::size_t g = 1; g <= std::size_t(std::max(params.bottom_gap_layers, 0)) && g <= l && !out[l].empty(); ++g)
+            const int below = params.gap_below && l < params.gap_below->size() ? (*params.gap_below)[l] : params.bottom_gap_layers;
+            for (std::size_t g = 1; g <= std::size_t(std::max(below, 0)) && g <= l && !out[l].empty(); ++g)
                 // Grown by half a bead: no slivers left hanging over its edge.
                 out[l] = Clipper2Lib::Difference(out[l], offset(regions[l - g], params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
         });

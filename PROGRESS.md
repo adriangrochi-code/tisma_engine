@@ -12628,7 +12628,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   del voladizo el soporte quedaba a 0,1 mm de la pieza en vez de 0,2. Ahora la separación se cuenta capa a capa con
   los grosores reales (`support_gaps_above/below`), en la columna de rejilla, los árboles, la interfaz y lo que se
   apoya en el soporte. Prueba `[variable_layers]` (T con capas de 0,1 desde 4 mm: separación 0,2; falla sin el
-  arreglo con 0,1). La separación de abajo (`support.bottom_z_gap`) sigue en capas nominales: pendiente.
+  arreglo con 0,1). La separación de abajo (`support.bottom_z_gap`) también, desde el 2026-11-11
+  (`SupportParams::gap_below`, `support_gaps_below`): con capas de 0,1 mm sobre una placa el soporte que se apoya en
+  ella empezaba a 0,1 mm en vez de 0,2; prueba `[variable_layers]` (placa, tallo y tapa: 0,2 con capas de 0,2 y de
+  0,1; falla sin el arreglo).
 - `resin.md` regla 1, RE11 (spec/next 5d95bc0): `resin.first_layer_height` (0: `resin.layer_height`); la capa `n`
   tiene su tope en `h0 + n·h`. Ajuste, guía, campo en la tarjeta de capas de resina, CONFIG.md. Prueba `[resin]` RE11
   (0,1 y 0,05: topes 0,1 y 0,15, una capa menos).

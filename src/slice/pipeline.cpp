@@ -2275,6 +2275,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         layer_thickness.push_back(layer.top - layer.bottom);
     const std::vector<int> gap_above = support_gaps_above(layer_thickness, settings.support_z_gap);
     const std::vector<int> gap_below = support_gaps_below(layer_thickness, settings.support_z_gap);
+    // support.bottom_z_gap the same way: the empty layers under each support layer.
+    const std::vector<int> gap_under = support_gaps_below(
+        layer_thickness, settings.support_bottom_z_gap > 0.0 ? settings.support_bottom_z_gap : settings.support_z_gap);
     // The support under whatever hangs in the first support.enforce_layers
     // layers, however steep and whether support is on or not
     // (supports_more.md, rule 1): base only, in layers 0 to N - 4 (SM1).
@@ -2290,6 +2293,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         sp.bottom_gap_layers = settings.support_bottom_z_gap > 0.0
                                    ? int(std::lround(settings.support_bottom_z_gap / stack_height))
                                    : sp.z_gap_layers;
+        sp.gap_below = &gap_under; // in mm over the layers' own thicknesses
         sp.buildplate_only = settings.support_buildplate_only;
         sp.under_bridges = settings.support_under_bridges;
         sp.xy_gap = support_xy_gap(settings);
@@ -2672,10 +2676,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           // bottom_interface_layers layers under the bottom Z gap
                           // (supports_more.md, rule 7; grid support).
                           if (settings.support_style != SupportStyle::Organic) {
-                              const std::size_t bottom_gap =
-                                  settings.support_bottom_z_gap > 0.0
-                                      ? std::size_t(std::max(0L, std::lround(settings.support_bottom_z_gap / stack_height)))
-                                      : gap;
+                              const std::size_t bottom_gap = std::size_t(std::max(gap_under[l], 0));
                               const int below_layers = settings.support_bottom_interface_layers < 0
                                                            ? settings.support_interface_layers
                                                            : settings.support_bottom_interface_layers;

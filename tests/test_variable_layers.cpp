@@ -308,3 +308,43 @@ TEST_CASE("variable layers: the support's Z gap is in mm, over the layers' own t
         CHECK_THAT(m.layers[cap].bottom - m.layers[top].top, WithinAbs(0.2, 1e-6));
     }
 }
+
+TEST_CASE("variable layer height with support: the bottom Z gap in mm over the layers' own thicknesses",
+          "[variable_layers][support]") {
+    // A plate 2 mm high, a stem on it up to 6 mm and a cap over it: the
+    // support stands on the plate. 0.1 mm layers from 1.5 mm.
+    IndexedMesh t;
+    const auto box = [&](float x0, float y0, float z0, float x1, float y1, float z1) {
+        const auto base = std::uint32_t(t.vertices.size());
+        for (const auto& v : std::initializer_list<std::array<float, 3>>{
+                 {x0, y0, z0}, {x1, y0, z0}, {x1, y1, z0}, {x0, y1, z0}, {x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}})
+            t.vertices.push_back({v[0], v[1], v[2]});
+        quad(t, base + 0, base + 3, base + 2, base + 1);
+        quad(t, base + 4, base + 5, base + 6, base + 7);
+        for (std::uint32_t i = 0; i < 4; ++i)
+            quad(t, base + i, base + (i + 1) % 4, base + 4 + (i + 1) % 4, base + 4 + i);
+    };
+    box(0, 0, 0, 10, 10, 2);
+    box(4, 4, 2, 6, 6, 6);
+    box(0, 0, 6, 10, 10, 8);
+    for (const bool fine : {false, true}) {
+        Settings s = test_printer();
+        s.support = true;
+        s.support_z_gap = 0.2;
+        s.support_bottom_z_gap = 0.2;
+        if (fine)
+            s.layer_heights = {{1.5, 0.1}};
+        const SlicedModel m = slice_model(t, s);
+        // The support's first layer over the plate's inside (away from its
+        // edge, where the column also reaches down to the bed).
+        const Clipper2Lib::Paths64 probe = {{{1000000, 1000000}, {3000000, 1000000}, {3000000, 3000000}, {1000000, 3000000}}};
+        std::size_t first = 0;
+        while (first < m.layers.size() &&
+               (m.layers[first].bottom < 2.0 - 1e-6 ||
+                Clipper2Lib::Intersect(m.support_areas[first], probe, Clipper2Lib::FillRule::NonZero).empty()))
+            ++first;
+        REQUIRE(first < m.layers.size());
+        INFO((fine ? "0.1 mm layers" : "0.2 mm layers") << ": support from " << m.layers[first].bottom);
+        CHECK_THAT(m.layers[first].bottom - 2.0, WithinAbs(0.2, 1e-6));
+    }
+}
