@@ -1481,7 +1481,7 @@ Settings parse_checked(std::string_view text) {
     // Sublayers in the blends' zones (color_mixing_plus.md, rules 10 and 11).
     read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill", "cadence_heights", "height_a",
                                 "height_b", "step", "surface_only", "surface_depth",
-                                "extra_walls", "purge_into_infill", "purge_infill_max"},
+                                "extra_walls", "purge_into_infill", "purge_infill_max", "predictor"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
         if (n == "extra_walls") { // rule 14
@@ -1512,6 +1512,12 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_number() || !(v.get<double>() == 0.0 || (v.get<double>() >= 0.01 && v.get<double>() <= 2.0)))
                 fail(k, "must be 0 (the layer height) or from 0.01 to 2 mm");
             (n == "height_a" ? s.mix_height_a : s.mix_height_b) = v.get<double>();
+            return;
+        }
+        if (n == "predictor") { // rules 20, 21
+            if (!v.is_string() || (v.get<std::string>() != "mixer" && v.get<std::string>() != "spectral"))
+                fail(k, "must be \"mixer\" or \"spectral\"");
+            s.mix_predictor = v.get<std::string>();
             return;
         }
         if (n == "cadence_heights") {
@@ -3545,6 +3551,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"mixing.extra_walls", std::to_string(s.mix_extra_walls)},
         {"mixing.purge_into_infill", flag(s.mix_purge_into_infill)},
         {"mixing.purge_infill_max", num(s.mix_purge_infill_max)},
+        {"mixing.predictor", s.mix_predictor},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -4114,7 +4121,8 @@ std::string settings_json(const Settings& s) {
           {"surface_depth", s.mix_surface_depth},
           {"extra_walls", s.mix_extra_walls},
           {"purge_into_infill", s.mix_purge_into_infill},
-          {"purge_infill_max", s.mix_purge_infill_max}}},
+          {"purge_infill_max", s.mix_purge_infill_max},
+          {"predictor", s.mix_predictor}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},

@@ -12728,6 +12728,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
+- **Full Spectrum, reglas 20 y 21: ajuste `mixing.predictor`** (2026-11-11, bloque nocturno). `"mixer"` (por
+  defecto) o `"spectral"`; otro valor se rechaza. `match_color(..., transmission)`: con las TD de los filamentos, el
+  color de cada mezcla candidata sale de `mix_color_spectral`; sin ellas, de `mix_color`. Prueba `[mixing]`: el
+  ajuste se lee y se rechaza un valor inválido; con TD 0 los colores son los del mezclador; con TD, cada
+  candidata lleva su color espectral y el verde claro buscado sale de otra mezcla (Kubelka y Munk oscurece). Falta (interfaz): la lista en la ficha y pasar las TD a
+  `match_color` y a la vista previa cuando el ajuste es `spectral`.
 - **Full Spectrum, regla 21: predicción espectral** (2026-11-11, bloque nocturno; MX17). `mix_color_spectral(colores,
   partes, TD)` en `src/slice/color_mix.*`: Kubelka y Munk por canal (reflectancia lineal a K/S y de vuelta), cada
   filamento pesado por su parte × (1 + TD / 10). El factor es diseño propio: un filamento más translúcido pesa más.

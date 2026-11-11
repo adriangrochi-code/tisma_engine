@@ -598,7 +598,7 @@ double ciede2000_lab(const std::array<double, 3>& a, const std::array<double, 3>
 }
 
 std::vector<MixMatch> match_color(const std::string& target, const std::vector<std::string>& colors, int id, int max_cycle,
-                                  double min_part) {
+                                  double min_part, const std::vector<double>& transmission) {
     std::vector<MixMatch> all;
     const int n = int(colors.size());
     max_cycle = std::clamp(max_cycle, 2, 64);
@@ -613,6 +613,7 @@ std::vector<MixMatch> match_color(const std::string& target, const std::vector<s
         mix.id = id;
         std::vector<std::string> cs;
         std::vector<double> shares;
+        std::vector<double> tds;
         for (std::size_t k = 0; k < filaments.size(); ++k) {
             const double share = double(counts[k]) / sum;
             if (share < min_part - 1e-12)
@@ -620,8 +621,10 @@ std::vector<MixMatch> match_color(const std::string& target, const std::vector<s
             mix.components.push_back({filaments[k] + 1, share});
             cs.push_back(colors[std::size_t(filaments[k])]);
             shares.push_back(share);
+            const auto f = std::size_t(filaments[k]);
+            tds.push_back(f < transmission.size() ? transmission[f] : 0.0);
         }
-        MixMatch m{mix, mix_color(cs, shares), 0.0};
+        MixMatch m{mix, transmission.empty() ? mix_color(cs, shares) : mix_color_spectral(cs, shares, tds), 0.0};
         m.distance = ciede2000(target, m.color);
         mix.color = m.color;
         m.mix.color = m.color;

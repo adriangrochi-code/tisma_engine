@@ -18,6 +18,8 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
@@ -1067,6 +1069,40 @@ TEST_CASE("color mixing plus: the spectral prediction (rule 21, MX17)", "[mixing
     CHECK(ciede2000(yellow_clear, by[1]) < ciede2000(even, by[1]));
     // A filament alone keeps its colour (within rounding).
     CHECK(ciede2000(mix_color_spectral({"#c04020"}, {1.0}, {5.0}), "#c04020") < 1.0);
+}
+
+TEST_CASE("color mixing plus: mixing.predictor chooses how the colour sought is predicted (rules 20, 21)", "[mixing]") {
+    // The setting: "mixer" by default, "spectral" accepted, anything else refused.
+    CHECK(Settings{}.mix_predictor == "mixer");
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_mix_predictor";
+    std::filesystem::create_directories(dir);
+    const auto file = dir / "s.json";
+    {
+        std::ofstream(file) << R"({"mixing": {"predictor": "spectral"}})";
+    }
+    CHECK(load_settings(file).mix_predictor == "spectral");
+    {
+        std::ofstream(file) << R"({"mixing": {"predictor": "paint"}})";
+    }
+    CHECK_THROWS_AS(load_settings(file), SettingsError);
+    std::filesystem::remove_all(dir);
+    // match_color: with every TD at 0 the spectral prediction is the mixer's.
+    const std::vector<std::string> by = {"#0000ff", "#ffff00"};
+    const std::string target = mix_color(by, {0.5, 0.5});
+    const auto plain = match_color(target, by, 1);
+    const auto zero = match_color(target, by, 1, 6, 0.0, {0.0, 0.0});
+    REQUIRE(plain.size() == zero.size());
+    for (std::size_t k = 0; k < plain.size(); ++k)
+        CHECK(plain[k].color == zero[k].color);
+    // With TDs, each candidate's colour is the spectral one: Kubelka and Munk
+    // darkens blue with yellow, so the light green needs another blend.
+    const auto spectral = match_color(target, by, 1, 6, 0.0, {1.0, 20.0});
+    REQUIRE_FALSE(spectral.empty());
+    CHECK(spectral.front().color == mix_color_spectral(by, {spectral.front().mix.components[0].share,
+                                                            spectral.front().mix.components[1].share},
+                                                       {1.0, 20.0}));
+    CHECK(spectral.front().distance == ciede2000(target, spectral.front().color));
+    CHECK(spectral.front().mix.components != plain.front().mix.components);
 }
 
 TEST_CASE("color mixing plus: the estimate before slicing with each filament's own height (rules 8 and 12)", "[mixing]") {

@@ -517,6 +517,7 @@ struct Settings {
     // When a change's purge does not fit in its layer's sparse infill, that
     // infill grows denser, up to this % (rule 35); 0: off.
     double mix_purge_infill_max = 0.0;
+    std::string mix_predictor = "mixer"; // "mixer" | "spectral" (color_mixing_plus.md, rules 20, 21)
     // Curved layers (docs/spec/features/nonplanar.md): each layer the
     // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
     // curved_flat_below over curved_ramp_height (and out at the top with

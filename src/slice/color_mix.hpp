@@ -169,14 +169,18 @@ double ciede2000_lab(const std::array<double, 3>& a, const std::array<double, 3>
 // 3 of the filaments with a cycle of up to `max_cycle` layers and no share
 // under `min_part` (0 to 1), its colour by mix_color, the closest first by
 // CIEDE2000; the best and the next 3 at most. `id` numbers the blends.
-// Reached when the best is 10 or less apart.
+// Reached when the best is 10 or less apart. With `transmission` (each
+// filament's TD, mm) the colours come from the spectral prediction
+// (mix_color_spectral, `mixing.predictor = "spectral"`, rule 21); empty, from
+// the simple mixer (rule 20).
 struct MixMatch {
     ColorMix mix;
     std::string color;
     double distance = 0.0;
 };
 std::vector<MixMatch> match_color(const std::string& target, const std::vector<std::string>& filament_colors, int id,
-                                  int max_cycle = 6, double min_part = 0.0);
+                                  int max_cycle = 6, double min_part = 0.0,
+                                  const std::vector<double>& transmission = {});
 inline bool color_reached(const std::vector<MixMatch>& m) { return !m.empty() && m.front().distance <= 10.0; }
 
 // The purge between two filaments by their colours ("#rrggbb"), mm3
