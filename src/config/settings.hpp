@@ -503,6 +503,11 @@ struct Settings {
     // The height the blends' cycle is counted in (rule 9); 0 or the layer
     // height: by layer, as rules 7 and 10 say.
     double mix_step = 0.0; // mm
+    // The blend only in the part's shell (rule 13): the walls that start
+    // less than mix_surface_depth in and the surfaces; the inner walls and
+    // the sparse infill with the blend's largest filament.
+    bool mix_surface_only = false;
+    double mix_surface_depth = 0.8; // mm
     // Curved layers (docs/spec/features/nonplanar.md): each layer the
     // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
     // curved_flat_below over curved_ramp_height (and out at the top with

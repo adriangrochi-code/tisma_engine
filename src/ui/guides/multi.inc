@@ -183,6 +183,18 @@
      "makes the colour follow the height: each layer takes the filament due at the height of its middle, so the "
      "proportion holds even when the layer height changes. With sublayers and a step finer than the layer, the part "
      "with the mix prints in passes that high.\n\nExample: 0.2 mm."},
+    {"mixing.surface_only",
+     "La mezcla va solo en la cáscara de la pieza: las paredes de afuera y las superficies. Las paredes de adentro y "
+     "el relleno se imprimen con el filamento que más lleva la mezcla. El color se ve igual y el interior no cambia "
+     "de filamento.\n\nEjemplo: encendido, con 0,8 mm de cáscara.",
+     "The mix goes only in the part's shell: the outer walls and the surfaces. The inner walls and the infill print "
+     "with the filament the mix has most of. The colour looks the same and the inside does not change filament."
+     "\n\nExample: on, with a 0.8 mm shell."},
+    {"mixing.surface_depth",
+     "El grosor de la cáscara que lleva la mezcla, con «solo la superficie» encendido. Una pared que empieza más "
+     "adentro que esto se imprime con un solo filamento.\n\nEjemplo: 0,8 mm, dos paredes de 0,4.",
+     "The thickness of the shell that takes the mix, with surface only on. A wall that starts further in than this "
+     "prints with one filament.\n\nExample: 0.8 mm, two walls of 0.4."},
     {"mixing.height_b",
      "El alto de las capas del segundo filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
      "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,15 mm.",

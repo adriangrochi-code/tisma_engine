@@ -577,6 +577,8 @@ en el perfil de impresión.
 | `height_a` | mm | 0 | 0 o 0,01 a 2 | Alto de las capas del primer filamento; 0: `layers.height`. Se ajusta a `machine.min_layer_height`, `machine.max_layer_height` y la boquilla, con aviso |
 | `height_b` | mm | 0 | 0 o 0,01 a 2 | Alto de las capas del segundo filamento; 0: `layers.height`. Igual que `height_a` |
 | `step` | mm | 0 | 0 o 0,01 a 2 | Regla 9 (MX28, MX29): la altura en la que se cuenta el ciclo. 0, o `layers.height` con capas parejas: por capa, como siempre. Con otro valor, la capa con centro a la altura `z` (desde la base) toma el elemento `floor(z / step)` del ciclo. Con `subdivide` y un paso menor que la capa, la zona con mezcla va en pasadas de `step`, cada una con el elemento siguiente del ciclo (la última, lo que falte; menos de `sub_min_height` se junta con la anterior). Una capa en la que un filamento saldría dos veces (A, B, A) va entera, por altura, con aviso: el G-code imprime cada filamento una vez por capa |
+| `surface_only` | booleano | `false` | | Regla 13 (MX11, MX12): la mezcla va solo en la cáscara. Las paredes que empiezan a `surface_depth` o más de afuera (sumando el ancho de los cordones) y el relleno disperso van con el filamento de mayor parte de la mezcla; las paredes de afuera, los huecos entre ellas y las superficies sólidas, con la mezcla. Un degradé va entero con su mezcla |
+| `surface_depth` | mm | 0,8 | 0,1 a 5 | Grosor de la cáscara con mezcla |
 
 Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). Desde la línea de comandos, `slice <modelo>
 --config <ajustes.json> --mixes <mezclas.json> --mix <n>` lee las mezclas en ese mismo JSON (`{"version": 1,

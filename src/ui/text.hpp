@@ -2188,6 +2188,8 @@
     X(SubColorMix, "Mezcla de colores: capas", "Colour mixing: layers") \
     X(SumMixCadence, "Alto por filamento", "Height per filament") \
     X(SumMixSublayers, "Subcapas", "Sublayers") \
+    X(SubColorMixZones, "Mezcla de colores: dónde va", "Colour mixing: where it goes") \
+    X(SumMixShell, "Solo la superficie", "Surface only") \
     X(FineWallsCoarseInfill, "Paredes finas, relleno grueso", "Fine walls, coarse infill") \
     X(ColorMixingRow, "Mezcla de colores", "Color mixing") \
     X(ColorMixingCost, "Con una sola boquilla, cada capa con mezcla es un cambio de filamento con su purga: la impresión usa bastante más filamento y tarda más.", "With a single nozzle, every mixed layer is a filament change with its purge: the print uses much more filament and takes longer.") \

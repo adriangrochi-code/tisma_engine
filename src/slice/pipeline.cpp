@@ -27,6 +27,7 @@
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <map>
 #include <cstdio>
 #include <cmath>
 #include <limits>
@@ -702,8 +703,55 @@ bool subdivide_layer(SlicedModel& model, std::size_t l, const ColorMix& mix, con
     return true;
 }
 
+// The blend only in the shell (color_mixing_plus.md, rule 13): its walls
+// that start mix_surface_depth or more in (the beads' widths added up from
+// the outline) and its sparse infill take its largest filament; the outer
+// walls, the gaps between them and the solid surfaces keep the blend. A
+// gradient keeps it all. Own design (PROVENANCE.md).
+void mix_shell(SlicedModel& model, const ColorMix& mix, const Settings& s) {
+    if (!s.mix_surface_only || mix.gradient)
+        return;
+    const ColorMix shares = mix.pattern.empty() ? mix : pattern_mix(mix.id, mix.pattern);
+    int dominant = 0;
+    double most = 0.0;
+    for (const ColorMix::Component& c : shares.components)
+        if (c.share > most + 1e-12)
+            most = c.share, dominant = c.extruder;
+    if (dominant <= 0)
+        return;
+    const auto walls = [&](std::vector<Toolpath>& paths) {
+        std::map<int, double> width; // each bead index's width
+        for (const Toolpath& t : paths)
+            if (t.tool == mix.id && !t.points.empty() && !width.count(t.index))
+                width[t.index] = t.points.front().width;
+        for (Toolpath& t : paths) {
+            if (t.tool != mix.id)
+                continue;
+            double start = 0.0;
+            for (int k = 0; k < t.index; ++k) {
+                const auto it = width.find(k);
+                start += it != width.end() ? it->second : (t.points.empty() ? s.nozzle_diameter : t.points.front().width);
+            }
+            if (start >= s.mix_surface_depth - 1e-9)
+                t.tool = std::uint8_t(dominant);
+        }
+    };
+    const auto inside = [&](std::vector<Toolpath>& paths) {
+        for (Toolpath& t : paths)
+            if (t.tool == mix.id)
+                t.tool = std::uint8_t(dominant);
+    };
+    for (LayerWalls& w : model.walls)
+        walls(w.toolpaths);
+    for (LayerFill& f : model.fills)
+        inside(f.sparse);
+    for (ThickLayer& t : model.thick)
+        walls(t.walls), inside(t.fill.sparse);
+}
+
 void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
     for (const ColorMix& mix : mixes) {
+        mix_shell(model, mix, settings);
         std::vector<char> present(model.layers.size(), 0);
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
             if (l < present.size() && !present[l])

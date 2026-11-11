@@ -630,3 +630,50 @@ TEST_CASE("color mixing plus: the cycle counted in height (rule 9, MX28, MX29)",
             CHECK_FALSE(t.wavy);
     gcode_of(three, sub);
 }
+
+TEST_CASE("color mixing plus: the blend only in the shell (rule 13, MX11, MX12)", "[mixing]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.infill_density = 0.2;
+    s.mix_surface_only = true;
+    s.mix_surface_depth = 0.8;
+    const ColorMix most = blend(3, {{1, 0.25}, {2, 0.75}}); // 2 is the larger share
+    const SlicedModel model = sliced(box(3), s, {most});
+    REQUIRE(model.walls.size() == 50);
+    // MX11: in each layer the two outer walls with the layer's filament of
+    // the cycle, the third wall and the sparse infill with filament 2.
+    std::set<int> outer_tools;
+    for (std::size_t l = 5; l < 45; ++l) {
+        int layer_tool = -1;
+        for (const Toolpath& t : model.walls[l].toolpaths) {
+            INFO("layer " << l << " wall " << t.index);
+            if (t.index >= 2) {
+                CHECK(t.tool == 2);
+            } else {
+                if (layer_tool < 0)
+                    layer_tool = t.tool;
+                CHECK(t.tool == layer_tool);
+            }
+        }
+        outer_tools.insert(layer_tool);
+        for (const Toolpath& t : model.fills[l].sparse)
+            CHECK(t.tool == 2);
+    }
+    CHECK(outer_tools == std::set<int>{1, 2}); // the outside still alternates
+    const std::string shell = gcode_of(model, s);
+    // MX12: no more changes than with the blend all through.
+    Settings all = s;
+    all.mix_surface_only = false;
+    const std::string through = gcode_of(sliced(box(3), all, {most}), all);
+    CHECK(changes(shell) <= changes(through));
+    // Rule 19: without blends, the same moves (the settings' own comments aside).
+    const auto moves = [](const std::string& g) {
+        std::string out;
+        std::istringstream in(g);
+        for (std::string line; std::getline(in, line);)
+            if (!line.empty() && line[0] != ';')
+                out += line + '\n';
+        return out;
+    };
+    CHECK(moves(gcode_of(sliced(box(1), s, {}), s)) == moves(gcode_of(sliced(box(1), all, {}), all)));
+}

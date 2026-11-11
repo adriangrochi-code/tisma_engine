@@ -229,6 +229,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"mixing.height_a", A},
             {"mixing.height_b", A},
             {"mixing.step", A}}},
+          {"color_mix_zones", T::SubColorMixZones, {{"mixing.surface_only", A}, {"mixing.surface_depth", A}}},
           {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}, {"resin.first_layer_height", A}}},
           {"resin_supports", T::SubResinSupports,
            {{"resin.supports", N},
@@ -747,6 +748,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.fine_walls_coarse_infill ? tr(T::FineWallsCoarseInfill)
                : color_mixing_offered(s)  ? tr(T::ColorMixingRow)
                                           : tr(T::SumOff);
+    if (id == "color_mix_zones")
+        return s.mix_surface_only ? tr(T::SumMixShell) : tr(T::SumOff);
     if (id == "color_mix")
         return s.mix_cadence_heights ? tr(T::SumMixCadence) : s.mix_subdivide ? tr(T::SumMixSublayers) : tr(T::SumOff);
     if (id == "extruders")
