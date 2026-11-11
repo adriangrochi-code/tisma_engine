@@ -1,0 +1,9 @@
+# Delete takes the chosen model away with one model on the plate and the 3D
+# view in use (the owner's request, 2026-11-11).
+wait 3
+click-model
+wait 2
+expect-selected 1
+key delete
+wait 2
+expect-models 0

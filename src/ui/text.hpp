@@ -1016,7 +1016,8 @@
     X(RaySamples, "Muestras: %d de %d", "Samples: %d of %d")                                                          \
     X(RayPreparing, "Preparando la escena para los rayos…", "Preparing the scene for the rays…")                     \
     X(RayTooBig, "La escena es demasiado grande para el ray tracing en esta GPU", "The scene is too large for ray tracing on this GPU") \
-    X(DropHint, "Arrastrá un STL o un G-code acá, o usá Abrir", "Drop an STL or G-code file here, or use Open")      \
+    X(DropHint, "Abrir un archivo", "Open a file") \
+    X(DropHintSub, "o arrastrá un STL, un 3MF o un G-code acá", "or drop an STL, 3MF or G-code file here")      \
     X(KindTravel, "Viajes", "Travel")                                                                                 \
     X(KindOuterWall, "Pared externa", "Outer wall")                                                                   \
     X(KindInnerWall, "Pared interna", "Inner wall")                                                                   \
@@ -1484,7 +1485,7 @@
       "Ctrl+Shift+P: the part goes to Prepare as an object; if it came from there, it replaces it and keeps its place, settings and painting") \
     X(DesignNeedsSolid, "Hacé un sólido primero.", "Make a solid first.") \
     X(DesignRestarted, "El componente de diseño se cerró y se abrió de nuevo.", "The design component closed and was opened again.") \
-    X(DesignMissing, "Falta el componente de diseño: reinstalá Tisma para usar Diseño.", "The design component is missing: reinstall Tisma to use Design.") \
+    X(DesignMissing, "Falta el componente de diseño (solidcraft-cli %s) en %s. Los paquetes de Tisma lo traen; una compilación propia lo baja con -DTISMA_SOLIDCRAFT=ON.", "The design component (solidcraft-cli %s) is missing from %s. Tisma's packages carry it; a build of your own downloads it with -DTISMA_SOLIDCRAFT=ON.") \
     X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
     X(DesignBuilding, "Construyendo…", "Building…") \
     X(DesignVolume, "Volumen", "Volume") \
@@ -2593,6 +2594,7 @@
     X(ObjectParts, "Partes", "Parts") \
     X(PartItem, "Parte: %s", "Part: %s") \
     X(CutTwoObjects, "Dos objetos", "Two objects") \
+    X(CutConnectorsApart, "Los conectores son para piezas separadas", "Connectors are for separate pieces") \
     X(CutTwoParts, "Un objeto con dos partes", "One object, two parts") \
     X(CutPartBelow, "Abajo", "Lower") \
     X(CutPartAbove, "Arriba", "Upper") \

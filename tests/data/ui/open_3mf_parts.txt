@@ -1,0 +1,5 @@
+# A 3MF with one object of two parts opens as one model with two parts
+# (formats.md, rule 5: FM9), each with the file's extruder.
+wait 3
+expect-models 1
+expect-parts 0 2

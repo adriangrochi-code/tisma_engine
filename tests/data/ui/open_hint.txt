@@ -1,0 +1,8 @@
+# The empty plate's «Abrir un archivo» (the owner's request, 2026-11-11): a
+# click on it opens the file dialog.
+wait 3
+expect-file-dialog no
+expect-control open_hint
+menu open_hint
+wait 2
+expect-file-dialog yes

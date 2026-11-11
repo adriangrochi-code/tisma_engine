@@ -1,0 +1,7 @@
+# `--paint color,N,...` paints with filament or blend N from the command
+# line, for the spec team's black-box tests (ME16, ME17): a 3 mm brush on the
+# cube's side paints about pi 3² of it with filament 2.
+wait 3
+set machine.extruders 2
+paint-color 2
+expect-paint-area 20 40

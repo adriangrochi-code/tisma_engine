@@ -75,3 +75,42 @@ if(MSVC)
   # A windowed program that still starts at main().
   target_link_options(tisma PRIVATE /ENTRY:mainCRTStartup)
 endif()
+
+# The design component (cad_design.md, rule 1; THIRD_PARTY.md, SolidCraft):
+# the packages carry solidcraft-cli at the pinned version; a build of one's
+# own downloads it with TISMA_SOLIDCRAFT=ON, checks it and puts it next to
+# the program. Off by default: the tests use their own stand-in.
+option(TISMA_SOLIDCRAFT "Download the pinned solidcraft-cli next to the program for the Design tab" OFF)
+if(TISMA_SOLIDCRAFT)
+  set(sc_version 0.30.0)
+  set(sc_dir ${CMAKE_BINARY_DIR}/_deps/solidcraft-${sc_version})
+  if(WIN32)
+    set(sc_asset solidcraft-${sc_version}-windows-x64-portable.zip)
+    set(sc_sha ae5f502bc0062656965bff31f50739504e24c219baf520526fbd9208dfc261ba)
+  elseif(UNIX AND NOT APPLE)
+    set(sc_asset solidcraft-${sc_version}-linux-x86_64.tar.gz)
+    set(sc_sha 5cd95727352b9a343fc8ff4bfb688671a5901a1b601a71c46e94c7b20750c9a0)
+  else()
+    message(WARNING "TISMA_SOLIDCRAFT: no solidcraft-cli ${sc_version} for this system; the Design tab says so")
+  endif()
+  if(sc_asset)
+    if(NOT EXISTS ${sc_dir}/extracted)
+      file(DOWNLOAD https://github.com/tangency-labs/solidcraft/releases/download/v${sc_version}/${sc_asset}
+           ${sc_dir}/${sc_asset} EXPECTED_HASH SHA256=${sc_sha} STATUS sc_status)
+      list(GET sc_status 0 sc_code)
+      if(sc_code EQUAL 0)
+        file(ARCHIVE_EXTRACT INPUT ${sc_dir}/${sc_asset} DESTINATION ${sc_dir}/extracted)
+      else()
+        message(WARNING "TISMA_SOLIDCRAFT: could not download ${sc_asset}: ${sc_status}")
+      endif()
+    endif()
+    file(GLOB_RECURSE sc_files ${sc_dir}/extracted/*solidcraft-cli* ${sc_dir}/extracted/*LICENSE-MIT
+         ${sc_dir}/extracted/*LICENSE-APACHE ${sc_dir}/extracted/*NOTICE ${sc_dir}/extracted/*THIRD-PARTY-LICENSES.txt)
+    if(sc_files)
+      add_custom_command(TARGET tisma POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:tisma>/solidcraft
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${sc_files} $<TARGET_FILE_DIR:tisma>/solidcraft/
+        COMMENT "solidcraft-cli ${sc_version} next to the program")
+    endif()
+  endif()
+endif()

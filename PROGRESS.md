@@ -13262,3 +13262,46 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   k del canal de color pasa a `paint_slots[k-1]`, 0 o fuera de la tabla es la pieza propia (sin pintar); tabla vacía,
   sin cambios. `tisma node` la aplica al cortar un proyecto; la interfaz la aplica en su corte. Prueba `[project][paint]`.
   Además (búsqueda profunda): el color pintado terminaba un ancho de línea pasado el borde pintado (69005b6).
+- **Después** (MT33, respuesta de fichas): en «Un objeto con dos partes», los conectores quedan deshabilitados con la
+  nota «Los conectores son para piezas separadas» y vuelven a valer con «Dos objetos». Prueba: `cut_parts.txt`.
+- **Después** (pedido de fichas, para ME16 y ME17 por caja negra): `--paint color,N,X,Y,Z,RADIO` pinta con el
+  filamento o la mezcla N (de 1 a 16, la marca que el motor lee hoy). Prueba: `ui_paint_color_cli`.
+
+## 2026-11-11 — interfaz: las partes de un 3MF al abrirlo (formats.md, regla 5: FM9) y el contorno con Vulkan
+
+- **Hecho:** con `ModelFile::pieces` del motor (ee7e6b2), un 3MF se abre con un modelo por objeto de su placa, cada
+  uno en su lugar y con sus partes (nombre y extrusor del archivo); uno solo sin partes queda como antes. El contorno
+  de lo elegido se dibuja en una ventana propia detrás de las demás: en la lista de fondo, la vista Vulkan lo tapaba
+  (lo encontró `ui_view_sphere_prepare_vulkan_same_as_opengl` en ASan; ahora coinciden y los dos lo muestran).
+- **Pruebas:** `ui_open_3mf_parts` (`box_parts.3mf`: un modelo, dos partes); pasan las 98 de 3MF, importar,
+  proyecto, recargar y vistas.
+- **CI local** (ASan de abaaed6): 1254/1256; `ui_script_cut_parts` falló porque cambié su guion durante la corrida,
+  y la de Vulkan es la arreglada acá.
+
+## 2026-11-11 — interfaz: pedidos del dueño (16:16): abrir desde la placa vacía, selección más visible, Supr
+
+- **Hecho:**
+  - en la placa vacía, «Abrir un archivo, o arrastrar un STL o un G-code acá» es un botón: un clic abre el diálogo de
+    archivo (se ilumina al pasar el mouse, con la mano);
+  - la selección se ve mucho más: el modelo elegido se aclara (vuelve el tinte) y cada elegido lleva un contorno de
+    3 px del acento con un brillo de 8 px debajo (más tenue donde está tapado). El tinte es para el elegido principal:
+    la vista pinta un solo tramo con otro color; los demás elegidos llevan el contorno;
+  - Supr borra lo elegido desde un atajo global (antes vivía en la columna de herramientas, que no corre con una
+    calibración o el visor), mientras no se escriba en un campo.
+- **Pruebas:** `open_hint.txt` (orden nueva `expect-file-dialog`), `delete_one.txt`; pasan los 203 `ui_`, incluidas
+  las comparaciones de OpenGL con Vulkan. Captura con un modelo elegido revisada.
+- **Decisión:** esto cambia lo de la ficha en `spec/next` («el color de la pieza no cambia»): lo pidió el dueño.
+
+## 2026-11-11 — interfaz: el componente de diseño en una compilación propia (pedido del dueño)
+
+- **Hecho:** «Falta el componente de diseño» salía en toda compilación propia: solo los paquetes (release y nightly)
+  traen `solidcraft-cli`. Ahora el aviso dice qué falta y dónde lo buscó («solidcraft-cli 0.30.0 en
+  <carpeta>/solidcraft») y cómo tenerlo; y la opción de CMake `TISMA_SOLIDCRAFT=ON` baja la versión fija, comprueba su
+  SHA-256 (los de `THIRD_PARTY.md`) y la copia con sus licencias junto a `tisma`. Queda apagada por defecto: las
+  pruebas usan su sustituto y no conviene bajar 43 a 96 MB en cada CI.
+- **Probado:** en Linux, configurar con la opción baja y copia `solidcraft-cli` y sus cuatro archivos de licencia; la
+  pestaña Diseño ya no muestra el aviso. En Windows no se probó (el mismo zip que usa el paquete).
+- **Después** (pedido de fichas, 16:16): «Abrir un archivo» es un botón grande del acento en el medio de la placa
+  vacía, con «o arrastrá un STL, un 3MF o un G-code acá» debajo; con algo elegido y más de un modelo, los no elegidos
+  se ven un poco atenuados (al 80 %). Pasan los 203 `ui_`.
+

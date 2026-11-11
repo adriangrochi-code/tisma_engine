@@ -871,6 +871,7 @@ private:
     void add_model(const std::filesystem::path& path);
     void add_mesh(TriangleMesh mesh, const std::filesystem::path& name);
     void split_into_parts();
+    std::string design_missing_text() const;
     // A gradient between two points (color_mixing_plus.md, rule 3: MX31):
     // which one the next click on a part places (1 start, 2 end, 0 none),
     // the place of a click in the part's own measures, and the spheres and
@@ -3936,13 +3937,14 @@ bool App::init(std::string& error) {
     for (const AppOptions::Stroke& b : options_.strokes) {
         const PaintChannel channel = b.channel == "seam"    ? PaintChannel::Seam
                                      : b.channel == "fuzzy" ? PaintChannel::Fuzzy
+                                     : b.channel == "color" ? PaintChannel::Color
                                                             : PaintChannel::Support;
         for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
             Brush brush;
             brush.centre = {b.x, b.y, b.z};
             brush.radius = b.radius;
             brush.detail = std::max(0.05, b.radius / 6.0);
-            brush.mark = b.block ? kPaintBlock : kPaintEnforce;
+            brush.mark = b.color > 0 ? std::uint8_t(b.color) : b.block ? kPaintBlock : kPaintEnforce;
             paint(objects_[i].painting, channel, placed_meshes_[i], brush);
         }
         paint_channel_ = channel;
@@ -4421,7 +4423,48 @@ void App::load_model(const std::filesystem::path& path) {
             settings_changed();
         }
         calibration_.reset();
+        const std::vector<ModelFile::Piece> pieces = std::move(stl.pieces);
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
+        // A 3MF's objects and parts as they were (formats.md, rule 5: FM9):
+        // one model for each build item, its parts with their names and
+        // extruders, each where the file has it.
+        if (!objects_.empty() && pieces.size() > 1 && std::all_of(pieces.begin(), pieces.end(), [&](const ModelFile::Piece& p) {
+                return p.first + p.count <= objects_.front().mesh.triangle_count();
+            })) {
+            const TriangleMesh whole = std::move(objects_.front().mesh);
+            const std::string file_name = objects_.front().name;
+            std::vector<std::size_t> order; // the build items, as they first come
+            for (const ModelFile::Piece& p : pieces)
+                if (std::find(order.begin(), order.end(), p.object) == order.end())
+                    order.push_back(p.object);
+            std::vector<PlateObject> made;
+            for (const std::size_t item : order) {
+                PlateObject o{order.size() > 1 ? file_name + " (" + std::to_string(made.size() + 1) + ")" : file_name, {}, {}, {}};
+                std::vector<PlatePart> parts;
+                for (const ModelFile::Piece& p : pieces) {
+                    if (p.object != item)
+                        continue;
+                    parts.push_back({p.name, o.mesh.triangle_count(), p.count, p.extruder, {}});
+                    for (std::size_t t = p.first; t < p.first + p.count; ++t)
+                        o.mesh.add_triangle(whole.corner(t, 0), whole.corner(t, 1), whole.corner(t, 2));
+                }
+                if (parts.size() > 1)
+                    o.parts = std::move(parts);
+                else if (parts.size() == 1 && parts.front().extruder > 0)
+                    o.extruder = parts.front().extruder;
+                const BoundingBox box = o.mesh.bounding_box();
+                o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
+                o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
+                if (order.size() == 1)
+                    o.source = utf8(std::filesystem::absolute(path));
+                made.push_back(std::move(o));
+            }
+            objects_ = std::move(made);
+            selected_ = 0;
+            also_selected_.clear();
+            plate_changed();
+            frame_all();
+        }
         // Another program's project (project_import.md, rules 1, 2 and 9):
         // which one, its parts, and that its settings stay out for now.
         if (lower_extension(path) == ".3mf") {
@@ -11963,8 +12006,6 @@ void App::plate_tools() {
                 selected_ = -1;
             tool_ = PlateTool::Select;
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen && !ImGui::GetIO().KeyCtrl) // Ctrl+Del: all
-            delete_selected();
         // + and − add or take away an instance (interface.md, «Menús»).
         if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false) ||
                        (ImGui::IsKeyPressed(ImGuiKey_Equal, false) && ImGui::GetIO().KeyShift)))
@@ -12214,6 +12255,13 @@ void App::plate_tools() {
         ImGui::RadioButton(tr(T::CutTwoParts), &result, 1);
         note_rect("cut_two_parts");
         cut_parts_ = result == 1;
+        // MT33: the connectors stay as they were, unused, until two objects again.
+        if (cut_parts_) {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+            loc::TextDisabled("%s", tr(T::CutConnectorsApart));
+            ImGui::PopTextWrapPos();
+            note_rect("cut_connectors_apart");
+        }
         ImGui::BeginDisabled(cut_parts_);
         ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
         // Connectors (model_tools.md, rule 18): a click on the plane adds one,
@@ -12602,9 +12650,19 @@ void App::selection_outline() {
     if (chosen.empty() || tool_ == PlateTool::Paint)
         return;
     const Vec3 eye = camera_.eye();
-    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    // In a window of its own behind the others: the Vulkan view draws over
+    // the background list, and the tools' cards must stay over the outline.
+    ImGui::SetNextWindowPos(view_pos_);
+    ImGui::SetNextWindowSize(view_size_);
+    ImGui::Begin("##selection_outline", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::BringWindowToDisplayBack(ImGui::GetCurrentWindow());
+    ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
-    const ImU32 bright = ImGui::GetColorU32(rgb(theme_.accent_hover)), faint = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.35f));
+    const ImU32 bright = ImGui::GetColorU32(rgb(theme_.accent_hover)), faint = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.45f)),
+                glow = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.28f));
     for (const int i : chosen) {
         if (std::size_t(i) >= placed_meshes_.size())
             continue;
@@ -12668,10 +12726,13 @@ void App::selection_outline() {
                 if (const auto hit = pick(placed_meshes_, indexes, eye, to * (1.0f / dist)))
                     hidden = float(hit->distance) < dist - std::max(0.02f * dist, 0.2f);
             }
-            dl->AddLine(*sa, *sb, hidden ? faint : bright, 2.0f * scale_);
+            if (!hidden) // a soft glow under the line
+                dl->AddLine(*sa, *sb, glow, 8.0f * scale_);
+            dl->AddLine(*sa, *sb, hidden ? faint : bright, 3.0f * scale_);
         }
     }
     dl->PopClipRect();
+    ImGui::End();
 }
 
 // The models' modifiers (orange) and negative volumes (grey) over the 3D
@@ -14035,25 +14096,43 @@ void App::help_windows() {
 }
 
 void App::empty_hint() {
-    const char* text = tr(T::DropHint);
+    // A big «Abrir un archivo» button, and under it that a file can be
+    // dropped (the owner's request, 2026-11-11).
+    const char* title = tr(T::DropHint);
+    const char* sub = tr(T::DropHintSub);
     ImGui::PushFont(nullptr, kTitleSize);
-    const ImVec2 size = ImGui::CalcTextSize(text);
+    const ImVec2 title_size = ImGui::CalcTextSize(title);
     ImGui::PopFont();
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + (view_size_.x - size.x) * 0.5f - 24.0f * scale_,
-                                   view_pos_.y + view_size_.y * 0.5f - size.y));
-    ImGui::SetNextWindowBgAlpha(0.8f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f * scale_, 16.0f * scale_));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    const ImVec2 button(title_size.x + 48.0f * scale_, title_size.y + 24.0f * scale_);
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + view_size_.y * 0.5f), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f * scale_);
     ImGui::Begin("##hint", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav);
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBackground);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, rgb(0xFFFFFF));
+    const float sub_w = ImGui::CalcTextSize(sub).x, width = std::max(button.x, sub_w);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (width - button.x) * 0.5f);
     ImGui::PushFont(nullptr, kTitleSize);
-    loc::TextColored(rgb(theme_.text_dim), "%s", text);
+    const bool open = ImGui::Button(title, button);
     ImGui::PopFont();
+    ImGui::PopStyleColor(4);
+    if (ImGui::IsItemHovered())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    g_menu_rects["open_hint"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                       ImGui::GetItemRectMax().y);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (width - sub_w) * 0.5f);
+    loc::TextColored(rgb(theme_.text_dim), "%s", sub);
     ImGui::End();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar();
+    if (open) {
+        purpose_ = Purpose::Open;
+        browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
+    }
 }
 
 // What the icon row shows over the paths (preview.md, rule 11), drawn over
@@ -14736,6 +14815,14 @@ std::string lower_ascii(std::string s) {
 
 } // namespace
 
+// What is missing and where it was looked for (the owner's request,
+// 2026-11-11: say what is missing when the build does not bring it).
+std::string App::design_missing_text() const {
+    const std::filesystem::path where = !options_.solidcraft.empty() ? std::filesystem::path(from_utf8(options_.solidcraft)).parent_path()
+                                                                     : cad::executable_dir() / "solidcraft";
+    return format(tr(T::DesignMissing), cad::kSolidCraftVersion, utf8(where).c_str());
+}
+
 void App::start_solidcraft_probe() {
     const std::filesystem::path exe = !options_.solidcraft.empty()
                                           ? std::filesystem::path(from_utf8(options_.solidcraft))
@@ -14993,7 +15080,7 @@ void App::rebuild_design() {
         return;
     design_dirty_ = false;
     if (!solidcraft_.available) {
-        design_error_ = tr(T::DesignMissing);
+        design_error_ = design_missing_text();
         return;
     }
     const cad::Design copy = design_;
@@ -15135,7 +15222,7 @@ void App::design_panel() {
     if (!solidcraft_probed_) {
         loc::TextDisabled("%s", tr(T::DesignChecking));
     } else if (!solidcraft_.available) { // rule 22 bis
-        loc::TextColored(rgb(0xE5484D), "%s", tr(T::DesignMissing));
+        loc::TextColored(rgb(0xE5484D), "%s", design_missing_text().c_str());
         rect_of("design_missing");
         // The component's own words (in English, for a problem report) only
         // on the line's tooltip: one line in the chosen language (TR22).
@@ -23565,6 +23652,11 @@ void App::layout() {
     if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
         delete_all();
+    // Delete takes the chosen models away wherever the focus is, but in a
+    // field being typed in (the owner's request, 2026-11-11).
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput && no_popup() && selected_ >= 0 &&
+        selected_ < int(objects_.size()) && ImGui::Shortcut(ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
+        delete_selected();
     // Window's tabs (Ctrl+1 to Ctrl+6), Fullscreen (F11), Collapse Sidebar
     // (Shift+Tab, not while a field takes Tab).
     if (no_popup()) {
@@ -23627,8 +23719,12 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.background_bottom = vec(theme_.view_bottom);
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);
-    // The chosen models keep their colour: an outline marks them (interface.md, «Navegación», rule 1).
-    f.model_selected = f.model;
+    // The chosen model lights up and an outline with a glow marks every one
+    // chosen (the owner's request, 2026-11-11: much more visible, as Fusion 360).
+    f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
+    // The ones not chosen a little dimmer, as Fusion 360 shows a selection.
+    if (tab_ == Tab::Prepare && selected_ >= 0 && objects_.size() > 1)
+        f.model = f.model * 0.8f;
     if (tab_ == Tab::Prepare && tool_ == PlateTool::Paint) // the marks stand out on a light part (UI35)
         f.model = f.model_selected = vec(theme_.paint_part);
     if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&
@@ -26159,6 +26255,12 @@ void App::script_input() {
                     tour_pointed_ == step.key ? "" : tour_pointed_.c_str());
         if (tour_pointed_ != step.key)
             return fail_step("it outlines " + (tour_pointed_.empty() ? std::string("nothing") : tour_pointed_));
+        next();
+    } else if (step.verb == "expect-file-dialog") { // the file dialog is open: "yes|no"
+        const bool want = step.key != "no", got = browser_.is_open();
+        std::printf("ui-script: expect-file-dialog %s: %s\n", step.key.c_str(), got == want ? "ok" : "not so");
+        if (got != want)
+            return fail_step(got ? "the file dialog is open" : "the file dialog is not open");
         next();
     } else if (step.verb == "expect-selected") { // how many models are chosen
         const std::size_t want = std::size_t(std::atoi(step.key.c_str())), got = all_selected().size();
