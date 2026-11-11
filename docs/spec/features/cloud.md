@@ -81,6 +81,10 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
       para una sola cuenta), 422 si falta un campo. La misma compra mandada dos veces da la misma respuesta;
     - además: 404 si esa tienda no está configurada en el servidor, y 503 con `Retry-After` si la tienda no responde (la
       app reintenta después, sin perder la compra); 402 también si la tienda confirma otro producto que el dicho;
+    - la compra lleva la cuenta: la app la inicia con un identificador opaco de la cuenta de Tisma (en Google Play,
+      `obfuscatedAccountId`; en el App Store, `appAccountToken`, un UUID), que `GET /v1/me` da como
+      `purchase_account_token`; el servidor rechaza con 409 una compra cuyo identificador no es el de la cuenta que la
+      manda. Una compra guardada para reintentar se manda solo desde la cuenta que la hizo;
     - Microsoft Store: antes de comprar, la app pide `GET /v1/billing/microsoft/ticket` (con sesión) y recibe el
       permiso y el `publisher_user_id` con que crea la `store_id_key`;
     - después, el servidor sigue los avisos de la tienda (Google Play: notificaciones en tiempo real; App Store:
