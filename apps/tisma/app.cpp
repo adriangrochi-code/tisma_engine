@@ -884,6 +884,17 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     int mix_changes_planned() const;
+    // A blend's colour as `mixing.predictor` foresees it (rules 20, 21): the
+    // simple mixer, or the spectral one with each filament's TD.
+    std::string blend_color(const ColorMix& m) const;
+    std::vector<double> filament_transmission() const; // empty with the simple mixer
+    void recolor_mixes();
+    // After the number of filaments changes (color_mixing_plus.md, «Número de
+    // una mezcla», MX30): the blends numbered right after the filaments, and
+    // the models, their painting and their parts follow; a blend that needs a
+    // filament no longer there is turned off and its models print with the 1st.
+    void renumber_mixes();
+    int mix_extruders_ = 0; // the filaments the blends' numbers follow
     // The plate's blends before slicing (color_mixing_plus.md, rules 12 and 38).
     struct MixCost {
         int changes = 0;
@@ -1211,6 +1222,15 @@ private:
     // the bed, and whether the part below is turned over onto its cut face.
     double cut_height_ = 5.0;
     bool cut_flip_lower_ = false;
+    // The cut's connectors (model_tools.md, rule 18): 0 none, 1 a fixed dowel,
+    // 2 a loose pin; round or square; size, depth and tolerance in mm; where
+    // they go on the cut plane (x, y on the plate; none: the section's middle);
+    // inverted, the dowel is asked on the upper half (which lies on its cut
+    // face, so it goes back with a notice: rule 18, MT32).
+    int cut_connector_ = 0;
+    bool cut_square_ = false, cut_invert_ = false;
+    double cut_size_ = 4.0, cut_depth_ = 3.0, cut_tolerance_ = 0.1;
+    std::vector<std::array<double, 2>> cut_points_;
     // The Measure tool (rule 20): what was picked on which object, and the
     // distance it should be.
     std::vector<MeasureFeature> measure_picks_;
@@ -1588,6 +1608,10 @@ private:
     bool cube_drag_ = false;
     std::map<std::string, ImVec2> cube_spots_; // script: where each face, edge and corner of the cube is
     OrbitCamera camera_mark_;                  // script: the camera at camera-mark
+    std::string mix_color_mark_;               // script: the blend's colour at mix-color-mark
+    std::string color_target_ = "#808080";     // the mixing dialog's colour sought (color_mixing_plus.md, rule 4)
+    std::vector<MixMatch> color_matches_;
+    std::size_t palette_count_ = 0;            // the samples of the last quick palette (rule 22)
     bool camera_framed_ = false; // the camera is as the last framing left it (no orbit, pan or zoom since)
     bool last_coarse_ = false; // the last frame drew the coarse copy (--ui-script's expect-coarse)
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
@@ -2150,6 +2174,13 @@ const std::map<T, const char*>& row_keys() {
         {T::InterlockAvoidance, "interlocking.boundary_avoidance"}, {T::PaintMaxRegionWidth, "painting.max_region_width"},
         {T::PaintInterlockingDepth, "painting.interlocking_depth"}, {T::SyncSupportLayers, "support.synchronize_layers"},
         {T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill"}, {T::ColorMixingRow, "multi.color_mixing"},
+        {T::TransmissionRow, "extrusion.transmission_distance"}, {T::MixSubdivideRow, "mixing.subdivide"}, {T::MixSubMinHeightRow, "mixing.sub_min_height"},
+        {T::MixSubFirstLayerRow, "mixing.sub_first_layer"}, {T::MixSubInfillRow, "mixing.sub_infill"},
+        {T::MixCadenceRow, "mixing.cadence_heights"}, {T::MixHeightARow, "mixing.height_a"},
+        {T::MixHeightBRow, "mixing.height_b"}, {T::MixStepRow, "mixing.step"},
+        {T::MixSurfaceOnlyRow, "mixing.surface_only"}, {T::MixSurfaceDepthRow, "mixing.surface_depth"},
+        {T::MixExtraWallsRow, "mixing.extra_walls"}, {T::MixPurgeIntoInfillRow, "mixing.purge_into_infill"},
+        {T::MixPurgeInfillMaxRow, "mixing.purge_infill_max"}, {T::MixPredictorRow, "mixing.predictor"},
         {T::CurvedModeRow, "curved.mode"}, {T::CurvedPatternRow, "curved.pattern"}, {T::CurvedFitHead, "curved.fit_head"},
         {T::CurvedAmplitude, "curved.amplitude"}, {T::CurvedWavelength, "curved.wavelength"},
         {T::CurvedAngle, "curved.angle"}, {T::CurvedTwist, "curved.twist"}, {T::CurvedConeAngle, "curved.cone_angle"},
@@ -4974,6 +5005,7 @@ void App::open_project(const std::filesystem::path& path) {
     // not have are dropped (color_mixing.md, rule 5).
     mixes_ = std::move(p.mixes);
     std::erase_if(mixes_, [&](const ColorMix& m) { return !mix_usable(m, settings_.extruders); });
+    mix_extruders_ = std::max(settings_.extruders, 1);
     filament_colors_ = std::move(p.filament_colors);
     bed_changed();
     settings_changed();
@@ -5801,13 +5833,7 @@ void App::profile_row(ProfileKind kind, bool compact) {
                     std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(rgb3[0] * 255.0f)),
                                   unsigned(std::lround(rgb3[1] * 255.0f)), unsigned(std::lround(rgb3[2] * 255.0f)));
                     filament_colors_[0] = hex;
-                    for (ColorMix& m : mixes_) { // the mixed colours made with it (color_mixing.md)
-                        std::vector<std::string> colors;
-                        std::vector<double> shares;
-                        for (const ColorMix::Component& c : m.components)
-                            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
-                        m.color = mix_color(colors, shares);
-                    }
+                    recolor_mixes(); // the mixed colours made with it (color_mixing.md)
                 }
                 ImGui::EndMenu();
             }
@@ -6859,6 +6885,8 @@ void App::take_limits(const device::PrinterLimits& limits, const std::string& fi
 
 void App::settings_changed() {
     ++revision_.settings;
+    renumber_mixes();
+    recolor_mixes(); // the prediction or a filament's TD may have changed (color_mixing_plus.md, rule 21)
     if (result_ && !viewer_)
         stale_ = true;
 }
@@ -9572,6 +9600,37 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
         flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
         mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
+    } else if (id == "color_mix") {
+        // How the blends are laid in layers (color_mixing_plus.md, rules 8 to
+        // 10); 0 mm: the layer's height.
+        flag(T::MixSubdivideRow, "mixing.subdivide", s.mix_subdivide);
+        mm(T::MixSubMinHeightRow, "mixing.sub_min_height", s.mix_sub_min_height, 0.01, 10.0, "%.2f mm", 0.002f);
+        flag(T::MixSubFirstLayerRow, "mixing.sub_first_layer", s.mix_sub_first_layer);
+        flag(T::MixSubInfillRow, "mixing.sub_infill", s.mix_sub_infill);
+        flag(T::MixCadenceRow, "mixing.cadence_heights", s.mix_cadence_heights);
+        mm(T::MixHeightARow, "mixing.height_a", s.mix_height_a, 0.0, 10.0, "%.2f mm", 0.002f, tr(T::MixZeroIsLayer));
+        mm(T::MixHeightBRow, "mixing.height_b", s.mix_height_b, 0.0, 10.0, "%.2f mm", 0.002f, tr(T::MixZeroIsLayer));
+        mm(T::MixStepRow, "mixing.step", s.mix_step, 0.0, 10.0, "%.2f mm", 0.002f, tr(T::MixZeroIsLayer));
+    } else if (id == "color_mix_zones") {
+        // Where the blends go and how their colour is foreseen (rules 13, 14,
+        // 20, 21, 35).
+        flag(T::MixSurfaceOnlyRow, "mixing.surface_only", s.mix_surface_only);
+        mm(T::MixSurfaceDepthRow, "mixing.surface_depth", s.mix_surface_depth, 0.1, 5.0, "%.1f mm", 0.01f);
+        whole(T::MixExtraWallsRow, "mixing.extra_walls", s.mix_extra_walls, 0, 8);
+        flag(T::MixPurgeIntoInfillRow, "mixing.purge_into_infill", s.mix_purge_into_infill);
+        mm(T::MixPurgeInfillMaxRow, "mixing.purge_infill_max", s.mix_purge_infill_max, 0.0, 100.0, "%.0f %%", 0.5f);
+        if (shown("mixing.predictor")) {
+            label_cell(T::MixPredictorRow, tr(T::MixPredictorTip));
+            const bool spectral = s.mix_predictor == "spectral";
+            if (ImGui::BeginCombo("##v", tr(spectral ? T::MixPredictorSpectral : T::MixPredictorMixer))) {
+                for (const auto& [value, name] : {std::pair{"mixer", T::MixPredictorMixer}, std::pair{"spectral", T::MixPredictorSpectral}})
+                    if (ImGui::Selectable(tr(name), s.mix_predictor == value) && s.mix_predictor != value) {
+                        s.mix_predictor = value;
+                        changed = true;
+                    }
+                ImGui::EndCombo();
+            }
+        }
     } else if (id == "multi_nozzle") {
         // Different nozzles and mixed colours (multimaterial.md, rules 3, 9
         // and 11): with one nozzle for every filament, turning the mixing on
@@ -9871,6 +9930,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
             mm(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.front(), 0.0, 10000.0, "%.0f mm³", 0.5f);
         else
             count(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.size());
+        // How far light goes through it (HueForge's TD; color_mixing_plus.md, rules 21 and 33).
+        if (s.transmission_distance.size() == 1) {
+            if (shown("extrusion.transmission_distance")) {
+                changed |= row(T::TransmissionRow, s.transmission_distance.front(), 0.0, 100.0, "%.1f mm", 0.05f, tr(T::TransmissionTip));
+            }
+        } else {
+            count(T::TransmissionRow, "extrusion.transmission_distance", s.transmission_distance.size());
+        }
         count(T::FlowBySpeedRow, "extrusion.flow_by_speed", s.flow_by_speed.size()); // pellets.md, rule 5
         if (shown("extrusion.section")) // pellets.md, rule 4
             changed |= row(T::BeadSectionRow, s.bead_section,
@@ -10689,7 +10756,37 @@ void App::viewport() {
         ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
     }
     const bool on_gizmo = gizmo(editing && !painting);
-    if (editing && !painting && !on_gizmo && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    // The Cut tool's connectors (model_tools.md, rule 18): a click on the cut
+    // plane, within the chosen model, places one; a right click takes the
+    // nearest away.
+    bool cut_click = false;
+    if (editing && tool_ == PlateTool::Cut && cut_connector_ != 0 && selected_ >= 0 &&
+        std::size_t(selected_) < placed_meshes_.size() && ImGui::IsItemHovered() &&
+        (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))) {
+        const BoundingBox box = placed_meshes_[std::size_t(selected_)].bounding_box();
+        const Vec3 e = camera_.eye(), d = mouse_ray();
+        const float z = box.min.z + float(cut_height_);
+        if (!box.empty && std::abs(d.z) > 1e-6f) {
+            const float t = (z - e.z) / d.z;
+            const Vec3 p = e + d * t;
+            if (t > 0.0f && p.x >= box.min.x && p.x <= box.max.x && p.y >= box.min.y && p.y <= box.max.y) {
+                cut_click = true;
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    cut_points_.push_back({double(p.x), double(p.y)});
+                } else if (!cut_points_.empty()) {
+                    std::size_t nearest = 0;
+                    double best = 1e300;
+                    for (std::size_t k = 0; k < cut_points_.size(); ++k) {
+                        const double dd = std::hypot(cut_points_[k][0] - p.x, cut_points_[k][1] - p.y);
+                        if (dd < best)
+                            best = dd, nearest = k;
+                    }
+                    cut_points_.erase(cut_points_.begin() + std::ptrdiff_t(nearest));
+                }
+            }
+        }
+    }
+    if (editing && !painting && !on_gizmo && !cut_click && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         pressed_object_ = -1;
         dragged_ = false;
         const Vec3 d = mouse_ray(), e = camera_.eye();
@@ -10850,6 +10947,7 @@ void App::viewport() {
     // rule 10); on the plate, add a model or a shape, or arrange them (own
     // design, the owner's request).
     if (tab_ == Tab::Prepare && !calibration_ && !viewer_ && ImGui::IsItemHovered() &&
+        !(tool_ == PlateTool::Cut && cut_connector_ != 0) &&
         ImGui::IsMouseReleased(ImGuiMouseButton_Right) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f) {
         const auto hit = editing ? pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()) : std::nullopt;
         if (hit) {
@@ -11968,6 +12066,42 @@ void App::plate_tools() {
         ImGui::DragScalar("##cut_z", ImGuiDataType_Double, &cut_height_, 0.1f, &lo, &tall, field_text("##cut_z", "%.2f mm", cut_height_),
                           ImGuiSliderFlags_AlwaysClamp);
         ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
+        // Connectors (model_tools.md, rule 18): a click on the plane adds one,
+        // a right click takes the nearest away; none placed, one in the middle.
+        ImGui::SeparatorText(tr(T::CutConnectors));
+        {
+            const T kinds[] = {T::CutConnectorNone, T::CutConnectorDowel, T::CutConnectorPin};
+            ImGui::SetNextItemWidth(field + 60.0f * scale_);
+            if (ImGui::BeginCombo("##connector", tr(kinds[std::clamp(cut_connector_, 0, 2)]))) {
+                for (int k = 0; k < 3; ++k)
+                    if (ImGui::Selectable(tr(kinds[k]), k == cut_connector_))
+                        cut_connector_ = k;
+                ImGui::EndCombo();
+            }
+            note_rect("cut_connector");
+        }
+        if (cut_connector_ != 0) {
+            int shape = cut_square_ ? 1 : 0;
+            ImGui::RadioButton(tr(T::CutShapeRound), &shape, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton(tr(T::CutShapeSquare), &shape, 1);
+            cut_square_ = shape == 1;
+            const auto connector_field = [&](T label, const char* id, double& v, double min, double max, const char* fmt, float speed) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(tr(label));
+                ImGui::SameLine(110.0f * scale_);
+                ImGui::SetNextItemWidth(field);
+                ImGui::DragScalar(id, ImGuiDataType_Double, &v, speed, &min, &max, field_text(id, fmt, v), ImGuiSliderFlags_AlwaysClamp);
+            };
+            connector_field(T::CutConnectorSize, "##cut_size", cut_size_, 0.5, 50.0, "%.1f mm", 0.05f);
+            connector_field(T::CutConnectorDepth, "##cut_depth", cut_depth_, 0.5, 50.0, "%.1f mm", 0.05f);
+            connector_field(T::CutConnectorTolerance, "##cut_tol", cut_tolerance_, 0.0, 2.0, "%.2f mm", 0.005f);
+            if (cut_connector_ == 1)
+                ImGui::Checkbox(tr(T::CutInvert), &cut_invert_);
+            loc::TextDisabled("%s", format(tr(T::CutConnectorCount), int(cut_points_.size())).c_str());
+            if (!cut_points_.empty() && ImGui::SmallButton(tr(T::ResetSettings)))
+                cut_points_.clear();
+        }
         ImGui::BeginDisabled(!(cut_height_ > 0.0 && cut_height_ < tall));
         if (ImGui::Button(tr(T::CutButton), ImVec2(120.0f * scale_, 0)))
             cut = true;
@@ -12102,19 +12236,78 @@ void App::cut_selected() {
     CutResult halves = cut_mesh(placed_mesh(o), cut_height_);
     if (halves.below.empty() || halves.above.empty())
         return;
-    if (cut_flip_lower_)
+    // The connectors (model_tools.md, rule 18): a fixed dowel added to one
+    // half and a hole in the other; a pin, a hole in both and the pin apart.
+    // Each hole is a negative volume its tolerance wider all round and deeper.
+    const BoundingBox below_box = halves.below.bounding_box(), above_box = halves.above.bounding_box();
+    std::vector<std::array<double, 2>> points = cut_points_;
+    if (cut_connector_ != 0 && points.empty())
+        points.push_back({0.5 * (double(above_box.min.x) + above_box.max.x), 0.5 * (double(above_box.min.y) + above_box.max.y)});
+    if (cut_connector_ == 0)
+        points.clear();
+    const double size = cut_size_, depth = cut_depth_, tol = cut_tolerance_;
+    const double z_cut = double(above_box.min.z);
+    const auto prism = [&](double h) { return cut_square_ ? make_box(size, size, h) : make_cylinder(size / 2.0, h, 48); };
+    const auto hole = [&](const BoundingBox& box, double x, double y, double z, bool mirrored) {
+        const double cx = 0.5 * (double(box.min.x) + box.max.x), cy = 0.5 * (double(box.min.y) + box.max.y);
+        return PlateVolume{PlateVolume::Kind::Negative, cut_square_ ? PlateVolume::Shape::Box : PlateVolume::Shape::Cylinder,
+                           {x - cx, mirrored ? cy - y : y - cy, z}, {size + 2.0 * tol, size + 2.0 * tol, depth + tol}, {}};
+    };
+    // A half that lies on its cut face never carries the dowel and is never
+    // turned for it (rule 18, MT32): the upper half always lies on it, so the
+    // dowel goes to the lower one; when that one lies on its face too, the
+    // dowel becomes a loose pin. Either way a notice says so.
+    int connector = cut_connector_;
+    const bool flip_below = cut_flip_lower_;
+    if (connector == 1 && !points.empty() && (cut_invert_ || flip_below)) {
+        if (flip_below)
+            connector = 2;
+        notify(tr(T::CutConnectorsMoved));
+    }
+    const bool dowel = connector == 1;
+    std::vector<PlateVolume> below_holes, above_holes;
+    for (const auto& [x, y] : points) {
+        if (dowel) { // on the lower half, standing on its cut face
+            TriangleMesh d = prism(depth);
+            d.translate(float(x), float(y), float(z_cut));
+            for (std::size_t t = 0; t < d.triangle_count(); ++t)
+                halves.below.add_triangle(d.corner(t, 0), d.corner(t, 1), d.corner(t, 2));
+        } else { // the pin's hole at the lower half's cut face: its top, or its bottom when turned
+            below_holes.push_back(hole(below_box, x, y,
+                                       flip_below ? 0.0 : double(below_box.max.z - below_box.min.z) - (depth + tol), flip_below));
+        }
+        above_holes.push_back(hole(above_box, x, y, 0.0, false)); // at the upper half's cut face, its bottom
+    }
+    if (flip_below)
         rotate_mesh(halves.below, 180.0, 0.0, 0.0); // its cut face down on the bed
+
     // The halves keep the object's extruder; its painting was by triangle and
     // stays with the whole.
     PlateObject below{o.name + " (1)", std::move(halves.below), {}, {}};
     PlateObject above{o.name + " (2)", std::move(halves.above), {}, {}};
-    for (PlateObject* half : {&below, &above}) {
-        half->extruder = o.extruder;
-        half->wipe_into_infill = o.wipe_into_infill, half->wipe_into_object = o.wipe_into_object;
-        half->settings = o.settings;
+    below.volumes = std::move(below_holes);
+    above.volumes = std::move(above_holes);
+    std::vector<PlateObject> made;
+    made.push_back(std::move(below));
+    made.push_back(std::move(above));
+    if (connector == 2 && !points.empty()) { // the pins, to print apart: one for each place
+        TriangleMesh pins;
+        for (std::size_t k = 0; k < points.size(); ++k) {
+            TriangleMesh pin = prism(2.0 * depth);
+            pin.translate(float(k) * float(size + 3.0), 0.0f, 0.0f);
+            for (std::size_t t = 0; t < pin.triangle_count(); ++t)
+                pins.add_triangle(pin.corner(t, 0), pin.corner(t, 1), pin.corner(t, 2));
+        }
+        made.push_back(PlateObject{o.name + " (" + tr(T::CutPinName) + ")", std::move(pins), {}, {}});
+    }
+    for (PlateObject& half : made) {
+        half.extruder = o.extruder;
+        half.wipe_into_infill = o.wipe_into_infill, half.wipe_into_object = o.wipe_into_object;
+        half.settings = o.settings;
     }
     objects_.erase(objects_.begin() + std::ptrdiff_t(index));
-    objects_.insert(objects_.begin() + std::ptrdiff_t(index), {std::move(below), std::move(above)});
+    objects_.insert(objects_.begin() + std::ptrdiff_t(index), std::make_move_iterator(made.begin()), std::make_move_iterator(made.end()));
+    cut_points_.clear();
     tool_ = PlateTool::Select;
     arrange_plate();
 }
@@ -12147,6 +12340,17 @@ void App::cut_plane_overlay() {
     dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
     dl->AddConvexPolyFilled(c, 4, ImGui::GetColorU32(rgb(theme_.accent, 0.28f)));
     dl->AddPolyline(c, 4, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.9f)), 2.0f * scale_, ImDrawFlags_Closed);
+    // The connectors' places on the plane.
+    if (cut_connector_ != 0)
+        for (const auto& [x, y] : cut_points_) {
+            ImVec2 at;
+            if (!project(float(x), float(y), z, at))
+                continue;
+            ImVec2 edge;
+            const float r = project(float(x) + float(cut_size_) / 2.0f, float(y), z, edge) ? std::hypot(edge.x - at.x, edge.y - at.y) : 6.0f;
+            dl->AddCircleFilled(at, std::max(r, 3.0f * scale_), IM_COL32(255, 255, 255, 200));
+            dl->AddCircle(at, std::max(r, 3.0f * scale_), ImGui::GetColorU32(rgb(theme_.accent)), 0, 2.0f * scale_);
+        }
     dl->PopClipRect();
 }
 
@@ -12254,6 +12458,85 @@ static MixChangeOptions mix_change_options(const Settings& s) {
     options.height_b = s.mix_height_b;
     options.step = s.mix_step;
     return options;
+}
+
+std::vector<double> App::filament_transmission() const {
+    if (settings_.mix_predictor != "spectral")
+        return {};
+    std::vector<double> td;
+    for (int e = 1; e <= std::max(settings_.extruders, 1); ++e) {
+        const auto& v = settings_.transmission_distance;
+        td.push_back(v.empty() ? 0.0 : v[std::min(std::size_t(e - 1), v.size() - 1)]);
+    }
+    return td;
+}
+
+std::string App::blend_color(const ColorMix& m) const {
+    std::vector<std::string> colors;
+    std::vector<double> shares, td;
+    const std::vector<double> all = filament_transmission();
+    for (const ColorMix::Component& c : m.components) {
+        colors.push_back(filament_color(c.extruder));
+        shares.push_back(c.share);
+        if (!all.empty())
+            td.push_back(all[std::size_t(std::clamp(c.extruder, 1, int(all.size())) - 1)]);
+    }
+    return all.empty() ? mix_color(colors, shares) : mix_color_spectral(colors, shares, td);
+}
+
+void App::renumber_mixes() {
+    const int n = std::max(settings_.extruders, 1);
+    if (mix_extruders_ == 0)
+        mix_extruders_ = n;
+    if (n == mix_extruders_)
+        return;
+    mix_extruders_ = n;
+    std::map<int, int> to; // old number → new
+    bool lost = false;
+    int next = n + 1;
+    for (ColorMix& m : mixes_) {
+        const bool missing =
+            std::any_of(m.components.begin(), m.components.end(), [&](const ColorMix::Component& c) { return c.extruder > n; }) ||
+            std::any_of(m.pattern.begin(), m.pattern.end(), [&](int f) { return f > n; });
+        const int old = m.id;
+        m.id = next++;
+        if (missing) {
+            lost |= m.enabled;
+            m.enabled = false;
+            to[old] = 1;
+        } else {
+            to[old] = m.id;
+        }
+    }
+    if (to.empty())
+        return;
+    const auto moved = [&](int e) {
+        const auto it = to.find(e);
+        return it == to.end() ? e : it->second;
+    };
+    for (PlateObject& o : objects_) {
+        o.extruder = moved(o.extruder);
+        // The colour painting: its marks are extruder numbers.
+        for (std::size_t t = 0; t < o.painting.size(PaintChannel::Color); ++t) {
+            Painting::Tree tree = o.painting.tree(PaintChannel::Color, t);
+            bool changed = false;
+            for (std::uint8_t& mark : tree)
+                if (mark != Painting::kSplit && mark != kPaintNone && to.contains(int(mark))) {
+                    mark = std::uint8_t(moved(int(mark)));
+                    changed = true;
+                }
+            if (changed)
+                o.painting.set_tree(PaintChannel::Color, t, std::move(tree));
+        }
+    }
+    if (lost)
+        notify(tr(T::MixFilamentGone));
+    plate_changed();
+}
+
+void App::recolor_mixes() {
+    for (ColorMix& m : mixes_)
+        m.color = blend_color(m);
 }
 
 std::vector<std::vector<double>> App::color_purge_table() const {
@@ -12424,13 +12707,7 @@ void App::mixing_dialog() {
         return ImVec4(float((v >> 16) & 0xFF) / 255.0f, float((v >> 8) & 0xFF) / 255.0f, float(v & 0xFF) / 255.0f, 1.0f);
     };
     const int filaments = std::max(settings_.extruders, 1);
-    const auto recolor = [&](ColorMix& m) {
-        std::vector<std::string> colors;
-        std::vector<double> shares;
-        for (const ColorMix::Component& c : m.components)
-            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
-        m.color = mix_color(colors, shares);
-    };
+    const auto recolor = [&](ColorMix& m) { m.color = blend_color(m); };
     const auto add = [&](int a, int b) {
         ColorMix m;
         m.id = filaments + 1;
@@ -12459,7 +12736,9 @@ void App::mixing_dialog() {
         for (const ColorMix::Component& c : m.components)
             shares += (shares.empty() ? "" : ", ") + std::to_string(c.extruder) + " - " +
                       std::to_string(int(std::lround(c.share * 100.0))) + " %";
-        if (ImGui::Selectable((format(tr(T::VirtualExtruder), m.id) + "\n" + shares).c_str(), mix_edit_ == int(k), 0,
+        // Its name, when it has one (color_mixing_plus.md, rule 6).
+        const std::string title = format(tr(T::VirtualExtruder), m.id) + (m.name.empty() ? "" : " · " + m.name);
+        if (ImGui::Selectable((title + "\n" + shares + "##mix").c_str(), mix_edit_ == int(k), 0,
                               ImVec2(170.0f * scale_, 0)))
             mix_edit_ = int(k);
         ImGui::SameLine();
@@ -12498,6 +12777,92 @@ void App::mixing_dialog() {
         if (e < filaments)
             ImGui::SameLine();
         ImGui::PopID();
+    }
+    // The colour sought (color_mixing_plus.md, rule 4): the closest blend of
+    // 2 or 3 filaments and the next 3, each with its distance; a notice when
+    // the best is more than 10 apart. Cycles of up to 4 layers, no share
+    // under 15 % (the spec's defaults).
+    std::vector<std::string> filament_hexes;
+    for (int e = 1; e <= filaments; ++e)
+        filament_hexes.push_back(filament_color(e));
+    const auto next_id = [&] {
+        int id = filaments + 1;
+        for (const ColorMix& other : mixes_)
+            id = std::max(id, other.id + 1);
+        return id;
+    };
+    const auto name_of_color = [&](const std::string& hex) {
+        const ColorName n = color_name(hex);
+        return language() == Language::Spanish ? n.es : n.en;
+    };
+    if (filaments >= 2) {
+        ImGui::SeparatorText(tr(T::ColorSought));
+        ImVec4 t = color_of(color_target_);
+        float target3[3] = {t.x, t.y, t.z};
+        if (ImGui::ColorEdit3("##target", target3, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
+            char hex[8];
+            std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(target3[0] * 255.0f)),
+                          unsigned(std::lround(target3[1] * 255.0f)), unsigned(std::lround(target3[2] * 255.0f)));
+            color_target_ = hex;
+            color_matches_.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::FindBlend)))
+            color_matches_ = match_color(color_target_, filament_hexes, next_id(), 4, 0.15, filament_transmission());
+        note_rect("find_blend");
+        if (!color_matches_.empty() && !color_reached(color_matches_)) {
+            loc::TextColored(rgb(theme_.paint_block), "%s", tr(T::ColorNotReached));
+            note_rect("color_not_reached");
+        }
+        for (std::size_t k = 0; k < color_matches_.size(); ++k) {
+            const MixMatch& match = color_matches_[k];
+            ImGui::PushID(int(k) + 1000);
+            ImGui::ColorButton("##match", color_of(match.color), ImGuiColorEditFlags_NoTooltip, ImVec2(22.0f * scale_, 22.0f * scale_));
+            ImGui::SameLine();
+            std::string shares;
+            for (const ColorMix::Component& c : match.mix.components)
+                shares += (shares.empty() ? "" : " + ") + std::to_string(c.extruder) + " " +
+                          std::to_string(int(std::lround(c.share * 100.0))) + " %";
+            ImGui::AlignTextToFramePadding();
+            loc::Text("%s", format(tr(k == 0 ? T::MatchBest : T::MatchRecommended), shares.c_str(), match.distance).c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::AddBlend))) {
+                ColorMix m = match.mix;
+                m.id = next_id();
+                m.color = blend_color(m);
+                if (m.name.empty())
+                    m.name = name_of_color(m.color);
+                mixes_.push_back(std::move(m));
+                mix_edit_ = int(mixes_.size()) - 1;
+            }
+            note_rect("add_match." + std::to_string(k));
+            ImGui::PopID();
+        }
+        // The quick palette (rule 22): every blend of up to 2 or 3 layers,
+        // each with the name of its colour, to print as a sample card.
+        ImGui::SeparatorText(tr(T::QuickPalette));
+        for (const auto& [cycle, label, key] : {std::tuple{2, T::QuickPaletteSmall, "quick_palette.2"}, std::tuple{3, T::QuickPaletteLarge, "quick_palette.3"}}) {
+            if (ImGui::Button(tr(label))) {
+                const std::vector<PaletteSample> samples = quick_palette(filament_hexes, cycle, next_id(), filament_transmission());
+                for (const PaletteSample& p : samples) {
+                    if (p.mix.components.size() < 2 && p.mix.pattern.empty())
+                        continue; // a filament on its own is already there
+                    ColorMix m = p.mix;
+                    m.id = next_id();
+                    m.color = p.color;
+                    m.name = language() == Language::Spanish ? p.name.es : p.name.en;
+                    if (std::none_of(mixes_.begin(), mixes_.end(), [&](const ColorMix& o) {
+                            return o.components == m.components && o.pattern == m.pattern; }))
+                        mixes_.push_back(std::move(m));
+                }
+                palette_count_ = samples.size();
+            }
+            note_rect(key);
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
+        if (palette_count_ > 0)
+            loc::TextDisabled("%s", format(tr(T::QuickPaletteAdded), int(palette_count_)).c_str());
     }
     ImGui::SeparatorText(tr(T::TwoColorBlends));
     for (int a = 1; a <= filaments; ++a)
@@ -23945,10 +24310,44 @@ void App::script_input() {
         for (const ColorMix& other : mixes_)
             m.id = std::max(m.id, other.id + 1);
         m.components = {{std::atoi(step.key.c_str()), 0.5}, {std::atoi(step.value.c_str()), 0.5}};
+        m.color = blend_color(m);
         mixes_.push_back(m);
         for (PlateObject& o : objects_)
             o.extruder = m.id;
         std::printf("ui-script: add-mix: %d changes for the plate\n", mix_changes_planned());
+        next();
+    } else if (step.verb == "open-mixing") { // the mixed colours' dialog, as its button opens it
+        mixing_open_ = true;
+        next();
+    } else if (step.verb == "filament-color") { // a filament's colour: "N #rrggbb"
+        const int n = std::atoi(step.key.c_str());
+        if (n < 1)
+            return fail_step("no such filament");
+        if (filament_colors_.size() < std::size_t(n))
+            filament_colors_.resize(std::size_t(n));
+        filament_colors_[std::size_t(n - 1)] = step.value;
+        recolor_mixes();
+        next();
+    } else if (step.verb == "color-target") { // the mixing dialog's colour sought
+        color_target_ = step.key;
+        color_matches_.clear();
+        next();
+    } else if (step.verb == "expect-mixes") { // how many blends the project has
+        const int want = std::atoi(step.key.c_str());
+        std::printf("ui-script: expect-mixes %d: %s%zu\n", want, int(mixes_.size()) == want ? "ok, " : "got ", mixes_.size());
+        if (int(mixes_.size()) != want)
+            return fail_step("the project has " + std::to_string(mixes_.size()) + " blends");
+        next();
+    } else if (step.verb == "mix-color-mark") { // remember the last blend's colour, for expect-mix-color
+        mix_color_mark_ = mixes_.empty() ? std::string() : mixes_.back().color;
+        next();
+    } else if (step.verb == "expect-mix-color") { // since mix-color-mark: changed | same
+        const std::string now = mixes_.empty() ? std::string() : mixes_.back().color;
+        const bool ok = step.key == "changed" ? now != mix_color_mark_ : now == mix_color_mark_;
+        std::printf("ui-script: expect-mix-color %s: %s (%s, was %s)\n", step.key.c_str(), ok ? "ok" : "no", now.c_str(),
+                    mix_color_mark_.c_str());
+        if (!ok)
+            return fail_step("the blend's colour is not " + step.key);
         next();
     } else if (step.verb == "use-published-material") { // the same for the chosen pack filament's values
         refresh_material_community();
@@ -24851,6 +25250,52 @@ void App::script_input() {
         std::printf("ui-script: expect-apart %s %s: %s\n", step.key.c_str(), step.value.c_str(), apart ? "ok" : "they overlap");
         if (!apart)
             return fail_step("they overlap");
+        next();
+    } else if (step.verb == "cut") { // the last model cut at a height, with connectors: "HEIGHT [none|dowel|pin SIZE DEPTH TOL [invert]]"
+        double height = 0.0, size = 4.0, depth = 3.0, tol = 0.1;
+        char kind[16] = "none", invert[16] = "";
+        std::sscanf((step.key + " " + step.value).c_str(), "%lf %15s %lf %lf %lf %15s", &height, kind, &size, &depth, &tol, invert);
+        if (objects_.empty())
+            return fail_step("no model on the plate");
+        selected_ = int(objects_.size()) - 1;
+        cut_height_ = height;
+        cut_connector_ = std::string(kind) == "dowel" ? 1 : std::string(kind) == "pin" ? 2 : 0;
+        cut_size_ = size, cut_depth_ = depth, cut_tolerance_ = tol;
+        cut_invert_ = std::string(invert) == "invert";
+        cut_selected();
+        next();
+    } else if (step.verb == "expect-model") { // model I's height (mm) and its negative volumes' size: "I HEIGHT [W D H]"
+        std::size_t i = 0;
+        double height = 0.0, w = 0.0, dd = 0.0, h = 0.0;
+        const int n = std::sscanf((step.key + " " + step.value).c_str(), "%zu %lf %lf %lf %lf", &i, &height, &w, &dd, &h);
+        if (i >= objects_.size())
+            return fail_step("no such model");
+        const std::array<double, 3> got = model_size(objects_[i]);
+        std::string holes;
+        bool hole_ok = n < 5;
+        for (const PlateVolume& v : objects_[i].volumes)
+            if (v.kind == PlateVolume::Kind::Negative) {
+                holes += format(" %.2f×%.2f×%.2f", v.size[0], v.size[1], v.size[2]);
+                hole_ok |= std::abs(v.size[0] - w) < 1e-6 && std::abs(v.size[1] - dd) < 1e-6 && std::abs(v.size[2] - h) < 1e-6;
+            }
+        const bool ok = std::abs(got[2] - height) < 0.01 && hole_ok;
+        std::printf("ui-script: expect-model %zu: %s (height %.2f, holes%s)\n", i, ok ? "ok" : "no", got[2], holes.c_str());
+        if (!ok)
+            return fail_step("model " + std::to_string(i) + " is not so");
+        next();
+    } else if (step.verb == "expect-extruder") { // model I prints with extruder or blend N; with "off", that blend is off: "I N [off]"
+        std::size_t i = 0;
+        int want = 0;
+        char off[8] = "";
+        std::sscanf((step.key + " " + step.value).c_str(), "%zu %d %7s", &i, &want, off);
+        if (i >= objects_.size())
+            return fail_step("no such model");
+        const int got = objects_[i].extruder;
+        const bool off_ok = std::string(off) != "off" ||
+                            std::any_of(mixes_.begin(), mixes_.end(), [](const ColorMix& m) { return !m.enabled; });
+        std::printf("ui-script: expect-extruder %zu %d: %s%d\n", i, want, got == want && off_ok ? "ok, " : "got ", got);
+        if (got != want || !off_ok)
+            return fail_step("model " + std::to_string(i) + " prints with " + std::to_string(got));
         next();
     } else if (step.verb == "expect-objects") { // this many models on the plate, the last one's name with VALUE
         const std::size_t want = std::size_t(std::atoll(step.key.c_str()));

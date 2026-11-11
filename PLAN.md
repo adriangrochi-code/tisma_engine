@@ -697,7 +697,10 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   (`docs/UI.md`, «Ayuda»)
 - [ ] Ayuda, lo que sigue: el texto de los ajustes en inglés; señalar en la pantalla lo que cada paso del asistente
   nombra
-- [ ] Cortar, Partir y Medir de la ficha `interface.md`
+- [ ] Cortar, Partir y Medir de la ficha `interface.md` (hoy `model_tools.md`, regla 18). Hecho (2026-11-11): conectores
+  sobre el corte horizontal, espiga fija y pasador, redondos o cuadrados, con tamaño, profundidad, tolerancia, clic en
+  el plano e «Invertir plano» (MT22, MT23); la mitad que apoya sobre la cara no lleva la espiga (MT32). Falta: plano libre, encastre a presión, cola de milano, base hexagonal y
+  tronco, el resultado como un objeto con dos partes (MT24), elegir por zona si se separa, y deshacer el corte (MT31)
 - [x] Modelos grandes en la interfaz (pedido del dueño, 2026-10-26): arrastrar no rehace la malla en cada cuadro, y el
   clic y el pincel buscan en un árbol de cajas (`docs/UI.md`, «Modelos grandes»)
 - [ ] Modelos grandes, lo que sigue: armar el árbol de cajas y la malla de la placa en segundo plano; los campos de

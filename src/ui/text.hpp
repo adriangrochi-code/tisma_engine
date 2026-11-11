@@ -2529,7 +2529,55 @@
     X(PurgeByColorsHint, "por colores", "by colours") \
     X(PurgePairsRow, "Purga por par", "Purge by pair") \
     X(PurgePairsTitle, "Purga entre filamentos, mm³ (fila: de; columna: a)", "Purge between filaments, mm³ (row: from; column: to)") \
-    X(PurgeResetColors, "Volver a los colores", "Back to the colours")
+    X(PurgeResetColors, "Volver a los colores", "Back to the colours") \
+    X(MixSubdivideRow, "Subcapas en las mezclas", "Sublayers in the blends") \
+    X(MixSubMinHeightRow, "Alto mínimo de una subcapa", "Lowest sublayer") \
+    X(MixSubFirstLayerRow, "Dividir la primera capa", "Divide the first layer") \
+    X(MixSubInfillRow, "Dividir también el relleno", "Divide the infill too") \
+    X(MixCadenceRow, "Alto de capa por filamento", "Layer height by filament") \
+    X(MixHeightARow, "Alto del primer filamento", "First filament's height") \
+    X(MixHeightBRow, "Alto del segundo filamento", "Second filament's height") \
+    X(MixStepRow, "Altura del ciclo", "Cycle's height") \
+    X(MixZeroIsLayer, "0: el alto de la capa", "0: the layer's height") \
+    X(MixSurfaceOnlyRow, "Mezcla solo en la superficie", "Blend only on the surface") \
+    X(MixSurfaceDepthRow, "Grosor de la superficie", "Surface's thickness") \
+    X(MixExtraWallsRow, "Paredes de más en las mezclas", "Extra walls in the blends") \
+    X(MixPurgeIntoInfillRow, "Purgar en el relleno", "Purge into the infill") \
+    X(MixPurgeInfillMaxRow, "Relleno máximo para la purga", "Highest infill for the purge") \
+    X(MixPredictorRow, "Predicción del color", "Colour prediction") \
+    X(MixPredictorTip, "Cómo se prevé el color de una mezcla; la espectral usa la TD de cada filamento", \
+      "How a blend's colour is foreseen; the spectral one uses each filament's TD") \
+    X(MixPredictorMixer, "Simple", "Simple") \
+    X(MixPredictorSpectral, "Espectral (con la TD)", "Spectral (with the TD)") \
+    X(MixFilamentGone, "Una mezcla usa un filamento que ya no está: quedó apagada y sus piezas van con el filamento 1", \
+      "A blend uses a filament no longer there: it is off and its models print with filament 1") \
+    X(CutConnectors, "Conectores", "Connectors") \
+    X(CutConnectorNone, "Sin conectores", "No connectors") \
+    X(CutConnectorDowel, "Espiga fija", "Fixed dowel") \
+    X(CutConnectorPin, "Pasador", "Pin") \
+    X(CutShapeRound, "Redondo", "Round") \
+    X(CutShapeSquare, "Cuadrado", "Square") \
+    X(CutConnectorSize, "Tamaño", "Size") \
+    X(CutConnectorDepth, "Profundidad", "Depth") \
+    X(CutConnectorTolerance, "Tolerancia", "Tolerance") \
+    X(CutInvert, "Invertir plano (la espiga arriba)", "Flip the plane (the dowel above)") \
+    X(CutConnectorCount, "%d puestos (clic en el plano; clic derecho saca). Sin ninguno, uno en el medio", \
+      "%d placed (click on the plane; right click removes). With none, one in the middle") \
+    X(CutPinName, "pasador", "pin") \
+    X(CutConnectorsMoved, "Los conectores pasaron a la otra mitad para que apoye plana", \
+      "The connectors went to the other half so that it lies flat") \
+    X(ColorSought, "Color buscado", "Colour sought") \
+    X(FindBlend, "Buscar la mezcla", "Find the blend") \
+    X(ColorNotReached, "Ese color no se alcanza con estos filamentos", "That colour cannot be reached with these filaments") \
+    X(MatchBest, "Elegida: %s (distancia %.1f)", "Chosen: %s (distance %.1f)") \
+    X(MatchRecommended, "Recomendación: %s (distancia %.1f)", "Recommendation: %s (distance %.1f)") \
+    X(QuickPalette, "Paleta rápida", "Quick palette") \
+    X(QuickPaletteSmall, "Ciclos de hasta 2 capas", "Cycles of up to 2 layers") \
+    X(QuickPaletteLarge, "Ciclos de hasta 3 capas", "Cycles of up to 3 layers") \
+    X(QuickPaletteAdded, "%d muestras en la paleta; sus mezclas están en la lista", "%d samples in the palette; their blends are in the list") \
+    X(TransmissionRow, "Distancia de transmisión (TD)", "Transmission distance (TD)") \
+    X(TransmissionTip, "El espesor en el que el filamento deja pasar casi nada de luz; 0: desconocida. Por encima de 10 mm se ve lo de adentro y no se purga en su relleno", \
+      "The thickness through which the filament lets almost no light pass; 0: unknown. Above 10 mm what is inside shows, so no purge into its infill")
 
 #include <cstdarg>
 #include <optional>

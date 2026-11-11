@@ -13040,3 +13040,43 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `height_a`, `height_b`; 3aff0cf de la otra sesión): con 0,3 y 0,15 mm el cubo da 44 cambios, no 49 (guion).
 - **Sigue:** selector `mixing.predictor` y la pestaña «Color buscado» cuando el motor los suba; selección múltiple y
   barra de vista abajo al centro.
+
+## 2026-11-11 — interfaz: las tarjetas de la mezcla de colores y la predicción espectral
+
+- **Encontrado:** las tarjetas «Mezcla de colores: capas» y «…: dónde va» (de la otra sesión) no tenían filas en la
+  app: ningún ajuste `mixing.*` se podía cambiar desde el panel, ni `extrusion.transmission_distance`.
+- **Hecho:** sus filas (subcapas, alto por filamento, altura del ciclo, solo la superficie, paredes de más, purga en
+  el relleno, predicción del color) y la TD en «Flujo». El color de cada mezcla sale de un solo lugar
+  (`App::blend_color`): el mezclador simple o, con `mixing.predictor = "spectral"`, `mix_color_spectral` con la TD
+  de cada filamento; se recalcula con cada cambio de ajustes. Guion `mix_settings.txt` (campos con coma decimal, y
+  el color de la mezcla cambia al pasar a la predicción espectral con TD 3 mm).
+- **Después:** en el diálogo de mezclas, «Color buscado» (regla 4: la elegida y 3 recomendaciones con su distancia
+  CIEDE2000, aviso si no se alcanza; `match_color` con las TD de la predicción) y «Paleta rápida» (regla 22: ciclos
+  de hasta 2 o 3 capas; agrega a la lista las mezclas que faltan, con el nombre de su color). La lista muestra el
+  nombre de cada mezcla. Guion `mix_match.txt` (MX5, MX6, MX18).
+- **Visto y no arreglado:** al subir el número de filamentos, una mezcla ya creada puede quedar con el número de un
+  filamento nuevo (#3 con 4 filamentos); los nombres de color del motor mezclan mayúscula y minúscula inicial.
+- **Sigue:** la pieza de muestras (`palette_piece`, CM8) en la placa, el eje del degradé y
+  `MixChangeOptions::extent` cuando llegue a209135; después selección múltiple y barra de vista.
+
+## 2026-11-11 — interfaz: conectores del corte (model_tools.md, regla 18)
+
+- **Hecho:** la herramienta Cortar tiene «Conectores»: espiga fija o pasador, redondo o cuadrado, tamaño,
+  profundidad y tolerancia; un clic sobre el plano del corte pone uno, el clic derecho saca el más cercano; sin
+  ninguno, uno en el medio de la sección. La espiga se suma a la mitad de abajo (o a la de arriba con «Invertir
+  plano», que se da vuelta para que apunte hacia arriba) y el hueco del otro lado es un volumen negativo, más ancho y
+  más hondo por la tolerancia; el pasador hace el hueco en las dos y sale como un modelo aparte de doble largo. La
+  mitad que lleva la espiga no se da vuelta aunque se pida. Órdenes de guion: `cut`, `expect-model`.
+- **Pruebas:** `cut_connectors.txt` (MT22: mitad de 8 mm con la espiga, hueco de 4,2 × 3,1 mm) y `cut_pin.txt`
+  (MT23 y la espiga invertida). No laminado con los conectores ni impreso: «not tested on hardware».
+- **Sigue:** plano libre, encastre a presión, cola de milano, base hexagonal, el resultado en dos partes (MT24).
+
+## 2026-11-11 — interfaz: el número de una mezcla sigue a los filamentos (MX30)
+
+- **Hecho** (respuesta de fichas, spec/next, `color_mixing_plus.md` «Número de una mezcla»): al cambiar la cantidad
+  de filamentos, las mezclas se renumeran después de ellos (de 2 a 4, la #3 pasa a #5) y los modelos y su pintura de
+  color las siguen; una mezcla que usa un filamento que ya no está queda apagada, sus modelos van con el filamento 1 y
+  un aviso lo dice. Los ajustes propios de una parte que nombren una mezcla todavía no se renumeran.
+- **Pruebas:** `mix_numbers.txt`. Orden de guion nueva: `expect-extruder`.
+- **CI local:** el de 7af18c8 corre en segundo plano; el tramo de gcc quedó mezclado con una compilación mía y no
+  cuenta; clang y ASan cubren este commit.
