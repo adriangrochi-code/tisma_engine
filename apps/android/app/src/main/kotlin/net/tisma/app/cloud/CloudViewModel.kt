@@ -416,13 +416,17 @@ class CloudViewModel(
     }
 
     /** Runs the blocking [block] off the main thread; [onDone] runs on the main thread if it did not fail. */
+    /** How many requests are running: busy stays on until the last one ends, not the first. */
+    private val running = java.util.concurrent.atomic.AtomicInteger()
+
     private fun launchRequest(quiet: Boolean = false, onDone: (() -> Unit)? = null, block: () -> Unit) =
         viewModelScope.launch {
+            running.incrementAndGet()
             _state.update { it.copy(busy = true) }
             val ok = try {
                 request(quiet) { block(); true } ?: false
             } finally {
-                _state.update { it.copy(busy = false) }
+                if (running.decrementAndGet() == 0) _state.update { it.copy(busy = false) }
             }
             if (ok) onDone?.invoke()
         }

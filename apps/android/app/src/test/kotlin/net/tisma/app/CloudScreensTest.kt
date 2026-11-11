@@ -152,6 +152,22 @@ class CloudScreensTest {
     }
 
     @Test
+    fun `busy stays on while any request still runs`() {
+        val v = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+        v.signIn("ana@example.com", "password1")
+        waitState { v.state.value.signedIn && !v.state.value.busy }
+        val release = java.util.concurrent.CountDownLatch(1)
+        v.saveResult("slow", "slow.gcode") { release.await(); null }
+        waitState { v.state.value.busy }
+        v.saveResult("quick", "quick.gcode") { null }
+        waitState { v.state.value.notice != null }
+        repeat(20) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+        assertTrue(v.state.value.busy, "the slow request is still running")
+        release.countDown()
+        waitState { !v.state.value.busy }
+    }
+
+    @Test
     fun `MA10 a cloud slice opens in the preview`() {
         compose.runOnIdle { vm.signIn("ana@example.com", "password1") }
         waitState { vm.state.value.signedIn }
