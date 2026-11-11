@@ -125,6 +125,11 @@ De cada mezcla (en el proyecto, junto a los datos de `color_mixing.md`):
       altura y las franjas se notan menos;
     - con `sub_first_layer` en `no`, la primera capa no se divide; con `sub_infill` en `no`, el relleno de la zona
       tampoco (va con el filamento de la última subcapa).
+    - (11-11-2026, decisión de diseño aceptada) una pasada por filamento, con su parte del alto (2 : 1 en 0,3 mm:
+      0,2 y 0,1), no una por paso del ciclo; el degradado sigue su ciclo capa a capa; si la parte de un filamento queda
+      por debajo de `sub_min_height`, esa capa no se divide y va con el filamento del ciclo, como sin `subdivide`;
+    - las subcapas van de abajo hacia arriba, con un cambio de filamento por capa: la capa siguiente empieza con el
+      filamento con que terminó la anterior.
 11. **Subcapas con varias zonas:** dos zonas con mezcla en la misma capa pueden tener subcapas distintas; cada una
     termina exactamente en la altura de la capa, para que la capa siguiente empiece pareja.
 12. **Costo de las subcapas:** cada subcapa es un cambio de filamento más. El programa lo cuenta en la estimación y
