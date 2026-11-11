@@ -93,6 +93,10 @@ de abajo.
 
 ### Torre de purga
 
+8 quater. **Temperatura de espera del filamento:** `filament.idle_temperature` (°C, 0 = no se usa): con
+   `extruders.ooze_prevention` apagado, una herramienta que deja de imprimir baja a esa temperatura hasta que vuelve a
+   usarse, y antes de volver se calienta y espera a la de impresión (como PrusaSlicer). Con la prevención de goteo
+   prendida manda la regla de esa prevención (prueba ME15).
 8 ter. **Extrusor que la impresora no tiene:** si un ajuste de extrusor (`extruders.walls`, `extruders.infill`,
    `extruders.solid_infill`, `extruders.support`, `extruders.support_interface`, la torre de purga) pide un número
    mayor que `machine.extruders`, se usa el extrusor 1 y se lamina igual, con un aviso «El perfil pide el extrusor N:
@@ -171,3 +175,4 @@ de 0,2, 2 perímetros, sin relleno, sin falda ni borde, centro en (100, 100)), d
 | ME12 | Voladizo de `supports_skirt.md` | `support.synchronize_layers` con `support.z_gap` 0; `machine.max_layer_height` 0,25 | Sin sincronizar: 70 capas (soporte en Z 0,49, 0,8, 1,08…). Sincronizado: 50 capas, soporte en Z 0,2, 0,4, 0,6… Altura máxima 0,25: capas del soporte de 0,247 (sin el ajuste, 0,296) |
 | ME13 | Dos boquillas, filamentos PLA 210 y PETG 240, una pieza de cada uno | `M104`/`M109` del extrusor 1 a 240 antes de su primera extrusión; ninguna extrusión con su boquilla en 0 |
 | ME14 | Cubo con voladizo, una boquilla | `extruders.support` 5, `extruders.support_interface` 5 | Lamina; soporte e interfaz con T0; aviso de extrusor que no existe |
+| ME15 | Dos boquillas, una pieza de cada una alternando capas; PLA 215 con `filament.idle_temperature` 170 | sin prevención de goteo | Al dejar la herramienta, `M104 T… S170`; antes de volver a ella, `M109 T… S215` |
