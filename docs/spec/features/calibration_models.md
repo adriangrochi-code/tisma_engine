@@ -22,6 +22,17 @@ cargan de archivos.
    - dígitos de siete segmentos, con trazos de 0,8 mm (dos líneas de una boquilla de 0,4) y 0,6 mm de relieve;
    - cada dígito mide de ancho `max(2,2; 0,55 · alto)` mm, con 0,8 mm entre dígitos.
 
+- **Paleta de mezclas** (`color_mixing_plus.md`, regla 22; diseño propio, 11-11-2026):
+  - una base de 1 mm de alto con el filamento 1, y encima una muestra por mezcla de la paleta rápida (10 o 26), en el
+    orden de la lista: de adelante a la izquierda, a lo largo de X, en filas de 5 hacia atrás (10 → 2 filas; 26 → 6
+    filas, la última con una);
+  - cada muestra es un cuadrado de 15 × 15 mm y 2 mm de alto sobre la base, impreso con su mezcla, con 3 mm entre
+    muestras y 3 mm de borde de base alrededor; 2 mm alcanza para 10 capas de 0,2, varios ciclos de 2 y 3 capas;
+  - delante de cada muestra, sobre la base, su número (1 a 26) en relieve como en la regla 6, de 4 mm de alto y con
+    el filamento 1; el nombre del color (en el idioma de la interfaz) va en la lista que muestra el programa junto al
+    número, no en la pieza (los dígitos de siete segmentos no escriben letras);
+  - la cara de arriba de cada muestra es la que se fotografía para corregir el color (regla 22).
+
 La pieza de prueba general, con todo junto y mecanismos, es Mabel: `quality_model.md`.
 
 ## Pruebas por franjas (torres)
@@ -124,3 +135,4 @@ El ancho es el de cada parche más su separación; la pieza ocupa el ancho menos
 | CM5 | Paso 0 | No se genera la pieza: «el paso y su alto tienen que ser mayores que 0» |
 | CM6 | Caudal máximo con `machine.max_flow` 20 | De 10 a 30 mm³/s, de a 2, franjas de 2 mm (11 franjas) |
 | CM7 | Caudal máximo sin `machine.max_flow` | De 5 a 25 mm³/s, de a 1, franjas de 2 mm |
+| CM8 | Paleta rápida de 10 con 4 filamentos | Base de 87 × 39 mm y 1 mm (5 columnas, 2 filas); 10 cuadrados de 15 × 15 × 2 mm, cada uno con su mezcla; números 1 a 10 adelante de cada uno, con el filamento 1; la lista del programa da el nombre de cada número |
