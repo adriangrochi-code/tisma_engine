@@ -829,6 +829,18 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
                     (std::abs(settings.mix_step - settings.layer_height) > 1e-9 || variable_layers(settings))
                 ? settings.mix_step
                 : 0.0;
+        if (step > 0.0 && !settings.mix_subdivide && !mix.gradient) {
+            double thinnest = std::numeric_limits<double>::infinity();
+            for (std::size_t l = 0; l < model.layers.size(); ++l)
+                if (present[l])
+                    thinnest = std::min(thinnest, model.layers[l].top - model.layers[l].bottom);
+            // A step finer than every layer skips elements of the cycle: the
+            // colour can come out of fewer filaments (rule 9).
+            static const std::string finer =
+                "mixing.step is finer than the layers without mixing.subdivide: some of a blend's filaments may not print";
+            if (step < thinnest - 1e-9 && std::find(model.notices.begin(), model.notices.end(), finer) == model.notices.end())
+                model.notices.push_back(finer);
+        }
         const std::vector<int> filament = mix_layers(mix, model.layers, present, step);
         int last = 0;
         std::size_t passes = 0;

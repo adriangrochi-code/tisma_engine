@@ -12723,6 +12723,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Búsqueda profunda (05:15): mezclas nuevas combinadas.** Probé sesgo con solo la superficie, paredes de más con
+  alto por filamento, solo la superficie con subcapas, un degradé con paso y subcapas, sesgo con paso y subcapas, y
+  sesgo con jarrón. El G-code pasa el control en todos. Hallazgo: `mixing.step` más fino que las capas y sin
+  subcapas (paso 0,05 con capas de 0,2) imprime la mezcla 1 : 1 toda con el filamento 1, sin ningún cambio, porque
+  cada centro cae en un elemento par del ciclo. Es la fórmula de la regla 9, así que no la cambio: ahora se avisa.
+  Prueba `[mixing]`, que falla sin el aviso. Consultado a la sesión de especificaciones. CI local con ASan en
+  ba84a92: EXIT 0.
 - **Full Spectrum, regla 37: purga según los colores** (2026-11-11, bloque nocturno; MX25). `purge_from_colors` y
   `purge_table` en `src/slice/color_mix.*`: CIELAB (D65) de cada color, 60 mm³ + 1,6 por punto de L* que se gana +
   0,6 por punto de a*b*, hasta 300 (diseño propio). Negro a blanco 220, blanco a negro 60, el mismo color 0. El motor
