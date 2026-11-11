@@ -12750,7 +12750,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   (desde 200, por el contorno del objeto: la envolvente de sus partes juntas, por objeto y copia) y el degradé se aplica
   a cada uno aparte; las partes de un objeto lo comparten. En secuencial ya iba por objeto. Prueba `[mixing]`: dos
   cubos de 20 mm con un degradé en X: cada uno va de 1 a la izquierda a 2 a la derecha (sin el arreglo, 84 contra 648
-  en el borde derecho del primero); ningún número temporal queda; G-code verificado.
+  en el borde derecho del primero); ningún número temporal queda; G-code verificado. Búsqueda profunda: un objeto dentro del contorno de otro (un cubo en el
+  medio de un marco) tomaba el degradé del marco; ahora cada punto va al contorno más chico que lo contiene (prueba:
+  el cubo con sus dos franjas, 3 : 7 y 7 : 3, en vez de casi mitad y mitad).
 - **Full Spectrum, regla 3: degradé entre dos puntos (MX31)** (2026-11-11). `ColorMix::from`/`to` (`"from"`, `"to"` en
   el JSON, en mm de la pieza: X e Y desde el centro de lo que imprime con la mezcla, con el medio ancho de los cordones;
   Z desde su primera capa). `gradient_between` en `apply_mixes`: la proporción es la proyección sobre la recta, recortada

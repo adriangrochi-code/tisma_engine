@@ -1494,3 +1494,32 @@ TEST_CASE("color mixing plus: two points nearly vertical make a gradient in Z wh
     CHECK(mix_changes_estimate(along, 10.0, o) == mix_changes_estimate(x, 10.0, o));
     CHECK(mix_changes_estimate(along, 10.0, o) == changes(gcode_of(sliced(box(3), s, {along}), s)));
 }
+
+TEST_CASE("color mixing plus: an object inside another one's outline keeps its own gradient (MX32)", "[mixing]") {
+    // A square frame 60 mm wide (four bars, one object) and a 10 mm cube in
+    // its middle (another object), one gradient in X: the cube 1 to 2 on its own.
+    Plate p;
+    add_box(p.mesh, 70, 70, 0, 130, 75, 10);
+    add_box(p.mesh, 70, 125, 0, 130, 130, 10);
+    add_box(p.mesh, 70, 75, 0, 75, 125, 10);
+    add_box(p.mesh, 125, 75, 0, 130, 125, 10);
+    add_box(p.mesh, 95, 95, 0, 105, 105, 10);
+    p.objects = {{"frame", 0, 48, 0, 0, 3}, {"cube", 48, 12, 1, 0, 3}};
+    Settings s = base();
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.axis = 'x';
+    const SlicedModel model = sliced(p, s, {g});
+    const auto count = [&](double x0, double x1, int tool) {
+        int n = 0;
+        for (const LayerWalls& w : model.walls)
+            for (const Toolpath& t : w.toolpaths)
+                for (const ToolpathPoint& q : t.points)
+                    n += q.p.x > x0 && q.p.x < x1 && q.p.y > 94 && q.p.y < 106 && t.tool == tool;
+        return n;
+    };
+    // A 10 mm cube has two bands, 3 : 7 and 7 : 3 (by 10 %); with the
+    // frame's gradient its middle was nearly half and half (180 and 120).
+    CHECK(count(95, 96.5, 1) > 2 * count(95, 96.5, 2));
+    CHECK(count(103.5, 105, 2) > 2 * count(103.5, 105, 1));
+}

@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <map>
+#include <numeric>
 #include <cstdio>
 #include <cmath>
 #include <limits>
@@ -1007,6 +1008,13 @@ std::vector<ColorMix> gradients_by_object(SlicedModel& model, const std::vector<
         return mixes;
     std::vector<ColorMix> out;
     int next = 200;
+    // The smallest outline round a point first: an object in the middle of
+    // another one (a cube inside a frame) is inside both convex outlines.
+    std::vector<std::size_t> by_area(outlines.size());
+    std::iota(by_area.begin(), by_area.end(), std::size_t(0));
+    std::stable_sort(by_area.begin(), by_area.end(), [&](std::size_t a, std::size_t b) {
+        return std::abs(Clipper2Lib::Area(outlines[a])) < std::abs(Clipper2Lib::Area(outlines[b]));
+    });
     for (const ColorMix& m : mixes) {
         out.push_back(m); // what falls in no outline keeps the blend's own number
         if (!m.gradient || next + int(outlines.size()) > 255)
@@ -1020,7 +1028,7 @@ std::vector<ColorMix> gradients_by_object(SlicedModel& model, const std::vector<
                     continue;
                 const Point2d& q = t.points[t.points.size() / 2].p;
                 const Clipper2Lib::Point64 at{to_units(q.x), to_units(q.y)};
-                for (std::size_t k = 0; k < outlines.size(); ++k)
+                for (const std::size_t k : by_area)
                     if (Clipper2Lib::PointInPolygon(at, outlines[k]) != Clipper2Lib::PointInPolygonResult::IsOutside) {
                         t.tool = std::uint8_t(first + int(k));
                         used[k] = 1;
