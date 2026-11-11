@@ -727,7 +727,7 @@ material.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `max_region_width` | número | 0 | 0 a 1000 | Ancho máximo de una región pintada de un color, en mm; 0: sin límite (regla 18): se lee y se guarda; el motor todavía no lamina los colores pintados |
+| `max_region_width` | número | 0 | 0 a 1000 | Ancho máximo de una región pintada de un color, en mm; 0: sin límite (regla 18). Cada punto de la capa toma el color de la cara más cercana, hasta este ancho adentro; las capas sólidas de arriba y abajo de un techo o piso pintado, también |
 | `interlocking_depth` | número | 0 | 0 a 1000 | Entrelazado entre regiones pintadas, en mm (regla 18): se lee y se guarda |
 
 ### `mmu`

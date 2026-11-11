@@ -13304,4 +13304,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Después** (pedido de fichas, 16:16): «Abrir un archivo» es un botón grande del acento en el medio de la placa
   vacía, con «o arrastrá un STL, un 3MF o un G-code acá» debajo; con algo elegido y más de un modelo, los no elegidos
   se ven un poco atenuados (al 80 %). Pasan los 203 `ui_`.
+- **Mantenimiento 2026-11-11 16:40** (con la sesión de interfaz trabajando en paralelo sobre `dev`, como acordó el dueño).
+  Revisado: `origin/main` sin nada nuevo; fuzz de G-code 2000 casos, semilla 1111202616: 0 fallas (23 no imprimibles);
+  `tools/ci_linux.sh` en b49decc: 1266/1267, la falla era de la vista (contorno de abaaed6) y la arregló la interfaz en
+  037c44e. Medido y mejorado: los colores pintados en un cubo de 200 × 200 × 20 mm (100 capas, una cara pintada) tardaban
+  2405 ms contra 7 ms sin pintar; las zonas crecían de a un ancho de línea hasta el centro. Ahora los primeros 8 pasos son
+  de un ancho y después 1,5 veces más largos cada uno, hasta 5 mm (adentro solo hay relleno), y el crecimiento para cuando
+  ya no crece ninguna zona pintada (la sin pintar no se usa): 300 ms (×8). Con `max_region_width` > 0, pasos de un ancho
+  como antes. Arreglado en la búsqueda de la tarde: bordes pintados (69005b6, b0bc7e4, 3f6744b). `CONFIG.md`
+  `max_region_width` ya no dice que el motor no lamina los colores pintados.
 

@@ -166,8 +166,6 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
     }
     if (bands.empty())
         return out;
-    const std::size_t steps =
-        depth > 0.0 ? std::size_t(std::ceil(depth / step)) : std::numeric_limits<std::size_t>::max();
     tbb::parallel_for(std::size_t(0), std::min(layers.size(), regions.size()), [&](std::size_t l) {
         const Polygons& region = regions[l];
         if (region.empty())
@@ -192,15 +190,23 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
         const Polygons ring = Clipper2Lib::Difference(region, offset(region, -step), Clipper2Lib::FillRule::NonZero);
         zone.insert(zone.begin(), Clipper2Lib::Difference(ring, painted, Clipper2Lib::FillRule::NonZero));
         Polygons taken = Clipper2Lib::Union(zone.front(), painted, Clipper2Lib::FillRule::NonZero);
-        // Grown all together, a step at a time, each over what is not taken yet.
+        // Grown all together, a step at a time, each over what is not taken
+        // yet. The first steps, where the walls and the skin are, a line
+        // width each; deeper in, where only the infill is, longer ones (up to
+        // 5 mm). The unpainted zone is not kept: once no painted one grows,
+        // the rest is the part's own.
         std::vector<Polygons> front = zone;
-        for (std::size_t s = 0; s < steps; ++s) {
-            bool grew = false;
+        double reached = 0.0, grow = step;
+        for (std::size_t s = 0; depth > 0.0 ? reached < depth - 1e-9 : true; ++s) {
+            if (depth <= 0.0 && s >= 8)
+                grow = std::min(grow * 1.5, std::max(step, 5.0));
+            reached += grow;
+            bool grew = false, painted_grew = false;
             Polygons now = taken;
             for (std::size_t k = 0; k < zone.size(); ++k) {
                 if (front[k].empty())
                     continue;
-                Polygons more = Clipper2Lib::Intersect(offset(front[k], step), region, Clipper2Lib::FillRule::NonZero);
+                Polygons more = Clipper2Lib::Intersect(offset(front[k], grow), region, Clipper2Lib::FillRule::NonZero);
                 more = Clipper2Lib::Difference(more, taken, Clipper2Lib::FillRule::NonZero);
                 more = Clipper2Lib::Difference(more, now, Clipper2Lib::FillRule::NonZero); // first label this step wins
                 if (more.empty() || std::abs(Clipper2Lib::Area(more)) < 1.0) {
@@ -211,9 +217,10 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
                 now = Clipper2Lib::Union(now, more, Clipper2Lib::FillRule::NonZero);
                 front[k] = std::move(more);
                 grew = true;
+                painted_grew = painted_grew || k > 0;
             }
             taken = std::move(now);
-            if (!grew)
+            if (!grew || !painted_grew)
                 break;
         }
         // Two steps thin or thinner there is no room for two filaments: a painted
