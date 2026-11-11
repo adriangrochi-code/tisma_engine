@@ -580,6 +580,38 @@ std::vector<Stroke> label_strokes(const std::string& text, double w, double h, d
     return out;
 }
 
+PalettePiece palette_piece(std::size_t count) {
+    constexpr double side = 15.0, gap = 3.0, edge = 3.0, base_height = 1.0, sample_height = 2.0;
+    constexpr double number_gap = 1.0, number_height = 4.0, stroke = 0.8, relief = 0.6, digit_gap = 0.8;
+    constexpr std::size_t per_row = 5;
+    PalettePiece out;
+    if (count == 0)
+        return out;
+    const std::size_t columns = std::min(count, per_row), rows = (count + per_row - 1) / per_row;
+    const double row_depth = number_height + number_gap + side;
+    out.width = 2.0 * edge + double(columns) * side + double(columns - 1) * gap;
+    out.depth = 2.0 * edge + double(rows) * row_depth + double(rows - 1) * gap;
+    const double ox = -out.width / 2.0, oy = -out.depth / 2.0;
+    add_box(out.base, ox, oy, 0.0, ox + out.width, oy + out.depth, base_height);
+    const double digit = std::max(2.2, 0.55 * number_height); // rule 6
+    for (std::size_t k = 0; k < count; ++k) {
+        const double x = ox + edge + double(k % per_row) * (side + gap);
+        const double y = oy + edge + double(k / per_row) * (row_depth + gap);
+        TriangleMesh sample;
+        add_box(sample, x, y + number_height + number_gap, base_height, x + side, y + row_depth, base_height + sample_height);
+        out.samples.push_back(std::move(sample));
+        // The number, centred under its sample, read from the front; its
+        // strokes start 0.2 mm inside the base so they are one solid with it.
+        const std::string text = std::to_string(k + 1);
+        const double length = double(text.size()) * digit + double(text.size() - 1) * digit_gap;
+        const double x0 = x + (side - length) / 2.0, y0 = y;
+        for (const Stroke& s : label_strokes(text, digit - stroke, number_height - stroke, digit_gap + stroke))
+            add_box(out.base, x0 + std::min(s.x0, s.x1), y0 + std::min(s.y0, s.y1), base_height - 0.2,
+                    x0 + std::max(s.x0, s.x1) + stroke, y0 + std::max(s.y0, s.y1) + stroke, base_height + relief);
+    }
+    return out;
+}
+
 void add_label(TriangleMesh& mesh, const std::string& text, double x, double z, double face_y, bool towards_minus_y,
                double height, double stroke, double depth) {
     const double width = height * 0.55;

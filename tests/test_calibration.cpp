@@ -771,3 +771,33 @@ TEST_CASE("calibration: bridges and overhangs (docs/CALIBRATION.md)", "[calibrat
     CHECK_FALSE(test.arcs);
     CHECK(calibration_print_settings(CalibrationKind::Flow, supported).support);
 }
+
+TEST_CASE("blend palette: base, samples and numbers (calibration_models.md, CM8)", "[calibration][mixing]") {
+    using Catch::Matchers::WithinAbs;
+    const PalettePiece ten = palette_piece(10);
+    // 5 columns and 2 rows: 3 + 5 x 15 + 4 x 3 + 3 wide; 3 + 2 x 20 + 3 + 3 deep.
+    CHECK_THAT(ten.width, WithinAbs(93.0, 1e-9));
+    CHECK_THAT(ten.depth, WithinAbs(49.0, 1e-9));
+    REQUIRE(ten.samples.size() == 10);
+    const BoundingBox base = ten.base.bounding_box();
+    CHECK_THAT(base.min.x, WithinAbs(-46.5, 1e-4));
+    CHECK_THAT(base.max.y, WithinAbs(24.5, 1e-4));
+    CHECK_THAT(base.min.z, WithinAbs(0.0, 1e-6));
+    CHECK_THAT(base.max.z, WithinAbs(1.6, 1e-4)); // the numbers stand 0.6 mm out
+    // The first sample at the front left, 3 mm in, past its number (4 + 1 mm).
+    const BoundingBox first = ten.samples[0].bounding_box();
+    CHECK_THAT(first.min.x, WithinAbs(-43.5, 1e-4));
+    CHECK_THAT(first.min.y, WithinAbs(-24.5 + 3.0 + 5.0, 1e-4));
+    CHECK_THAT(first.max.x - first.min.x, WithinAbs(15.0, 1e-4));
+    CHECK_THAT(first.max.y - first.min.y, WithinAbs(15.0, 1e-4));
+    CHECK_THAT(first.min.z, WithinAbs(1.0, 1e-6));
+    CHECK_THAT(first.max.z, WithinAbs(3.0, 1e-6));
+    // Along X, then the next row towards the back.
+    CHECK_THAT(ten.samples[1].bounding_box().min.x - first.min.x, WithinAbs(18.0, 1e-4));
+    CHECK_THAT(ten.samples[5].bounding_box().min.y - first.min.y, WithinAbs(23.0, 1e-4));
+    // 26: 6 rows, the last with one.
+    const PalettePiece all = palette_piece(26);
+    CHECK(all.samples.size() == 26);
+    CHECK_THAT(all.depth, WithinAbs(3.0 + 6 * 20.0 + 5 * 3.0 + 3.0, 1e-9));
+    CHECK(palette_piece(0).samples.empty());
+}

@@ -12728,6 +12728,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
+- **Paleta de mezclas (pieza, CM8)** (2026-11-11, bloque nocturno; `calibration_models.md` de spec/next, «Piezas
+  para medir»; `color_mixing_plus.md` regla 22). `palette_piece(n)` en `src/calibration/calibration.*`: base de 1 mm
+  (filamento 1) con los números 1 a n en relieve de 4 mm (regla 6, 0,6 mm de relieve) y una muestra de 15 × 15 × 2 mm
+  por mezcla, en filas de 5 desde adelante a la izquierda, 3 mm entre muestras y de borde; centrada en el origen.
+  Prueba `[calibration]` CM8: 93 × 49 mm con 10, posiciones de la primera, la segunda y la sexta, 6 filas con 26.
+  Falta (interfaz): cargarla en la placa con `quick_palette` (cada muestra una parte con su mezcla) y la lista de
+  nombres junto a los números; laminarla entera no se probó.
 - **Búsqueda profunda: el estimado de cambios ignoraba `mixing.step`** (2026-11-11, reglas 9 y 12). Con capas de
   0,2 mm y paso 0,4 el estimado decía 49 cambios en un cubo de 10 mm y el laminado hace 24 (16 con paso 0,6).
   `MixChangeOptions::step` y el estimado toma el paso como el laminado: apagado a la altura de capa, por capa si es más
