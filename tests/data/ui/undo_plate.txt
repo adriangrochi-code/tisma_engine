@@ -1,0 +1,31 @@
+# Undo of the plate's changes (model_tools.md, rule 29: MT31): paint, cut and
+# move are steps; Ctrl+Z three times gives back the whole model, unpainted,
+# in its place, and Ctrl+Y does them again.
+wait 3
+menu tool_paint
+paint-drag 772 400 818 420
+expect-paint-area 35
+menu tool_paint
+cut 4
+expect-models 2
+key m
+wait 2
+drag-control gizmo_move_x 60 0
+key ctrl+z
+wait 3
+expect-models 2
+key ctrl+z
+wait 3
+expect-models 1
+expect-model 0 10
+expect-paint-area 35
+key ctrl+z
+wait 3
+expect-models 1
+expect-paint-area 0 0
+key ctrl+y
+wait 3
+expect-paint-area 35
+key ctrl+y
+wait 3
+expect-models 2

@@ -714,6 +714,9 @@
     X(PaintFuzzy, "Piel difusa", "Fuzzy skin")                                                                        \
     X(PaintColors, "Colores", "Colors")                                                                               \
     X(PaintLater, "Llega cuando el motor tenga varios extrusores", "Comes when the engine has several extruders")   \
+    X(BrushRound, "Pincel", "Brush") \
+    X(BrushSmartFill, "Relleno inteligente", "Smart fill") \
+    X(SmartFillAngle, "Ángulo", "Angle") \
     X(PaintColorsNeedTwo, "Con más de un filamento o con mezclas de colores", "With more than one filament or with colour blends") \
     X(PaintEnforce, "Forzar", "Enforce")                                                                              \
     X(PaintBlock, "Bloquear", "Block")                                                                                \

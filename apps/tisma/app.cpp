@@ -932,7 +932,24 @@ private:
     // CAD navigation (interface.md, «Navegación de la vista 3D»).
     std::optional<ImVec2> screen_of(Vec3 p) const;
     Vec3 orbit_pivot_at(ImVec2 m);
-    void box_select(ImVec2 a, ImVec2 b);
+    void box_select(ImVec2 a, ImVec2 b, bool add = false);
+    // The other models chosen with the one in selected_ (interface.md,
+    // «Navegación», rule 1: Ctrl or Shift add; the rectangle chooses all it
+    // takes), and their outline over the view.
+    std::vector<int> also_selected_;
+    bool is_selected(int i) const {
+        return i == selected_ || std::find(also_selected_.begin(), also_selected_.end(), i) != also_selected_.end();
+    }
+    std::vector<int> all_selected() const;
+    void selection_outline();
+    struct Silhouette { // a model's edges with the faces on their two sides
+        std::size_t version = 0;
+        std::vector<Vec3f> points;
+        std::vector<std::array<std::uint32_t, 4>> edges; // two points, two faces (the same twice on an open edge)
+        std::vector<Vec3f> normals, centres;              // of each face
+    };
+    std::map<int, Silhouette> silhouettes_;
+    static constexpr std::uint32_t kNoFace = 0xFFFFFFFFu;
     void view_cube();
     void turn_view_to(float yaw, float pitch, bool frame);
     void home_view();
@@ -1266,6 +1283,11 @@ private:
     // how wide; the model a stroke started on; where the brush is now.
     PaintChannel paint_channel_ = PaintChannel::Support;
     std::uint8_t paint_mark_ = kPaintEnforce;
+    // The smart fill (model_tools.md, rule 27; MT30): a click paints the
+    // neighbouring faces while the bend between them stays under the angle.
+    bool smart_fill_ = false;
+    float smart_angle_ = 30.0f;
+    void smart_fill(std::size_t object, std::size_t triangle);
     float brush_radius_ = 2.0f;
     int painting_object_ = -1;
     bool painted_ = false;     // the stroke changed something
@@ -1409,10 +1431,16 @@ private:
     // Undo and redo of where the models are (Ctrl+Z, Ctrl+Y; the spec team's
     // UI45): each step is a model's placement before a drag or an edit, kept
     // while the plate has the same models.
+    // A step may instead hold the whole plate before a cut, a split, a
+    // mirror, a deletion or a stroke of paint (model_tools.md, rule 29: MT31).
     struct PlaceStep {
         std::size_t object = 0, count = 0; // which model, of how many on the plate
         Placement place;
+        std::shared_ptr<const std::vector<PlateObject>> plate{};
+        int selected = -1;
     };
+    void remember_plate();
+    bool paint_step_ = false; // the stroke under way has its step
     std::vector<PlaceStep> place_undo_, place_redo_;
     Placement press_place_;    // the pressed model's placement when the bed drag began
     bool card_editing_ = false; // the tool card's edit already has its undo step
@@ -1775,6 +1803,7 @@ private:
     // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
     // the first-use tip on screen, the tips already seen and whether they show.
     int tour_step_ = -1;
+    std::string tour_pointed_; // the anchor the assistant's step outlined last
     std::string tip_;
     std::set<std::string> tips_seen_;
     bool tips_ = true;
@@ -4543,6 +4572,7 @@ TriangleMesh App::plate_now() const {
 // A model was moved, turned, scaled, added or removed: the slice and the
 // analysis are out of date.
 void App::plate_changed() {
+    std::erase_if(also_selected_, [&](int i) { return i < 0 || i >= int(objects_.size()) || i == selected_; });
     ++revision_.model;
     if (result_ && !viewer_)
         stale_ = true;
@@ -4701,11 +4731,22 @@ Vec3 App::orbit_pivot_at(ImVec2 m) {
 // The rectangle of a left drag from an empty place (rule 1): left to right
 // chooses what is wholly inside, right to left also what it touches. The
 // plate keeps one chosen model for now: the nearest of those to the press.
-void App::box_select(ImVec2 a, ImVec2 b) {
+std::vector<int> App::all_selected() const {
+    std::vector<int> out;
+    if (selected_ >= 0 && selected_ < int(objects_.size()))
+        out.push_back(selected_);
+    for (const int i : also_selected_)
+        if (i >= 0 && i < int(objects_.size()) && i != selected_ && std::find(out.begin(), out.end(), i) == out.end())
+            out.push_back(i);
+    return out;
+}
+
+void App::box_select(ImVec2 a, ImVec2 b, bool add) {
     const ImVec2 lo(std::min(a.x, b.x), std::min(a.y, b.y)), hi(std::max(a.x, b.x), std::max(a.y, b.y));
     const bool touching = b.x < a.x;
     int best = -1;
     float best_d = 0.0f;
+    std::vector<int> taken;
     for (std::size_t i = 0; i < placed_meshes_.size() && i < objects_.size(); ++i) {
         if (placed_meshes_[i].empty())
             continue;
@@ -4729,10 +4770,20 @@ void App::box_select(ImVec2 a, ImVec2 b) {
         if (!(touching ? touches : inside))
             continue;
         const float d = std::hypot(0.5f * (s0.x + s1.x) - a.x, 0.5f * (s0.y + s1.y) - a.y);
+        taken.push_back(int(i));
         if (best < 0 || d < best_d)
             best = int(i), best_d = d;
     }
-    selected_ = best;
+    // All it takes; the nearest to where it started is the one the tools act on.
+    if (!add) {
+        selected_ = best;
+        also_selected_.clear();
+    } else if (best >= 0 && selected_ < 0) {
+        selected_ = best;
+    }
+    for (const int i : taken)
+        if (!is_selected(i))
+            also_selected_.push_back(i);
 }
 
 // Turns the view to those angles in a short animation (the view cube, rule 2).
@@ -7234,6 +7285,7 @@ void App::top_bar() {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
+    anchor("open_button");
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     const bool more = icon_button("##more", "tisma_more", tr(T::More), button_h);
@@ -10758,11 +10810,18 @@ void App::viewport() {
         painting_object_ = -1;
         painted_ = false;
         if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
+            remember_plate(); // taken back below when the stroke paints nothing
+            paint_step_ = true;
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
             last_stroke_ = io.MousePos;
             last_dab_.reset();
-            brush_stroke(hit->object, io.MousePos);
+            if (smart_fill_) {
+                smart_fill(hit->object, hit->triangle);
+                painting_object_ = -1; // a fill, not a stroke
+            } else {
+                brush_stroke(hit->object, io.MousePos);
+            }
         }
     } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
                (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
@@ -10773,7 +10832,10 @@ void App::viewport() {
             ++revision_.model;
             if (result_ && !viewer_)
                 stale_ = true;
+        } else if (paint_step_ && !place_undo_.empty() && place_undo_.back().plate) {
+            place_undo_.pop_back();
         }
+        paint_step_ = false;
         painting_object_ = -1;
         painted_ = false;
     }
@@ -10833,7 +10895,26 @@ void App::viewport() {
         dragged_ = false;
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d)) {
-            selected_ = int(hit->object);
+            // Ctrl or Shift add a model, or take one already chosen away
+            // (interface.md, «Navegación», rule 1); a plain click on one not
+            // chosen chooses it alone.
+            const int h = int(hit->object);
+            if ((io.KeyCtrl || io.KeyShift) && tool_ != PlateTool::Measure) {
+                if (!is_selected(h)) {
+                    if (selected_ >= 0)
+                        also_selected_.push_back(selected_);
+                    selected_ = h;
+                } else if (h != selected_) {
+                    std::erase(also_selected_, h);
+                } else if (!also_selected_.empty()) {
+                    selected_ = also_selected_.back();
+                    also_selected_.pop_back();
+                }
+            } else {
+                if (!is_selected(h))
+                    also_selected_.clear();
+                selected_ = h;
+            }
             if (tool_ == PlateTool::Measure) {
                 // A face's plane, or with Shift its nearest vertex; another
                 // object starts again (rule 20: within one object).
@@ -10949,7 +11030,7 @@ void App::viewport() {
             }
         }
         if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            box_select(a, b);
+            box_select(a, b, io.KeyCtrl || io.KeyShift);
             box_selecting_ = false;
         }
     }
@@ -10961,7 +11042,7 @@ void App::viewport() {
         else if (pressed_object_ < 0 && !on_gizmo && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint && !box_selecting_ &&
                  ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
                  std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
-            selected_ = -1; // a click on the empty bed
+            selected_ = -1, also_selected_.clear(); // a click on the empty bed
         pressed_object_ = -1;
         dragged_ = false;
     }
@@ -12282,6 +12363,8 @@ void App::split_selected() {
         notify(tr(T::SplitOnePiece));
         return;
     }
+    remember_plate();
+    also_selected_.clear();
     std::vector<PlateObject> parts;
     for (std::size_t k = 0; k < pieces.size(); ++k) {
         PlateObject p{o.name + " (" + std::to_string(k + 1) + ")", std::move(pieces[k]), {}, {}};
@@ -12301,12 +12384,13 @@ void App::split_selected() {
 // each where it was. The paint and the Engineering data stay when the
 // triangles keep their order.
 void App::split_into_parts() {
-    PlateObject& o = objects_[std::size_t(selected_)];
-    std::vector<TriangleMesh> pieces = split_mesh(o.mesh);
+    std::vector<TriangleMesh> pieces = split_mesh(objects_[std::size_t(selected_)].mesh);
     if (pieces.size() < 2) {
         notify(tr(T::SplitOnePiece));
         return;
     }
+    remember_plate();
+    PlateObject& o = objects_[std::size_t(selected_)];
     TriangleMesh whole;
     std::vector<PlatePart> parts;
     for (std::size_t k = 0; k < pieces.size(); ++k) {
@@ -12325,6 +12409,7 @@ void App::split_into_parts() {
 }
 
 void App::mirror_selected(int axis) {
+    remember_plate();
     PlateObject& o = objects_[std::size_t(selected_)];
     const BoundingBox from = o.mesh.bounding_box();
     // Its modifiers and negative volumes go where the mirror puts them: the
@@ -12359,10 +12444,12 @@ void App::mirror_selected(int axis) {
 
 void App::cut_selected() {
     const std::size_t index = std::size_t(selected_);
-    const PlateObject& o = objects_[index];
-    CutResult halves = cut_mesh(placed_mesh(o), cut_height_);
+    CutResult halves = cut_mesh(placed_mesh(objects_[index]), cut_height_);
     if (halves.below.empty() || halves.above.empty())
         return;
+    remember_plate();
+    also_selected_.clear();
+    const PlateObject& o = objects_[index];
     // One object with two parts (rule 18: MT24): where they were, together,
     // each part able to take settings of its own; no connectors.
     if (cut_parts_) {
@@ -12502,6 +12589,88 @@ void App::cut_plane_overlay() {
             dl->AddCircleFilled(at, std::max(r, 3.0f * scale_), IM_COL32(255, 255, 255, 200));
             dl->AddCircle(at, std::max(r, 3.0f * scale_), ImGui::GetColorU32(rgb(theme_.accent)), 0, 2.0f * scale_);
         }
+    dl->PopClipRect();
+}
+
+// The chosen models' outline (interface.md, «Navegación», rule 1): 2 px of
+// the accent colour along each one's silhouette, the edges between a face
+// toward the eye and one away from it, and its open edges; fainter where
+// another part hides it (a ray to the edge's middle meets something first).
+// The edges and faces are kept until the plate changes.
+void App::selection_outline() {
+    const std::vector<int> chosen = all_selected();
+    if (chosen.empty() || tool_ == PlateTool::Paint)
+        return;
+    const Vec3 eye = camera_.eye();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const ImU32 bright = ImGui::GetColorU32(rgb(theme_.accent_hover)), faint = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.35f));
+    for (const int i : chosen) {
+        if (std::size_t(i) >= placed_meshes_.size())
+            continue;
+        const TriangleMesh& m = placed_meshes_[std::size_t(i)];
+        Silhouette& sil = silhouettes_[i];
+        if (sil.version != plate_version_ || sil.points.empty()) {
+            sil = {};
+            sil.version = plate_version_;
+            if (m.triangle_count() > 400000) { // too many to walk each frame: its box instead
+                const BoundingBox box = m.bounding_box();
+                for (int k = 0; k < 8; ++k)
+                    sil.points.push_back({k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z});
+                for (const auto& [p, q] : {std::pair{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}})
+                    sil.edges.push_back({std::uint32_t(p), std::uint32_t(q), kNoFace, kNoFace});
+            } else {
+                const IndexedMesh w = weld_exact(m);
+                sil.points = w.vertices;
+                std::map<std::pair<std::uint32_t, std::uint32_t>, std::size_t> seen;
+                for (std::size_t t = 0; t < w.triangles.size(); ++t) {
+                    const auto& tri = w.triangles[t];
+                    const Vec3f a = w.vertices[tri[0]], b = w.vertices[tri[1]], c = w.vertices[tri[2]];
+                    const Vec3f u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+                    sil.normals.push_back({u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x});
+                    sil.centres.push_back({(a.x + b.x + c.x) / 3.0f, (a.y + b.y + c.y) / 3.0f, (a.z + b.z + c.z) / 3.0f});
+                    for (int k = 0; k < 3; ++k) {
+                        const std::uint32_t p = tri[std::size_t(k)], q = tri[std::size_t((k + 1) % 3)];
+                        const auto key = std::minmax(p, q);
+                        if (const auto it = seen.find(key); it != seen.end())
+                            sil.edges[it->second][3] = std::uint32_t(t);
+                        else
+                            seen[key] = sil.edges.size(), sil.edges.push_back({p, q, std::uint32_t(t), std::uint32_t(t)});
+                    }
+                }
+            }
+        }
+        // The silhouette from where the eye is now.
+        const auto facing = [&](std::uint32_t f) {
+            const Vec3f& n = sil.normals[f];
+            const Vec3f& c = sil.centres[f];
+            return n.x * (eye.x - c.x) + n.y * (eye.y - c.y) + n.z * (eye.z - c.z) > 0.0f;
+        };
+        std::vector<std::array<std::uint32_t, 2>> lines;
+        for (const auto& e : sil.edges)
+            if (e[2] == kNoFace || e[2] == e[3] || facing(e[2]) != facing(e[3]))
+                lines.push_back({e[0], e[1]});
+        // A model being dragged is drawn shifted until it is placed again.
+        const Vec3 shift = dragged_ && i == pressed_object_ ? drag_offset_ : Vec3{};
+        const bool hidden_test = lines.size() <= 3000 && shift == Vec3{};
+        const auto& indexes = plate_indexes();
+        for (const auto& [p, q] : lines) {
+            const Vec3f a{sil.points[p].x + shift.x, sil.points[p].y + shift.y, sil.points[p].z + shift.z};
+            const Vec3f b{sil.points[q].x + shift.x, sil.points[q].y + shift.y, sil.points[q].z + shift.z};
+            const auto sa = screen_of({a.x, a.y, a.z}), sb = screen_of({b.x, b.y, b.z});
+            if (!sa || !sb)
+                continue;
+            bool hidden = false;
+            if (hidden_test) {
+                const Vec3 mid{0.5f * (a.x + b.x), 0.5f * (a.y + b.y), 0.5f * (a.z + b.z)};
+                const Vec3 to = mid - eye;
+                const float dist = length(to);
+                if (const auto hit = pick(placed_meshes_, indexes, eye, to * (1.0f / dist)))
+                    hidden = float(hit->distance) < dist - std::max(0.02f * dist, 0.2f);
+            }
+            dl->AddLine(*sa, *sb, hidden ? faint : bright, 2.0f * scale_);
+        }
+    }
     dl->PopClipRect();
 }
 
@@ -13463,11 +13632,25 @@ void App::paint_card(ImVec2 at) {
             paint_mark_ = kPaintBlock;
         swatch(theme_.paint_mark_block);
     }
-    ImGui::SetNextItemWidth(170.0f * scale_);
-    ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, field_text(tr(T::BrushSize), "%.1f mm", brush_radius_), ImGuiSliderFlags_Logarithmic);
+    // The brush or the smart fill (rule 27).
+    int shape = smart_fill_ ? 1 : 0;
+    ImGui::RadioButton(tr(T::BrushRound), &shape, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton(tr(T::BrushSmartFill), &shape, 1);
+    note_rect("smart_fill");
+    smart_fill_ = shape == 1;
+    if (smart_fill_) {
+        ImGui::SetNextItemWidth(170.0f * scale_);
+        ImGui::SliderFloat(tr(T::SmartFillAngle), &smart_angle_, 1.0f, 90.0f, field_text(tr(T::SmartFillAngle), "%.0f°", smart_angle_));
+    } else {
+        ImGui::SetNextItemWidth(170.0f * scale_);
+        ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, field_text(tr(T::BrushSize), "%.1f mm", brush_radius_),
+                           ImGuiSliderFlags_Logarithmic);
+    }
     const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
     ImGui::BeginDisabled(!chosen || objects_[std::size_t(std::max(selected_, 0))].painting.empty(paint_channel_));
     if (ImGui::Button(tr(T::PaintClear))) {
+        remember_plate();
         objects_[std::size_t(selected_)].painting.clear(paint_channel_);
         paint_dirty_ = true;
         ++revision_.model;
@@ -13488,6 +13671,17 @@ void App::paint_card(ImVec2 at) {
 // the one before (Brush::stroke), so a fast mouse on a slow computer still
 // leaves one line and not separate dots (the testers' UI37 and BH44, the
 // owner's video of 31-10-2026), with few dabs a frame.
+void App::smart_fill(std::size_t object, std::size_t triangle) {
+    PlateObject& o = objects_[object];
+    const std::uint8_t mark = ImGui::GetIO().KeyShift                ? kPaintNone
+                              : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
+                                                                      : paint_mark_;
+    for (const std::uint32_t t : face_region(o.mesh, std::uint32_t(triangle), double(smart_angle_)))
+        o.painting.set_tree(paint_channel_, t, mark == kPaintNone ? Painting::Tree{} : Painting::Tree{mark});
+    painted_ = true;
+    paint_dirty_ = true;
+}
+
 void App::brush_drag(std::size_t object) {
     const ImVec2 to = ImGui::GetIO().MousePos;
     const float dx = to.x - last_stroke_.x, dy = to.y - last_stroke_.y;
@@ -13687,21 +13881,24 @@ const std::map<std::string, TipText>& tip_texts() {
 // The welcome, the basic ideas with a drawing each (the owner's request,
 // 2026-10-29: someone who never used a slicer understands them), then how
 // to go from a model to a print.
+// Each step that names a part of the screen points at it (PLAN.md, «Ayuda,
+// lo que sigue»): the anchor it outlines, when that part is on screen.
 struct TourStep {
     T title, text;
     Picture picture = Picture::None;
+    const char* anchor = nullptr;
 };
 constexpr std::array<TourStep, 11> kTour = {{{T::Tour0Title, T::Tour0},
                                              {T::TourSliceTitle, T::TourSlice, Picture::Slicing},
                                              {T::TourLayersTitle, T::TourLayers, Picture::TopBottom},
                                              {T::TourSupportTitle, T::TourSupport, Picture::Support},
                                              {T::TourMaterialTitle, T::TourMaterial, Picture::NozzleTemp},
-                                             {T::Tour1Title, T::Tour1},
-                                             {T::Tour2Title, T::Tour2},
-                                             {T::Tour3Title, T::Tour3},
-                                             {T::Tour4Title, T::Tour4},
-                                             {T::Tour5Title, T::Tour5},
-                                             {T::Tour6Title, T::Tour6}}};
+                                             {T::Tour1Title, T::Tour1, Picture::None, "open_button"},
+                                             {T::Tour2Title, T::Tour2, Picture::None, "printer_selector"},
+                                             {T::Tour3Title, T::Tour3, Picture::None, "quick_settings"},
+                                             {T::Tour4Title, T::Tour4, Picture::None, "plate_tools"},
+                                             {T::Tour5Title, T::Tour5, Picture::None, "slice_button"},
+                                             {T::Tour6Title, T::Tour6, Picture::None, "send_button"}}};
 
 } // namespace
 
@@ -13743,6 +13940,16 @@ void App::help_windows() {
     const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
     if (!tour && tip_.empty())
         return;
+    // The part the step names, outlined over everything.
+    if (tour && kTour[std::size_t(tour_step_)].anchor)
+        if (const auto found = anchors_.find(kTour[std::size_t(tour_step_)].anchor); found != anchors_.end()) {
+            const float pad = 4.0f * scale_;
+            const ImVec2 a(found->second[0] - pad, found->second[1] - pad), b(found->second[2] + pad, found->second[3] + pad);
+            ImDrawList* dl = ImGui::GetForegroundDrawList();
+            dl->AddRect(a, b, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.35f)), 8.0f * scale_, 7.0f * scale_);
+            dl->AddRect(a, b, ImGui::GetColorU32(rgb(theme_.accent_hover)), 8.0f * scale_, 2.5f * scale_);
+            tour_pointed_ = found->first;
+        }
     const float width = (tour ? 500.0f : 420.0f) * scale_;
     // At the bottom of the view; in the preview, whose move slider and legend
     // are down there, at the top under the view's buttons.
@@ -18775,6 +18982,34 @@ void App::undo_engineering(bool redo) {
     structural_part_ = int(step.object);
 }
 
+// The plate as it is, before a change of its models or their paint.
+// Each copy holds every mesh: past 5 million triangles in all the steps
+// (some 180 MB), the oldest copies are let go.
+void App::remember_plate() {
+    place_undo_.push_back({0, objects_.size(), {}, std::make_shared<const std::vector<PlateObject>>(objects_), selected_});
+    if (place_undo_.size() > 100)
+        place_undo_.erase(place_undo_.begin());
+    place_redo_.clear();
+    const auto triangles = [](const PlaceStep& step) {
+        std::size_t n = 0;
+        if (step.plate)
+            for (const PlateObject& o : *step.plate)
+                n += o.mesh.triangle_count();
+        return n;
+    };
+    std::size_t total = 0;
+    for (const PlaceStep& step : place_undo_)
+        total += triangles(step);
+    for (auto it = place_undo_.begin(); total > 5000000 && it + 1 < place_undo_.end();) {
+        if (it->plate) {
+            total -= triangles(*it);
+            it = place_undo_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 // Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
 // Ctrl+Shift+Z) moves it again. Steps from a plate with other models are
 // dropped: their numbers no longer name the same models.
@@ -18783,6 +19018,14 @@ void App::undo_engineering(bool redo) {
 void App::delete_selected(bool keep_choice) {
     if (selected_ < 0 || selected_ >= int(objects_.size()))
         return;
+    remember_plate();
+    // Every model chosen, from the last so the numbers hold.
+    std::vector<int> gone = all_selected();
+    std::sort(gone.begin(), gone.end(), std::greater<>());
+    for (const int i : gone)
+        if (i != selected_)
+            objects_.erase(objects_.begin() + i), selected_ -= i < selected_;
+    also_selected_.clear();
     objects_.erase(objects_.begin() + selected_);
     selected_ = keep_choice && !objects_.empty() ? std::min(selected_, int(objects_.size()) - 1) : -1;
     if (objects_.empty()) {
@@ -18884,23 +19127,23 @@ void App::more_menu() {
         }
         // Numbered, newest first; one no longer there is dropped when chosen.
         if (ImGui::BeginMenu(tr(T::RecentProjects), !recent_projects_.empty())) {
-            std::optional<std::filesystem::path> open;
+            std::optional<std::filesystem::path> recent;
             for (std::size_t i = 0; i < recent_projects_.size(); ++i) {
                 const std::string label = std::to_string(i + 1) + "  " + utf8(recent_projects_[i].filename()) +
                                           "##recent" + std::to_string(i);
                 if (ImGui::MenuItem(label.c_str()))
-                    open = recent_projects_[i];
+                    recent = recent_projects_[i];
                 note_rect("recent_" + std::to_string(i + 1));
                 ImGui::SetItemTooltip("%s", utf8(recent_projects_[i]).c_str());
             }
             ImGui::EndMenu();
-            if (open) {
+            if (recent) {
                 std::error_code ec;
-                if (std::filesystem::exists(*open, ec))
-                    open_project(*open);
+                if (std::filesystem::exists(*recent, ec))
+                    open_project(*recent);
                 else {
-                    std::erase(recent_projects_, *open);
-                    fail(T::CannotOpen, utf8(*open));
+                    std::erase(recent_projects_, *recent);
+                    fail(T::CannotOpen, utf8(*recent));
                 }
             }
         }
@@ -19188,12 +19431,26 @@ void App::send_gcode() {
 void App::undo_place(bool redo) {
     std::vector<PlaceStep>& from = redo ? place_redo_ : place_undo_;
     std::vector<PlaceStep>& to = redo ? place_undo_ : place_redo_;
-    while (!from.empty() && (from.back().count != objects_.size() || from.back().object >= objects_.size()))
+    while (!from.empty() && !from.back().plate &&
+           (from.back().count != objects_.size() || from.back().object >= objects_.size()))
         from.pop_back();
     if (from.empty())
         return;
     const PlaceStep step = from.back();
     from.pop_back();
+    if (step.plate) { // the whole plate back, and the one undone kept for redo
+        to.push_back({0, objects_.size(), {}, std::make_shared<const std::vector<PlateObject>>(std::move(objects_)), selected_});
+        objects_ = *step.plate;
+        selected_ = step.selected < int(objects_.size()) ? step.selected : -1;
+        also_selected_.clear();
+        gizmo_drag_.reset();
+        paint_dirty_ = true;
+        ++revision_.model;
+        if (result_ && !viewer_)
+            stale_ = true;
+        plate_changed();
+        return;
+    }
     PlateObject& o = objects_[step.object];
     to.push_back({step.object, step.count, o.place});
     o.place = step.place;
@@ -23108,6 +23365,7 @@ void App::layout() {
         if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_) {
             plate_tools();
             volumes_overlay();
+            selection_outline();
             object_settings_window();
         }
         mixing_dialog();
@@ -23369,7 +23627,8 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.background_bottom = vec(theme_.view_bottom);
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);
-    f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
+    // The chosen models keep their colour: an outline marks them (interface.md, «Navegación», rule 1).
+    f.model_selected = f.model;
     if (tab_ == Tab::Prepare && tool_ == PlateTool::Paint) // the marks stand out on a light part (UI35)
         f.model = f.model_selected = vec(theme_.paint_part);
     if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&
@@ -25751,6 +26010,31 @@ void App::script_input() {
         if (passes > most)
             return fail_step(std::to_string(passes) + " were computed");
         next();
+    } else if (step.verb == "add-cylinder") { // the gallery's cylinder, 10 mm round and 20 mm high
+        add_shape(make_cylinder(10.0, 20.0, 48), T::ShapeCylinder);
+        next();
+    } else if (step.verb == "smart-fill") { // the smart fill from model I's first side or top triangle: "I side|top [ANGLE]"
+        std::size_t i = 0;
+        char where[8] = "";
+        float angle = smart_angle_;
+        std::sscanf((step.key + " " + step.value).c_str(), "%zu %7s %f", &i, where, &angle);
+        if (i >= objects_.size() || i >= placed_meshes_.size())
+            return fail_step("no such model");
+        const TriangleMesh& m = placed_meshes_[i];
+        std::optional<std::size_t> seed;
+        for (std::size_t t = 0; t < m.triangle_count() && !seed; ++t) {
+            const Vec3f a = m.corner(t, 0), b = m.corner(t, 1), c = m.corner(t, 2);
+            const Vec3f u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+            const double nx = double(u.y) * v.z - double(u.z) * v.y, ny = double(u.z) * v.x - double(u.x) * v.z,
+                         nz = double(u.x) * v.y - double(u.y) * v.x, len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (len > 0.0 && (std::string(where) == "top" ? nz / len > 0.9 : std::abs(nz / len) < 0.1))
+                seed = t;
+        }
+        if (!seed)
+            return fail_step("no such triangle");
+        smart_angle_ = angle;
+        smart_fill(i, *seed);
+        next();
     } else if (step.verb == "paint-color") { // the Paint tool's colour channel, with extruder or blend N
         paint_channel_ = PaintChannel::Color;
         paint_mark_ = std::uint8_t(std::clamp(std::atoi(step.key.c_str()), 1, int(kPaintMaxMark)));
@@ -25770,7 +26054,7 @@ void App::script_input() {
             io.AddMouseButtonEvent(0, false);
         else if (f >= 8)
             next();
-    } else if (step.verb == "expect-paint-area") { // the painted pieces of the channel in use cover at least VALUE mm2
+    } else if (step.verb == "expect-paint-area") { // the painted pieces of the channel in use cover at least MIN mm2 [and at most MAX]
         double area = 0.0;
         for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
             const IndexedMesh m = weld_exact(placed_meshes_[i]);
@@ -25783,8 +26067,10 @@ void App::script_input() {
             }
         }
         const double want = std::atof(step.key.c_str());
-        std::printf("ui-script: expect-paint-area %s: %s%.2f\n", step.key.c_str(), area >= want ? "ok, " : "got ", area);
-        if (area < want)
+        const double most = step.value.empty() ? 1e300 : std::atof(step.value.c_str());
+        const bool ok = area >= want && area <= most;
+        std::printf("ui-script: expect-paint-area %s %s: %s%.2f\n", step.key.c_str(), step.value.c_str(), ok ? "ok, " : "got ", area);
+        if (!ok)
             return fail_step("the paint covers " + std::to_string(area) + " mm2");
         next();
     } else if (step.verb == "expect-config-covers") { // every option the preferences keep has a control (PF7)
@@ -25863,6 +26149,28 @@ void App::script_input() {
             return fail_step("no such part");
         objects_[i].parts[k].extruder = e;
         objects_material_changed();
+        next();
+    } else if (step.verb == "tour") { // the assistant at step N (0 to 10)
+        tour_step_ = std::atoi(step.key.c_str());
+        tour_pointed_.clear();
+        next();
+    } else if (step.verb == "expect-tour-points") { // the anchor the assistant's step outlines
+        std::printf("ui-script: expect-tour-points %s: %s%s\n", step.key.c_str(), tour_pointed_ == step.key ? "ok" : "got ",
+                    tour_pointed_ == step.key ? "" : tour_pointed_.c_str());
+        if (tour_pointed_ != step.key)
+            return fail_step("it outlines " + (tour_pointed_.empty() ? std::string("nothing") : tour_pointed_));
+        next();
+    } else if (step.verb == "expect-selected") { // how many models are chosen
+        const std::size_t want = std::size_t(std::atoi(step.key.c_str())), got = all_selected().size();
+        std::printf("ui-script: expect-selected %zu: %s%zu\n", want, got == want ? "ok, " : "got ", got);
+        if (got != want)
+            return fail_step(std::to_string(got) + " models are chosen");
+        next();
+    } else if (step.verb == "expect-models") { // how many models the plate has
+        const std::size_t want = std::size_t(std::atoi(step.key.c_str()));
+        std::printf("ui-script: expect-models %zu: %s%zu\n", want, objects_.size() == want ? "ok, " : "got ", objects_.size());
+        if (objects_.size() != want)
+            return fail_step("the plate has " + std::to_string(objects_.size()) + " models");
         next();
     } else if (step.verb == "expect-parts") { // model I's parts and, in order, their extruders: "I N [E1 E2 ...]"
         std::istringstream in(step.key + " " + step.value);

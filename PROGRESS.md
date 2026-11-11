@@ -13193,3 +13193,47 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   1252/1253); se repite sin correr pruebas con Xvfb mientras tanto.
 - **Sigue:** relleno inteligente (MT30), deshacer de la pintura y del corte (MT31).
 
+## 2026-11-11 — interfaz: relleno inteligente de la pintura (model_tools.md, regla 27: MT30)
+
+- **Hecho:** la herramienta Pintar elige «Pincel» o «Relleno inteligente» con su ángulo (30° por defecto): un clic
+  pinta las caras vecinas mientras el doblez entre ellas no pase el ángulo (con `face_region`); Shift borra. Vale para
+  todos los canales.
+- **Pruebas:** `smart_fill.txt` (MT30: en un cilindro de 10 × 20 mm, el costado, unos 1257 mm², sin las tapas; la
+  tapa sola, unos 314). Órdenes nuevas `add-cylinder` y `smart-fill`; `expect-paint-area` acepta un máximo.
+- **CI local** de f84cc40: gcc 1252/1254, las dos que fallaron por «Xvfb failed to start» (carrera de pantallas entre
+  pruebas paralelas) pasan solas; clang y ASan se corren aparte.
+
+## 2026-11-11 — interfaz: deshacer el corte, la pintura y los cambios de la placa (model_tools.md, regla 29: MT31)
+
+- **Hecho:** Ctrl+Z y Ctrl+Y ahora también deshacen y rehacen cortar, separar (en piezas o en partes), espejar,
+  borrar un modelo, cada trazo o relleno de pintura y «Borrar todo» de la pintura, además de mover (UI45). Cada paso
+  guarda una copia de la placa antes del cambio; un trazo que no pinta nada no deja paso. Las copias se limitan a 5
+  millones de triángulos entre todas (las más viejas se sueltan).
+- **Pruebas:** `undo_plate.txt` (MT31: pintar, cortar y mover; tres Ctrl+Z vuelven a la pieza entera, sin pintura,
+  en su lugar; Ctrl+Y rehace). `place_undo` y `more_cards` siguen pasando. Orden nueva `expect-models`.
+- **Falta** de la regla 29: la lista de pasos al lado de los botones.
+
+## 2026-11-11 — interfaz: el asistente señala lo que nombra (PLAN, «Ayuda, lo que sigue»)
+
+- **Hecho:** cada paso del asistente que nombra una parte de la pantalla la marca con un borde violeta encima de
+  todo: Abrir, la impresora, el panel de ajustes, las herramientas de la placa, Laminar y, cuando está, Imprimir.
+  «Ajustes en una sola página por pestaña» ya estaba hecho desde el 2026-10-29: queda marcado en PLAN.
+- **Pruebas:** `tour_points.txt` (órdenes nuevas `tour` y `expect-tour-points`). Captura del paso de Laminar
+  revisada.
+- **Falta:** el texto de los ajustes en inglés (la ayuda (i) lee `docs/CONFIG.md`, que está en español).
+
+## 2026-11-11 — interfaz: elegir varios modelos y el contorno de lo elegido (interface.md, «Navegación», regla 1)
+
+- **Hecho** (ficha en `spec/next`, pasa `check_spec.py`): el rectángulo elige todos los modelos que toma (de izquierda
+  a derecha los de adentro, de derecha a izquierda los que toca), y las herramientas actúan sobre el más cercano al
+  punto de partida; Ctrl o Mayús con un clic suman un modelo o sacan uno elegido, y con el rectángulo suman; un clic
+  en la cama vacía suelta todos; Supr borra todos los elegidos. Lo elegido ya no cambia de color: lleva un contorno
+  de 2 px del color de acento por su silueta (las aristas entre una cara que mira al ojo y otra que no, y las
+  abiertas), más tenue donde otra pieza lo tapa (un rayo al medio de la arista; hasta 3000 aristas). Con más de
+  400 000 triángulos, el contorno es su caja. Así también se ve con la vista de colores.
+- **Pruebas:** `multi_select.txt` (órdenes nuevas `expect-selected`); pasan los 155 `ui_` sin las de Vulkan, OpenGL,
+  Estructural y Aerodinámica. Capturas revisadas.
+- **Falta:** mover, girar y escalar varios juntos (hoy actúan sobre uno).
+- **CI local** (clang de 9a1a7c4): 1253/1255; las dos fallaron por pantallas (una «Xvfb failed to start», la otra pasa
+  sola); ASan en curso.
+
