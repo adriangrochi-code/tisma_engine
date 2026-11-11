@@ -1,0 +1,13 @@
+# The cost of the blends before slicing (color_mixing_plus.md, rule 12): with
+# one nozzle for two filaments and the cube in a 1 : 1 blend, turning the
+# mixing on says how many filament changes the plate will take, and so does
+# its card once it is on.
+wait 3
+set machine.extruders 2
+set machine.single_extruder_mmu true
+add-mix 1 2
+click multi.color_mixing
+expect-text unos 49 cambios de filamento
+key escape
+set multi.color_mixing true
+expect-control mix_changes_planned
