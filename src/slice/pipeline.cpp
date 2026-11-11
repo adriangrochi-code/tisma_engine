@@ -886,6 +886,9 @@ void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector
 }
 
 void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
+    // Each layer's filament from the blends already laid, for the next
+    // blend's cycle to agree with where it can (rule 39).
+    std::vector<int> laid(model.layers.size(), 0);
     for (const ColorMix& mix : mixes) {
         const ShellMoved shell = mix_shell(model, mix, settings);
         std::vector<char> present(model.layers.size(), 0);
@@ -919,7 +922,30 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
                     model.notices.push_back(finer);
             }
         }
-        const std::vector<int> filament = mix_layers(mix, model.layers, present, by_height);
+        std::vector<int> filament = mix_layers(mix, model.layers, present, by_height);
+        // The cycles in line (color_mixing_plus.md, rule 39): with blends on
+        // the plate already, the rotation of this one's cycle that prints the
+        // same filament as they do on the most layers; on a tie, as it is.
+        if (by_height == 0.0 && !mix.gradient && std::any_of(laid.begin(), laid.end(), [](int f) { return f > 0; })) {
+            const std::vector<int> cycle = mix_sequence(mix);
+            const auto agree = [&](const std::vector<int>& f) {
+                int n = 0;
+                for (std::size_t l = 0; l < f.size() && l < laid.size(); ++l)
+                    n += f[l] > 0 && f[l] == laid[l];
+                return n;
+            };
+            int best = agree(filament);
+            for (std::size_t o = 1; o < cycle.size(); ++o) {
+                std::vector<int> turned(cycle.begin() + std::ptrdiff_t(o), cycle.end());
+                turned.insert(turned.end(), cycle.begin(), cycle.begin() + std::ptrdiff_t(o));
+                std::vector<int> f = mix_layers(pattern_mix(mix.id, turned), model.layers, present, 0.0);
+                if (const int a = agree(f); a > best)
+                    best = a, filament = std::move(f);
+            }
+        }
+        for (std::size_t l = 0; l < filament.size() && l < laid.size(); ++l)
+            if (laid[l] == 0 && filament[l] > 0)
+                laid[l] = filament[l];
         int last = 0;
         std::size_t passes = 0;
         for (std::size_t l = 0; l < model.layers.size(); ++l)

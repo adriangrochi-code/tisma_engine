@@ -956,3 +956,31 @@ TEST_CASE("color mixing plus: the denser infill also with the blend only in the 
         CHECK(t.tool == 1);
     gcode_of(dense, more);
 }
+
+TEST_CASE("color mixing plus: blends on a plate line up their cycles (rule 39, MX26)", "[mixing]") {
+    // Two boxes, blends 1 : 1 of (1, 2) and of (3, 1): as each starts, a has
+    // filament 1 on the even layers and b on the odd ones, never together.
+    Settings s = base(3);
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 10);
+    add_box(p.mesh, 40, 40, 0, 60, 60, 10);
+    p.objects = {{"a", 0, 12, 0, 0, 4}, {"b", 12, 12, 1, 0, 5}};
+    const std::vector<ColorMix> mixes = {blend(4, {{1, 0.5}, {2, 0.5}}), blend(5, {{3, 0.5}, {1, 0.5}})};
+    const auto together = [](const SlicedModel& m) {
+        int both = 0;
+        for (std::size_t l = 0; l < m.walls.size(); ++l) {
+            std::set<int> a, b;
+            for (const Toolpath& t : m.walls[l].toolpaths)
+                (t.points.front().p.x > 80 ? a : b).insert(t.tool);
+            both += a.count(1) && b.count(1);
+        }
+        return both;
+    };
+    const SlicedModel model = sliced(p, s, mixes);
+    // In line: filament 1 in both boxes on every layer that has it (25 of 50).
+    CHECK(together(model) == 25);
+    // Each blend alone keeps its own cycle: b starts with 3.
+    const SlicedModel alone = sliced(box(5), s, {mixes[1]});
+    CHECK(sequence(alone).substr(0, 4) == "3131");
+    gcode_of(model, s);
+}

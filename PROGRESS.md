@@ -12723,6 +12723,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 39: ciclos alineados** (2026-11-11, bloque nocturno; MX26). En `apply_mixes`, con varias
+  mezclas en la placa, cada mezcla después de la primera prueba las rotaciones de su ciclo y se queda con la que más
+  capas comparte filamento con lo ya puesto (en un empate, sin rotar). Solo con el ciclo por capa, no con `step`.
+  Prueba `[mixing]` MX26: (1, 2) y (3, 1) 1 : 1 en dos cajas tienen el filamento 1 juntas en las 25 capas que lo
+  tienen (sin alinear, 0); una mezcla sola sigue con su ciclo. Con periodos distintos (3 y 2) lo más que se puede es
+  una capa cada 6, y lo da. Siguiente: reglas 36 (descarte), 38 (sugerencias del aviso) y 40 (informe).
 - **Búsqueda profunda (06:20): reglas 13 y 35 juntas.** Con `surface_only`, el relleno disperso pasa al filamento
   dominante antes de `denser_for_purge`, que solo aceptaba caminos de la mezcla, así que `purge_infill_max` no hacía
   nada. Ahora `mix_shell` dice cuántos caminos pasó en cada capa y con qué filamento, y el relleno más denso queda
