@@ -187,8 +187,13 @@ private fun Axis(axis: String, set: (String) -> Unit) = FlowRow(horizontalArrang
 @Composable
 private fun Num(label: String, value: Double, tag: String, set: (Double) -> Unit) {
     var text by remember(tag) { mutableStateOf(value.toString().removeSuffix(".0")) }
-    OutlinedTextField(text, { t -> text = t; t.replace(',', '.').toDoubleOrNull()?.let(set) }, singleLine = true, label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth().testTag(tag))
+    val onText: (String) -> Unit = { t -> text = t; t.replace(',', '.').replace('−', '-').toDoubleOrNull()?.let(set) }
+    // Offsets and angles may be negative, and the number keyboard has no minus on many phones.
+    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        OutlinedTextField(text, onText, singleLine = true, label = { Text(label) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag(tag))
+        SignButton(text, tag + "_sign", onText)
+    }
 }
 
 @StringRes

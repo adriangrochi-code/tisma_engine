@@ -309,17 +309,23 @@ private fun Editor(row: SettingsLayout.Row, value: kotlinx.serialization.json.Js
             }
             val number = e is SettingsLayout.Editor.Number
             val bad = text.isNotBlank() && SettingsLayout.toJson(e, text) == null
+            val onText: (String) -> Unit = { t -> text = t; SettingsLayout.toJson(e, t)?.let { if (SettingsLayout.show(it) != shown) set(it) } }
+            // The number keyboard has no minus on many phones: a value that may be negative gets a ± button.
+            val signed = e is SettingsLayout.Editor.Number && (e.min == null || e.min < 0)
+            Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 text,
-                { t -> text = t; SettingsLayout.toJson(e, t)?.let { if (SettingsLayout.show(it) != shown) set(it) } },
+                onText,
                 singleLine = !(e is SettingsLayout.Editor.Text && e.multiline),
                 minLines = if (e is SettingsLayout.Editor.Text && e.multiline) 3 else 1,
                 isError = bad,
                 suffix = if (row.unit.isNotBlank()) ({ Text(row.unit) }) else null,
                 supportingText = if (bad) ({ Text(stringResource(R.string.panel_invalid, row.range)) }) else null,
                 keyboardOptions = KeyboardOptions(keyboardType = if (number) KeyboardType.Decimal else KeyboardType.Text),
-                modifier = Modifier.fillMaxWidth().testTag("edit_${row.key}"),
+                modifier = Modifier.weight(1f).testTag("edit_${row.key}"),
             )
+            if (signed) SignButton(text, "sign_${row.key}", onText)
+            }
         }
     }
 }
@@ -390,4 +396,15 @@ fun PrinterSettingsCard(state: SliceState, nav: Navigator) {
             }
         }
     }
+}
+
+/** Turns a typed number's sign (the number keyboard has no minus key on many phones). */
+internal fun flipSign(t: String): String {
+    val s = t.trim()
+    return if (s.startsWith("-") || s.startsWith("−")) s.drop(1) else "-$s"
+}
+
+@Composable
+fun SignButton(text: String, tag: String, onText: (String) -> Unit) {
+    androidx.compose.material3.TextButton(onClick = { onText(flipSign(text)) }, modifier = Modifier.testTag(tag)) { Text("±") }
 }

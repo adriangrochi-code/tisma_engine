@@ -162,6 +162,13 @@ class SettingsPanelTest {
         compose.runOnIdle { assertEquals(JsonPrimitive(1.5), slice.state.value.settings.changes["layers.first_height"]) }
         first.performTextReplacement("1,")
         first.assert(androidx.compose.ui.test.hasText("1,", substring = false))
+        // No minus key on many number keyboards: a field that may be negative has ±, one that may not has none.
+        assertEquals(0, compose.onAllNodes(hasTestTag("sign_layers.first_height")).fetchSemanticsNodes().size)
+        compose.runOnIdle { slice.setView(View.ADVANCED) }
+        compose.onNodeWithTag("panel_section").performScrollToNode(hasTestTag("edit_slicing.xy_offset"))
+        compose.onNodeWithTag("edit_slicing.xy_offset").performTextReplacement("0,2")
+        compose.onNodeWithTag("sign_slicing.xy_offset").performClick()
+        compose.runOnIdle { assertEquals(JsonPrimitive(-0.2), slice.state.value.settings.changes["slicing.xy_offset"]) }
     }
 
     @Test
