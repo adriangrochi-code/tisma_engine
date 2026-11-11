@@ -527,3 +527,43 @@ TEST_CASE("color mixing plus: the changes a blend asks for, counted before slici
     MixChangeOptions cycle;
     CHECK(mix_changes_estimate(third, 10.0, o) > mix_changes_estimate(third, 10.0, cycle));
 }
+
+TEST_CASE("color mixing plus: each filament with its own layer height (rule 8, MX7)", "[mixing]") {
+    Settings s = base();
+    s.mix_cadence_heights = true;
+    s.mix_height_a = 0.3;
+    s.mix_height_b = 0.15;
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    const SlicedModel model = sliced(box(3), s, {half});
+    REQUIRE(model.layers.size() > 10);
+    // The first layer the first filament's; then 0.15 mm of the second and
+    // 0.3 mm of the first in turn, up to the top.
+    CHECK(sequence(model).front() == '1');
+    for (std::size_t l = 1; l + 1 < model.layers.size(); ++l) {
+        const double h = model.layers[l].top - model.layers[l].bottom;
+        INFO("layer " << l << ": " << h << " mm");
+        CHECK_THAT(h, WithinAbs(l % 2 ? 0.15 : 0.3, 1e-6));
+        REQUIRE_FALSE(model.walls[l].toolpaths.empty());
+        CHECK(model.walls[l].toolpaths.front().tool == (l % 2 ? 2 : 1));
+    }
+    CHECK_THAT(model.layers.back().top, WithinAbs(10.0, 0.16));
+    // The G-code passes the check, and its layer changes follow the filaments: one each layer.
+    const std::string text = gcode_of(model, s);
+    CHECK(changes(text) == int(model.layers.size()) - 1);
+    // Within the machine's limits: a height above the largest is cut to it, with a notice.
+    s.max_layer_height = 0.25;
+    const SlicedModel capped = sliced(box(3), s, {half});
+    for (std::size_t l = 0; l < capped.layers.size(); ++l)
+        CHECK(capped.layers[l].top - capped.layers[l].bottom <= 0.25 + 1e-9);
+    CHECK(std::any_of(capped.notices.begin(), capped.notices.end(),
+                      [](const std::string& n) { return n.find("kept within the machine's layer heights") != std::string::npos; }));
+    // A gradient is not two heights: its cycle, every layer as thick as the
+    // layer height, with a notice.
+    s.max_layer_height = 0.0;
+    ColorMix fade = half;
+    fade.gradient = true;
+    const SlicedModel cycle = sliced(box(3), s, {fade});
+    CHECK(cycle.layers.size() == 50);
+    CHECK(std::any_of(cycle.notices.begin(), cycle.notices.end(),
+                      [](const std::string& n) { return n.find("cadence_heights needs one blend") != std::string::npos; }));
+}

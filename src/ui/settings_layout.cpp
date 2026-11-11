@@ -219,11 +219,15 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.standby_delta", A}}},
           {"multi_nozzle", T::SubMultiNozzle,
            {{"multi.fine_walls_coarse_infill", N},
-            {"multi.color_mixing", N},
-            {"mixing.subdivide", A},
+            {"multi.color_mixing", N}}},
+          {"color_mix", T::SubColorMix,
+           {{"mixing.subdivide", A},
             {"mixing.sub_min_height", A},
             {"mixing.sub_first_layer", A},
-            {"mixing.sub_infill", A}}},
+            {"mixing.sub_infill", A},
+            {"mixing.cadence_heights", A},
+            {"mixing.height_a", A},
+            {"mixing.height_b", A}}},
           {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}, {"resin.first_layer_height", A}}},
           {"resin_supports", T::SubResinSupports,
            {{"resin.supports", N},
@@ -742,6 +746,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.fine_walls_coarse_infill ? tr(T::FineWallsCoarseInfill)
                : color_mixing_offered(s)  ? tr(T::ColorMixingRow)
                                           : tr(T::SumOff);
+    if (id == "color_mix")
+        return s.mix_cadence_heights ? tr(T::SumMixCadence) : s.mix_subdivide ? tr(T::SumMixSublayers) : tr(T::SumOff);
     if (id == "extruders")
         return s.extruders > 1 ? format(T::SumExtrudersN, s.extruders) : tr(T::SumOneExtruder);
     if (id == "interlocking")

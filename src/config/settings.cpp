@@ -1479,9 +1479,22 @@ Settings parse_checked(std::string_view text) {
             s.fine_walls_coarse_infill = v.get<bool>();
     });
     // Sublayers in the blends' zones (color_mixing_plus.md, rules 10 and 11).
-    read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill"},
+    read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill", "cadence_heights", "height_a",
+                                "height_b"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
+        if (n == "height_a" || n == "height_b") { // rule 8; the machine's limits when slicing
+            if (!v.is_number() || !(v.get<double>() == 0.0 || (v.get<double>() >= 0.01 && v.get<double>() <= 2.0)))
+                fail(k, "must be 0 (the layer height) or from 0.01 to 2 mm");
+            (n == "height_a" ? s.mix_height_a : s.mix_height_b) = v.get<double>();
+            return;
+        }
+        if (n == "cadence_heights") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.mix_cadence_heights = v.get<bool>();
+            return;
+        }
         if (n == "sub_min_height") {
             if (!v.is_number() || !(v.get<double>() >= 0.01 && v.get<double>() <= 2.0))
                 fail(k, "must be from 0.01 to 2 mm");
@@ -3470,6 +3483,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"mixing.sub_min_height", num(s.mix_sub_min_height)},
         {"mixing.sub_first_layer", flag(s.mix_sub_first_layer)},
         {"mixing.sub_infill", flag(s.mix_sub_infill)},
+        {"mixing.cadence_heights", flag(s.mix_cadence_heights)},
+        {"mixing.height_a", num(s.mix_height_a)},
+        {"mixing.height_b", num(s.mix_height_b)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -4030,7 +4046,10 @@ std::string settings_json(const Settings& s) {
          {{"subdivide", s.mix_subdivide},
           {"sub_min_height", s.mix_sub_min_height},
           {"sub_first_layer", s.mix_sub_first_layer},
-          {"sub_infill", s.mix_sub_infill}}},
+          {"sub_infill", s.mix_sub_infill},
+          {"cadence_heights", s.mix_cadence_heights},
+          {"height_a", s.mix_height_a},
+          {"height_b", s.mix_height_b}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},

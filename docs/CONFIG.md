@@ -564,7 +564,7 @@ objetos, en gramos si se conoce `extrusion.density` (aviso `purge`, regla 10, MM
 
 ### `mixing`
 
-De la ficha `docs/spec/features/color_mixing_plus.md`: subcapas en las zonas con mezcla de colores (reglas 10 y 11). Va
+De la ficha `docs/spec/features/color_mixing_plus.md`: subcapas en las zonas con mezcla de colores (reglas 10 y 11) y el alto por filamento (regla 8). Va
 en el perfil de impresión.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -573,6 +573,9 @@ en el perfil de impresión.
 | `sub_min_height` | mm | 0,04 | 0,01 a 2 | Si la parte de un filamento da una pasada más fina que esto, esa capa sigue con el ciclo, sin subcapas |
 | `sub_first_layer` | booleano | `false` | | `false`: la primera capa no se divide (MX10) |
 | `sub_infill` | booleano | `false` | | `false`: el relleno disperso de la zona va una vez, con el filamento de la última pasada |
+| `cadence_heights` | booleano | `false` | | Regla 8 (MX7): con una sola mezcla de dos filamentos en toda la cama, sin pintura ni modificadores ni otra altura de capa, las capas se alternan: una de `height_a` con el primer filamento y una de `height_b` con el segundo (la primera capa, del primero, con su propio alto). Si no se cumple, el ciclo de siempre y un aviso. Con esto no hay subcapas |
+| `height_a` | mm | 0 | 0 o 0,01 a 2 | Alto de las capas del primer filamento; 0: `layers.height`. Se ajusta a `machine.min_layer_height`, `machine.max_layer_height` y la boquilla, con aviso |
+| `height_b` | mm | 0 | 0 o 0,01 a 2 | Alto de las capas del segundo filamento; 0: `layers.height`. Igual que `height_a` |
 
 Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). Desde la línea de comandos, `slice <modelo>
 --config <ajustes.json> --mixes <mezclas.json> --mix <n>` lee las mezclas en ese mismo JSON (`{"version": 1,

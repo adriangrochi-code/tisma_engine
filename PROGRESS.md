@@ -12678,7 +12678,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 4 | Color buscado (CIEDE2000, recomendaciones) | pendiente |
   | 5 | Pares automáticos | parcial: `auto_pair_mixes` (MX1); falta `mixing.auto_pairs` y crearlos en la interfaz |
   | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
-  | 8–9 | Alto por filamento, paso | pendiente |
+  | 8–9 | Alto por filamento, paso | 8 hecho (MX7; `mixing.cadence_heights`, `height_a`, `height_b`); 9 (`step`) pendiente: la ficha dice «a confirmar» |
   | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: el motor estima los cambios antes de laminar (`mix_changes_estimate`); falta que la interfaz los muestre en el aviso |
   | 13–14 | Solo la superficie, paredes de más | pendiente |
   | 15 | Sesgo | pendiente |
@@ -12723,6 +12723,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, paso 3: alto por filamento** (2026-11-11; `color_mixing_plus.md` regla 8, MX7). Ajustes
+  `mixing.cadence_heights`, `height_a` y `height_b`, en una tarjeta nueva «Mezcla de colores: capas» que también
+  lleva las subcapas (la de boquillas pasaba de 8 ajustes). Con una sola mezcla de dos filamentos en toda la cama, las
+  capas se alternan: `height_b` con el segundo filamento y `height_a` con el primero, después de la primera capa
+  (primer filamento, con su propio alto). Los altos se ajustan a los límites de la máquina y la boquilla, con aviso.
+  Decisiones propias: con otra mezcla, partes sin mezcla, pintura de color, modificadores, `layers.heights` o
+  `layers.cusp_height`, se usa el ciclo de la mezcla y se avisa; sin subcapas (cada capa ya es de un filamento). La
+  regla 9 (`step`) queda pendiente porque la ficha dice «a confirmar». Prueba `[mixing]` MX7: capas de 0,15 y 0,3 mm
+  alternadas con su filamento, tope de 0,25 mm con aviso, degradé con el ciclo y aviso, G-code verificado con un
+  cambio por capa.
 - **Full Spectrum, regla 12: cambios antes de laminar** (2026-11-11). `mix_changes_estimate(mezcla, alto, opciones)` en
   `src/slice/color_mix.*` cuenta los cambios de filamento sin laminar: capas uniformes del alto, el ciclo de la mezcla
   y, con `mixing.subdivide`, una pasada por filamento en el mismo orden que el laminado. La prueba compara con los

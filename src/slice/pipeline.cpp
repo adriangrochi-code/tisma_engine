@@ -15,6 +15,7 @@
 #include "perimeters/fuzzy.hpp"
 #include "slice/belt.hpp"
 #include "slice/painted.hpp"
+#include "slice/variable_layers.hpp"
 #include "support/support.hpp"
 #include "geom/distance.hpp"
 #include "geom/polyholes.hpp"
@@ -914,6 +915,61 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             }
     }
     const std::vector<MeshObject>* objects = given ? &resolved : nullptr;
+    // Each filament with its own layer height (color_mixing_plus.md, rule
+    // 8): one blend of two filaments printing the whole plate, its layers
+    // height_a and height_b in turn, the first layer the first filament's;
+    // anything else on the plate, the blend's cycle, with a notice.
+    if (settings.mix_cadence_heights && mixes) {
+        const ColorMix* mix = nullptr;
+        if (objects && !objects->empty() && !settings.sequential) {
+            const int id = objects->front().extruder;
+            for (const ColorMix& m : blends)
+                if (m.id == id)
+                    mix = &m;
+            if (std::any_of(objects->begin(), objects->end(), [&](const MeshObject& o) { return o.extruder != id; }))
+                mix = nullptr;
+        }
+        std::vector<int> two;
+        if (mix && !mix->gradient && mix->pattern.empty())
+            for (const ColorMix::Component& c : mix->components)
+                if (c.share > 0.0)
+                    two.push_back(c.extruder);
+        const bool painted = painting && !painting->empty(PaintChannel::Color);
+        if (two.size() != 2 || painted || (given_modifiers && !given_modifiers->empty()) || !settings.layer_heights.empty() || settings.cusp_height > 0.0) {
+            mix_notices.push_back("mixing.cadence_heights needs one blend of two filaments printing the whole plate, with no "
+                                  "paint, modifiers or other layer heights: the blend's cycle is used");
+        } else {
+            const HeightBounds bounds = height_bounds(settings);
+            const auto fit = [&](double h) { return std::clamp(h > 0.0 ? h : settings.layer_height, bounds.min, bounds.max); };
+            const double ha = fit(settings.mix_height_a), hb = fit(settings.mix_height_b);
+            if (ha != (settings.mix_height_a > 0.0 ? settings.mix_height_a : settings.layer_height) ||
+                hb != (settings.mix_height_b > 0.0 ? settings.mix_height_b : settings.layer_height))
+                mix_notices.push_back("mixing.height_a and height_b are kept within the machine's layer heights");
+            float lo = input.vertices.front().z, hi = lo;
+            for (const Vec3f& v : input.vertices)
+                lo = std::min(lo, v.z), hi = std::max(hi, v.z);
+            Settings cadence = settings;
+            cadence.mix_cadence_heights = false;
+            cadence.mix_subdivide = false; // each layer is one filament already
+            double z = double(lo) + settings.first_layer_height;
+            for (int k = 1; z < double(hi) - 1e-9; ++k) {
+                const double h = k % 2 ? hb : ha;
+                cadence.layer_heights.push_back({z, h});
+                z += h;
+            }
+            std::vector<ColorMix> turns = *mixes;
+            for (ColorMix& m : turns)
+                if (m.id == mix->id) {
+                    ColorMix alt = pattern_mix(m.id, two);
+                    alt.name = m.name;
+                    m = std::move(alt);
+                }
+            SlicedModel made = slice_model(input, cadence, gpu, stress, painting, given, &turns, negative_volumes, nullptr,
+                                           given_volumes);
+            made.notices.insert(made.notices.begin(), mix_notices.begin(), mix_notices.end());
+            return made;
+        }
+    }
     // The plate's objects: each one sliced apart when printed one after
     // another (sequential.md, rule 1), else the plate as one, with their
     // outlines kept.
@@ -991,7 +1047,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         out.notices.insert(out.notices.end(), mix_notices.begin(), mix_notices.end());
         return out;
     }
-    return slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);
+    SlicedModel plate = slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);
+    plate.notices.insert(plate.notices.end(), mix_notices.begin(), mix_notices.end());
+    return plate;
 }
 
 namespace {

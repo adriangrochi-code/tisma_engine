@@ -160,6 +160,25 @@
      "Whether the inside infill of a part with a mix is also split into passes. Off, the infill prints once a layer "
      "with the last pass's filament: it does not show, and it saves time.\n\nThe walls and the surfaces are split "
      "all the same.\n\nExample: off."},
+    {"mixing.cadence_heights",
+     "Con una mezcla de dos filamentos que imprime toda la pieza, cada filamento tiene su propio alto de capa y se "
+     "alternan: una capa del primero, una del segundo. La proporción del color sale de los altos.\n\nSi en la cama "
+     "hay otra mezcla, partes sin mezcla o pintura, se usa el ciclo de siempre y se avisa.\n\nEjemplo: 0,3 mm y "
+     "0,15 mm dan dos partes del primero por una del segundo.",
+     "With a two-filament mix that prints the whole part, each filament has its own layer height and they take "
+     "turns: one layer of the first, one of the second. The colour's proportion comes from the heights.\n\nIf the "
+     "plate has another mix, parts without a mix or paint, the usual cycle is used, with a warning.\n\nExample: 0.3 "
+     "mm and 0.15 mm give two parts of the first to one of the second."},
+    {"mixing.height_a",
+     "El alto de las capas del primer filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
+     "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,3 mm.",
+     "The layer height of the mix's first filament, with per-filament heights on. 0 uses the layer height. It is "
+     "kept within the printer's limits.\n\nExample: 0.3 mm."},
+    {"mixing.height_b",
+     "El alto de las capas del segundo filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
+     "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,15 mm.",
+     "The layer height of the mix's second filament, with per-filament heights on. 0 uses the layer height. It is "
+     "kept within the printer's limits.\n\nExample: 0.15 mm."},
     {"wipe_tower.enabled",
      "Al cambiar de filamento o de boquilla, la que entra todavía tiene restos del color anterior o no sale pareja. "
      "La torre de purga es un bloque que se imprime al costado de la pieza: los cambios de herramienta se hacen "

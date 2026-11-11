@@ -494,6 +494,12 @@ struct Settings {
     bool mix_subdivide = false;
     double mix_sub_min_height = 0.04; // mm
     bool mix_sub_first_layer = false, mix_sub_infill = false;
+    // Each filament of a two-filament blend with its own layer height
+    // (color_mixing_plus.md, rule 8): the first filament's layers
+    // mix_height_a thick, the second's mix_height_b, alternating; 0: the
+    // layer height. Only when one blend prints the whole plate.
+    bool mix_cadence_heights = false;
+    double mix_height_a = 0.0, mix_height_b = 0.0; // mm
     // Curved layers (docs/spec/features/nonplanar.md): each layer the
     // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
     // curved_flat_below over curved_ramp_height (and out at the top with
