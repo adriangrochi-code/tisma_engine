@@ -12307,3 +12307,5 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   prueba a `POST /v1/me/purchases`; al entrar se restauran las compras; se lee `subscription` de `GET /v1/me`
   (`PurchaseTest` CC21/CC22, `StoreBillingTest`). La tienda va detrás de `StoreBilling`: sin implementación hasta
   que el dueño decida la licencia de la biblioteca de Google Play Billing (no es permisiva). No probado con Play real.
+- 7426f8d: una compra guardada tras un 503 se mandaba con la cuenta que estuviera abierta después: cerrar sesión y
+  entrar con otra le daba el plan pagado a esa otra. Ahora la compra guardada lleva su cuenta (`StoreBillingTest`).
