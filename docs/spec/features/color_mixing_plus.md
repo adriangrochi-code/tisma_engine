@@ -75,6 +75,11 @@ en el mismo orden y las piezas, pintura y modificadores que las usaban siguen co
 nuevo; ninguna pieza pasa a un filamento nuevo por coincidencia de número. Una mezcla que usa un filamento que ya no
 existe queda apagada, con aviso (MX30).
 
+**Pintar con mezclas** (11-11-2026): la pintura de colores guarda hasta 16 números (filamentos y mezclas juntos). Si
+hay más, el canal Colores ofrece los filamentos y las mezclas marcadas «Para pintar» en el diálogo de mezclas, hasta
+completar 16; por defecto, las primeras en número. Al tildar una de más, se avisa «La pintura admite 16 colores:
+destildá otra mezcla para usar esta». Las mezclas sin la marca se siguen pudiendo asignar a piezas enteras (MX33).
+
 ## Crear mezclas
 
 1. **Cuatro tipos**, en un diálogo con una pestaña para cada uno y la vista previa del color siempre visible:
@@ -302,6 +307,7 @@ salvo donde se dice.
 | MX30 | Mezcla 1 : 1 de 1 y 2 creada con 2 filamentos (es la 3) asignada a una pieza; se pasa a 4 filamentos / después a 1 | La mezcla pasa a ser la 5 y la pieza sigue con ella, no con el filamento 3 / la mezcla queda apagada con aviso y la pieza usa el filamento 1 |
 | MX31 | Cubo de 20 mm, degradé entre (−10, −10, 0) y (10, 10, 20) del cubo, 1 a 2 | La esquina de abajo adelante a la izquierda con 1, la de arriba atrás a la derecha con 2, el centro mitad y mitad; puntos (0, 0, 0) y (0, 0, 20): igual que un degradé en Z |
 | MX32 | Dos cubos de 20 mm separados, la misma mezcla de degradé en X de 1 a 2 | Cada cubo va de 1 a la izquierda a 2 a la derecha; no un solo degradé a lo ancho de los dos |
+| MX33 | 4 filamentos y la paleta rápida de 26 | Pintar ofrece los 4 filamentos y 12 mezclas (las 5 a 16); al marcar «Para pintar» la 20 sin destildar otra, el aviso y no se marca; asignar la 20 a una pieza entera, sí |
 | MX11 | `surface_only` con `surface_depth` 0,8 | Solo las 2 paredes de afuera y las superficies alternan; el relleno de un solo filamento |
 | MX12 | MX11 contra la caja sin `surface_only` | Menos cambios de filamento en MX11 en las capas que tienen relleno |
 | MX13 | `bias` 0,5 en una mezcla 1 : 1 | Las paredes de afuera de las capas del segundo filamento quedan más adentro que las del primero |
