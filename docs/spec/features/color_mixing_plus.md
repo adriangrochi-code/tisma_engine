@@ -120,8 +120,8 @@ De cada mezcla (en el proyecto, junto a los datos de `color_mixing.md`):
    - sin `subdivide`: la capa cuyo centro está a la altura `z` (desde la base de la pieza) lleva el elemento
      `floor(z / step)` del ciclo (módulo su largo). Así el color depende de la altura y no del número de capa: con altura
      de capa variable, la proporción de cada filamento por milímetro se mantiene;
-     un `step` más fino que la capa sin `subdivide` no tiene sentido (el centro de cada capa caería siempre en el mismo
-     elemento): esa capa usa `step` igual a su alto y se avisa «mixing.step is finer than the layers without
+     un `step` más fino que todas las capas con mezcla, sin `subdivide`, no tiene sentido (el centro de cada capa
+     caería siempre en el mismo elemento): las capas siguen el ciclo capa por capa, como con `step` igual a la capa y se avisa «mixing.step is finer than the layers without
      mixing.subdivide…» (11-11-2026, hallazgo del motor);
    - con `subdivide` y `step` menor que la capa: la zona con mezcla se imprime en pasadas de `step` (la última, lo que
      falte hasta la capa), cada una con el elemento siguiente del ciclo; una pasada de menos de `sub_min_height` se junta
