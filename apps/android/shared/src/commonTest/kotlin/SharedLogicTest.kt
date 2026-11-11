@@ -40,4 +40,13 @@ class SharedLogicTest {
         val one = BlockList(now, 1, now + 7.days, emptyMap(), emptySet(), emptySet(), emptySet(), mapOf("a" to "rights"))
         assertEquals(listOf("b"), index.search("gear", one).map { it.id })
     }
+
+    @Test
+    fun theSearchIgnoresAccents() {
+        assertEquals("deformacion engranaje nandu", foldText("Deformación ENGRANAJE Ñandú"))
+        val m = LibraryIndex.Model("a", 1, "Soporte de cámara", "", listOf("fotografía"), "CC0", "José", "acct", 1,
+            emptyList(), false, "")
+        val index = LibraryIndex(1, listOf(m))
+        assertEquals(listOf("a"), index.search("camara fotografia jose", null).map { it.id })
+    }
 }

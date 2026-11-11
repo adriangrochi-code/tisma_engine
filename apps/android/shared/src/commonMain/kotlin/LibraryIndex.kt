@@ -31,11 +31,11 @@ class LibraryIndex(val sequence: Long, val models: List<Model>) {
 
     /** Rule 4 and the person's search (name, tag, author, license). */
     fun search(query: String, list: BlockList?): List<Model> {
-        val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val words = foldText(query).trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         return models.filter { m ->
             !m.hasGcode && (list == null || (!list.blocksModel(m.id) && !list.blocksAccount(m.authorAccount) &&
                 m.files.none { list.blocksFile(it.sha256) })) &&
-                words.all { w -> (listOf(m.name, m.author, m.license) + m.tags).any { it.lowercase().contains(w) } }
+                words.all { w -> (listOf(m.name, m.author, m.license) + m.tags).any { foldText(it).contains(w) } }
         }
     }
 

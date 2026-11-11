@@ -230,7 +230,9 @@ class CloudViewModel(
             client.logout()
         } finally {
             forgetSession()
-            _state.update { it.copy(email = null, account = null, jobs = emptyList(), jobsLoaded = false, reports = emptyList()) }
+            // Nothing of this account stays for whoever signs in next on this phone.
+            _state.update { it.copy(email = null, account = null, jobs = emptyList(), jobsLoaded = false, reports = emptyList(),
+                sessions = emptyList()) }
         }
     }
 
@@ -374,7 +376,7 @@ class CloudViewModel(
         forgetSession()
         _state.update {
             it.copy(email = null, account = null, jobs = emptyList(), jobsLoaded = false, reports = emptyList(),
-                notice = Notice.SessionExpired)
+                sessions = emptyList(), notice = Notice.SessionExpired)
         }
     }
 
