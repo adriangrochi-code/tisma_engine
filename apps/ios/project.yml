@@ -40,11 +40,24 @@ targets:
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../android/shared/build/bin/iosSimulatorArm64/debugFramework
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
+  TismaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [TismaUITests]
+    dependencies:
+      - target: Tisma
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Tisma
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
 schemes:
   Tisma:
     build:
       targets:
         Tisma: all
         TismaTests: [test]
+        TismaUITests: [test]
     test:
-      targets: [TismaTests]
+      targets: [TismaTests, TismaUITests]

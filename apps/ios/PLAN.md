@@ -34,7 +34,7 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    Impresora (12-11): Klipper, OctoPrint, PrusaLink y Duet con los clientes comunes (`PrinterBridge`), estado cada
    5 s solo con la pantalla a la vista, pausar, seguir y parar; la clave en el Llavero del iPhone. Bambu después.
 6. **CI**: `.github/workflows/ios.yml` en macOS: las pruebas de `shared` en el simulador de iPhone (hecho, 11-11);
-   después `xcodebuild test` con la app de SwiftUI (12-11; las capturas como artefacto, después). Las pruebas de `shared` también corren
+   después `xcodebuild test` con la app de SwiftUI (12-11) y una prueba de interfaz que guarda una captura de cada sección como artefacto `ios-screenshots`. Las pruebas de `shared` también corren
    aquí en la JVM.
 7. **Planes** (dueño, 10-11; `cloud.md` 5b, spec/next cada191): se compran dentro de la app con la tienda. En iOS,
    StoreKit 2 con suscripciones que se renuevan solas, con los mismos ids de producto que Google Play donde se pueda;
