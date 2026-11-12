@@ -13,6 +13,12 @@ expect class PinnedTls(expectedSha256: String?) {
     var seenName: String?
         private set
 
-    /** Connects to [host]:[port] with TLS and checks the certificate before anything is sent. */
-    fun open(host: String, port: Int, timeoutMs: Int = 10_000): net.tisma.io.Link
+    /**
+     * Connects to [host]:[port] with TLS and checks the certificate before anything is sent. [readTimeoutMs] limits a
+     * read that waits (0: none, for MQTT, which may stay quiet for long).
+     */
+    fun open(host: String, port: Int, timeoutMs: Int = 10_000, readTimeoutMs: Int = 0): net.tisma.io.Link
+
+    /** An FTPS data connection to [port], resuming the TLS session of the control connection on [sessionPort]. */
+    fun openData(host: String, port: Int, sessionPort: Int, timeoutMs: Int = 10_000): net.tisma.io.Link
 }

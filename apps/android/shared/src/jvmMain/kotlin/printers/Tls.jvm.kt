@@ -23,7 +23,18 @@ actual class PinnedTls actual constructor(private val expectedSha256: String?) {
     @Volatile actual var seenName: String? = null
         private set
 
-    actual fun open(host: String, port: Int, timeoutMs: Int): net.tisma.io.Link = net.tisma.io.SocketLink(socket(host, port, timeoutMs))
+    actual fun open(host: String, port: Int, timeoutMs: Int, readTimeoutMs: Int): net.tisma.io.Link =
+        net.tisma.io.SocketLink(socket(host, port, timeoutMs).apply { soTimeout = readTimeoutMs })
+
+    actual fun openData(host: String, port: Int, sessionPort: Int, timeoutMs: Int): net.tisma.io.Link {
+        val plain = Socket()
+        return try {
+            plain.connect(InetSocketAddress(host, port), timeoutMs)
+            net.tisma.io.SocketLink(wrap(plain, host, sessionPort).apply { soTimeout = 30_000 })
+        } catch (e: Throwable) {
+            runCatching { plain.close() }; throw e
+        }
+    }
 
     private val trust = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =

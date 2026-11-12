@@ -52,7 +52,7 @@ actual class PinnedTls actual constructor(private val expectedSha256: String?) {
     actual var seenName: String? = null
         private set
 
-    actual fun open(host: String, port: Int, timeoutMs: Int): Link {
+    actual fun open(host: String, port: Int, timeoutMs: Int, readTimeoutMs: Int): Link {
         val (input, output) = memScoped {
             val i = alloc<ObjCObjectVar<NSInputStream?>>()
             val o = alloc<ObjCObjectVar<NSOutputStream?>>()
@@ -78,6 +78,12 @@ actual class PinnedTls actual constructor(private val expectedSha256: String?) {
         check(output, input)
         return StreamLink(input, output)
     }
+
+    /**
+     * iOS: a new TLS link to the data port with the same pinned certificate. NSStream gives no way to name the session
+     * to resume; a printer that insists on resuming it refuses the upload (to be checked on a printer).
+     */
+    actual fun openData(host: String, port: Int, sessionPort: Int, timeoutMs: Int): Link = open(host, port, timeoutMs, 30_000)
 
     private fun check(output: NSOutputStream, input: NSInputStream) {
         val trust = output.propertyForKey(key(kCFStreamPropertySSLPeerTrust))

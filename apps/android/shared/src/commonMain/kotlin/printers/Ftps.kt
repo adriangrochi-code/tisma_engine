@@ -1,26 +1,23 @@
 package net.tisma.printers
 
-import java.io.BufferedReader
-import java.io.InputStream
-import java.io.InputStreamReader
-import java.io.OutputStream
-import java.net.InetSocketAddress
-import java.net.Socket
+import net.tisma.io.ByteInput
+import net.tisma.io.ByteOutput
+import net.tisma.io.copyAll
 
 /**
  * Uploads one file by implicit FTPS (FTP, RFC 959, over TLS from the first
  * byte, RFC 4217's PBSZ and PROT P), as Bambu Lab's local mode wants it on port
  * 990 (printer_connections.md, «Bambu Lab en red local», rule 5). Own code from
- * the RFCs. The data connection reuses the control connection's TLS session.
+ * the RFCs. The data connection reuses the control connection's TLS session where the platform can (Android; on
+ * iOS not checked on a printer yet). Common code.
  */
 class FtpsUpload(private val tls: PinnedTls, private val host: String, private val port: Int) {
 
-    fun store(user: String, password: String, remoteName: String, length: Long, open: () -> InputStream) {
-        val control = tls.socket(host, port)
-        control.soTimeout = 30_000
-        control.use {
-            val r = BufferedReader(InputStreamReader(control.getInputStream(), Charsets.UTF_8))
-            val w = control.getOutputStream()
+    fun store(user: String, password: String, remoteName: String, length: Long, open: () -> ByteInput) {
+        val control = tls.open(host, port, readTimeoutMs = 30_000)
+        try {
+            val r = Lines(control.input)
+            val w = control.output
             expect(r, 220)
             command(w, "USER $user"); expect(r, 331, 230)
             command(w, "PASS $password")
@@ -36,30 +33,44 @@ class FtpsUpload(private val tls: PinnedTls, private val host: String, private v
             val dataPort = nums[4] * 256 + nums[5]
             command(w, "STOR $remoteName")
             // The data address is the printer's own (the PASV address may be a private one behind it).
-            val plain = Socket()
-            val data = try {
-                plain.connect(InetSocketAddress(host, dataPort), 10_000)
-                tls.wrap(plain, host, port)
-            } catch (e: Throwable) {
-                runCatching { plain.close() }; throw e
-            }
-            data.use { d ->
+            val data = tls.openData(host, dataPort, port)
+            try {
                 expect(r, 150, 125)
-                open().use { it.copyTo(d.getOutputStream(), 64 * 1024) }
+                open().use { it.copyAll(data.output) }
+                data.output.flush()
+            } finally {
+                data.close()
             }
             expect(r, 226, 250)
             runCatching { command(w, "QUIT") }
+        } finally {
+            runCatching { control.close() }
         }
         if (length < 0) Unit
     }
 
-    private fun command(w: OutputStream, line: String) {
-        w.write((line + "\r\n").toByteArray(Charsets.UTF_8))
+    private fun command(w: ByteOutput, line: String) {
+        val b = (line + "\r\n").encodeToByteArray()
+        w.write(b, 0, b.size)
         w.flush()
     }
 
+    /** Reply lines, read byte by byte so nothing of the stream is taken ahead. */
+    private class Lines(private val input: ByteInput) {
+        fun readLine(): String? {
+            val b = net.tisma.io.BytesOutput()
+            while (true) {
+                val c = input.read()
+                if (c < 0) return if (b.toByteArray().isEmpty()) null else b.toByteArray().decodeToString()
+                if (c == '\n'.code) return b.toByteArray().decodeToString().removeSuffix("\r")
+                b.write(c)
+                if (b.toByteArray().size > 8192) throw PrinterException(PrinterException.Kind.UNEXPECTED, "An FTP reply too long")
+            }
+        }
+    }
+
     /** A reply: its code and text, multi-line replies read to their last line (RFC 959, 4.2). */
-    private fun reply(r: BufferedReader): Pair<Int, String> {
+    private fun reply(r: Lines): Pair<Int, String> {
         var line = r.readLine() ?: throw PrinterException(PrinterException.Kind.NETWORK, "The printer closed the connection")
         val code = line.take(3).toIntOrNull() ?: throw PrinterException(PrinterException.Kind.UNEXPECTED, "Bad FTP reply")
         if (line.length > 3 && line[3] == '-') {
@@ -71,7 +82,7 @@ class FtpsUpload(private val tls: PinnedTls, private val host: String, private v
         return code to line
     }
 
-    private fun expect(r: BufferedReader, vararg codes: Int): String {
+    private fun expect(r: Lines, vararg codes: Int): String {
         val (code, text) = reply(r)
         if (code !in codes) throw PrinterException(PrinterException.Kind.SERVER, "FTP: $text")
         return text
