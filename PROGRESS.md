@@ -13583,3 +13583,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Decisión (P2):** Flashforge, FlashAir y MKS quedan sin hacer: no hay documentación oficial accesible (la de
   FlashAir ya no contesta y el archivo web no se alcanza desde aquí) y `PLAN.md` dice que ahí decide el dueño. Se
   pregunta en el resumen de la mañana.
+
+## 2026-11-12 — macOS antes de la beta: diálogos nativos de abrir y guardar
+
+- **Hecho:** en macOS, `FileBrowser` usa NSOpenPanel y NSSavePanel (AppKit, documentación pública de Apple), como
+  BH40 en Windows: el título, la carpeta, las extensiones como tipos permitidos y, al guardar, el nombre propuesto, la
+  extensión agregada y la pregunta antes de reemplazar (del sistema). Las corridas con guion y capturas siguen con el
+  diálogo propio. `PLAN.md` marcaba sin hacer la CI de macOS y el .dmg, hechos el 10-11; quedan marcados.
+- **Pruebas:** en Linux compila sin cambios; el archivo `.mm` solo lo compila la CI de macOS. No probado a mano en una
+  Mac.
+- **Sigue (macOS):** la vista (MoltenVK o OpenGL), la cámara USB con AVFoundation, la biblioteca para iOS.

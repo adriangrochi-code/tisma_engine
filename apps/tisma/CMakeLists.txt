@@ -71,6 +71,12 @@ target_link_libraries(tisma PRIVATE tisma_ui tisma_net tisma_bambu tisma_imgui n
 if(WIN32)
   target_link_libraries(tisma PRIVATE comdlg32) # the system's Open and Save As dialogs (BH40)
 endif()
+if(APPLE)
+  # The system's Open and Save dialogs (AppKit), as on Windows; Objective-C++
+  # is enabled at the top (its standard follows CXX_STANDARD).
+  target_sources(tisma PRIVATE file_dialog_macos.mm)
+  target_link_libraries(tisma PRIVATE "-framework AppKit" "-framework UniformTypeIdentifiers")
+endif()
 if(MSVC)
   # A windowed program that still starts at main().
   target_link_options(tisma PRIVATE /ENTRY:mainCRTStartup)

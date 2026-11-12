@@ -1386,11 +1386,14 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 
 ### macOS antes de la beta (decisión del dueño, 2026-11-10; reutilizar todo lo posible)
 
-- [ ] CI de macOS en cada envío, arm64 y x86_64 (runners de GitHub): compila y pasan las pruebas.
+- [x] CI de macOS en cada envío, arm64 y x86_64 (runners de GitHub): compila y pasan las pruebas (verde desde
+  3667e62, cuenta desde 550cbff).
 - [ ] La vista: MoltenVK o el camino OpenGL que ya existe.
-- [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows).
+- [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows): escritos (2026-11-12, NSOpenPanel y NSSavePanel en
+  `apps/tisma/file_dialog_macos.mm`); compila la CI de macOS, sin probar a mano en una Mac.
 - [ ] Cámara USB con AVFoundation y el permiso de cámara (`printer_connections.md`, regla 7 de macOS).
 - [ ] Paquete `.dmg`; sin firmar hasta que el dueño tenga la cuenta de Apple Developer, después firma y notarización.
+  Hecho sin firmar (754e4c0, b2a2963: Tisma.app en el .zip y el .dmg de la versión); falta la firma.
 - [ ] El motor como biblioteca para iOS (arm64, sin GPU por ahora o Metal vía MoltenVK), para la app de iPhone que
   hace la sesión de Android: un xcframework (iosArm64 + iosSimulatorArm64) con la entrada C `tisma_run_cli`
   (argc/argv de la línea de comandos, salida en buffers, mismos códigos de salida; `include/tisma/tisma_engine.h`,
