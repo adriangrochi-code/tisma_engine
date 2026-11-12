@@ -22,6 +22,10 @@ final class ScreensTests: XCTestCase {
             let button = app.tabBars.buttons[tab]
             XCTAssertTrue(button.waitForExistence(timeout: 10), "the \(tab) section is there")
             button.tap()
+            if tab == "Plate" {
+                // The printer card: no printer saved yet, so its connection icon says none (rule 42).
+                XCTAssertTrue(app.buttons["connection_none"].waitForExistence(timeout: 10), "the printer card is on the plate")
+            }
             keep(name)
         }
         XCTAssertTrue(app.navigationBars["More"].waitForExistence(timeout: 5))

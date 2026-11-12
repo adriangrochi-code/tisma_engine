@@ -67,3 +67,11 @@
 "%@ stopped printing" = "%@ dejó de imprimir";
 "%@ paused" = "%@ está en pausa";
 "%@ has an error" = "%@ tiene un error";
+"No printer connected" = "Ninguna impresora conectada";
+"Connecting to the printer" = "Conectando con la impresora";
+"Printer connected" = "Impresora conectada";
+"The printer does not answer" = "La impresora no responde";
+"No printer chosen" = "Sin impresora elegida";
+"Choose it in the assistant or below." = "Elígela en el asistente o aquí debajo.";
+"hardened steel" = "acero endurecido";
+"auto" = "auto";

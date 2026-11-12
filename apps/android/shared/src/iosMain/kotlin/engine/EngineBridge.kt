@@ -14,7 +14,25 @@ data class SliceSummary(val printTime: String, val printTimeS: Double, val filam
  * The engine's catalog and summaries for the SwiftUI screens (mobile_app.md, rules 11 and 12). The engine itself runs
  * in Swift (tisma_run_cli); this reads what it needs and what it writes, with the same code as Android.
  */
+/**
+ * What the plate's printer card draws (settings_panel.md, rules 34 to 36): the printer's [shape] (open, enclosed, delta,
+ * belt, resin, pellets), the nozzle's look, and, for a Bambu Lab, its plate's [bed] family and name ([plate], empty for
+ * the printer's own choice).
+ */
+data class PrinterCardLook(val shape: String, val hardened: Boolean, val highFlow: Boolean, val bambu: Boolean,
+                           val bed: String, val plate: String)
+
 object EngineBridge {
+    /** The card's look from the printer's profile (`tisma-engine profile`'s JSON) and its name. */
+    fun cardLook(profileJson: String, name: String): PrinterCardLook {
+        val values = runCatching { (Json.parseToJsonElement(profileJson) as? JsonObject)?.let { SettingsLayout.flatten(it) } }
+            .getOrNull().orEmpty()
+        fun text(k: String) = (values[k] as? JsonPrimitive)?.content.orEmpty()
+        val plate = text("bambu.plate")
+        return PrinterCardLook(printerShape { values[it] }.name.lowercase(), text("machine.hardened_nozzle") == "true",
+            highFlow(name), name.contains("Bambu", ignoreCase = true), bedFamily(plate).name.lowercase(), plate)
+    }
+
     /** The catalog of printers and filaments the app carries (resources/catalog), or null if it does not read. */
     fun catalog(printersJson: String, filamentsJson: String): Catalog? = runCatching { Catalog.parse(printersJson, filamentsJson) }.getOrNull()
 

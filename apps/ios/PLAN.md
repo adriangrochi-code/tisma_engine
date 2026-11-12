@@ -42,6 +42,9 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    Avisos de fin de impresión (12-11): PrintWatcher lee la impresora guardada cada 5 s con la app abierta y da un
    aviso local (terminó, se paró, en pausa, error) con las reglas de PrintEvents de Android; en segundo plano, una
    tarea BGAppRefresh mientras imprime (iOS decide cuándo: el aviso puede llegar tarde). Sin probar en un iPhone.
+   Tarjeta de impresora (12-11): en Placa, el dibujo de la impresora, la boquilla y la cama (Bambu Lab) con las mismas
+   tablas que Android (reglas 34 a 36, ahora en el módulo compartido), el filamento y el icono de conexión (regla 42)
+   que abre Impresora. Siguiente: Ingeniería.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común

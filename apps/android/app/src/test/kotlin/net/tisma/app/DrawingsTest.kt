@@ -3,11 +3,11 @@ package net.tisma.app
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
-import net.tisma.app.ui.BedFamily
-import net.tisma.app.ui.PrinterShape
-import net.tisma.app.ui.bedFamily
-import net.tisma.app.ui.highFlow
-import net.tisma.app.ui.printerShape
+import net.tisma.app.engine.BedFamily
+import net.tisma.app.engine.PrinterShape
+import net.tisma.app.engine.bedFamily
+import net.tisma.app.engine.highFlow
+import net.tisma.app.engine.printerShape
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.test.Test

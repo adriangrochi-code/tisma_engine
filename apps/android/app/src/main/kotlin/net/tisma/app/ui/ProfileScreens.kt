@@ -32,6 +32,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import net.tisma.app.R
 import net.tisma.app.engine.EngineRunner
+import net.tisma.app.engine.bedFamily
+import net.tisma.app.engine.highFlow
+import net.tisma.app.engine.printerShape
 import net.tisma.app.engine.SliceState
 import net.tisma.app.engine.SliceViewModel
 import java.util.Locale

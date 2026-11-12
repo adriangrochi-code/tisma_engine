@@ -34,7 +34,7 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
             // mobile_app.md, rule 5: Plate, Print, Material, Printer and More (the library is in More, rule 9).
-            PlateView().tabItem { Label("Plate", systemImage: "square.grid.3x3") }.tag(0)
+            PlateView(openPrinter: { tab = 3 }).tabItem { Label("Plate", systemImage: "square.grid.3x3") }.tag(0)
             SettingsView(tab: "print", title: "Print").tabItem { Label("Print", systemImage: "slider.horizontal.3") }.tag(1)
             SettingsView(tab: "material", title: "Material").tabItem { Label("Material", systemImage: "drop") }.tag(2)
             PrinterView().tabItem { Label("Printer", systemImage: "printer") }.tag(3)
@@ -75,12 +75,23 @@ struct PlateView: View {
     @AppStorage("printer.kind") private var savedKind = "moonraker"
     @AppStorage("printer.address") private var savedAddress = ""
     @AppStorage("printer.user") private var savedUser = ""
+    /// The connection icon opens the Printer tab.
+    var openPrinter: () -> Void = {}
+    @ObservedObject private var watcher = PrintWatcher.shared
+    @State private var look: PrinterCardLook?
 
     private var model: Catalog.PrinterModel? { Engine.catalog?.printer(name: printer) }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    PrinterCard(printer: printer, nozzle: nozzle, filament: filament, look: look,
+                                connection: Connection.of(address: savedAddress, line: watcher.line, problem: watcher.problem),
+                                onConnection: openPrinter)
+                        // The drawings come from the printer's profile, made by the engine when the choice changes.
+                        .task(id: "\(printer)|\(nozzle)|\(filament)") { await loadLook() }
+                }
                 Section("Printer") {
                     if let c = Engine.catalog {
                         Picker("Printer", selection: $printer) {
@@ -172,6 +183,18 @@ struct PlateView: View {
             }
             await MainActor.run { busy = false }
         }
+    }
+
+    /// The card's look from `tisma-engine profile` for the chosen printer (off the main thread).
+    private func loadLook() async {
+        guard !printer.isEmpty else { look = nil; return }
+        let (p, n, f) = (printer, nozzle, filament.isEmpty ? nil : filament)
+        look = await Task.detached { () -> PrinterCardLook? in
+            let (url, _) = Engine.profile(printer: p, nozzle: n, filament: f)
+            guard let url, let json = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+            try? FileManager.default.removeItem(at: url)
+            return EngineBridge.shared.cardLook(profileJson: json, name: p)
+        }.value
     }
 
     /// mobile_app.md, rule 14 (MA7): the G-code goes to the saved printer, which starts it.
