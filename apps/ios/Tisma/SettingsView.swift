@@ -45,6 +45,14 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle(title)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                }
+            }
         }
     }
 }
@@ -54,6 +62,7 @@ private struct RowView: View {
     @ObservedObject private var panel = PanelModel.shared
     @State private var text = ""
     @State private var bad = false
+    @FocusState private var editing: Bool
 
     var body: some View {
         switch row.kind {
@@ -72,16 +81,25 @@ private struct RowView: View {
                 Spacer()
                 TextField(row.value, text: $text)
                     .multilineTextAlignment(.trailing)
-                    .keyboardType(row.kind == "text" ? .default : .numbersAndPunctuation)
+                    // mobile_app.md, rule 17: numbers with the phone's number pad (a percent may be typed too).
+                    .keyboardType(row.kind == "text" ? .default : row.kind == "number" && !signed ? .decimalPad : .numbersAndPunctuation)
                     .foregroundStyle(bad ? .red : .primary)
-                    .onSubmit {
-                        bad = !(panel.bridge?.set(key: row.key, text: text) ?? false)
-                        if !bad { panel.changed() }
-                    }
+                    .focused($editing)
+                    .onSubmit { commit() }
+                    // The number pad has no return key: the value is kept when the field is left.
+                    .onChange(of: editing) { _, now in if !now && text != row.value { commit() } }
                     .frame(maxWidth: 140)
                 if !row.unit.isEmpty { Text(row.unit).foregroundStyle(.secondary) }
             }
             .onAppear { text = row.value }
         }
+    }
+
+    /// A value that may go below zero (an offset, or one that already is) keeps the keyboard with the minus sign.
+    private var signed: Bool { row.value.hasPrefix("-") || row.key.contains("offset") }
+
+    private func commit() {
+        bad = !(panel.bridge?.set(key: row.key, text: text) ?? false)
+        if !bad { panel.changed() }
     }
 }

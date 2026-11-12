@@ -110,3 +110,8 @@
 "Touched on the part" = "Tocada en la pieza";
 "Frame" = "Encuadrar";
 "Share or save the G-code" = "Compartir o guardar el G-code";
+"Done" = "Listo";
+"Cancelled." = "Cancelado.";
+"This model needs %d MB and the phone has %d MB free: slice it in Tisma Cloud." = "Este modelo necesita %d MB y el teléfono tiene %d MB libres: lamínalo en Tisma Cloud.";
+"Slicing…" = "Laminando…";
+"Cancel" = "Cancelar";

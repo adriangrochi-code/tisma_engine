@@ -1,4 +1,5 @@
 import Foundation
+import os
 import TismaShared
 
 /// The engine inside the app (mobile_app.md, rule 1; apps/ios/PLAN.md, step 4): iOS runs no programs, so its command
@@ -73,5 +74,50 @@ enum Engine {
         }
         let r = run(["slice", model.path, "--config", config.path, "-o", gcode.path, "--summary", summary.path])
         return (r, gcode, try? String(contentsOf: summary, encoding: .utf8))
+    }
+
+    /// A slice as a job of the engine's library (tisma_engine.h): its progress, a way to cancel it, and the memory it
+    /// needs checked first (mobile_app.md, rules 12 and 19). One job per object.
+    final class SliceJob: @unchecked Sendable {
+        enum Outcome {
+            case done(summary: String)
+            case cancelled
+            /// More memory than the phone has left for the app: the cloud is offered.
+            case tooLarge(needed: UInt64, available: UInt64)
+            case failed(String)
+            /// The library refused before slicing (what the command line may still do).
+            case refused(String)
+        }
+
+        private let ctx = tisma_create()
+        deinit { tisma_destroy(ctx) }
+
+        func cancel() { tisma_cancel(ctx) }
+
+        private static func text(_ s: tisma_status) -> String { s.message.map { String(cString: $0) } ?? "code \(s.code.rawValue)" }
+
+        func run(model: URL, settings: String, gcode: URL, progress: @escaping (Int, String) -> Void) -> Outcome {
+            var s = tisma_open_path(ctx, model.path)
+            guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
+            s = tisma_set_settings_json(ctx, settings)
+            guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
+            let needed = tisma_estimate_memory(ctx)
+            let available = UInt64(os_proc_available_memory())
+            if available > 0 && needed > available { return .tooLarge(needed: needed, available: available) }
+            s = tisma_slice_start(ctx)
+            guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
+            while true {
+                let p = tisma_poll(ctx)
+                if p.state == TISMA_DONE {
+                    let w = tisma_write_gcode(ctx, gcode.path)
+                    guard w.code == TISMA_OK else { return .failed(Self.text(w)) }
+                    return .done(summary: tisma_summary_json(ctx).map { String(cString: $0) } ?? "{}")
+                }
+                if p.state == TISMA_STOPPED { return .cancelled }
+                if p.state == TISMA_FAILED { return .failed(Self.text(p.error)) }
+                progress(Int(p.percent), p.stage.map { String(cString: $0) } ?? "")
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+        }
     }
 }

@@ -8,7 +8,9 @@ import kotlinx.serialization.json.doubleOrNull
 import net.tisma.io.lines
 
 /** A slice's summary as the iPhone shows it (the engine's `--summary`, the same keys Android reads). */
-data class SliceSummary(val printTime: String, val printTimeS: Double, val filamentMm: Double, val filamentG: Double, val layers: Int)
+data class SliceSummary(val printTime: String, val printTimeS: Double, val filamentMm: Double, val filamentG: Double, val layers: Int,
+                        /** The filament's cost (mobile_app.md, rule 12), or -1 when the profile gives no price. */
+                        val cost: Double = -1.0)
 
 /**
  * The engine's catalog and summaries for the SwiftUI screens (mobile_app.md, rules 11 and 12). The engine itself runs
@@ -71,6 +73,6 @@ object EngineBridge {
         val o = runCatching { Json.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return null
         fun num(k: String) = (o[k] as? JsonPrimitive)?.doubleOrNull ?: 0.0
         return SliceSummary((o["print_time"] as? JsonPrimitive)?.contentOrNull.orEmpty(), num("print_time_s"),
-            num("filament_mm"), num("filament_g"), num("layers").toInt())
+            num("filament_mm"), num("filament_g"), num("layers").toInt(), (o["cost"] as? JsonPrimitive)?.doubleOrNull ?: -1.0)
     }
 }

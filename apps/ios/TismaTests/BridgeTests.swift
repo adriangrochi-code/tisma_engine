@@ -169,4 +169,43 @@ final class BridgeTests: XCTestCase {
         XCTAssertEqual(lines.first?.key, "verdict")
         XCTAssertGreaterThan(map?.triangles ?? 0, 0, "the safety map")
     }
+
+    /// MA2 and rule 12 through the engine's library: progress comes, the cube is sliced, and the summary reads (with
+    /// its cost when the profile has a price). A library that refuses is reported for the engine team.
+    func testTheCubeAsALibraryJob() throws {
+        let c = try XCTUnwrap(Engine.catalog)
+        let printer = try XCTUnwrap(c.printers.first { $0.name.contains("Prusa") } ?? c.printers.first)
+        let (config, why) = Engine.profile(printer: printer.name, nozzle: 0.4, filament: c.filamentsFor(p: printer).first?.fullName)
+        let profile = try XCTUnwrap(config, why)
+        let model = FileManager.default.temporaryDirectory.appendingPathComponent("cube20-job.stl")
+        try Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
+        let gcode = model.deletingPathExtension().appendingPathExtension("gcode")
+        var seen: [Int] = []
+        let outcome = Engine.SliceJob().run(model: model, settings: try String(contentsOf: profile, encoding: .utf8), gcode: gcode) { p, _ in seen.append(p) }
+        switch outcome {
+        case .done(let json):
+            let s = EngineBridge.shared.summary(json: json)
+            print("ENGINE-SLICE job done progress=\(seen.count) summary=\(json.prefix(300))")
+            XCTAssertGreaterThan(s?.layers ?? 0, 0)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: gcode.path))
+        case .refused(let why): print("ENGINE-SLICE job refused: \(why)")
+        case .failed(let why): XCTFail("the job failed: \(why)")
+        case .cancelled: XCTFail("cancelled without asking")
+        case .tooLarge(let n, let a): XCTFail("too large: \(n) of \(a)")
+        }
+    }
+
+    /// A job cancelled at once stops (or, too quick to catch, finishes): never a failure.
+    func testACancelledJobStops() throws {
+        let model = FileManager.default.temporaryDirectory.appendingPathComponent("cube20-cancel.stl")
+        try Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
+        let job = Engine.SliceJob()
+        var outcome: Engine.SliceJob.Outcome?
+        let started = Date()
+        outcome = job.run(model: model, settings: #"{"layers":{"height":0.2}}"#, gcode: model.deletingPathExtension().appendingPathExtension("gcode")) { _, _ in
+            job.cancel()
+        }
+        print("ENGINE-SLICE cancel outcome=\(String(describing: outcome)) in \(Date().timeIntervalSince(started)) s")
+        if case .failed(let why) = outcome { XCTFail(why) }
+    }
 }

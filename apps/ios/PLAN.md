@@ -96,12 +96,12 @@ se marca con la fecha.
 | 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | P6: informar un problema (`app` `ios`); P7: preferencias y créditos |
 | 10 Abrir | STL, 3MF, OBJ, STEP, Compartir, enlace de sitio | STL, 3MF, OBJ, Compartir | P8: STEP; P9: enlaces de sitios de modelos |
 | 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente | P10: el paquete de perfiles |
-| 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa | P11: avance y cancelar; P12: estimar memoria y ofrecer la nube; P13: costo |
+| 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa; avance y cancelar, memoria y costo con la API de trabajos del motor (P11–P13, 12-11; si la biblioteca no los da, la línea de comandos como antes) | — |
 | 13 Ingeniería | caras tocadas, punto, dirección, temperatura, mapa, relleno mínimo | caras tocadas, mapa | P14: carga en un punto y dirección elegida; P15: temperatura; P16: relleno mínimo |
 | 14 Impresoras | búsqueda en la red, cámara | las cinco clases, mandar, pausar, seguir, parar, avisos | P17: búsqueda en la red (Bonjour); P18: cámara |
 | 15 Nube | Google, analizar en la nube, impresoras remotas, pagos | cuenta, laminar en la nube | P19: analizar en la nube; P20: impresoras remotas de los puentes; Google y pagos esperan al dueño (cuenta de Apple) |
 | 16 Ayuda sin conexión | sí | no | P21: ayuda (`assistant.md`) |
-| 17 Teclado numérico | sí | números y signos | P22: teclado decimal en los valores |
+| 17 Teclado numérico | sí | teclado decimal (P22, 12-11; con signo en los desplazamientos) | — |
 | 18, 19 Rendimiento | medido | sin medir | se mide en un iPhone cuando haya cuenta de Apple |
 
 ## Pendiente del dueño

@@ -84,6 +84,9 @@ struct PlateView: View {
     @ObservedObject private var watcher = PrintWatcher.shared
     @State private var look: PrinterCardLook?
     @State private var partMesh: PartMesh?
+    @State private var job: Engine.SliceJob?
+    @State private var percent = 0
+    @State private var stageText = ""
     @State private var framing = 0
 
     private var model: Catalog.PrinterModel? { Engine.catalog?.printer(name: printer) }
@@ -146,7 +149,11 @@ struct PlateView: View {
                 Section("Engine") {
                     Text(Engine.run(["--version"]).out.trimmingCharacters(in: .whitespacesAndNewlines))
                     Button("Slice") { slice() }.disabled(busy || printer.isEmpty)
-                    if busy { ProgressView() }
+                    // rule 12: the slice in the background, with its progress and a way to stop it.
+                    if busy {
+                        ProgressView(value: Double(percent), total: 100) { Text(stageText.isEmpty ? String(localized: "Slicing…") : stageText) }
+                        if let job { Button("Cancel", role: .cancel) { job.cancel() }.accessibilityIdentifier("plate_cancel") }
+                    }
                     if let result { Text(result).font(.footnote.monospaced()) }
                     if let gcode {
                         NavigationLink("Preview") { PreviewView(gcode: gcode) }
@@ -244,8 +251,17 @@ struct PlateView: View {
         }
     }
 
+    /// «2 h 05 min» from seconds.
+    nonisolated static func duration(_ s: Double) -> String {
+        let m = Int(s / 60)
+        return m >= 60 ? String(format: "%d h %02d min", m / 60, m % 60) : "\(m) min"
+    }
+
     private func slice() {
         busy = true
+        percent = 0; stageText = ""
+        let job = Engine.SliceJob()
+        self.job = job
         // A filament gives the temperatures: without one the engine refuses the G-code (nozzle heater at 0).
         let fallback = Engine.catalog.flatMap { c in model.flatMap { c.filamentsFor(p: $0).first?.fullName } }
         let (p, n, f, chosen) = (printer, nozzle, filament.isEmpty ? fallback : filament, opened)
@@ -264,17 +280,38 @@ struct PlateView: View {
                 if let panel, let text = try? String(contentsOf: profile, encoding: .utf8) {
                     applied = (try? panel.over(profileJson: text).write(to: config, atomically: true, encoding: .utf8)) != nil
                 }
-                let (r, out, summary) = Engine.slice(model: model, config: applied ? config : profile)
-                if r.code == 0 { made = out }
-                if r.code == 0, let s = summary.flatMap({ EngineBridge.shared.summary(json: $0) }) {
-                    text = "\(s.printTime) · \(String(format: "%.2f m", s.filamentMm / 1000)) · \(String(format: "%.1f g", s.filamentG)) · \(s.layers) layers"
+                let settings = applied ? config : profile
+                let out = model.deletingPathExtension().appendingPathExtension("gcode")
+                // The engine's library first: progress, cancel and the memory check (rules 12 and 19).
+                let outcome = job.run(model: model, settings: (try? String(contentsOf: settings, encoding: .utf8)) ?? "{}", gcode: out) { pc, stage in
+                    Task { @MainActor in percent = pc; stageText = stage }
+                }
+                var summary: String?
+                var failure: String?
+                switch outcome {
+                case .done(let json): summary = json; made = out
+                case .cancelled: failure = String(localized: "Cancelled.")
+                case .tooLarge(let needed, let available):
+                    failure = String(format: String(localized: "This model needs %d MB and the phone has %d MB free: slice it in Tisma Cloud."),
+                                     Int(needed / 1_000_000), Int(available / 1_000_000))
+                case .failed(let why): failure = why
+                case .refused(let why):
+                    // The command line, as before, when the library refuses (its exit code says why).
+                    print("ENGINE-SLICE library refused: \(why)")
+                    let (r, o, sum) = Engine.slice(model: model, config: settings)
+                    if r.code == 0 { made = o; summary = sum } else { failure = "exit \(r.code)\n\(r.err)" }
+                }
+                if let s = summary.flatMap({ EngineBridge.shared.summary(json: $0) }), made != nil {
+                    let time = s.printTime.isEmpty ? Self.duration(s.printTimeS) : s.printTime
+                    text = "\(time) · \(String(format: "%.2f m", s.filamentMm / 1000)) · \(String(format: "%.1f g", s.filamentG))"
+                        + (s.cost >= 0 ? " · " + String(format: "%.2f", s.cost) : "") + " · \(s.layers) layers"
                 } else {
-                    text = "exit \(r.code)\n\(r.err)"
+                    text = failure ?? "?"
                 }
             } else {
                 text = "No profile: \(why)"
             }
-            await MainActor.run { result = text; gcode = made; busy = false }
+            await MainActor.run { result = text; gcode = made; busy = false; self.job = nil }
         }
     }
 }
