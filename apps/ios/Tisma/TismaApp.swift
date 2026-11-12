@@ -22,12 +22,19 @@ struct TismaApp: App {
 }
 
 struct RootView: View {
+    @State private var tab = 0
+    @AppStorage("plate.opened") private var openedPath = ""
+
     var body: some View {
-        TabView {
-            PlateView().tabItem { Label("Plate", systemImage: "square.grid.3x3") }
-            LibraryView().tabItem { Label("Library", systemImage: "books.vertical") }
-            PrinterView().tabItem { Label("Printer", systemImage: "printer") }
-            MoreView().tabItem { Label("More", systemImage: "ellipsis.circle") }
+        TabView(selection: $tab) {
+            PlateView().tabItem { Label("Plate", systemImage: "square.grid.3x3") }.tag(0)
+            LibraryView().tabItem { Label("Library", systemImage: "books.vertical") }.tag(1)
+            PrinterView().tabItem { Label("Printer", systemImage: "printer") }.tag(2)
+            MoreView().tabItem { Label("More", systemImage: "ellipsis.circle") }.tag(3)
+        }
+        // «Compartir con Tisma» from another app (MA5): the model goes onto the plate.
+        .onOpenURL { url in
+            if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 }
         }
     }
 }
@@ -42,7 +49,8 @@ struct PlateView: View {
     @State private var busy = false
     @State private var gcode: URL?
     /// The model on the plate: the person's (copied into the app) or, until one is opened, the 20 mm cube.
-    @State private var opened: URL?
+    @AppStorage("plate.opened") private var openedPath = ""
+    private var opened: URL? { openedPath.isEmpty ? nil : URL(fileURLWithPath: openedPath) }
     @State private var picking = false
     @State private var sent: String?
     // The printer saved on the Printer screen.
@@ -92,7 +100,7 @@ struct PlateView: View {
             .navigationTitle("Plate")
             // mobile_app.md, rule 10: STL, OBJ and 3MF from the phone's files (STEP waits for the engine).
             .fileImporter(isPresented: $picking, allowedContentTypes: Self.modelTypes) { r in
-                if case .success(let url) = r { opened = Self.copyIn(url); gcode = nil; result = nil }
+                if case .success(let url) = r { openedPath = Self.copyIn(url)?.path ?? ""; gcode = nil; result = nil }
             }
         }
     }

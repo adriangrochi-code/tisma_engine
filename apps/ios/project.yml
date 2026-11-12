@@ -26,6 +26,19 @@ targets:
       - framework: Engine/TismaEngine.xcframework
         embed: false
       - sdk: libc++.tbd
+    # «Compartir con Tisma» (mobile_app.md, rule 10): other apps can open STL, OBJ and 3MF files in Tisma.
+    info:
+      path: Tisma/Info.plist
+      properties:
+        LSSupportsOpeningDocumentsInPlace: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: 3D model
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.standard-tesselated-geometry-format
+              - public.geometry-definition-format
+              - public.3mf
+              - public.data
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tismaservidores.tisma

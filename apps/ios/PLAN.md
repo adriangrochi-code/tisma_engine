@@ -31,7 +31,8 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    (12-11). Perfiles (12-11): impresora, boquilla y filamento del catálogo del motor (`Catalog` en `shared`) y
    `tisma-engine profile` para el `--config`. Vista previa por capas (12-11, `GcodeLayers` en `shared`). Abrir STL, OBJ y
    3MF de los archivos del teléfono (12-11). Mandar el G-code a la
-   impresora guardada y empezar (12-11). Falta «Compartir con Tisma» y el resto de los ajustes.
+   impresora guardada y empezar (12-11). «Compartir con Tisma»: otras apps abren STL, OBJ
+   y 3MF en Tisma y el modelo va a la Placa (12-11). Falta el resto de los ajustes.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común
