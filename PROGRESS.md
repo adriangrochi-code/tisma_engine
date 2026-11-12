@@ -13571,3 +13571,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   real.
 - **Sigue:** la interfaz tiene que ofrecer los dos tipos (sesión de la interfaz). En el motor: Flashforge (la API
   local no tiene documentación oficial: la ficha mide pedidos; el protocolo necesita decisión o ficha), FlashAir y MKS.
+
+## 2026-11-12 — gcode_macros: las variables de la Bambu Lab H3C (spec/next d497b7c)
+
+- **Hecho:** `nozzle_diameter_at_nozzle_id` es la lista por boquilla física (`machine.nozzle_diameter` en lista si la
+  hay; si no, la de una boquilla), `initial_no_support_nozzle_id` vale 0 (el motor empieza siempre por el primer
+  filamento) y `fins_extrude_safe_temp` es `[0]` salvo que el paquete la traiga en `machine.variables`. La expresión de
+  la línea 134 de la H3C (`nozzle_diameter_at_nozzle_id[initial_no_support_nozzle_id] == 0.2`) ya se lee.
+- **Pruebas:** un caso nuevo en `[macros]`; pasan las 133 de `[gcode]`. No probado con la H3C del paquete: lo mide la
+  sesión de perfiles.
+- **Decisión (P2):** Flashforge, FlashAir y MKS quedan sin hacer: no hay documentación oficial accesible (la de
+  FlashAir ya no contesta y el archivo web no se alcanza desde aquí) y `PLAN.md` dice que ahí decide el dueño. Se
+  pregunta en el resumen de la mañana.

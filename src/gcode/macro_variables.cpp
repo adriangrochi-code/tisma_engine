@@ -158,7 +158,21 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     set("first_non_support_filaments", list_of(TemplateValue::of(0LL)));
     set("filament_ids", list_of(TemplateValue::of(std::string())));
     set("curr_y_acceleration_limit", number(s.max_accel_y));
-    set("nozzle_diameter_at_nozzle_id", list_of(number(s.nozzle_diameter)));
+    // By physical nozzle, from 0; the nozzle of the first filament that is
+    // not support, fixed at the start (the Bambu Lab H3C indexes the list
+    // with it); the safe temperature for extruding the fins, 0 (off) when the
+    // pack does not give it.
+    {
+        TemplateValue diameters = list_of(number(s.nozzle_diameter));
+        if (!s.nozzle_diameters.empty()) {
+            diameters.list.clear();
+            for (const double d : s.nozzle_diameters)
+                diameters.list.push_back(number(d));
+        }
+        set("nozzle_diameter_at_nozzle_id", std::move(diameters));
+    }
+    set("initial_no_support_nozzle_id", TemplateValue::of(0LL));
+    set("fins_extrude_safe_temp", list_of(TemplateValue::of(0LL)));
     set("overall_chamber_temperature", whole(s.chamber_temperature));
     set("min_vitrification_temperature", TemplateValue::of(0LL));
     set("temperature_vitrification", list_of(TemplateValue::of(0LL)));

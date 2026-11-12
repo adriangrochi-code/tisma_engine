@@ -2960,6 +2960,23 @@ TEST_CASE("Bambu Lab's own variables are filled, and a list read past its end gi
     }));
 }
 
+TEST_CASE("the Bambu Lab H3C's start G-code: its nozzle by physical number (gcode_macros.md, rule 10 quater)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.nozzle_diameter = 0.2;
+    TemplateContext c = template_context(s, SlicedModel{});
+    CHECK(render_template("{if (nozzle_diameter_at_nozzle_id[initial_no_support_nozzle_id] == 0.2)}fine{else}std{endif}"
+                          " safe {fins_extrude_safe_temp[0]}",
+                          c, "machine.start_gcode") == "fine safe 0");
+    s.nozzle_diameter = 0.4;
+    s.nozzle_diameters = {0.4, 0.6, 0.4, 0.8};
+    s.variables["fins_extrude_safe_temp"] = {"240"};
+    TemplateContext four = template_context(s, SlicedModel{});
+    CHECK(render_template("{nozzle_diameter_at_nozzle_id[1]} {nozzle_diameter_at_nozzle_id[3]} "
+                          "{initial_no_support_nozzle_id} {fins_extrude_safe_temp[0]}",
+                          four, "machine.start_gcode") == "0.6 0.8 0 240");
+}
+
 TEST_CASE("OrcaSlicer and Creality Print filaments' own G-code names (gcode_variables.md, 2026-11-10)", "[gcode][macros]") {
     Settings s = test_printer();
     TemplateContext c = template_context(s, SlicedModel{});
