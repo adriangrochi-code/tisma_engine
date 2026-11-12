@@ -8,7 +8,7 @@ final class ScreensTests: XCTestCase {
     func testEachSectionOpens() {
         let app = XCUIApplication()
         app.launch()
-        for (tab, name) in [("Plate", "plate"), ("Library", "library"), ("Printer", "printer"), ("More", "more")] {
+        for (tab, name) in [("Plate", "plate"), ("Print", "print"), ("Material", "material"), ("Printer", "printer"), ("More", "more")] {
             let button = app.tabBars.buttons[tab]
             XCTAssertTrue(button.waitForExistence(timeout: 10), "the \(tab) section is there")
             button.tap()

@@ -21,6 +21,11 @@ targets:
         buildPhase: resources
       - path: ../../resources/catalog/filaments.json
         buildPhase: resources
+      # The settings panel's layout (settings_panel.md), the same files as Android's.
+      - path: ../android/app/src/main/assets/settings/layout_en.json
+        buildPhase: resources
+      - path: ../android/app/src/main/assets/settings/layout_es.json
+        buildPhase: resources
     dependencies:
       # The engine as a static library (the engine's CI, apps/ios/PLAN.md step 4); C++ inside, so libc++ too.
       - framework: Engine/TismaEngine.xcframework

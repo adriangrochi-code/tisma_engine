@@ -311,7 +311,7 @@ private fun Editor(row: SettingsLayout.Row, value: kotlinx.serialization.json.Js
             val bad = text.isNotBlank() && SettingsLayout.toJson(e, text) == null
             val onText: (String) -> Unit = { t -> text = t; SettingsLayout.toJson(e, t)?.let { if (SettingsLayout.show(it) != shown) set(it) } }
             // The number keyboard has no minus on many phones: a value that may be negative gets a ± button.
-            val signed = e is SettingsLayout.Editor.Number && (e.min == null || e.min < 0)
+            val signed = e is SettingsLayout.Editor.Number && (e.min.let { it == null || it < 0 })
             Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 text,

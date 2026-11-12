@@ -123,4 +123,16 @@ final class BridgeTests: XCTestCase {
         XCTAssertTrue(text.contains("\"temperature\":215"), "the filament's nozzle temperature is kept")
         XCTAssertTrue(text.contains("\"bed_temperature\":65.0"))
     }
+
+    func testThePanelHasLevelsAndKeepsChanges() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "layout_en", withExtension: "json"))
+        let panel = PanelBridge(layoutJson: try String(contentsOf: url, encoding: .utf8), changesJson: "{}")
+        let basic = panel.sections(tab: "print", level: 0).flatMap { $0.rows }.count
+        let advanced = panel.sections(tab: "print", level: 2).flatMap { $0.rows }.count
+        XCTAssertGreaterThan(basic, 0)
+        XCTAssertGreaterThan(advanced, basic)
+        XCTAssertTrue(panel.set(key: "layers.height", text: "0,12"), "a comma decimal is a number")
+        XCTAssertFalse(panel.set(key: "layers.height", text: "abc"))
+        XCTAssertTrue(panel.over(profileJson: #"{"layers":{"height":0.2,"first_height":0.3}}"#).contains("0.12"))
+    }
 }

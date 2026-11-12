@@ -187,7 +187,7 @@ class SettingsLayout(val version: String, val tabs: List<Tab>) {
         /** `layers.height` keys back to the engine's nested settings. */
         fun nest(values: Map<String, JsonElement>): JsonObject {
             val root = HashMap<String, Any>()
-            for ((key, v) in values.toSortedMap()) {
+            for ((key, v) in values.entries.sortedBy { it.key }.map { it.key to it.value }) {
                 val parts = key.split('.')
                 var m = root
                 for (p in parts.dropLast(1)) {

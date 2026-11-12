@@ -34,7 +34,9 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    impresora guardada y empezar (12-11). «Compartir con Tisma»: otras apps abren STL, OBJ
    y 3MF en Tisma y el modelo va a la Placa (12-11). Laminar un 3MF en la nube, seguirlo, bajar el G-code y
    verlo (12-11; `Jobs.kt` en `shared`). Impresión y Material básicos (12-11): altura de capa, relleno, soportes y
-   temperaturas sobre el perfil (`PrintChanges` en `shared`). Falta el panel completo de `settings_panel.md`.
+   temperaturas sobre el perfil (`PrintChanges` en `shared`). El panel completo (12-11): secciones Impresión y Material
+   con los niveles Básico, Normal y Avanzado y las reglas de ocultar, del mismo `SettingsLayout` que Android (en
+   `shared`); los cambios se aplican al laminar. Las secciones de abajo quedan como pide la regla 5.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común

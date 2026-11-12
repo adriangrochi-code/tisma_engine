@@ -50,3 +50,9 @@
 "Supports" = "Soportes";
 "Material" = "Material";
 "The filament's" = "La del filamento";
+"Level" = "Nivel";
+"Basic" = "Básico";
+"Normal" = "Normal";
+"Advanced" = "Avanzado";
+"The settings layout is missing from this build." = "Esta versión no trae el panel de ajustes.";
+"Shared library" = "Biblioteca compartida";
