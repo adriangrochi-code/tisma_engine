@@ -1,13 +1,14 @@
 {
  "format": "tisma-credits-ios",
  "version": 1,
- "about": "What the iPhone app carries besides the engine's credits (resources/credits.json): the engine's libraries linked into its iOS library (engine_libraries, to be confirmed by the engine team) and the app's own, with their notices (docs/spec/features/credits.md, rule 4). The SwiftUI code uses only Apple's system frameworks.",
+ "about": "What the iPhone app carries besides the engine's credits (resources/credits.json): the engine's libraries linked into its iOS library (engine_libraries, as the engine team listed them on 2026-11-12) and the app's own, with their notices (docs/spec/features/credits.md, rule 4). The SwiftUI code uses only Apple's system frameworks.",
  "engine_libraries": [
   "Clipper2",
   "nlohmann/json",
   "Boost.Polygon",
   "Boost.Config",
-  "oneTBB"
+  "oneTBB",
+  "stb_image_write"
  ],
  "libraries": [
   {
