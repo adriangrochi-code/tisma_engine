@@ -58,7 +58,13 @@ enum Engine {
     /// file for --config; nil (and why) when the engine cannot make them.
     static func profile(printer: String, nozzle: Double, filament: String?) -> (URL?, String) {
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("profile-\(UUID().uuidString).json")
-        let r = run(EngineBridge.shared.profileArgs(printer: printer, nozzle: nozzle, filament: filament, out: out.path))
+        // A printer of the installed profile pack (chosen in the assistant): its variant with the pack's own default
+        // filament and print profile (profile_pack.md, rule 13; parity P10b), as on Android.
+        let pack = UserDefaults.standard.string(forKey: "plate.pack") ?? ""
+        let args = !pack.isEmpty && Pack.installed
+            ? PackBridge.shared.profileArgs(packDir: Pack.packDir.path, printer: pack, out: out.path)
+            : EngineBridge.shared.profileArgs(printer: printer, nozzle: nozzle, filament: filament, out: out.path)
+        let r = run(args)
         return (r.code == 0 && FileManager.default.fileExists(atPath: out.path)) ? (out, r.err) : (nil, r.err)
     }
 

@@ -66,6 +66,7 @@ struct PlateView: View {
     @AppStorage("plate.printer") private var printer = ""
     @AppStorage("plate.nozzle") private var nozzle = 0.4
     @AppStorage("plate.filament") private var filament = ""
+    @AppStorage("plate.pack") private var pack = ""
     @State private var result: String?
     @State private var busy = false
     @State private var gcode: URL?
@@ -113,8 +114,10 @@ struct PlateView: View {
                 }
                 Section("Printer") {
                     if let c = Engine.catalog {
-                        Picker("Printer", selection: $printer) {
+                        // A catalog printer chosen here replaces a pack printer chosen in the assistant.
+                        Picker("Printer", selection: Binding(get: { printer }, set: { printer = $0; pack = "" })) {
                             Text("Choose…").tag("")
+                            if !pack.isEmpty { Text(printer).tag(printer) }
                             ForEach(c.printers, id: \.name) { Text($0.name).tag($0.name) }
                         }
                         if let m = model {

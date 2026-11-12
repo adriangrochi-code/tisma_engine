@@ -95,7 +95,7 @@ se marca con la fecha.
 | 8 Impresora | Conexión y Calibración | Conexión y Calibración (P5, 12-11) | — |
 | 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | ayuda (P21, 12-11); informar un problema (P6, `app` `ios`, 12-11: el servidor lo acepta desde cc28f98 de tisma-cloud, en producción cuando el dueño actualice); preferencias (el servidor) y créditos (P7, 12-11; la lista de bibliotecas del motor en iOS la confirma el motor) |
 | 10 Abrir | STL, 3MF, OBJ, STEP, Compartir, enlace de sitio | STL, 3MF, OBJ, Compartir | P8: STEP; P9: enlaces de sitios de modelos |
-| 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente; el paquete se baja e instala desde Más (P10, 12-11) | P10b: las impresoras y filamentos del paquete en el asistente y la placa |
+| 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente; el paquete se baja e instala desde Más (P10, 12-11) | P10c: elegir otro filamento del paquete (hoy, el que trae la variante; las impresoras del paquete ya están en el asistente, P10b, 12-11) |
 | 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa; avance por etapas, cancelar y memoria con la API de trabajos del motor (P11, P12, 12-11; en dev desde 4986dc4) | P13: el costo (el motor lo da null por ahora) |
 | 13 Ingeniería | caras tocadas, punto, dirección, temperatura, mapa, relleno mínimo | caras tocadas, mapa | P14: carga en un punto y dirección elegida; P15: temperatura; P16: relleno mínimo |
 | 14 Impresoras | búsqueda en la red, cámara | las cinco clases, mandar, pausar, seguir, parar, avisos | — (búsqueda en la red con Bonjour, P17, y cámara, P18, 12-11) |
