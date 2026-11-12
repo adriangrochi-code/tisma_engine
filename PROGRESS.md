@@ -12339,5 +12339,8 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   archivos y por «Compartir con Tisma»; vista previa por capas (`GcodeLayers` en `shared`); mandar el G-code a la
   impresora guardada. Siempre con un filamento: sin él el perfil deja la boquilla a 0 °C y el control del motor
   rechaza el G-code (el motor ahora lo avisa, 5cf8071). Nada probado en un iPhone real ni contra una impresora.
+- iPhone, después (12-11, run 43250090655, verde en el simulador): laminar un 3MF en la nube, seguirlo, bajar el
+  G-code a un archivo y verlo (`Jobs.kt` en `shared`; mandar y seguir no se prueban en la CI, que no tiene servidor);
+  Impresión y Material básicos (altura de capa, relleno, soportes, temperaturas) sobre el perfil (`PrintChanges`).
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
