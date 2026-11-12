@@ -72,9 +72,11 @@ if(WIN32)
   target_link_libraries(tisma PRIVATE comdlg32) # the system's Open and Save As dialogs (BH40)
 endif()
 if(APPLE)
-  # The system's Open and Save dialogs (AppKit), as on Windows; Objective-C++
-  # is enabled at the top (its standard follows CXX_STANDARD).
+  # The system's Open and Save dialogs (AppKit), as on Windows: the .mm goes
+  # through the C++ compiler as Objective-C++ (enabling OBJCXX would build
+  # GLFW's .m files as Objective-C++ too, which they are not).
   target_sources(tisma PRIVATE file_dialog_macos.mm)
+  set_source_files_properties(file_dialog_macos.mm PROPERTIES LANGUAGE CXX COMPILE_OPTIONS "-xobjective-c++")
   target_link_libraries(tisma PRIVATE "-framework AppKit" "-framework UniformTypeIdentifiers")
 endif()
 if(MSVC)
