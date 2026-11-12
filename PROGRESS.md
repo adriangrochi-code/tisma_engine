@@ -12342,5 +12342,9 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - iPhone, después (12-11, run 43250090655, verde en el simulador): laminar un 3MF en la nube, seguirlo, bajar el
   G-code a un archivo y verlo (`Jobs.kt` en `shared`; mandar y seguir no se prueban en la CI, que no tiene servidor);
   Impresión y Material básicos (altura de capa, relleno, soportes, temperaturas) sobre el perfil (`PrintChanges`).
+- iPhone, panel de ajustes (12-11, run 43258512253, verde en el simulador): `SettingsLayout` en `shared` (Android
+  sin cambios); secciones Impresión y Material con los niveles Básico, Normal y Avanzado y las reglas de ocultar; los
+  cambios se guardan y se aplican sobre el perfil al laminar. La barra de abajo: Placa, Impresión, Material,
+  Impresora y Más (regla 5), con la biblioteca en Más.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
