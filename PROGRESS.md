@@ -13769,3 +13769,18 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   real (QA).
 - **Pruebas:** `design_sketch_palette.txt` (la paleta, y la cota de 40 mm cambiada a 50 con doble clic); pasan las 22
   de Diseño.
+
+## 2026-11-12 — interfaz: las herramientas del boceto en la barra (QA)
+
+- **Hecho:** la fila de herramientas del boceto, que se montaba sobre la barra de íconos, ya no existe. La pestaña
+  Boceto de la barra tiene sus grupos:
+  - Crear: línea, rectángulo, círculo, arco, Extruir y Revolucionar;
+  - Modificar: recortar … escalar;
+  - Restricciones: cota y las geométricas, con su letra;
+  - Inspeccionar: distancia y área;
+  - Insertar: DXF y SVG de entrada y DXF de salida;
+  - Terminar.
+  Los modos (Referencias F3, Ortogonal F8, Ajuste a la cuadrícula F9, Polar F10) y el plano van a la paleta. En el
+  panel izquierdo quedan solo las restricciones y los grados de libertad.
+- **Pruebas:** `design_sketch_edit` y `design_sketch_fillet` buscan ahora sus herramientas en los grupos de la barra;
+  pasan las 22 de Diseño. Captura revisada a 1400 × 860.

@@ -1618,7 +1618,6 @@ private:
     void sketch_update_cursor();
     void sketch_resolve_cursor();
     void sketch_overlay();
-    void sketch_strip();
     void sketch_palette(); // rule 11 sexies: «Finish sketch» on top, the palette at the right
     void sketch_look_at();
     void sketch_cursor_input();
@@ -15655,6 +15654,25 @@ void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c) {
         dl->PathStroke(c, t);
     } else if (id == "finish") {
         line(0.15f, 0.5f, 0.4f, 0.75f), line(0.4f, 0.75f, 0.85f, 0.25f);
+    } else if (id == "trim") { // a line cut where it crosses another
+        line(0.15f, 0.5f, 0.42f, 0.5f), line(0.58f, 0.5f, 0.85f, 0.5f), line(0.5f, 0.15f, 0.5f, 0.85f);
+    } else if (id == "extend") {
+        line(0.15f, 0.5f, 0.75f, 0.5f), line(0.85f, 0.15f, 0.85f, 0.85f), line(0.62f, 0.38f, 0.75f, 0.5f), line(0.62f, 0.62f, 0.75f, 0.5f);
+    } else if (id == "offset") {
+        line(0.15f, 0.3f, 0.85f, 0.3f), line(0.15f, 0.7f, 0.85f, 0.7f), line(0.5f, 0.35f, 0.5f, 0.65f);
+    } else if (id == "rotate") {
+        dl->PathArcTo(p(0.5f, 0.5f), 0.33f * w, 0.0f, 4.7f, 20);
+        dl->PathStroke(c, t);
+        line(0.83f, 0.5f, 0.73f, 0.36f), line(0.83f, 0.5f, 0.93f, 0.36f);
+    } else if (id == "scale" || id == "copy") {
+        box(0.15f, 0.45f, 0.55f, 0.85f);
+        box(0.4f, 0.15f, 0.85f, 0.6f);
+    } else if (id.starts_with("txt:")) { // a constraint: its letter, as drawn by the geometry
+        const std::string text(id.substr(4));
+        const float size = w * 0.55f;
+        const ImVec2 at = ImGui::GetFont()->CalcTextSizeA(size, FLT_MAX, 0.0f, text.c_str());
+        dl->AddRect(p(0.12f, 0.12f), p(0.88f, 0.88f), c, w * 0.12f, std::max(1.0f, t * 0.6f));
+        dl->AddText(ImGui::GetFont(), size, ImVec2(a.x + 0.5f * (w - at.x), a.y + 0.5f * (w - at.y)), c, text.c_str());
     } else { // a constraint or an edit tool: a dot and a stroke
         dl->AddCircle(p(0.5f, 0.5f), 0.3f * w, c, 20, t);
         line(0.35f, 0.5f, 0.65f, 0.5f);
@@ -15739,13 +15757,71 @@ void App::design_toolbar() {
             {SketchEdit::Tool::Rectangle, T::SketchToolRect, "rectangle", "REC"},
             {SketchEdit::Tool::Circle, T::SketchToolCircle, "circle", "C"},
             {SketchEdit::Tool::Arc, T::SketchToolArc, "arc", "A"}};
+        const char* strip_ids[] = {"sketch_line", "sketch_rect", "sketch_circle", "sketch_arc"};
+        int n = 0;
         for (const auto& [tool, label, icon, key] : kinds)
-            draw.tools.push_back({std::string("design_sketch_") + icon, icon, tr(label), tr(T::DesignTipSketchTool), key, true, false,
+            draw.tools.push_back({strip_ids[n++], icon, tr(label), tr(T::DesignTipSketchTool), key, true, false,
                                   [this, tool] { sketch_tool(tool); }});
+        // The sketch made a body: extruded or revolved, with its region closed.
+        const bool region = editing_sketch()->has_region();
+        draw.tools.push_back({"sketch_extrude", "press_pull", tr(T::SketchExtrude), tr(T::DesignTipSketchTool), "E", region, false,
+                              [this] { sketch_command("e", "e"); }});
+        draw.tools.push_back({"sketch_revolve", "pattern_circular", tr(T::SketchRevolve), tr(T::DesignTipSketchTool), "REV", region, false,
+                              [this] { sketch_command("rev", "rev"); }});
+        // Modificar (rule 17): the edit tools, the main three as icons.
+        Group modify{T::DesignGroupModify, "design_group_sketch_modify", 3, {}};
+        using K = SketchEdit::EditKind;
+        const std::tuple<K, T, const char*, const char*> edits[] = {
+            {K::Trim, T::EditTrim, "sketch_edit_trim", "trim"},           {K::Extend, T::EditExtend, "sketch_edit_extend", "extend"},
+            {K::Offset, T::EditOffset, "sketch_edit_offset", "offset"},   {K::Fillet, T::EditFillet, "sketch_edit_fillet", "fillet"},
+            {K::Chamfer, T::EditChamfer, "sketch_edit_chamfer", "chamfer"}, {K::Mirror, T::EditMirror, "sketch_edit_mirror", "mirror"},
+            {K::Array, T::EditArray, "sketch_edit_array", "pattern_rectangular"}, {K::Move, T::EditMove, "sketch_edit_move", "move"},
+            {K::Copy, T::EditCopy, "sketch_edit_copy", "copy"},           {K::Rotate, T::EditRotate, "sketch_edit_rotate", "rotate"},
+            {K::Scale, T::EditScale, "sketch_edit_scale", "scale"}};
+        for (const auto& [kind, label, id, icon] : edits)
+            modify.tools.push_back({id, icon, tr(label), tr(T::DesignTipSketchTool), "", true, false, [this, kind] { sketch_edit_tool(kind); }});
+        // Restricciones (rule 5): the dimension and the geometric ones.
+        Group rules{T::SketchRules, "design_group_sketch_rules", 4, {}};
+        using R = SketchEdit::Rule;
+        const std::tuple<R, T, const char*, const char*> rule_tools[] = {
+            {R::Dimension, T::RuleDimension, "sketch_rule_dimension", "txt:<>"},
+            {R::Horizontal, T::RuleHorizontal, "sketch_rule_horizontal", "txt:H"},
+            {R::Vertical, T::RuleVertical, "sketch_rule_vertical", "txt:V"},
+            {R::Coincident, T::RuleCoincident, "sketch_rule_coincident", "txt:C"},
+            {R::Parallel, T::RuleParallel, "sketch_rule_parallel", "txt://"},
+            {R::Perpendicular, T::RulePerpendicular, "sketch_rule_perpendicular", "txt:L"},
+            {R::Equal, T::RuleEqual, "sketch_rule_equal", "txt:="},
+            {R::Concentric, T::RuleConcentric, "sketch_rule_concentric", "txt:O"},
+            {R::Tangent, T::RuleTangent, "sketch_rule_tangent", "txt:T"},
+            {R::Fixed, T::RuleFixed, "sketch_rule_fixed", "txt:F"},
+            {R::Angle, T::RuleAngle, "sketch_rule_angle", "txt:A"}};
+        for (const auto& [rule, label, id, icon] : rule_tools)
+            rules.tools.push_back({id, icon, tr(label), tr(T::DesignTipSketchTool), "", true, false, [this, rule] { sketch_rule_tool(rule); }});
+        // Inspeccionar and Insertar: measures, and drawings in and out (rules 18, 19 bis, 20).
+        Group inspect{T::DesignGroupInspect, "design_group_sketch_inspect", 1,
+                      {{"sketch_measure_distance", "measure", tr(T::EditDistance), tr(T::DesignTipSketchTool), "DI", true, false,
+                        [this] { sketch_edit_tool(K::Distance); }},
+                       {"sketch_measure_area", "measure", tr(T::EditArea), tr(T::DesignTipSketchTool), "AREA", true, false,
+                        [this] { sketch_edit_tool(K::Area); }}}};
+        Group insert{T::DesignGroupInsert, "design_group_sketch_insert", 1,
+                     {{"sketch_import_dxf", "dxf", tr(T::SketchImportDxf), tr(T::DesignTipSketchTool), "", true, false,
+                       [this] {
+                           purpose_ = Purpose::ImportSketchDxf;
+                           browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportDxf), {".dxf"}, last_folder_);
+                       }}}};
+        insert.tools.push_back({"sketch_import_svg", "dxf", tr(T::SketchImportSvg), tr(T::DesignTipSketchTool), "", true, false, [this] {
+                                    purpose_ = Purpose::ImportSketchSvg;
+                                    browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportSvg), {".svg"}, last_folder_);
+                                }});
+        insert.tools.push_back({"sketch_export_dxf", "dxf", tr(T::SketchExportDxf), tr(T::DesignTipSketchTool), "", true, false, [this] {
+                                    purpose_ = Purpose::ExportSketchDxf;
+                                    browser_.open(FileBrowser::Mode::Save, tr(T::SketchExportDxf), {".dxf"}, last_folder_, "boceto.dxf");
+                                }});
         Group finish{T::DesignGroupFinish, "design_group_finish", 1,
                      {{"design_toolbar_finish", "finish", tr(T::SketchFinish), tr(T::DesignTipFinish), "", true, false,
                        [this] { finish_sketch(); }}}};
-        tabs.push_back({T::DesignTabSketch, {std::move(draw), std::move(finish)}});
+        tabs.push_back({T::DesignTabSketch, {std::move(draw), std::move(modify), std::move(rules), std::move(inspect), std::move(insert),
+                                             std::move(finish)}});
     }
     // Inspeccionar and Utilidades.
     tabs.push_back({T::DesignTabInspect,
@@ -16597,13 +16673,9 @@ void App::design_panel() {
     section(T::DesignSecSketch);
     if (sketch_edit_ && editing_sketch()) {
         SketchEdit& e = *sketch_edit_;
+        // The tools are in the toolbar's Boceto tab and the modes in the
+        // palette (rule 11 sexies): here, the constraints and what is left free.
         loc::TextDisabled("%s", plane_label(editing_sketch()->plane));
-        ImGui::Checkbox(tr(T::SketchSnaps), &e.snaps);
-        ImGui::SameLine();
-        ImGui::Checkbox(tr(T::SketchOrtho), &e.ortho);
-        ImGui::Checkbox(tr(T::SketchGrid), &e.grid);
-        ImGui::SameLine();
-        ImGui::Checkbox(tr(T::SketchPolar), &e.polar);
         loc::TextDisabled("%s", tr(T::SketchHint));
         // The degrees of freedom left (rule 5), and the constraint tools.
         {
@@ -16653,59 +16725,6 @@ void App::design_panel() {
                 x += w + ImGui::GetStyle().ItemSpacing.x;
             }
         }
-        // Editar (rule 17).
-        {
-            loc::TextDisabled("%s", tr(T::SketchEditTools));
-            using K = SketchEdit::EditKind;
-            const std::tuple<K, T, const char*> edits[] = {
-                {K::Trim, T::EditTrim, "sketch_edit_trim"},       {K::Extend, T::EditExtend, "sketch_edit_extend"},
-                {K::Offset, T::EditOffset, "sketch_edit_offset"}, {K::Fillet, T::EditFillet, "sketch_edit_fillet"},
-                {K::Chamfer, T::EditChamfer, "sketch_edit_chamfer"},
-                {K::Mirror, T::EditMirror, "sketch_edit_mirror"}, {K::Array, T::EditArray, "sketch_edit_array"},
-                {K::Move, T::EditMove, "sketch_edit_move"},       {K::Copy, T::EditCopy, "sketch_edit_copy"},
-                {K::Rotate, T::EditRotate, "sketch_edit_rotate"}, {K::Scale, T::EditScale, "sketch_edit_scale"},
-                {K::Distance, T::EditDistance, "sketch_measure_distance"}, {K::Area, T::EditArea, "sketch_measure_area"},
-            };
-            float x = 0.0f;
-            const float room = ImGui::GetContentRegionAvail().x;
-            for (const auto& [kind, label, id] : edits) {
-                const float w = ImGui::CalcTextSize(tr(label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
-                if (x > 0.0f && x + w <= room)
-                    ImGui::SameLine();
-                else
-                    x = 0.0f;
-                const bool on = e.tool == SketchEdit::Tool::Edit && e.edit == kind;
-                if (on)
-                    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
-                if (ImGui::SmallButton(tr(label)))
-                    sketch_edit_tool(kind);
-                if (on)
-                    ImGui::PopStyleColor();
-                rect_of(id);
-                x += w + ImGui::GetStyle().ItemSpacing.x;
-            }
-        }
-        // Drawings from other programs, and the sketch out (rules 19 bis, 20).
-        if (ImGui::SmallButton(tr(T::SketchImportDxf))) {
-            purpose_ = Purpose::ImportSketchDxf;
-            browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportDxf), {".dxf"}, last_folder_);
-        }
-        rect_of("sketch_import_dxf");
-        ImGui::SameLine();
-        if (ImGui::SmallButton(tr(T::SketchImportSvg))) {
-            purpose_ = Purpose::ImportSketchSvg;
-            browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportSvg), {".svg"}, last_folder_);
-        }
-        rect_of("sketch_import_svg");
-        ImGui::SameLine();
-        if (ImGui::SmallButton(tr(T::SketchExportDxf))) {
-            purpose_ = Purpose::ExportSketchDxf;
-            browser_.open(FileBrowser::Mode::Save, tr(T::SketchExportDxf), {".dxf"}, last_folder_, "boceto.dxf");
-        }
-        rect_of("sketch_export_dxf");
-        if (ImGui::Button(tr(T::SketchFinish)))
-            finish_sketch();
-        rect_of("design_sketch_finish");
     } else {
         loc::TextDisabled("%s", tr(T::DesignSketch));
     }
@@ -23867,69 +23886,6 @@ void App::sketch_overlay() {
     dl->PopClipRect();
 }
 
-// The strip of the sketch's tools above the view (rule 3).
-void App::sketch_strip() {
-    cad::Sketch* sketch = editing_sketch();
-    if (!sketch_edit_ || !sketch)
-        return;
-    SketchEdit& e = *sketch_edit_;
-    const float h = 30.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 12.0f * scale_, view_pos_.y + 56.0f * scale_), ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.9f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * scale_, 4.0f * scale_));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
-    ImGui::Begin("##sketch_strip", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    const auto named = [](const char* name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
-    };
-    loc::TextColored(rgb(theme_.accent_hover), "%s", plane_label(sketch->plane));
-    ImGui::SameLine(0, 10.0f * scale_);
-    const struct {
-        const char* id;
-        T label;
-        SketchEdit::Tool tool;
-    } tools[] = {{"sketch_line", T::SketchToolLine, SketchEdit::Tool::Line},
-                 {"sketch_rect", T::SketchToolRect, SketchEdit::Tool::Rectangle},
-                 {"sketch_circle", T::SketchToolCircle, SketchEdit::Tool::Circle},
-                 {"sketch_arc", T::SketchToolArc, SketchEdit::Tool::Arc}};
-    for (const auto& tl : tools) {
-        if (button(tl.id, nullptr, tr(tl.label), false, e.tool == tl.tool, true, nullptr, h))
-            sketch_tool(tl.tool);
-        named(tl.id);
-        ImGui::SameLine();
-    }
-    ImGui::SameLine(0, 10.0f * scale_);
-    const struct {
-        const char* id;
-        T label;
-        bool* flag;
-    } toggles[] = {{"sketch_snaps", T::SketchSnaps, &e.snaps},
-                   {"sketch_ortho", T::SketchOrtho, &e.ortho},
-                   {"sketch_grid", T::SketchGrid, &e.grid},
-                   {"sketch_polar", T::SketchPolar, &e.polar}};
-    for (const auto& tg : toggles) {
-        if (button(tg.id, nullptr, tr(tg.label), false, *tg.flag, true, nullptr, h))
-            *tg.flag = !*tg.flag;
-        named(tg.id);
-        ImGui::SameLine();
-    }
-    ImGui::SameLine(0, 10.0f * scale_);
-    if (button("sketch_extrude", nullptr, tr(T::SketchExtrude), false, false, sketch->has_region(), nullptr, h))
-        sketch_command("e", "e");
-    named("sketch_extrude");
-    ImGui::SameLine();
-    if (button("sketch_revolve", nullptr, tr(T::SketchRevolve), false, false, sketch->has_region(), nullptr, h))
-        sketch_command("rev", "rev");
-    named("sketch_revolve");
-    ImGui::End();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
-}
-
 // Rule 11 sexies: «Finish sketch» in green at the top of the view, and the
 // sketch's palette at the right, under the view cube.
 void App::sketch_palette() {
@@ -23970,6 +23926,7 @@ void App::sketch_palette() {
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
     note_rect("sketch_palette");
     loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::SketchPalette));
+    loc::TextDisabled("%s", plane_label(sketch->plane));
     ImGui::Separator();
     const auto check = [&](const char* id, T label, bool& flag) {
         ImGui::Checkbox((std::string(tr(label)) + "##" + id).c_str(), &flag);
@@ -23977,9 +23934,14 @@ void App::sketch_palette() {
     };
     check("sketch_construction", T::SketchConstruction, e.construction);
     check("sketch_show_grid", T::SketchShowGrid, e.show_grid);
-    check("sketch_snap_grid", T::SketchGrid, e.grid);
     check("sketch_show_rules", T::SketchShowRules, e.show_rules);
     check("sketch_show_dims", T::SketchShowDims, e.show_dims);
+    // The drawing modes, with their keys (rules 15 and 16).
+    ImGui::Separator();
+    check("sketch_snaps", T::SketchSnaps, e.snaps);
+    check("sketch_ortho", T::SketchOrtho, e.ortho);
+    check("sketch_grid", T::SketchGrid, e.grid);
+    check("sketch_polar", T::SketchPolar, e.polar);
     if (ImGui::Button((std::string(tr(T::SketchLookAt)) + "##sketch_look_at").c_str()))
         sketch_look_at();
     note_rect("sketch_look_at");
@@ -25025,7 +24987,7 @@ void App::layout() {
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
             design_command_line(), design_timeline(), design_handles();
             if (sketch_edit_) {
-                sketch_strip(), sketch_palette();
+                sketch_palette();
                 sketch_cursor_input();
                 sketch_overlay();
             } else {
