@@ -39,8 +39,13 @@ class HttpRequest(
     val timeoutMs: Int = 30_000,
     /** A raw body streamed with its exact length (a file upload by PUT or POST). */
     val stream: FormPart? = null,
+    /**
+     * The answer may be large (a result of up to 1 GB): a platform that would hold it in memory writes it to a file
+     * first and reads it from there (iOS). Android streams every answer anyway.
+     */
+    val large: Boolean = false,
 ) {
-    fun withHeader(name: String, value: String) = HttpRequest(method, url, headers + (name to value), body, form, timeoutMs, stream)
+    fun withHeader(name: String, value: String) = HttpRequest(method, url, headers + (name to value), body, form, timeoutMs, stream, large)
 }
 
 /** An answer. [body] is read only when the caller asks for it, so a large result can be streamed. */

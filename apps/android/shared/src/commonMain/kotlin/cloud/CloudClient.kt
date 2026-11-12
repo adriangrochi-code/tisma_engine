@@ -201,7 +201,7 @@ class CloudClient(
 
     private fun fetch(route: String, out: ByteOutput, maxBytes: Long): Download {
         val response = send(HttpRequest("GET", serverUrl + route, headers(true),
-            timeoutMs = 30 * 60_000))
+            timeoutMs = 30 * 60_000, large = true))
         response.use { r ->
             if (!r.ok) throw failure(r)
             var total = 0L

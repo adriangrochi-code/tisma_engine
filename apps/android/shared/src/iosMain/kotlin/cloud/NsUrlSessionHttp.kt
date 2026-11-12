@@ -5,11 +5,15 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import net.tisma.io.BytesInput
+import net.tisma.io.FileInput
 import net.tisma.io.BytesOutput
 import net.tisma.io.IOException
 import net.tisma.io.copyAll
 import platform.Foundation.NSData
 import platform.Foundation.NSError
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.downloadTaskWithRequest
 import platform.Foundation.NSHTTPURLResponse
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
@@ -64,6 +68,8 @@ object NsUrlSessionHttp : Http {
         }
         if (body != null) r.setHTTPBody(body.toNSData())
 
+        if (request.large) return sendToFile(r)
+
         val done = dispatch_semaphore_create(0)
         var data: NSData? = null
         var response: NSURLResponse? = null
@@ -79,6 +85,35 @@ object NsUrlSessionHttp : Http {
         val headers = http.allHeaderFields.entries.associate { (k, v) -> k.toString() to v.toString() }
         return HttpResponse(http.statusCode.toInt(), headers, BytesInput(data?.toByteArray() ?: ByteArray(0)))
     }
+
+    /**
+     * A large answer (a result of up to 1 GB) goes to a file with a download task, never whole into memory, and is
+     * read from there; the file is deleted when the answer is closed.
+     */
+    private fun sendToFile(r: NSMutableURLRequest): HttpResponse {
+        val done = dispatch_semaphore_create(0)
+        var path: String? = null
+        var response: NSURLResponse? = null
+        var error: NSError? = null
+        session.downloadTaskWithRequest(r) { location, resp, e ->
+            response = resp; error = e
+            // The system removes [location] when this returns: the file is moved to a place of ours first.
+            if (location != null) {
+                val dest = NSTemporaryDirectory() + "tisma-" + kotlin.random.Random.nextLong().toULong().toString(16)
+                if (NSFileManager.defaultManager.moveItemAtPath(location.path ?: "", toPath = dest, error = null)) path = dest
+            }
+            dispatch_semaphore_signal(done)
+        }.resume()
+        dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER)
+
+        error?.let { e -> path?.let { remove(it) }; throw IOException(e.localizedDescription) }
+        val http = response as? NSHTTPURLResponse ?: run { path?.let { remove(it) }; throw IOException("No answer from the server") }
+        val headers = http.allHeaderFields.entries.associate { (k, v) -> k.toString() to v.toString() }
+        val file = path ?: return HttpResponse(http.statusCode.toInt(), headers, BytesInput(ByteArray(0)))
+        return HttpResponse(http.statusCode.toInt(), headers, FileInput(file, deleteOnClose = true))
+    }
+
+    private fun remove(path: String) { NSFileManager.defaultManager.removeItemAtPath(path, error = null) }
 
     private fun ByteArray.toNSData(): NSData = if (isEmpty()) NSData() else usePinned { p ->
         NSData.create(bytes = p.addressOf(0), length = size.toULong())

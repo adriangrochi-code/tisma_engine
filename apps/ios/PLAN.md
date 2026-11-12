@@ -17,7 +17,7 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    flujos `ByteInput`/`ByteOutput`), enviados con HttpURLConnection en Android y con NSURLSession en iOS. Hechos (11-11)
    Tisma Cloud y los clientes de Moonraker, OctoPrint, PrusaLink y Duet (con MD5 propio para Digest). Bambu queda
    en la JVM hasta su `expect`/`actual` de TLS. Las bajadas grandes en iOS (hasta
-   1 GB) irán a un archivo con la tarea de descarga de NSURLSession, no a memoria.
+   1 GB) van a un archivo con la tarea de descarga de NSURLSession y se leen de ahí, no a memoria (12-11).
    Bambu (MQTT con TLS, FTPS implícito, cámara del puerto 6000) necesita sockets TLS con el certificado propio de la
    impresora: `expect`/`actual` con Network.framework en iOS.
 3. **ViewModels en `shared`** (StateFlow), expuestos a Swift con envoltorios propios simples.
