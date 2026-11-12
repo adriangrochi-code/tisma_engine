@@ -1398,8 +1398,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
   hace la sesión de Android: un xcframework (iosArm64 + iosSimulatorArm64) con la entrada C `tisma_run_cli`
   (argc/argv de la línea de comandos, salida en buffers, mismos códigos de salida; `include/tisma/tisma_engine.h`,
   hecha el 2026-11-10). Lo mismo para SolidCraft (apps/ios/PLAN.md, android daf5723).
-  En marcha (2026-11-12): `tools/build_ios.sh` y el trabajo «iOS library» de la CI (sin fallar la corrida mientras
-  se pone en marcha).
+  Compila (2026-11-12, f1822c4): `tools/build_ios.sh` y el trabajo «iOS library» de la CI hacen
+  `TismaEngine.xcframework` (iPhone y simulador, desde iOS 16.3) con `tisma_run_cli`, y el trabajo cuenta. Falta
+  probarlo desde una app (sesión de iOS); sin GPU ni scripts de posprocesado en iOS.
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 

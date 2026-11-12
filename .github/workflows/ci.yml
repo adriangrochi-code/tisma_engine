@@ -117,8 +117,7 @@ jobs:
   ios:
     name: iOS library (xcframework)
     runs-on: macos-15
-    # Being brought up (PLAN.md, «macOS antes de la beta»): it does not fail the run yet.
-    continue-on-error: true
+    # PLAN.md, «macOS antes de la beta»: green since f1822c4 (2026-11-12), so it counts.
     steps:
       - uses: actions/checkout@v4
       - name: Install Ninja

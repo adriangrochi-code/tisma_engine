@@ -13661,3 +13661,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   el filamento es TPU; `long_retraction_when_ec` es falso salvo que el paquete la traiga. Con un solo filamento por
   ahora: con varios, el de la primera capa y el actual (`multi_extruder.md`) quedan para cuando el G-code los cambie.
 - **Pruebas:** pasan las 133 de `[gcode]` (la prueba de variables sin llenar usa ahora otra variable).
+
+## 2026-11-12 — macOS antes de la beta: el motor para iOS compila
+
+- **Hecho:** el trabajo «iOS library» de la CI pasó en f1822c4: `TismaEngine.xcframework` para iPhone y simulador
+  (arm64, desde iOS 16.3: ahí empieza `to_chars` de punto flotante en la biblioteca de C++), con `tisma_run_cli` en las
+  dos partes; queda como artefacto de cada corrida. En iOS no hay otros programas: los scripts de posprocesado avisan
+  que no pueden correr (`std::system` no existe allí). Desde ahora el trabajo cuenta en la corrida.
+- **Antes:** 517a604 rompió la compilación de macOS (prender OBJCXX hizo compilar los `.m` de GLFW como Objective-C++);
+  66cb7e6 lo arregla compilando solo `file_dialog_macos.mm` como Objective-C++; macOS volvió a verde (corrida 927).
+- **No probado:** el xcframework desde una app de iPhone; los diálogos de macOS a mano.
+- **Sigue (macOS):** la cámara USB con AVFoundation, la vista (MoltenVK u OpenGL), la firma del .dmg (cuenta del dueño).
