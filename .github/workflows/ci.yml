@@ -113,3 +113,25 @@ jobs:
           plutil -lint pkg/Tisma.app/Contents/Info.plist
           test -x pkg/Tisma.app/Contents/MacOS/tisma && test -s pkg/Tisma.app/Contents/Resources/tisma.icns
           pkg/Tisma.app/Contents/MacOS/tisma-engine --version
+
+  ios:
+    name: iOS library (xcframework)
+    runs-on: macos-15
+    # Being brought up (PLAN.md, «macOS antes de la beta»): it does not fail the run yet.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: brew install ninja
+      - name: Build TismaEngine.xcframework
+        run: tools/build_ios.sh build-ios
+      - name: The C entry is in both slices
+        run: |
+          for a in build-ios/iphoneos/libtisma_engine.a build-ios/iphonesimulator/libtisma_engine.a; do
+            nm -gU "$a" 2>/dev/null | grep -q '_tisma_run_cli$'
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tisma-engine-ios-xcframework
+          path: build-ios/TismaEngine.xcframework
+          if-no-files-found: error

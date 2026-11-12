@@ -13603,3 +13603,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** un caso nuevo en `[cloud]` (CC21 del lado del motor); pasan las 32.
 - **Sigue:** la interfaz lo pide al abrir el panel de la nube y antes de mandar, y muestra el aviso sin bloquear
   (sesión de la interfaz).
+
+## 2026-11-12 — macOS antes de la beta: el motor para iOS (empezado)
+
+- **Hecho:** `tools/build_ios.sh` arma `tisma_core` para iPhone (arm64) y para el simulador (arm64), sin interfaz,
+  pruebas ni GPU; junta en cada uno el motor con oneTBB y Clipper2 en `libtisma_engine.a` y hace
+  `TismaEngine.xcframework` con `include/`. El trabajo «iOS library» de la CI lo corre en macOS 15, mira que
+  `tisma_run_cli` esté en las dos y sube el xcframework; no hace fallar la corrida mientras se pone en marcha.
+- **Pruebas:** ninguna aquí (necesita Xcode); el primer resultado sale de la CI de GitHub.
+- **Sigue:** lo que diga esa corrida.
