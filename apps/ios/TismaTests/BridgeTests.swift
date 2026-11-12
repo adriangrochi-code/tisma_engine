@@ -43,4 +43,21 @@ final class BridgeTests: XCTestCase {
         Keychain.write("test.secret", "")
         XCTAssertNil(Keychain.read("test.secret"))
     }
+
+    func testTheEngineAnswersItsVersion() {
+        let r = Engine.run(["--version"])
+        XCTAssertEqual(r.code, 0, r.err)
+        XCTAssertFalse(r.out.isEmpty)
+    }
+
+    /// The first slice inside an iPhone app: its result is printed for the engine team, and must not crash.
+    func testTheEngineSlicesTheCube() throws {
+        let model = FileManager.default.temporaryDirectory.appendingPathComponent("cube20-test.stl")
+        try Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
+        let (r, gcode, summary) = Engine.slice(model: model)
+        let size = (try? FileManager.default.attributesOfItem(atPath: gcode.path)[.size] as? Int) ?? 0
+        print("ENGINE-SLICE exit=\(r.code) gcode=\(size) err=\(r.err.prefix(400)) summary=\(summary?.prefix(400) ?? "")")
+        XCTAssertEqual(r.code, 0, r.err)
+        XCTAssertGreaterThan(size, 1000)
+    }
 }

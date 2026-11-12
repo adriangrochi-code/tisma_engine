@@ -31,11 +31,36 @@ struct RootView: View {
     }
 }
 
+/// «Placa»: for now, the engine's first slice on the iPhone (the 20 mm cube); the plate and settings come next.
 struct PlateView: View {
+    @State private var result: String?
+    @State private var busy = false
+
     var body: some View {
-        ContentUnavailableView("Slicing on the iPhone is coming",
-                               systemImage: "cube",
-                               description: Text("The engine is not in this build yet. Library, printers and the cloud work."))
+        NavigationStack {
+            Form {
+                Section("Engine") {
+                    Text(Engine.run(["--version"]).out.trimmingCharacters(in: .whitespacesAndNewlines))
+                    Button("Slice the 20 mm cube") { slice() }.disabled(busy)
+                    if busy { ProgressView() }
+                    if let result { Text(result).font(.footnote.monospaced()) }
+                }
+            }
+            .navigationTitle("Plate")
+        }
+    }
+
+    private func slice() {
+        busy = true
+        Task.detached {
+            let dir = FileManager.default.temporaryDirectory
+            let model = dir.appendingPathComponent("cube20.stl")
+            try? Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
+            let (r, gcode, summary) = Engine.slice(model: model)
+            let size = (try? FileManager.default.attributesOfItem(atPath: gcode.path)[.size] as? Int) ?? 0
+            let text = "exit \(r.code) · G-code \(size) bytes\n" + (summary ?? r.err)
+            await MainActor.run { result = text; busy = false }
+        }
     }
 }
 

@@ -15,9 +15,15 @@ targets:
     type: application
     platform: iOS
     sources: [Tisma]
+    dependencies:
+      # The engine as a static library (the engine's CI, apps/ios/PLAN.md step 4); C++ inside, so libc++ too.
+      - framework: Engine/TismaEngine.xcframework
+        embed: false
+      - sdk: libc++.tbd
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tismaservidores.tisma
+        SWIFT_OBJC_BRIDGING_HEADER: Tisma/Tisma-Bridging-Header.h
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_CFBundleDisplayName: Tisma
