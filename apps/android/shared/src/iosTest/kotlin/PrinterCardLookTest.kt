@@ -17,6 +17,9 @@ class PrinterCardLookTest {
         assertEquals("enclosed", l.shape)
         assertTrue(l.hardened && l.highFlow && l.bambu)
         assertEquals("textured", l.bed)
+        assertEquals(listOf(0.0, 0.0, 220.0, 220.0), l.bedArea)
+        val mk4 = EngineBridge.cardLook("""{"machine":{"bed":[[0,-4],[250,-4],[250,210],[0,210]]}}""", "Prusa MK4S")
+        assertEquals(listOf(0.0, -4.0, 250.0, 210.0), mk4.bedArea)
     }
 
     @Test

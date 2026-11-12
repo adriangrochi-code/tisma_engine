@@ -83,12 +83,24 @@ struct PlateView: View {
     var openPrinter: () -> Void = {}
     @ObservedObject private var watcher = PrintWatcher.shared
     @State private var look: PrinterCardLook?
+    @State private var partMesh: PartMesh?
+    @State private var framing = 0
 
     private var model: Catalog.PrinterModel? { Engine.catalog?.printer(name: printer) }
 
     var body: some View {
         NavigationStack {
             Form {
+                // rule 6: the bed and the model in 3D (one finger turns, two move, pinch zooms; «Frame» puts it back).
+                if let partMesh {
+                    Section {
+                        PartView(mesh: partMesh, bed: look?.bedArea.map { $0.doubleValue } ?? [0, 0, 220, 220], frame: framing)
+                            .frame(height: 280)
+                            .listRowInsets(EdgeInsets())
+                            .accessibilityIdentifier("plate_3d")
+                        Button("Frame") { framing += 1 }
+                    }
+                }
                 Section {
                     PrinterCard(printer: printer, nozzle: nozzle, filament: filament, look: look,
                                 connection: Connection.of(address: savedAddress, line: watcher.line, problem: watcher.problem),
@@ -138,12 +150,20 @@ struct PlateView: View {
                     if let result { Text(result).font(.footnote.monospaced()) }
                     if let gcode {
                         NavigationLink("Preview") { PreviewView(gcode: gcode) }
+                        // rule 6: the output, saved or shared (Files, AirDrop, another app).
+                        ShareLink(item: gcode) { Label("Share or save the G-code", systemImage: "square.and.arrow.up") }
+                            .accessibilityIdentifier("plate_share")
                         Button("Send to the printer and start") { send(gcode) }.disabled(busy || savedAddress.isEmpty)
                         if let sent { Text(sent).font(.footnote) }
                     }
                 }
             }
             .navigationTitle("Plate")
+            .task(id: openedPath) {
+                let chosen = opened
+                partMesh = await Task.detached { PartMesh.load(chosen ?? EngineeringView.cube()) }.value
+                framing += 1
+            }
             // mobile_app.md, rule 10: STL, OBJ and 3MF from the phone's files (STEP waits for the engine).
             .fileImporter(isPresented: $picking, allowedContentTypes: Self.modelTypes) { r in
                 if case .success(let url) = r { openedPath = Self.copyIn(url)?.path ?? ""; gcode = nil; result = nil }

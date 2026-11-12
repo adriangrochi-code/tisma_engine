@@ -90,7 +90,7 @@ se marca con la fecha.
 | Regla | Android | iPhone | Hueco |
 |---|---|---|---|
 | 5 Secciones | sí | sí | — |
-| 6 Placa | cama y modelo en 3D, tarjeta, Laminar, salida (guardar, compartir, mandar), gestos, tiras de herramientas | tarjeta, Laminar, vista previa, mandar | P1: la cama y el modelo en 3D con gestos y Encuadrar; P2: compartir y guardar el G-code; P3: tiras de herramientas (Archivo, Vista, Ingeniería, Laminar) |
+| 6 Placa | cama y modelo en 3D, tarjeta, Laminar, salida (guardar, compartir, mandar), gestos, tiras de herramientas | tarjeta, Laminar, vista previa, mandar; la cama y el modelo en 3D con gestos y Encuadrar (P1, 12-11); compartir y guardar el G-code (P2, 12-11) | P3: tiras de herramientas (Archivo, Vista, Ingeniería, Laminar) |
 | 7 Impresión y Material | niveles y vista Personalizada | niveles | P4: vista Personalizada |
 | 8 Impresora | Conexión y Calibración | Conexión | P5: Calibración |
 | 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | P6: informar un problema (`app` `ios`); P7: preferencias y créditos |

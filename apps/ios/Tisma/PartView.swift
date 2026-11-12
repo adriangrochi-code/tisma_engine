@@ -9,6 +9,19 @@ struct PartMesh {
     let soup: Data
     var triangles: Int { soup.count / 36 }
 
+    /// min x, y, z, max x, y, z.
+    var bounds: [Float] {
+        var b: [Float] = [.greatestFiniteMagnitude, .greatestFiniteMagnitude, .greatestFiniteMagnitude,
+                          -.greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude]
+        soup.withUnsafeBytes { raw in
+            let f = raw.bindMemory(to: Float.self)
+            for i in stride(from: 0, to: f.count - 2, by: 3) {
+                for a in 0..<3 { b[a] = min(b[a], f[i + a]); b[a + 3] = max(b[a + 3], f[i + a]) }
+            }
+        }
+        return soup.isEmpty ? [0, 0, 0, 1, 1, 1] : b
+    }
+
     /// Reads an STL or OBJ with ModelIO (Apple's own reader); nil for what it cannot read (a 3MF: the faces by name).
     static func load(_ url: URL) -> PartMesh? {
         let asset = MDLAsset(url: url)
@@ -43,6 +56,10 @@ struct PartView: UIViewRepresentable {
     var held: [Int] = []
     var loaded: [Int] = []
     var map: StressMapData?
+    /// On the plate: the bed (min x, min y, max x, max y) with the part standing on its middle.
+    var bed: [Double]?
+    /// A change re-frames the camera («Encuadrar»).
+    var frame = 0
     var onTap: (Int) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
@@ -61,11 +78,33 @@ struct PartView: UIViewRepresentable {
     func updateUIView(_ view: SCNView, context: Context) {
         context.coordinator.onTap = onTap
         let root = view.scene!.rootNode
-        root.childNodes.forEach { $0.removeFromParentNode() }
+        root.childNodes.filter { $0.name != "camera" }.forEach { $0.removeFromParentNode() }
+        defer {
+            // The first time and on «Encuadrar»: the camera in front of and above the whole scene.
+            if context.coordinator.framed != frame {
+                context.coordinator.framed = frame
+                Self.frame(view, root)
+            }
+        }
         // The engine's Z is up; SceneKit's Y.
         let part = SCNNode()
         part.eulerAngles.x = -.pi / 2
         root.addChildNode(part)
+        if let bed, bed.count == 4 {
+            let w = CGFloat(bed[2] - bed[0]), h = CGFloat(bed[3] - bed[1])
+            let plate = SCNNode(geometry: SCNBox(width: w, height: h, length: 1, chamferRadius: 0))
+            plate.geometry?.firstMaterial?.diffuse.contents = UIColor.tertiarySystemFill
+            plate.position = SCNVector3(Float(bed[0]) + Float(w) / 2, Float(bed[1]) + Float(h) / 2, -0.5)
+            part.addChildNode(plate)
+            // The part on the bed's middle, standing on it (as Android's plate).
+            let b = mesh.bounds
+            let holder = SCNNode()
+            holder.position = SCNVector3(Float(bed[0] + bed[2]) / 2 - (b[0] + b[3]) / 2, Float(bed[1] + bed[3]) / 2 - (b[1] + b[4]) / 2, -b[2])
+            part.addChildNode(holder)
+            let body = SCNNode(geometry: Self.geometry(mesh.soup, color: .systemTeal))
+            holder.addChildNode(body)
+            return
+        }
         if let map {
             part.addChildNode(SCNNode(geometry: Self.geometry(map.positions, colors: map.colors)))
         } else {
@@ -77,7 +116,30 @@ struct PartView: UIViewRepresentable {
         }
     }
 
+    /// Puts the camera where the whole scene shows.
+    static func frame(_ view: SCNView, _ root: SCNNode) {
+        let content = root.childNodes.filter { $0.name != "camera" }
+        guard !content.isEmpty else { return }
+        var lo = SCNVector3(Float.greatestFiniteMagnitude, .greatestFiniteMagnitude, .greatestFiniteMagnitude)
+        var hi = SCNVector3(-Float.greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+        for n in content {
+            let (a, b) = n.boundingBox
+            for p in [n.convertPosition(a, to: root), n.convertPosition(b, to: root)] {
+                lo = SCNVector3(min(lo.x, p.x), min(lo.y, p.y), min(lo.z, p.z)); hi = SCNVector3(max(hi.x, p.x), max(hi.y, p.y), max(hi.z, p.z))
+            }
+        }
+        let c = SCNVector3((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2)
+        let r = max(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z, 1)
+        let camera = root.childNode(withName: "camera", recursively: false) ?? {
+            let n = SCNNode(); n.name = "camera"; n.camera = SCNCamera(); n.camera?.zFar = 100_000; root.addChildNode(n); return n
+        }()
+        camera.position = SCNVector3(c.x, c.y + r * 0.9, c.z + r * 1.6)
+        camera.look(at: c)
+        view.pointOfView = camera
+    }
+
     final class Coordinator: NSObject {
+        var framed = -1
         var onTap: (Int) -> Void
         init(onTap: @escaping (Int) -> Void) { self.onTap = onTap }
 

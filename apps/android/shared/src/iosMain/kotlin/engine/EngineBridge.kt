@@ -20,7 +20,7 @@ data class SliceSummary(val printTime: String, val printTimeS: Double, val filam
  * the printer's own choice).
  */
 data class PrinterCardLook(val shape: String, val hardened: Boolean, val highFlow: Boolean, val bambu: Boolean,
-                           val bed: String, val plate: String)
+                           val bed: String, val plate: String, val bedArea: List<Double> = listOf(0.0, 0.0, 220.0, 220.0))
 
 object EngineBridge {
     /** The card's look from the printer's profile (`tisma-engine profile`'s JSON) and its name. */
@@ -29,8 +29,16 @@ object EngineBridge {
             .getOrNull().orEmpty()
         fun text(k: String) = (values[k] as? JsonPrimitive)?.content.orEmpty()
         val plate = text("bambu.plate")
+        // The bed's outline (machine.bed, [x, y] corners) as min x, min y, max x, max y, for the plate's 3D view.
+        val corners = (values["machine.bed"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { c ->
+            val a = c as? kotlinx.serialization.json.JsonArray
+            val x = (a?.getOrNull(0) as? JsonPrimitive)?.doubleOrNull; val y = (a?.getOrNull(1) as? JsonPrimitive)?.doubleOrNull
+            if (x != null && y != null) x to y else null
+        }
+        val area = if (corners.size < 3) listOf(0.0, 0.0, 220.0, 220.0)
+            else listOf(corners.minOf { it.first }, corners.minOf { it.second }, corners.maxOf { it.first }, corners.maxOf { it.second })
         return PrinterCardLook(printerShape { values[it] }.name.lowercase(), text("machine.hardened_nozzle") == "true",
-            highFlow(name), name.contains("Bambu", ignoreCase = true), bedFamily(plate).name.lowercase(), plate)
+            highFlow(name), name.contains("Bambu", ignoreCase = true), bedFamily(plate).name.lowercase(), plate, area)
     }
 
     /** The catalog of printers and filaments the app carries (resources/catalog), or null if it does not read. */
