@@ -44,7 +44,11 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    tarea BGAppRefresh mientras imprime (iOS decide cuándo: el aviso puede llegar tarde). Sin probar en un iPhone.
    Tarjeta de impresora (12-11): en Placa, el dibujo de la impresora, la boquilla y la cama (Bambu Lab) con las mismas
    tablas que Android (reglas 34 a 36, ahora en el módulo compartido), el filamento y el icono de conexión (regla 42)
-   que abre Impresora. Siguiente: Ingeniería.
+   que abre Impresora.
+   Ingeniería (12-11): desde Placa, cara sujeta y cara con carga entre las caras propias del motor (sin tocar la
+   pieza en 3D todavía), fuerza, material, calidad, seguridad pedida y modo rápido; `analyze` dentro de la app y el
+   veredicto, la seguridad mínima, desplazamiento, tensión y avisos, como Android (EngineeringCase en el módulo
+   compartido). Falta: el mapa de seguridad sobre la pieza y marcar caras tocando el modelo.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común

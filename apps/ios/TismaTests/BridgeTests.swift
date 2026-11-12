@@ -143,4 +143,17 @@ final class BridgeTests: XCTestCase {
         XCTAssertTrue(title.hasPrefix("Klipper (Moonraker)"))
         XCTAssertEqual(body, "cube.gcode")
     }
+
+    /// Engineering on the 20 mm cube, held below and pushed from above, quick (solid) mode: the engine answers.
+    func testEngineeringOnTheCube() {
+        guard let printer = Engine.catalog?.printers.first else { return XCTFail("no catalog") }
+        let f = Engine.catalog?.filamentsFor(p: printer).first?.fullName
+        let caseJson = EngineeringBridge.shared.caseJson(fixedFace: "bottom", loadFace: "top", newtons: 100, material: "bambu-pla-basic",
+                                                         quality: "normal", solid: true)
+        let (lines, problem) = EngineeringView.run(model: nil, printer: printer.name, nozzle: printer.nozzles.first?.doubleValue ?? 0.4,
+                                                   filament: f, caseJson: caseJson, requiredSafety: 2)
+        print("ENGINE-ANALYZE lines=\(lines.map { "\($0.key)=\($0.value)" }) problem=\(problem ?? "")")
+        XCTAssertNil(problem)
+        XCTAssertEqual(lines.first?.key, "verdict")
+    }
 }

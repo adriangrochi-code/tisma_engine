@@ -117,6 +117,12 @@ struct PlateView: View {
                 Section("Model") {
                     Text(opened?.lastPathComponent ?? String(localized: "The 20 mm cube"))
                     Button("Open a model…") { picking = true }
+                    // mobile_app.md, rule 13: whether the part holds, with the engine's analysis.
+                    NavigationLink("Engineering") {
+                        EngineeringView(model: opened, printer: printer, nozzle: nozzle, filament: filament.isEmpty
+                            ? Engine.catalog.flatMap { c in model.flatMap { c.filamentsFor(p: $0).first?.fullName } } : filament)
+                    }
+                    .accessibilityIdentifier("plate_engineering")
                 }
                 // cloud.md, rules 6 to 9 (MA10): a 3MF project sliced in the cloud, followed, and its G-code previewed.
                 if let o = opened, o.pathExtension.lowercased() == "3mf", Keychain.read("cloud.token") != nil {

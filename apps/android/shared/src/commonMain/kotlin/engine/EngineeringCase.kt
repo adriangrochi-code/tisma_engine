@@ -72,24 +72,39 @@ data class EngineeringCase(
          */
         fun pad(quality: String) = if (quality == "high") 0.04f else 0.08f
 
-        /** The engine's face name when [triangles] (normal [n]) lie on the part's end in an axis, or null. */
-        fun endFace(mesh: MeshFile, triangles: IntArray, n: FloatArray): String? {
-            val axis = (0..2).firstOrNull { kotlin.math.abs(n[it]) > 0.996f } ?: return null
-            val b = mesh.bounds
-            val max = n[axis] > 0
-            val target = if (max) b[axis + 3] else b[axis]
-            for (t in triangles) for (k in 0..2) if (kotlin.math.abs(mesh.positions[9 * t + 3 * k + axis] - target) > 0.01f) return null
-            return when (axis) {
-                0 -> if (max) "x_max" else "x_min"
-                1 -> if (max) "y_max" else "y_min"
-                else -> if (max) "top" else "bottom"
-            }
-        }
-
         /** The materials of docs/MATERIALS.md the phone offers (their data sheets' records). */
         val MATERIALS = listOf("bambu-pla-basic", "bambu-pla-matte", "bambu-pla-tough-plus", "bambu-petg-basic",
             "bambu-petg-hf", "bambu-abs", "bambu-asa", "bambu-pla-cf", "bambu-petg-cf", "bambu-pa6-cf",
             "bambu-paht-cf", "esun-pla-plus", "esun-petg-basic")
 
+        /** The engine's own faces (docs/ANALYSIS.md, «El caso»), each with the direction into it, for a load. */
+        val FACES: Map<String, FloatArray> = linkedMapOf(
+            "top" to floatArrayOf(0f, 0f, -1f), "bottom" to floatArrayOf(0f, 0f, 1f),
+            "x_min" to floatArrayOf(1f, 0f, 0f), "x_max" to floatArrayOf(-1f, 0f, 0f),
+            "y_min" to floatArrayOf(0f, 1f, 0f), "y_max" to floatArrayOf(0f, -1f, 0f))
+
+        /**
+         * What the person reads of an `analyze` report (its `-o` JSON): the verdict against [requiredSafety] (holds,
+         * fails or no_result), the safety asked, the minimum safety, displacement and stress, and the engine's
+         * warnings (why there is no result), as Android shows them.
+         */
+        fun reportLines(report: String, requiredSafety: Double): List<Pair<String, String>> {
+            val o = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(report) as? JsonObject }.getOrNull()
+                ?: JsonObject(emptyMap())
+            val result = o["result"] as? JsonObject ?: JsonObject(emptyMap())
+            val valid = (o["valid"] as? JsonPrimitive)?.content == "true"
+            val min = (result["min_safety"] as? JsonPrimitive)?.content?.toDoubleOrNull()
+            val verdict = when {
+                !valid || min == null -> "no_result"
+                min >= requiredSafety -> "holds"
+                else -> "fails"
+            }
+            val warnings = (o["warnings"] as? JsonArray).orEmpty()
+                .mapNotNull { ((it as? JsonObject)?.get("message") as? JsonPrimitive)?.content }
+            return listOf("verdict" to verdict, "required_safety" to requiredSafety.toString()) +
+                listOf("min_safety", "max_displacement_mm", "max_von_mises_mpa")
+                    .mapNotNull { k -> (result[k] as? JsonPrimitive)?.let { k to it.content } } +
+                warnings.map { "warning" to it }
+        }
     }
 }

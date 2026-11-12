@@ -23,3 +23,14 @@ class PrinterCardLookTest {
         assertEquals("other", l.bed)
     }
 }
+
+class EngineeringBridgeTest {
+    @Test
+    fun theCaseAndArgumentsAreAndroids() {
+        val case = EngineeringBridge.caseJson("bottom", "top", 80.0, "bambu-petg-basic", "normal", false)
+        assertTrue("\"face\":\"bottom\"" in case && "-80.0" in case && "bambu-petg-basic" in case)
+        assertEquals(listOf("analyze", "m.stl", "--config", "c.json", "--case", "k.json", "-o", "r.json"),
+            EngineeringBridge.analyzeArgs("m.stl", "c.json", "k.json", "r.json"))
+        assertEquals(ReportLine("verdict", "holds"), EngineeringBridge.report("""{"valid":true,"result":{"min_safety":4}}""", 2.0).first())
+    }
+}
