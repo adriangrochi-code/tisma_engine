@@ -93,7 +93,7 @@ se marca con la fecha.
 | 6 Placa | cama y modelo en 3D, tarjeta, Laminar, salida (guardar, compartir, mandar), gestos, tiras de herramientas | tarjeta, Laminar, vista previa, mandar; la cama y el modelo en 3D con gestos y Encuadrar (P1, 12-11); compartir y guardar el G-code (P2, 12-11) | P3: tiras de herramientas (Archivo, Vista, Ingeniería, Laminar) |
 | 7 Impresión y Material | niveles y vista Personalizada | niveles | P4: vista Personalizada |
 | 8 Impresora | Conexión y Calibración | Conexión | P5: Calibración |
-| 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | P7: preferencias y créditos (P6, informar un problema con `app` `ios`, 12-11: el servidor lo acepta cuando QA avise) |
+| 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | P7: preferencias y créditos (P6, informar un problema con `app` `ios`, 12-11: el servidor lo acepta desde cc28f98 de tisma-cloud, en producción cuando el dueño actualice) |
 | 10 Abrir | STL, 3MF, OBJ, STEP, Compartir, enlace de sitio | STL, 3MF, OBJ, Compartir | P8: STEP; P9: enlaces de sitios de modelos |
 | 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente | P10: el paquete de perfiles |
 | 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa; avance y cancelar, memoria y costo con la API de trabajos del motor (P11–P13, 12-11; si la biblioteca no los da, la línea de comandos como antes) | — |
