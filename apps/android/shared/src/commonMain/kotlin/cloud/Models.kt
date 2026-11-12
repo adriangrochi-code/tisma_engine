@@ -212,3 +212,37 @@ fun JsonElement.display(): String = when (this) {
     is JsonPrimitive -> if (this is JsonNull) "" else content
     else -> toString()
 }
+
+/**
+ * cloud.md 4a: `GET /v1/status`, the service as a whole (no account data). With `slow` or `down` the screens show
+ * the label and the message in the phone's language as a notice, without blocking: jobs wait in the queue.
+ */
+data class ServiceStatus(
+    val status: String,
+    val labelEs: String,
+    val labelEn: String,
+    val messageEs: String,
+    val messageEn: String,
+    val unavailable: List<String>,
+    val longestWaitS: Double,
+    val nodesOnline: Int,
+    val checkedAt: String,
+) {
+    /** `slow` or `down`: worth a notice. An unknown value is shown too, so a new state is never hidden. */
+    val worthNotice: Boolean get() = status.isNotEmpty() && status != "ok"
+
+    fun label(spanish: Boolean) = (if (spanish) labelEs else labelEn).ifBlank { if (spanish) labelEn else labelEs }.ifBlank { status }
+    fun message(spanish: Boolean) = (if (spanish) messageEs else messageEn).ifBlank { if (spanish) messageEn else messageEs }
+
+    companion object {
+        fun from(o: JsonObject) = ServiceStatus(
+            status = o.text("status").lowercase(),
+            labelEs = o.text("label_es"), labelEn = o.text("label_en"),
+            messageEs = o.text("message_es"), messageEn = o.text("message_en"),
+            unavailable = o.texts("unavailable"),
+            longestWaitS = o.number("longest_wait_s"),
+            nodesOnline = o.number("nodes_online").toInt(),
+            checkedAt = o.text("checked_at"),
+        )
+    }
+}

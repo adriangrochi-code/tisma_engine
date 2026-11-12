@@ -3,6 +3,8 @@ import kotlinx.serialization.json.jsonObject
 import net.tisma.cloud.Account
 import net.tisma.cloud.CloudException
 import net.tisma.cloud.Plan
+import net.tisma.cloud.ServiceStatus
+import kotlin.test.assertFalse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -37,5 +39,18 @@ class CloudModelsTest {
         assertEquals("Too big", CloudException.detailOf("""{"detail":"Too big"}""", 413))
         assertEquals("bad field", CloudException.detailOf("""{"detail":[{"msg":"bad field"}]}""", 422))
         assertEquals("HTTP 500", CloudException.detailOf("<html>", 500))
+    }
+
+    @Test
+    fun serviceStatusInTheRightLanguage() {
+        val st = ServiceStatus.from(obj("""{"status":"SLOW","label_es":"Con demoras","label_en":"Delayed",
+            "message_es":"La cola espera.","message_en":"","unavailable":["aero"],"longest_wait_s":900,"nodes_online":1}"""))
+        assertTrue(st.worthNotice)
+        assertEquals("Con demoras", st.label(spanish = true))
+        assertEquals("Delayed", st.label(spanish = false))
+        assertEquals("La cola espera.", st.message(spanish = false), "falls back to the other language")
+        assertEquals(listOf("aero"), st.unavailable)
+        assertFalse(ServiceStatus.from(obj("""{"status":"ok"}""")).worthNotice)
+        assertFalse(ServiceStatus.from(obj("""{}""")).worthNotice)
     }
 }

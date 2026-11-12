@@ -168,6 +168,30 @@ class CloudScreensTest {
     }
 
     @Test
+    fun `CC21 a down service is shown in the cloud panel, and a job still goes after asking`() {
+        server.serviceStatus = "down"
+        compose.onNodeWithTag("section_more").performClick()
+        compose.onNodeWithTag("more_cloud").performClick()
+        waitFor("service_notice")
+        waitForText("Tisma Cloud: Down")
+        waitForText("No computing node answers.")
+        vm.signIn("ana@example.com", "password1")
+        waitState { vm.state.value.signedIn }
+        server.serviceStatus = "slow"
+        val asked = server.statusAsked.get()
+        val bytes = cube3mf()
+        var sent: String? = null
+        compose.runOnIdle { vm.submit(JobRequest.Slice, net.tisma.app.cloud.ProjectSource("cube.3mf", bytes.size.toLong()) { bytes.inputStream() }) { sent = it } }
+        waitState { sent != null }
+        assertTrue(server.statusAsked.get() > asked, "the state is asked before sending")
+        assertEquals("slow", vm.state.value.service?.status)
+        server.serviceStatus = "ok"
+        vm.refreshPublic()
+        waitState { vm.state.value.service?.status == "ok" }
+        compose.waitUntil(5_000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); compose.onAllNodes(hasTestTag("service_notice")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
     fun `MA10 a cloud slice opens in the preview`() {
         compose.runOnIdle { vm.signIn("ana@example.com", "password1") }
         waitState { vm.state.value.signedIn }

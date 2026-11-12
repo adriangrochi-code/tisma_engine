@@ -60,6 +60,10 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
     /** Tests: how many purchases get 503 «the store did not answer». */
     @Volatile var storeDown = 0
 
+    /** cloud.md 4a: what `GET /v1/status` says (`ok`, `slow`, `down`), and how many times it was asked. */
+    @Volatile var serviceStatus = "ok"
+    val statusAsked = java.util.concurrent.atomic.AtomicInteger()
+
     class JobDef(
         val id: String,
         val owner: String,
@@ -201,6 +205,21 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
             method == "GET" && r == listOf("health") -> ok(buildJsonObject {
                 put("ok", true); put("billing_url", "$url/account")
             })
+            method == "GET" && r == listOf("status") -> {
+                statusAsked.incrementAndGet()
+                val st = serviceStatus
+                ok(buildJsonObject {
+                    put("status", st)
+                    put("label_es", when (st) { "down" -> "Caído"; "slow" -> "Con demoras"; else -> "Funcionando" })
+                    put("label_en", when (st) { "down" -> "Down"; "slow" -> "Delayed"; else -> "Working" })
+                    put("message_es", when (st) { "down" -> "Ningún nodo de cálculo responde."; "slow" -> "La cola espera más de 10 min."; else -> "" })
+                    put("message_en", when (st) { "down" -> "No computing node answers."; "slow" -> "The queue waits over 10 min."; else -> "" })
+                    put("unavailable", buildJsonArray {})
+                    put("longest_wait_s", if (st == "slow") 900 else 0)
+                    put("nodes_online", if (st == "down") 0 else 2)
+                    put("checked_at", "2026-11-12T05:00:00Z")
+                })
+            }
             method == "GET" && r == listOf("plans") -> ok(buildJsonObject {
                 put("plans", buildJsonArray { synchronized(lock) { plans.filter { it.public }.forEach { add(planJson(it)) } } })
             })

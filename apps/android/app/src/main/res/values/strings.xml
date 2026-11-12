@@ -719,4 +719,5 @@
     <string name="unsafe_path">it would write outside its folder</string>
     <string name="unsafe_link">it carries a link</string>
     <string name="unsafe_big">it unpacks to more than allowed</string>
+    <string name="service_state">Tisma Cloud: %1$s</string>
 </resources>

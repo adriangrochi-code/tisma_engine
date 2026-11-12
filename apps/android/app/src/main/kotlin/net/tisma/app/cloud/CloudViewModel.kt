@@ -44,6 +44,8 @@ data class CloudState(
     val jobsLoaded: Boolean = false,
     val reports: List<SentReport> = emptyList(),
     val sessions: List<net.tisma.cloud.AccountSession> = emptyList(),
+    /** cloud.md 4a: the service's state, asked when the cloud panel opens and before a job is sent. */
+    val service: net.tisma.cloud.ServiceStatus? = null,
     /** A request is on its way; the buttons that send wait. */
     val busy: Boolean = false,
     /** Sending a project. */
@@ -113,6 +115,7 @@ class CloudViewModel(
 
     /** The public plans and the billing page; no session needed (rule 5a). */
     fun refreshPublic() = launchRequest(quiet = true) {
+        checkService()
         val plans = client.plans()
         val billing = runCatching { client.health().billingUrl }.getOrDefault("")
         _state.update { it.copy(plans = plans, plansLoaded = true, billingUrl = billing.ifEmpty { it.billingUrl }) }
@@ -261,6 +264,11 @@ class CloudViewModel(
     }
 
     /** Sends a project; [onSent] gets the new job's id. */
+    /** cloud.md 4a: asks the service's state; a server without it (older) or no answer leaves the last one. */
+    private fun checkService() {
+        runCatching { client.status() }.onSuccess { st -> _state.update { it.copy(service = st) } }
+    }
+
     fun submit(request: JobRequest, project: ProjectSource, onSent: (String) -> Unit) {
         if (state.value.uploading) return
         _state.update { it.copy(uploading = true) }
@@ -277,6 +285,8 @@ class CloudViewModel(
                         _state.update { it.copy(notice = Notice.NotThreeMf) }
                     }
                     true -> {
+                        // Before sending (cloud.md 4a): a slow or down service is shown, and the job still goes.
+                        withContext(io) { checkService() }
                         val job = request {
                             client.submit(request, project.name, project.length) {
                                 project.open() ?: throw java.io.IOException("Cannot read ${project.name}")

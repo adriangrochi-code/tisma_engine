@@ -38,6 +38,9 @@ class CloudClient(
     }
 
     /** `POST /v1/auth/login`. On success the client keeps the token. */
+    /** cloud.md 4a: `GET /v1/status`, without a session. */
+    fun status(): ServiceStatus = ServiceStatus.from(getObject("/v1/status", auth = false))
+
     fun login(email: String, password: String, device: String): Session {
         val o = postObject("/v1/auth/login", buildJsonObject {
             put("email", email); put("password", password); put("device", device)

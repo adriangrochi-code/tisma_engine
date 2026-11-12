@@ -247,6 +247,7 @@ fun NewJobScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
     }
 
     ScreenColumn {
+        ServiceNotice(state)
         TismaCard {
             OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
                 .testTag("pick_project")) {

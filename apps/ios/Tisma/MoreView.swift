@@ -9,10 +9,14 @@ struct MoreView: View {
     @State private var line: String?
     @State private var problem: String?
     @State private var busy = false
+    @State private var serviceNotice: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                if let serviceNotice {
+                    Section { Label(serviceNotice, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
+                }
                 Section("Tisma Cloud") {
                     TextField("Server", text: $server)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
@@ -25,7 +29,16 @@ struct MoreView: View {
                 }
             }
             .navigationTitle("More")
+            .task(id: server) { await checkService() }
         }
+    }
+
+    /// cloud.md 4a: asked when the cloud panel opens; only a notice, never a block.
+    private func checkService() async {
+        let s = server
+        let spanish = Locale.current.language.languageCode?.identifier == "es"
+        let notice = await Task.detached { CloudBridge.shared.serviceNotice(server: s, spanish: spanish) }.value
+        serviceNotice = notice
     }
 
     private func signIn() {

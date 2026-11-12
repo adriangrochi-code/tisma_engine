@@ -47,6 +47,7 @@ fun AccountScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
     // Asked again each time the panel opens (rule 5a).
     LaunchedEffect(state.signedIn) { cloud.refreshAccount() }
     ScreenColumn {
+        ServiceNotice(state)
         if (state.signedIn) AccountCard(state, cloud) else LoginCard(state, cloud, nav)
         if (state.signedIn) SessionsCard(state, cloud)
         PlansCard(state, cloud)
@@ -258,6 +259,26 @@ fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
     )
+}
+
+/**
+ * cloud.md 4a: when the service is slow or down, its label and message in the phone's language. Only a notice: jobs
+ * still go and wait in the queue.
+ */
+@Composable
+fun ServiceNotice(state: CloudState) {
+    val st = state.service?.takeIf { it.worthNotice } ?: return
+    val spanish = androidx.compose.ui.platform.LocalContext.current.isSpanish()
+    Card(Modifier.fillMaxWidth().testTag("service_notice"),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.service_state, st.label(spanish)), style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer)
+            st.message(spanish).takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
+    }
 }
 
 @Composable

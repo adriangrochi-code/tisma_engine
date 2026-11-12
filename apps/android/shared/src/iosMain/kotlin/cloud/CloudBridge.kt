@@ -27,6 +27,14 @@ object CloudBridge {
         return "${a.email} · ${a.plan} · $hours h"
     }
 
+    /**
+     * cloud.md 4a: the notice to show when the service is slow or down («Con demoras: …»), or null when it works or
+     * does not say. Never an error: a notice must not get in the way.
+     */
+    fun serviceNotice(server: String, spanish: Boolean): String? = runCatching { CloudClient(server).status() }.getOrNull()
+        ?.takeIf { it.worthNotice }
+        ?.let { st -> st.label(spanish) + st.message(spanish).let { m -> if (m.isBlank()) "" else ": $m" } }
+
     /** The default server (cloud.md, rule 1). */
     val defaultServer: String get() = CloudClient.DEFAULT_SERVER
 

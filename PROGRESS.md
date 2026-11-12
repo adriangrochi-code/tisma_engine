@@ -12309,3 +12309,17 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   que el dueño decida la licencia de la biblioteca de Google Play Billing (no es permisiva). No probado con Play real.
 - 7426f8d: una compra guardada tras un 503 se mandaba con la cuenta que estuviera abierta después: cerrar sesión y
   entrar con otra le daba el plan pagado a esa otra. Ahora la compra guardada lleva su cuenta (`StoreBillingTest`).
+
+## 2026-11-12 — Android e iPhone: módulo común, app de SwiftUI, estado de la nube
+
+- Paso 2 de `apps/ios/PLAN.md`: red común sin biblioteca nueva (`ByteInput`/`ByteOutput`/`IOException` son los de
+  `java.io` en Android, propios en iOS); el cliente de la nube y los de Moonraker, OctoPrint, PrusaLink y Duet están en
+  `shared` (MD5 propio de RFC 1321 para Digest). iOS envía con NSURLSession y baja los resultados grandes a un archivo.
+  Bambu queda en la JVM hasta su TLS en iOS.
+- Paso 5: empieza la app de SwiftUI (`apps/ios`, XcodeGen): cuatro secciones, «Más» entra a la cuenta por el cliente
+  común. Solo probada en el simulador de la CI de GitHub (no hay Mac en esta sesión); no vista en un iPhone.
+- cloud.md 4a (spec/next dd61f25): `GET /v1/status`. Android lo pide al abrir el panel de la nube y antes de mandar un
+  trabajo, y con `slow` o `down` muestra la etiqueta y el motivo en su idioma, sin bloquear (`CloudScreensTest`, CC21).
+  iPhone lo muestra en «Más»; mandar trabajos desde el iPhone todavía no está.
+- Siguiente: Biblioteca en el iPhone con el índice común; Bambu con TLS en iOS; el motor como biblioteca para iOS
+  (lo pide la sesión del motor).

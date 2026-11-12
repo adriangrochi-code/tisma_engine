@@ -14,4 +14,8 @@ final class BridgeTests: XCTestCase {
     func testTheDefaultServer() {
         XCTAssertEqual(CloudBridge.shared.defaultServer, "https://tismaservidores.net")
     }
+
+    func testNoNoticeWhenTheServerDoesNotAnswer() {
+        XCTAssertNil(CloudBridge.shared.serviceNotice(server: "http://127.0.0.1:9", spanish: true))
+    }
 }
