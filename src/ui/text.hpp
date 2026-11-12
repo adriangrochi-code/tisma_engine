@@ -797,6 +797,15 @@
     X(HostKindRow, "Programa", "Program") \
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
+    X(CameraRow, "Cámara", "Camera") \
+    X(CameraOwn, "La cámara de la impresora", "The printer's camera") \
+    X(CameraNone, "Sin cámara", "No camera") \
+    X(CameraMissing, "%s (no conectada)", "%s (not connected)") \
+    X(CameraNotConnected, "La cámara elegida no está conectada a esta computadora.", "The chosen camera is not connected to this computer.") \
+    X(CameraNoUsb, "No hay cámaras USB conectadas.", "No USB cameras are connected.") \
+    X(CameraRealFps, "%s imágenes/s reales", "%s frames/s actual") \
+    X(CameraGone, "La cámara se desconectó.", "The camera was disconnected.") \
+    X(CameraSilent, "La cámara no manda imágenes hace 10 s.", "The camera has sent no frames for 10 s.") \
     X(HostRepetierPrinter, "Impresora en el servidor", "Printer on the server") \
     X(HostRepetierFirst, "vacío: la primera", "empty: the first one") \
     X(HostUser, "Usuario", "User") \

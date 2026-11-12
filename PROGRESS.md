@@ -13706,3 +13706,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   iPhone 16 Pro con iOS 18.5, `tisma_run_cli` lamina `cube20.stl` con un `--config` mínimo: código 0 y un G-code de
   más de 1 KB (su corrida 43180443557). `--version` también da 0. El mensaje que confundía (un STL sin `--config` por
   el camino de los nodos) se arregló en b276520. Sin probar en un iPhone real.
+
+## 2026-11-12 — interfaz: cámara USB de la computadora por impresora
+
+- **Hecho:** en Dispositivo, cada impresora (USB, de red o Bambu Lab) elige su cámara: «La cámara de la impresora»
+  (solo las Bambu Lab), «Sin cámara» o una cámara USB conectada. La elección se guarda por impresora en las
+  preferencias, y la cámara se busca otra vez por su nombre si cambió de dispositivo. Al lado se ve lo que da la
+  cámara (tamaño, formato y las imágenes por segundo reales). La vista va en el panel de la impresora USB, debajo
+  de los datos en una de red, y en lugar de su cámara en las Bambu Lab. Usa el formato de la regla 2, muestra hasta
+  15 imágenes por segundo sin acumular, y avisa si la cámara se desconecta o pasa 10 s sin mandar imágenes. Las
+  imágenes quedan en memoria y la cámara se suelta al dejar la página.
+- **Pruebas:** `usb_camera_choice.txt` (sin cámaras en esta máquina: la lista lo dice, en USB y en red). Pasan con
+  `print_host_*`, `bambu_print` y `device_*`. **No probado con una cámara real:** en Windows y macOS la lista sale
+  vacía hasta que el motor tenga su captura.

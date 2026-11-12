@@ -69,6 +69,8 @@
 #include "fea/materials.hpp"
 #include "fea/verdict.hpp"
 #include "ui/camera.hpp"
+#include "device/camera_frame.hpp"
+#include "device/usb_camera.hpp"
 #include "ui/credits.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
@@ -1060,6 +1062,12 @@ private:
     void bambu_camera_on();
     void bambu_camera_off();
     void bambu_camera_view(float width);
+    // A USB camera of the computer as a printer's camera (printer_connections.md,
+    // «Cámara USB de la computadora»).
+    std::string camera_key() const;
+    std::string camera_choice(bool has_own, float field);
+    void usb_camera_view(const std::string& id, float width);
+    void usb_camera_off();
     ImTextureID upload_texture(const Image& image, bool clamp);
     void drop_texture(ImTextureID id);
     void device_connect(const std::string& port);
@@ -1814,6 +1822,31 @@ private:
     ImTextureID bambu_camera_tex_ = 0;
     int bambu_camera_w_ = 0, bambu_camera_h_ = 0;
     long long bambu_camera_shown_ = 0; // the frame the texture holds
+    // Each printer's camera (rule 1): "" its own, "none", or a USB camera's id;
+    // the camera's name beside it, to find it again when its id moved.
+    std::map<std::string, std::pair<std::string, std::string>> camera_choices_;
+    std::vector<device::UsbCamera> usb_cameras_;
+    bool usb_cameras_listed_ = false;
+    struct UsbCameraStream { // shared with the capture's thread
+        std::atomic<bool> stop{false};
+        std::mutex lock;
+        std::string frame;     // the newest, as the camera sent it
+        std::size_t frames = 0; // frames received
+        bool ended = false, disconnected = false;
+        std::string error;
+        device::CameraFormat format; // what the camera took
+    };
+    std::shared_ptr<UsbCameraStream> usb_cam_;
+    std::future<void> usb_cam_job_;
+    std::string usb_cam_id_;
+    device::FramePacer usb_pacer_;
+    std::size_t usb_cam_seen_ = 0;   // the frames the pacer was told of
+    double usb_fps_start_ = -1.0;    // the real rate: frames over the last seconds
+    std::size_t usb_fps_frames_ = 0;
+    double usb_fps_ = 0.0;
+    int usb_cam_frame_ = -100;       // the last frame the view was drawn (off when not)
+    ImTextureID usb_cam_tex_ = 0;
+    int usb_cam_w_ = 0, usb_cam_h_ = 0;
 
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
@@ -4133,6 +4166,7 @@ void App::shutdown() {
     slice_job_.wait();
     device_disconnect();
     bambu_camera_off();
+    usb_camera_off();
     // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
     session_file_.close();
     ui::end_session(session_mark_);
@@ -4251,6 +4285,10 @@ void App::load_preferences(const std::filesystem::path& from) {
         }
         // The network program: its kind, address and user; the key and
         // password from the system's store.
+        if (j.contains("cameras") && j["cameras"].is_object())
+            for (const auto& [printer, c] : j["cameras"].items())
+                if (c.is_object())
+                    camera_choices_[printer] = {c.value("camera", std::string()), c.value("name", std::string())};
         if (j.contains("print_host") && j["print_host"].is_object()) {
             const nlohmann::json& h = j["print_host"];
             device::host_kind_from(h.value("kind", std::string("octoprint")), host_.kind);
@@ -4375,6 +4413,8 @@ void App::save_preferences(const std::filesystem::path& to) {
         if (!host_.url.empty())
             j["print_host"] = {{"kind", device::host_kind_word(host_.kind)}, {"url", host_.url}, {"user", host_.user},
                                {"printer", host_.printer}, {"chosen", device_host_}};
+        for (const auto& [printer, choice] : camera_choices_)
+            j["cameras"][printer] = {{"camera", choice.first}, {"name", choice.second}};
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["packs"]["url"] = pack_url_;
@@ -24683,6 +24723,8 @@ void App::layout() {
         if (tab_ == Tab::Device)
             device_panel();
     }
+    if (usb_cam_ && ImGui::GetFrameCount() - usb_cam_frame_ > 2) // its view is gone: the camera is let go
+        usb_camera_off();
     // Each function's tip the first time it is used.
     if (tool_ != last_tool_) {
         last_tool_ = tool_;
@@ -25512,6 +25554,10 @@ void App::host_panel(float field, float button_h) {
     if (host_tested_ && !host_version_.ok)
         loc::TextColored(rgb(0xE5484D), tr(T::HostTestFailed), device::host_kind_name(host_.kind),
                          host_version_.error.c_str(), host_version_.code.c_str());
+    // Its camera, chosen before it answers too («Cámara USB», rule 1); seen
+    // below its data (rule 5).
+    ImGui::Separator();
+    const std::string cam = camera_choice(false, field);
     if (!host_tested_ || !host_version_.ok)
         return;
 
@@ -25533,6 +25579,10 @@ void App::host_panel(float field, float button_h) {
     }
     if (button("##host_refresh", nullptr, tr(T::BambuRefresh), false, false, !working, nullptr, button_h))
         host_refresh();
+
+    // The camera, below its data (printer_connections.md, «Cámara USB», rule 5).
+    if (!cam.empty() && cam != "none")
+        usb_camera_view(cam, std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
 
     // Sending, pausing, cancelling (devices.md, rule 22: upload, and print if «Start printing»).
     ImGui::Separator();
@@ -25659,6 +25709,204 @@ void App::bambu_camera_view(float width) {
         save_preferences();
         bambu_camera_on();
     }
+}
+
+// Which printer the page shows, as its cameras are kept («Cámara USB», rule 1).
+std::string App::camera_key() const {
+    if (device_bambu_)
+        return "bambu:" + bambu_.host;
+    if (device_host_)
+        return "host:" + host_.url;
+    return "usb:" + device_port_;
+}
+
+// The choice for the printer on the page (rule 1): its own camera when it has
+// one (""), none, or a USB camera connected now, with what that camera gives
+// beside it. A camera saved by name is found again when its id moved.
+std::string App::camera_choice(bool has_own, float field) {
+    if (!usb_cameras_listed_) {
+        usb_cameras_ = device::list_usb_cameras();
+        usb_cameras_listed_ = true;
+    }
+    const std::string key = camera_key();
+    auto it = camera_choices_.find(key);
+    std::string choice = it != camera_choices_.end() ? it->second.first : has_own ? "" : "none";
+    if (choice.empty() && !has_own)
+        choice = "none";
+    const device::UsbCamera* chosen = nullptr;
+    if (choice != "" && choice != "none") {
+        for (const device::UsbCamera& c : usb_cameras_)
+            if (c.id == choice)
+                chosen = &c;
+        if (!chosen && it != camera_choices_.end())
+            for (const device::UsbCamera& c : usb_cameras_)
+                if (c.name == it->second.second)
+                    chosen = &c;
+    }
+    const std::string saved_name = it != camera_choices_.end() ? it->second.second : std::string();
+    const std::string shown = choice.empty()      ? std::string(tr(T::CameraOwn))
+                              : choice == "none" ? std::string(tr(T::CameraNone))
+                              : chosen            ? chosen->name
+                                                  : format(tr(T::CameraMissing), saved_name.c_str());
+    const auto pick = [&](const std::string& id, const std::string& name) {
+        camera_choices_[key] = {id, name};
+        save_preferences();
+    };
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::BeginCombo(tr(T::CameraRow), shown.c_str())) {
+        if (has_own && ImGui::Selectable(tr(T::CameraOwn), choice.empty()))
+            pick("", "");
+        if (ImGui::Selectable(tr(T::CameraNone), choice == "none"))
+            pick("none", "");
+        for (const device::UsbCamera& c : usb_cameras_)
+            if (ImGui::Selectable((c.name + "##" + c.id).c_str(), chosen == &c))
+                pick(c.id, c.name);
+        ImGui::EndCombo();
+    }
+    note_rect("camera_choice");
+    ImGui::SameLine();
+    if (ImGui::SmallButton((std::string(tr(T::DeviceRefresh)) + "##cameras").c_str()))
+        usb_cameras_listed_ = false;
+    if (usb_cameras_.empty())
+        loc::TextDisabled("%s", tr(T::CameraNoUsb));
+    if (chosen) {
+        // What the camera gives: its size, format and real rate (rule 1).
+        const std::optional<device::CameraFormat> f = usb_cam_ && usb_cam_id_ == chosen->id
+                                                          ? std::optional<device::CameraFormat>(usb_cam_->format)
+                                                          : device::choose_camera_format(chosen->formats);
+        if (f) {
+            std::string line = device::camera_format_text(*f);
+            if (usb_cam_ && usb_cam_id_ == chosen->id && usb_fps_ > 0.0)
+                line += "  ·  " + format(tr(T::CameraRealFps), number(usb_fps_, 0).c_str());
+            loc::TextDisabled("%s", line.c_str());
+        }
+        return chosen->id;
+    }
+    if (choice != "" && choice != "none") {
+        loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CameraNotConnected));
+        return "none";
+    }
+    return choice;
+}
+
+void App::usb_camera_off() {
+    if (usb_cam_)
+        usb_cam_->stop = true;
+    if (usb_cam_job_.valid())
+        usb_cam_job_.get();
+    usb_cam_.reset();
+    usb_cam_id_.clear();
+    drop_texture(usb_cam_tex_);
+    usb_cam_tex_ = 0;
+    usb_cam_w_ = usb_cam_h_ = 0;
+}
+
+// The newest frame of the camera `id`, `width` wide (rules 2 to 4): opened in
+// the format rule 2 chooses, at most 15 a second on screen, the others
+// skipped; a warning when it went away or sent nothing for 10 s. The frames
+// stay in memory.
+void App::usb_camera_view(const std::string& id, float width) {
+    usb_cam_frame_ = ImGui::GetFrameCount();
+    frame_pending_ = true; // frames keep coming
+    if (usb_cam_ && usb_cam_id_ != id)
+        usb_camera_off();
+    const double now = glfwGetTime();
+    if (!usb_cam_) {
+        const device::UsbCamera* camera = nullptr;
+        for (const device::UsbCamera& c : usb_cameras_)
+            if (c.id == id)
+                camera = &c;
+        const std::optional<device::CameraFormat> f = camera ? device::choose_camera_format(camera->formats) : std::nullopt;
+        if (!f)
+            return;
+        usb_cam_ = std::make_shared<UsbCameraStream>();
+        usb_cam_->format = *f;
+        usb_cam_id_ = id;
+        usb_pacer_ = {};
+        usb_cam_seen_ = 0;
+        usb_fps_start_ = now;
+        usb_fps_frames_ = 0;
+        usb_fps_ = 0.0;
+        usb_cam_job_ = std::async(std::launch::async, [cam = usb_cam_, id, format = *f] {
+            device::UsbCapture capture;
+            std::string error;
+            if (!capture.open(id, format, error)) {
+                const std::lock_guard<std::mutex> hold(cam->lock);
+                cam->ended = true;
+                cam->error = error;
+                return;
+            }
+            {
+                const std::lock_guard<std::mutex> hold(cam->lock);
+                cam->format = capture.format();
+            }
+            std::string frame;
+            while (!cam->stop) {
+                if (capture.read(frame, 0.5)) {
+                    const std::lock_guard<std::mutex> hold(cam->lock);
+                    cam->frame.swap(frame);
+                    ++cam->frames;
+                } else if (capture.disconnected()) {
+                    const std::lock_guard<std::mutex> hold(cam->lock);
+                    cam->disconnected = cam->ended = true;
+                    break;
+                }
+            }
+            capture.close();
+        });
+    }
+    std::string frame, error;
+    std::size_t frames = 0;
+    bool ended = false, disconnected = false;
+    device::CameraFormat taken;
+    {
+        const std::lock_guard<std::mutex> hold(usb_cam_->lock);
+        frames = usb_cam_->frames;
+        ended = usb_cam_->ended;
+        disconnected = usb_cam_->disconnected;
+        error = usb_cam_->error;
+        taken = usb_cam_->format;
+    }
+    if (frames > usb_cam_seen_) {
+        usb_pacer_.arrived(frames - 1, now);
+        usb_fps_frames_ += frames - usb_cam_seen_;
+        usb_cam_seen_ = frames;
+    }
+    if (now - usb_fps_start_ >= 2.0) { // the real rate, over two seconds
+        usb_fps_ = double(usb_fps_frames_) / (now - usb_fps_start_);
+        usb_fps_start_ = now;
+        usb_fps_frames_ = 0;
+    }
+    if (disconnected)
+        usb_pacer_.disconnected();
+    if (usb_pacer_.due(now)) {
+        {
+            const std::lock_guard<std::mutex> hold(usb_cam_->lock);
+            frame = usb_cam_->frame;
+        }
+        Image image;
+        if (taken.mjpeg) {
+            image = decode_image(device::mjpeg_with_huffman_tables(frame));
+        } else {
+            image.width = taken.width;
+            image.height = taken.height;
+            image.rgba = device::yuyv_to_rgba(frame, taken.width, taken.height);
+        }
+        if (!image.rgba.empty()) {
+            drop_texture(usb_cam_tex_);
+            usb_cam_tex_ = upload_texture(image, true);
+            usb_cam_w_ = image.width;
+            usb_cam_h_ = image.height;
+        }
+    }
+    if (usb_cam_tex_ && usb_cam_w_ > 0)
+        ImGui::Image(ImTextureRef(usb_cam_tex_), ImVec2(width, width * float(usb_cam_h_) / float(usb_cam_w_)));
+    else if (!ended)
+        loc::TextDisabled("%s", tr(T::BambuCameraWaiting));
+    if (!error.empty())
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuCameraEnded), error.c_str());
+    else if (usb_pacer_.stalled(now))
+        loc::TextColored(rgb(0xE5484D), "%s", tr(disconnected ? T::CameraGone : T::CameraSilent));
 }
 
 void App::bambu_refresh() {
@@ -25852,16 +26100,25 @@ void App::bambu_panel(float field, float button_h) {
         }
     }
 
-    // The camera (rule 6: the A1 and P1 series; the X1 has none here).
-    bool camera = bambu_camera_ != nullptr;
-    if (ImGui::Checkbox(tr(T::BambuCamera), &camera)) {
+    // The camera (rule 6: the A1 and P1 series; the X1 has none here), or a
+    // USB one of the computer in its place («Cámara USB», rule 5).
+    const std::string cam = camera_choice(true, field);
+    if (cam.empty()) {
+        bool camera = bambu_camera_ != nullptr;
+        if (ImGui::Checkbox(tr(T::BambuCamera), &camera)) {
+            if (camera)
+                bambu_camera_on();
+            else
+                bambu_camera_off();
+        }
         if (camera)
-            bambu_camera_on();
-        else
+            bambu_camera_view(std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
+    } else {
+        if (bambu_camera_)
             bambu_camera_off();
+        if (cam != "none")
+            usb_camera_view(cam, std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
     }
-    if (camera)
-        bambu_camera_view(std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
 
     // Printing, pausing, stopping.
     ImGui::Separator();
@@ -26089,6 +26346,11 @@ void App::device_panel() {
         if (ImGui::SmallButton(tr(T::DeviceFan)))
             printer_->fan(device_fan_);
     }
+
+    // The camera (printer_connections.md, «Cámara USB», rule 5: in its panel).
+    ImGui::Separator();
+    if (const std::string cam = camera_choice(false, field); !cam.empty() && cam != "none")
+        usb_camera_view(cam, std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
 
     // 5: what happened.
     if (!device_log_.empty() && ImGui::CollapsingHeader(tr(T::DeviceLog))) {
