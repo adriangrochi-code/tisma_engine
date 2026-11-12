@@ -494,6 +494,144 @@ HostResult duet_cancel(const HostConfig& host) {
 
 } // namespace
 
+namespace {
+
+// AstroBox: OctoPrint's version and upload calls only (no published API for
+// the rest).
+HostResult unsupported(const char* what) {
+    HostResult out;
+    out.code = "unsupported";
+    out.error = what;
+    return out;
+}
+
+// Repetier-Server (its Web API): the commands go to /printer/api/<slug> as
+// ?a=<command>&data=<URL-encoded JSON>, the key in x-api-key.
+nlohmann::json repetier_json(const net::Response& r) {
+    return nlohmann::json::parse(r.body, nullptr, false);
+}
+
+// The printer's slug: the one asked for, or the server's first printer.
+std::string repetier_slug(const HostConfig& host, HostResult& result, std::string* server = nullptr) {
+    const net::Response r = net::perform(request(host, "GET", "/printer/info"));
+    result = result_of(r);
+    if (!result.ok)
+        return {};
+    const nlohmann::json j = repetier_json(r);
+    if (!j.is_object() || !j.contains("printers") || !j["printers"].is_array()) {
+        result.ok = false;
+        result.code = "bad_answer";
+        result.error = "the address answers, but not as Repetier-Server";
+        return {};
+    }
+    if (server)
+        *server = j.value("name", std::string("Repetier-Server")) + " " + j.value("version", std::string());
+    for (const nlohmann::json& p : j["printers"]) {
+        const std::string slug = p.is_object() ? p.value("slug", std::string()) : std::string();
+        if (!slug.empty() && (host.printer.empty() || slug == host.printer))
+            return slug;
+    }
+    result.ok = false;
+    result.code = "failed";
+    result.error = host.printer.empty() ? "Repetier-Server has no printer"
+                                        : "Repetier-Server has no printer named \"" + host.printer + "\"";
+    return {};
+}
+
+net::Response repetier_command(const HostConfig& host, const std::string& slug, const std::string& command,
+                               const nlohmann::json& data = nlohmann::json::object()) {
+    return net::perform(request(host, "POST", "/printer/api/" + url_part(slug) + "?a=" + command +
+                                                  "&data=" + url_part(data.dump())));
+}
+
+HostVersion repetier_version(const HostConfig& host) {
+    HostVersion out;
+    std::string server;
+    const std::string slug = repetier_slug(host, out, &server);
+    if (!out.ok)
+        return out;
+    // /printer/info needs no key: a command checks it.
+    static_cast<HostResult&>(out) = result_of(repetier_command(host, slug, "listPrinter"));
+    if (out.ok)
+        out.server = server;
+    return out;
+}
+
+HostResult repetier_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
+    HostResult out;
+    const std::string slug = repetier_slug(host, out);
+    if (!out.ok)
+        return out;
+    // Into the jobs to print it now, else into the models (the file field is «filename»).
+    net::Request r = request(host, "POST", std::string(start ? "/printer/job/" : "/printer/model/") + url_part(slug) +
+                                               "?a=upload&name=" + url_part(name));
+    r.timeout_s = std::max(host.timeout_s, 600);
+    r.form.push_back({"filename", "", path, name, "application/octet-stream"});
+    return result_of(net::perform(r));
+}
+
+double repetier_temp(const nlohmann::json& heater, const char* key) {
+    return heater.is_object() ? number(heater, key) : -1.0;
+}
+
+HostStatus repetier_status(const HostConfig& host) {
+    HostStatus out;
+    const std::string slug = repetier_slug(host, out);
+    if (!out.ok)
+        return out;
+    const net::Response list = repetier_command(host, slug, "listPrinter");
+    static_cast<HostResult&>(out) = result_of(list);
+    if (!out.ok)
+        return out;
+    const nlohmann::json printers = repetier_json(list);
+    bool found = false;
+    if (printers.is_array())
+        for (const nlohmann::json& p : printers) {
+            if (!p.is_object() || p.value("slug", std::string()) != slug)
+                continue;
+            found = true;
+            const std::string job = p.value("job", std::string("none"));
+            out.printing = !job.empty() && job != "none";
+            out.file = out.printing ? job : std::string();
+            out.state = p.value("online", 0) == 0 ? "Offline" : out.printing ? "Printing" : "Idle";
+            if (p.contains("done"))
+                out.progress = number(p, "done");
+        }
+    if (!found) {
+        out.ok = false;
+        out.code = "bad_answer";
+        out.error = "Repetier-Server sent no state for the printer";
+        return out;
+    }
+    const net::Response state = repetier_command(host, slug, "stateList");
+    if (state.ok()) {
+        nlohmann::json j = repetier_json(state);
+        if (j.is_object() && j.contains(slug))
+            j = j[slug];
+        if (j.is_object()) {
+            if (j.contains("extruder") && j["extruder"].is_array() && !j["extruder"].empty()) {
+                out.nozzle = repetier_temp(j["extruder"][0], "tempRead");
+                out.nozzle_target = repetier_temp(j["extruder"][0], "tempSet");
+            }
+            if (j.contains("heatedBed")) {
+                out.bed = repetier_temp(j["heatedBed"], "tempRead");
+                out.bed_target = repetier_temp(j["heatedBed"], "tempSet");
+            }
+        }
+    }
+    return out;
+}
+
+HostResult repetier_job(const HostConfig& host, const char* command) {
+    HostResult out;
+    const std::string slug = repetier_slug(host, out);
+    if (!out.ok)
+        return out;
+    return result_of(repetier_command(host, slug, command));
+}
+
+} // namespace
+
 bool host_kind_from(const std::string& word, HostKind& out) {
     if (word == "octoprint")
         out = HostKind::OctoPrint;
@@ -503,6 +641,10 @@ bool host_kind_from(const std::string& word, HostKind& out) {
         out = HostKind::PrusaLink;
     else if (word == "duet")
         out = HostKind::Duet;
+    else if (word == "astrobox")
+        out = HostKind::AstroBox;
+    else if (word == "repetier")
+        out = HostKind::Repetier;
     else
         return false;
     return true;
@@ -539,6 +681,8 @@ const char* host_kind_word(HostKind kind) {
     case HostKind::Moonraker: return "moonraker";
     case HostKind::PrusaLink: return "prusalink";
     case HostKind::Duet: return "duet";
+    case HostKind::AstroBox: return "astrobox";
+    case HostKind::Repetier: return "repetier";
     default: return "octoprint";
     }
 }
@@ -548,6 +692,8 @@ const char* host_kind_name(HostKind kind) {
     case HostKind::Moonraker: return "Klipper (Moonraker)";
     case HostKind::PrusaLink: return "PrusaLink";
     case HostKind::Duet: return "Duet";
+    case HostKind::AstroBox: return "AstroBox";
+    case HostKind::Repetier: return "Repetier-Server";
     default: return "OctoPrint";
     }
 }
@@ -559,6 +705,8 @@ HostVersion host_version(const HostConfig& host) {
         return prusalink_version(host);
     if (host.kind == HostKind::Duet)
         return duet_version(host);
+    if (host.kind == HostKind::Repetier)
+        return repetier_version(host);
     HostVersion out;
     const net::Response r = net::perform(request(host, "GET", "/api/version"));
     static_cast<HostResult&>(out) = result_of(r);
@@ -568,11 +716,13 @@ HostVersion host_version(const HostConfig& host) {
     if (!j.is_object() || !j.contains("api")) {
         out.ok = false;
         out.code = "bad_answer";
-        out.error = "the address answers, but not as OctoPrint";
+        out.error = host.kind == HostKind::AstroBox ? "the address answers, but not as AstroBox"
+                                                    : "the address answers, but not as OctoPrint";
         return out;
     }
     out.api = j.value("api", "");
-    out.server = j.value("text", "OctoPrint " + j.value("server", std::string()));
+    out.server = j.value("text", std::string(host.kind == HostKind::AstroBox ? "AstroBox " : "OctoPrint ") +
+                                     j.value("server", std::string()));
     return out;
 }
 
@@ -584,6 +734,8 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
         return prusalink_upload(host, path, name, start);
     if (host.kind == HostKind::Duet)
         return duet_upload(host, path, name, start, simulate);
+    if (host.kind == HostKind::Repetier)
+        return repetier_upload(host, path, name, start);
     net::Request r = request(host, "POST", "/api/files/local");
     r.timeout_s = std::max(host.timeout_s, 600); // a large file on a slow network
     r.form.push_back({"file", "", path, name, "application/octet-stream"});
@@ -599,6 +751,13 @@ HostStatus host_status(const HostConfig& host) {
         return prusalink_status(host);
     if (host.kind == HostKind::Duet)
         return duet_status(host);
+    if (host.kind == HostKind::Repetier)
+        return repetier_status(host);
+    if (host.kind == HostKind::AstroBox) {
+        HostStatus out;
+        static_cast<HostResult&>(out) = unsupported("AstroBox has no published API for the printer's state");
+        return out;
+    }
     HostStatus out;
     const net::Response job = net::perform(request(host, "GET", "/api/job"));
     static_cast<HostResult&>(out) = result_of(job);
@@ -646,6 +805,11 @@ HostResult host_pause(const HostConfig& host, bool pause) {
         return prusalink_job_call(host, "PUT", pause ? "/pause" : "/resume");
     if (host.kind == HostKind::Duet)
         return duet_pause(host, pause);
+    if (host.kind == HostKind::Repetier)
+        return pause ? unsupported("Repetier-Server's API has no pause command")
+                     : repetier_job(host, "continueJob");
+    if (host.kind == HostKind::AstroBox)
+        return unsupported("AstroBox has no published API to pause or resume");
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = nlohmann::json{{"command", "pause"}, {"action", pause ? "pause" : "resume"}}.dump();
@@ -659,6 +823,10 @@ HostResult host_cancel(const HostConfig& host) {
         return prusalink_job_call(host, "DELETE", "");
     if (host.kind == HostKind::Duet)
         return duet_cancel(host);
+    if (host.kind == HostKind::Repetier)
+        return repetier_job(host, "stopJob");
+    if (host.kind == HostKind::AstroBox)
+        return unsupported("AstroBox has no published API to cancel");
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = R"({"command": "cancel"})";

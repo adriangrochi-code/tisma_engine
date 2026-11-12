@@ -13559,3 +13559,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `flavor_choices.txt` (Klipper no está entre las opciones; la captura muestra solo Marlin 2 y Marlin 1:
   los textos de un menú abierto no los ve `expect-text`); pasan las 66 de ajustes e impresora.
 
+## 2026-11-12 — P2: AstroBox y Repetier-Server en el motor (devices.md)
+
+- **Hecho:** `src/device/print_host.*` suma dos tipos. Repetier-Server, por su Web API pública: probar
+  (`/printer/info` y `listPrinter` con la clave), subir a los modelos o, para imprimir, a los trabajos (campo
+  `filename`), el estado (`listPrinter`: trabajo y avance; `stateList`: boquilla y cama), seguir (`continueJob`) y
+  cancelar (`stopJob`); `HostConfig::printer` elige la impresora del servidor (vacío: la primera). Pausar no está en
+  la API publicada: «unsupported». AstroBox, sin API publicada: solo probar y subir, como OctoPrint (lo que midió la
+  ficha); estado, pausa y cancelar dan «unsupported».
+- **Pruebas:** dos casos nuevos contra simuladores propios; pasan las 22 de `[device]`. Sin probar con un servidor
+  real.
+- **Sigue:** la interfaz tiene que ofrecer los dos tipos (sesión de la interfaz). En el motor: Flashforge (la API
+  local no tiene documentación oficial: la ficha mide pedidos; el protocolo necesita decisión o ficha), FlashAir y MKS.

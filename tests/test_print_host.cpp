@@ -430,7 +430,7 @@ TEST_CASE("print host: PrusaLink's API with Digest, upload and print, state, pau
     CHECK(k == HostKind::PrusaLink);
     CHECK(host_kind_from("duet", k));
     CHECK(k == HostKind::Duet);
-    CHECK_FALSE(host_kind_from("repetier", k));
+    CHECK_FALSE(host_kind_from("flashair", k));
     std::filesystem::remove(g);
 }
 
@@ -609,4 +609,147 @@ TEST_CASE("print host: Moonraker found on the network, confirmed by its server i
     CHECK(found[0].name == "Moonraker @ voron");
     CHECK(found[0].url == fake.url());
     CHECK(found[0].server == "Moonraker v0.9.3 (Klipper ready)");
+}
+
+namespace {
+
+// Repetier-Server as its Web API describes it: /printer/info without a key,
+// the commands under /printer/api/<slug>?a=…, the uploads into models or jobs.
+class FakeRepetier {
+public:
+    FakeRepetier() {
+        server_.Get("/printer/info", [](const httplib::Request&, httplib::Response& res) {
+            res.set_content(R"({"name": "Repetier-Server", "version": "1.4.10", "apikey": "",
+                                "printers": [{"slug": "Ender_3", "name": "Ender 3", "active": true, "online": 1}]})",
+                            "application/json");
+        });
+        server_.Post(R"(/printer/api/([^/]+))", [this](const httplib::Request& req, httplib::Response& res) {
+            if (req.get_header_value("x-api-key") != "KEY") {
+                res.status = 401;
+                return;
+            }
+            std::lock_guard lock(mutex_);
+            const std::string a = req.get_param_value("a");
+            commands.push_back(req.matches[1].str() + ":" + a);
+            if (a == "listPrinter")
+                res.set_content(nlohmann::json::array({{{"slug", "Ender_3"}, {"online", 1}, {"job", job}, {"done", 12.5}}}).dump(),
+                                "application/json");
+            else if (a == "stateList")
+                res.set_content(R"({"Ender_3": {"extruder": [{"tempRead": 199.5, "tempSet": 200}],
+                                                "heatedBed": {"tempRead": 54.0, "tempSet": 55}}})",
+                                "application/json");
+            else if (a == "stopJob")
+                job = "none";
+            else
+                res.set_content("{}", "application/json");
+        });
+        const auto upload = [this](bool queue) {
+            return [this, queue](const httplib::Request& req, httplib::Response& res) {
+                if (req.get_header_value("x-api-key") != "KEY") {
+                    res.status = 401;
+                    return;
+                }
+                std::lock_guard lock(mutex_);
+                if (req.get_param_value("a") != "upload" || !req.form.has_file("filename")) {
+                    res.status = 400;
+                    return;
+                }
+                uploaded = req.form.get_file("filename").content;
+                uploaded_name = req.get_param_value("name");
+                if (queue)
+                    job = uploaded_name;
+                to_jobs = queue;
+                res.set_content("{}", "application/json");
+            };
+        };
+        server_.Post(R"(/printer/job/Ender_3)", upload(true));
+        server_.Post(R"(/printer/model/Ender_3)", upload(false));
+        port_ = server_.bind_to_any_port("127.0.0.1");
+        thread_ = std::thread([this] { server_.listen_after_bind(); });
+        server_.wait_until_ready();
+    }
+    ~FakeRepetier() {
+        server_.stop();
+        thread_.join();
+    }
+    std::string url() const { return "http://127.0.0.1:" + std::to_string(port_); }
+
+    std::string job = "none", uploaded, uploaded_name;
+    bool to_jobs = false;
+    std::vector<std::string> commands;
+
+private:
+    httplib::Server server_;
+    std::thread thread_;
+    std::mutex mutex_;
+    int port_ = 0;
+};
+
+} // namespace
+
+TEST_CASE("print host: Repetier-Server's Web API, test, upload and print, state, continue and stop (devices.md)",
+          "[device][net]") {
+    FakeRepetier fake;
+    HostConfig host;
+    host.kind = HostKind::Repetier;
+    host.url = fake.url();
+    host.api_key = "KEY";
+    const HostVersion v = host_version(host);
+    INFO(v.error);
+    REQUIRE(v.ok);
+    CHECK(v.server == "Repetier-Server 1.4.10");
+    HostConfig wrong = host;
+    wrong.api_key = "nope";
+    CHECK(host_version(wrong).code == "unauthorized");
+    HostConfig other = host;
+    other.printer = "Prusa";
+    CHECK_FALSE(host_version(other).ok);
+
+    const std::filesystem::path g = std::filesystem::temp_directory_path() / "tisma_print_host_r.gcode";
+    std::ofstream(g, std::ios::binary) << "G28\n";
+    REQUIRE(host_upload(host, g.string(), "cube 1.gcode", false).ok);
+    CHECK_FALSE(fake.to_jobs);
+    CHECK(fake.uploaded_name == "cube 1.gcode");
+    CHECK(fake.uploaded == "G28\n");
+    CHECK_FALSE(host_status(host).printing);
+    REQUIRE(host_upload(host, g.string(), "cube.gcode", true).ok);
+    CHECK(fake.to_jobs);
+
+    const HostStatus s = host_status(host);
+    INFO(s.error);
+    REQUIRE(s.ok);
+    CHECK(s.printing);
+    CHECK(s.file == "cube.gcode");
+    CHECK(s.progress == 12.5);
+    CHECK(s.nozzle == 199.5);
+    CHECK(s.nozzle_target == 200.0);
+    CHECK(s.bed == 54.0);
+    CHECK(s.bed_target == 55.0);
+
+    CHECK(host_pause(host, true).code == "unsupported");
+    REQUIRE(host_pause(host, false).ok);
+    REQUIRE(host_cancel(host).ok);
+    CHECK(fake.commands.back() == "Ender_3:stopJob");
+    CHECK_FALSE(host_status(host).printing);
+    std::filesystem::remove(g);
+}
+
+TEST_CASE("print host: AstroBox answers OctoPrint's version and upload calls (devices.md, rule 24)", "[device][net]") {
+    FakeOctoPrint fake;
+    HostConfig host;
+    host.kind = HostKind::AstroBox;
+    host.url = fake.url();
+    host.api_key = "KEY";
+    REQUIRE(host_version(host).ok);
+    const std::filesystem::path g = std::filesystem::temp_directory_path() / "tisma_print_host_a.gcode";
+    std::ofstream(g, std::ios::binary) << "G28\n";
+    REQUIRE(host_upload(host, g.string(), "cube.gcode", true).ok);
+    CHECK(fake.started);
+    CHECK(host_status(host).code == "unsupported");
+    CHECK(host_cancel(host).code == "unsupported");
+    HostKind k;
+    REQUIRE(host_kind_from("repetier", k));
+    CHECK(k == HostKind::Repetier);
+    CHECK(std::string(host_kind_name(HostKind::Repetier)) == "Repetier-Server");
+    std::filesystem::remove(g);
 }
