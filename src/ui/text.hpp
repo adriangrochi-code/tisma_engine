@@ -1240,10 +1240,9 @@
     X(FlowRow, "Flujo", "Flow")                                                                                       \
     X(FlowTip, "El porcentaje del volumen que se extruye en todas las líneas; lo ajusta la calibración de flujo", "The percentage of the volume every line extrudes; the flow calibration sets it") \
     X(GcodeOpened, "G-code abierto: %s", "G-code opened: %s")                                                         \
-    X(ProjectFromProgram, "Proyecto de %s: %d piezas. Sus ajustes todavía no se traen: se usan los de Tisma",          \
-      "Project from %s: %d parts. Its settings are not brought in yet: Tisma's are used")                              \
-    X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza. Sus ajustes todavía no se traen: se usan los de Tisma",          \
-      "Project from %s: 1 part. Its settings are not brought in yet: Tisma's are used")                                 \
+    X(ProjectFromProgram, "Proyecto de %s: %d piezas.", "Project from %s: %d parts.") \
+    X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza.", "Project from %s: 1 part.") \
+    X(ProjectSettingsKept, "Sus ajustes no se traen (no hay tabla para ese programa): se usan los de Tisma", "Its settings are not brought in (no table for that program): Tisma's are used") \
     X(ProjectSettingsSorted, "Ajustes del proyecto: %d traducidos, %d parecidos, %d sin equivalente", \
       "Project settings: %d translated, %d similar, %d without equivalent")                    \
     X(ProjectFromUnknown, "Proyecto de un programa desconocido: se abrieron las piezas, sin sus ajustes",             \
@@ -1525,6 +1524,18 @@
     X(DesignTipDeleteLast, "Borra el último paso del diseño.", "Deletes the design's last step.") \
     X(DesignAccept, "Aceptar", "OK") \
     X(DesignInPanel, "Se edita en el cuadro de la derecha", "Being edited in the panel on the right") \
+    X(ImportTitle, "Proyecto de %s", "%s project") \
+    X(ImportSummary, "Proyecto de %s: %d piezas, %d placa. Ajustes: %d traducidos, %d parecidos, %d sin equivalente", "%s project: %d pieces, %d plate. Settings: %d translated, %d similar, %d without equivalent") \
+    X(ImportPrinter, "Impresora del proyecto: %s", "The project's printer: %s") \
+    X(ImportShowDetail, "Ver detalle", "Show details") \
+    X(ImportHideDetail, "Ocultar detalle", "Hide details") \
+    X(ImportSearch, "Buscar un ajuste", "Search a setting") \
+    X(ImportTranslated, "Traducidos", "Translated") \
+    X(ImportSimilar, "Parecidos", "Similar") \
+    X(ImportNone, "Sin equivalente", "Without equivalent") \
+    X(ImportUseTheirs, "Usar la impresora del proyecto", "Use the project's printer") \
+    X(ImportUseMine, "Usar la mía", "Use mine") \
+    X(ImportPrinterMissing, "Esa impresora no está en el paquete de perfiles", "That printer is not in the profile pack") \
     X(KlipperMoonraker, "Klipper (Moonraker)", "Klipper (Moonraker)") \
     X(ProjectSettingsSkipped, "Sin equivalente (%d): %s…", "No equivalent (%d): %s…") \
     X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \

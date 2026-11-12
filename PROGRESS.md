@@ -13559,3 +13559,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `flavor_choices.txt` (Klipper no está entre las opciones; la captura muestra solo Marlin 2 y Marlin 1:
   los textos de un menú abierto no los ve `expect-text`); pasan las 66 de ajustes e impresora.
 
+## 2026-11-12 — interfaz: el diálogo al abrir un proyecto de otro programa (project_import.md, regla 9; beta, ítem 4)
+
+- **Hecho:** al abrir un proyecto con tabla de traducción, un diálogo «Proyecto de <programa>»: «N piezas, 1 placa.
+  Ajustes: A traducidos, B parecidos, C sin equivalente», la impresora que nombra el proyecto, «Ver detalle» (los
+  tres grupos con cada clave y su valor, con buscador) y «Usar la impresora del proyecto» (si el paquete la tiene por
+  ese nombre: la elige y vuelve a poner encima los ajustes del proyecto) o «Usar la mía». El aviso de los sin
+  equivalente nombra solo las claves, cortas (antes copiaba G-codes enteros); el primer aviso ya no dice que los
+  ajustes no se traen, y otro lo dice solo cuando de verdad no se traen (no hay tabla para ese programa). Las
+  placas se cuentan como una hasta que la lectura las dé.
+- **Pruebas:** `project_import_settings.txt` (el diálogo, la impresora del proyecto, el detalle, «Usar la mía»);
+  pasan las 60 de importar, proyecto y 3MF. Captura revisada.
+

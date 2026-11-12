@@ -1766,6 +1766,20 @@ private:
     // What another program's project brought that has no equivalent
     // (project_import.md, rules 6 and 9: «sin equivalente», by name and value).
     std::vector<std::string> import_skipped_;
+    // The dialog on opening another program's project (project_import.md,
+    // rule 9): what it is, its settings in their three groups, and the
+    // choice between the project's printer and the one in use.
+    struct ProjectImport {
+        bool open = false, detail = false;
+        std::string program, printer;      // the printer the project names
+        int items = 0;
+        SettingSort sort;
+        std::vector<std::pair<std::string, std::string>> own; // as the project has them
+        TranslationTable table;
+        char filter[64] = "";
+    };
+    ProjectImport import_;
+    void project_import_dialog();
     bool host_searched_ = false;
     std::string host_dialog_name_;
     device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
@@ -4531,6 +4545,7 @@ void App::load_model(const std::filesystem::path& path) {
                                         : format(tr(T::ProjectFromProgramOne), source.program.c_str()));
                 // Its settings by the pack's translation table, when it has
                 // one for this program (rules 6, 9 and 11).
+                bool brought = false;
                 if (pack_index_)
                     if (const auto table_path = pack_index_->translation.find(translation_dialect(source));
                         table_path != pack_index_->translation.end()) {
@@ -4542,24 +4557,43 @@ void App::load_model(const std::filesystem::path& path) {
                             if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
                                 const TranslationTable parsed = parse_translation(table);
                                 const SettingSort sort = sort_settings(parsed, own);
+                                // The dialog (rule 9), with the printer the project names.
+                                import_ = ProjectImport{};
+                                import_.open = true;
+                                import_.program = source.program;
+                                import_.items = source.items;
+                                import_.sort = sort;
+                                import_.own = own;
+                                import_.table = parsed;
+                                for (const auto& [key, value] : own)
+                                    if (key == "printer_settings_id")
+                                        import_.printer = value;
                                 // Translated and similar ones as changes by hand over the
                                 // printer and profiles chosen (rule 8); the rest named.
                                 const ProjectSettings got = translate_settings(parsed, own, settings_);
+                                brought = true;
                                 settings_ = got.settings;
                                 settings_changed();
                                 import_skipped_ = got.skipped;
                                 notify(format(tr(T::ProjectSettingsSorted), sort.translated, sort.similar, sort.none));
                                 if (!import_skipped_.empty()) {
+                                    // Their keys only, short: the values can be whole G-code scripts.
                                     std::string some;
-                                    for (std::size_t k = 0; k < import_skipped_.size() && k < 3; ++k)
-                                        some += (k ? ", " : "") + import_skipped_[k];
+                                    for (std::size_t k = 0; k < import_skipped_.size() && k < 3; ++k) {
+                                        std::string key = import_skipped_[k].substr(0, import_skipped_[k].find(" ="));
+                                        if (key.size() > 32)
+                                            key = key.substr(0, 31) + "…";
+                                        some += (k ? ", " : "") + key;
+                                    }
                                     notify(format(tr(T::ProjectSettingsSkipped), int(import_skipped_.size()), some.c_str()));
                                 }
                             }
                         } catch (const TranslationError&) {
-                            // A table this program cannot read: the notice above stands.
+                            // A table this program cannot read: Tisma's settings stay.
                         }
                     }
+                if (!brought)
+                    notify(tr(T::ProjectSettingsKept));
             }
             else if (source.program.empty() && source.application.find("Tisma") == std::string::npos)
                 notify(tr(T::ProjectFromUnknown));
@@ -13295,6 +13329,96 @@ void App::load_palette_piece() {
         return;
     objects_.back().parts = std::move(parts);
     plate_changed();
+}
+
+
+void App::project_import_dialog() {
+    if (!import_.open)
+        return;
+    // The project's printer, when the pack or the catalog has it by that name.
+    const auto project_printer = [&]() -> const Profile* {
+        if (import_.printer.empty())
+            return nullptr;
+        if (const Profile* p = find_profile(ProfileKind::Printer, import_.printer))
+            return p;
+        return nullptr;
+    };
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.45f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f * scale_, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowFocus();
+    bool open = true;
+    const std::string title = format(tr(T::ImportTitle), import_.program.c_str()) + "###project_import";
+    if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        g_menu_rects["project_import"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                                ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                                ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+        ImGui::PushTextWrapPos(0.0f);
+        loc::Text("%s", format(tr(T::ImportSummary), import_.program.c_str(), import_.items, 1, import_.sort.translated,
+                               import_.sort.similar, import_.sort.none).c_str());
+        if (!import_.printer.empty())
+            loc::TextDisabled("%s", format(tr(T::ImportPrinter), import_.printer.c_str()).c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        if (ImGui::Button(tr(import_.detail ? T::ImportHideDetail : T::ImportShowDetail)))
+            import_.detail = !import_.detail;
+        note_rect("import_detail");
+        if (import_.detail) {
+            // The three groups, each with its keys and values; a search narrows them.
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##import_filter", tr(T::ImportSearch), import_.filter, sizeof import_.filter);
+            std::string want = import_.filter;
+            for (char& c : want)
+                c = char(std::tolower(static_cast<unsigned char>(c)));
+            ImGui::BeginChild("##import_list", ImVec2(0, 260.0f * scale_), ImGuiChildFlags_Borders);
+            const std::pair<SettingGroup, T> groups[] = {{SettingGroup::Translated, T::ImportTranslated},
+                                                         {SettingGroup::Similar, T::ImportSimilar},
+                                                         {SettingGroup::None, T::ImportNone}};
+            for (const auto& [group, label] : groups) {
+                int count = 0;
+                for (const auto& [key, g] : import_.sort.detail)
+                    count += g == group;
+                const std::string head = std::string(tr(label)) + " (" + std::to_string(count) + ")";
+                if (!ImGui::CollapsingHeader(head.c_str(), group == SettingGroup::None ? 0 : ImGuiTreeNodeFlags_DefaultOpen))
+                    continue;
+                for (const auto& [key, g] : import_.sort.detail) {
+                    if (g != group)
+                        continue;
+                    std::string value;
+                    for (const auto& [k, v] : import_.own)
+                        if (k == key)
+                            value = v;
+                    std::string line = key + " = " + value, low = line;
+                    for (char& c : low)
+                        c = char(std::tolower(static_cast<unsigned char>(c)));
+                    if (!want.empty() && low.find(want) == std::string::npos)
+                        continue;
+                    loc::Text("%s", line.c_str());
+                }
+            }
+            ImGui::EndChild();
+        }
+        ImGui::Separator();
+        // Whose printer: the project's (when the pack has it) or the one in use (rule 8).
+        const Profile* theirs = project_printer();
+        ImGui::BeginDisabled(!theirs);
+        if (ImGui::Button(tr(T::ImportUseTheirs))) {
+            choose_profile(ProfileKind::Printer, *theirs);
+            settings_ = translate_settings(import_.table, import_.own, settings_).settings;
+            settings_changed();
+            open = false;
+        }
+        ImGui::EndDisabled();
+        note_rect("import_use_theirs");
+        if (!theirs && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::ImportPrinterMissing));
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::ImportUseMine)))
+            open = false;
+        note_rect("import_use_mine");
+    }
+    ImGui::End();
+    import_.open = open;
 }
 
 void App::mixing_dialog() {
@@ -24459,6 +24583,7 @@ void App::layout() {
             object_settings_window();
         }
         mixing_dialog();
+        project_import_dialog();
         if (tab_ == Tab::Prepare && mixing_open_)
             gradient_overlay();
         if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && !engineering_tab(tab_)) // those panels have their own buttons
