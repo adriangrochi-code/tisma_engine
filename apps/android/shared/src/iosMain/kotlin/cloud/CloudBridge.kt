@@ -62,6 +62,15 @@ object CloudBridge {
         CloudClient(server, token.ifEmpty { null }).report(ProblemReport(kind, title.trim(), description.trim(), steps.trim(),
             expected.trim(), actual.trim(), appVersion.ifEmpty { null }, os.ifEmpty { null }, null, app = "ios"))
 
+    /**
+     * cloud.md, rule 5c («restaurar compras»; parity P19 pagos, owner's account pending): one App Store transaction
+     * (StoreKit 2's signed JWS) sent for the server to verify. The account's plan name after it; the server answers
+     * the same transaction twice the same, 503 when the store does not answer (sent again at the next start).
+     */
+    @Throws(CloudException::class)
+    fun sendAppStorePurchase(server: String, token: String, productId: String, signedTransaction: String): String =
+        CloudClient(server, token).purchase(StorePurchase("app_store", productId, signedTransaction = signedTransaction)).plan
+
     /** A job's state for the screen: «queued», «running 40 %», «done», or «failed: …» in the phone's language. */
     @Throws(CloudException::class)
     fun jobLine(server: String, token: String, id: String, spanish: Boolean): JobLine {

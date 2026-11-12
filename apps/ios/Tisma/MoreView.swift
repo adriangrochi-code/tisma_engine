@@ -14,9 +14,19 @@ final class AccountScreenModel: ObservableObject {
     let model = CloudBridge.shared.accountModel(tokens: KeychainTokens(), server: Prefs.server)
     private var stop: (() -> Void)?
 
+    private var restored = false
+
     init() {
         stop = model.watch { [weak self] s in
-            Task { @MainActor in self?.state = s }
+            Task { @MainActor in
+                guard let self else { return }
+                self.state = s
+                // cloud.md, rule 5c: the store's active purchases go to the server once the session is open.
+                if s.signedIn && !self.restored {
+                    self.restored = true
+                    await Purchases.restore(token: Keychain.read("cloud.token") ?? "")
+                }
+            }
         }
     }
 
