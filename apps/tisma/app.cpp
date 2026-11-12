@@ -16134,7 +16134,11 @@ void App::design_handles() {
     if (design_dialog_ < 0 || std::size_t(design_dialog_) >= design_.features.size() || design_box_.empty)
         return;
     cad::Feature& f = design_.features[std::size_t(design_dialog_)];
-    if (f.type != cad::Feature::Type::Primitive || f.suppressed)
+    // An operation with one measure (radius, distance, thickness) has it too.
+    const bool one_value = f.type == cad::Feature::Type::Operation &&
+                           (f.op.kind == cad::OperationKind::Fillet || f.op.kind == cad::OperationKind::Chamfer ||
+                            f.op.kind == cad::OperationKind::Shell);
+    if ((f.type != cad::Feature::Type::Primitive && !one_value) || f.suppressed)
         return;
     const std::size_t bodies = std::count_if(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
         return g.type != cad::Feature::Type::Operation && !g.suppressed;
@@ -16148,7 +16152,9 @@ void App::design_handles() {
         double per_mm;
     };
     std::vector<Handle> handles;
-    switch (f.kind) {
+    if (one_value) {
+        handles = {{0, 0, 1.0}}; // along X from the top edge, a millimetre for a millimetre
+    } else switch (f.kind) {
     case cad::Primitive::Box: handles = {{0, 0, 2.0}, {1, 1, 2.0}, {2, 2, 1.0}}; break;
     case cad::Primitive::Cylinder: handles = {{0, 0, 2.0}, {1, 2, 1.0}}; break;
     case cad::Primitive::Sphere: handles = {{0, 0, 2.0}}; break;
@@ -16161,10 +16167,13 @@ void App::design_handles() {
     const ImU32 colours[3] = {IM_COL32(229, 72, 77, 255), IM_COL32(63, 191, 127, 255), IM_COL32(59, 130, 246, 255)};
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     for (const Handle& h : handles) {
-        if (h.size >= cad::size_count(f.kind))
+        if (!one_value && h.size >= cad::size_count(f.kind))
             continue;
+        double& value = one_value ? f.op.value : f.sizes[h.size];
         Vec3 face = centre, dir{0, 0, 0};
         (h.axis == 0 ? face.x : h.axis == 1 ? face.y : face.z) = h.axis == 0 ? b.max.x : h.axis == 1 ? b.max.y : b.max.z;
+        if (one_value)
+            face.z = b.max.z; // on the top edge, where a fillet or a chamfer shows
         (h.axis == 0 ? dir.x : h.axis == 1 ? dir.y : dir.z) = 1.0f;
         const auto a = screen_of(face), one = screen_of(face + dir);
         if (!a || !one)
@@ -16197,15 +16206,19 @@ void App::design_handles() {
             const ImVec2 d = ImGui::GetIO().MouseDelta;
             const double mm = double(d.x * s.x + d.y * s.y) / double(px_per_mm);
             if (mm != 0.0) {
-                f.sizes[h.size] = std::max(0.1, f.sizes[h.size] + mm * h.per_mm);
+                value = std::max(0.1, value + mm * h.per_mm);
                 design_edited_ = true;
             }
-            const std::string value = format("%s %.2f mm", tr(size_label(f.kind, h.size)), f.sizes[h.size]);
+            const T name = !one_value                                     ? size_label(f.kind, h.size)
+                           : f.op.kind == cad::OperationKind::Fillet ? T::OpRadius
+                           : f.op.kind == cad::OperationKind::Chamfer ? T::OpDistance
+                                                                       : T::OpThickness;
+            const std::string shown = format("%s %.2f mm", tr(name), value);
             const ImVec2 m = ImGui::GetIO().MousePos;
             dl->AddRectFilled(ImVec2(m.x + 14.0f * scale_, m.y + 8.0f * scale_),
-                              ImVec2(m.x + 22.0f * scale_ + ImGui::CalcTextSize(value.c_str()).x, m.y + 12.0f * scale_ + ImGui::GetFontSize() + 4.0f * scale_),
+                              ImVec2(m.x + 22.0f * scale_ + ImGui::CalcTextSize(shown.c_str()).x, m.y + 12.0f * scale_ + ImGui::GetFontSize() + 4.0f * scale_),
                               ImGui::GetColorU32(rgb(theme_.panel, 0.95f)), 4.0f * scale_);
-            dl->AddText(ImVec2(m.x + 18.0f * scale_, m.y + 10.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), value.c_str());
+            dl->AddText(ImVec2(m.x + 18.0f * scale_, m.y + 10.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), shown.c_str());
         }
         ImGui::End();
         dl->AddCircleFilled(tip, (active ? 8.0f : 6.0f) * scale_, colours[h.axis]);

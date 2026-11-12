@@ -13571,3 +13571,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `project_import_settings.txt` (el diálogo, la impresora del proyecto, el detalle, «Usar la mía»);
   pasan las 60 de importar, proyecto y 3MF. Captura revisada.
 
+## 2026-11-12 — interfaz: flechas también en las operaciones de Diseño (regla 11 quinquies)
+
+- **Hecho:** Redondeo, Chaflán y Vaciado, con su cuadro abierto, tienen una flecha desde la arista de arriba que
+  cambia su medida (radio, distancia o espesor) al arrastrarla, con el valor junto al puntero. Las demás operaciones
+  (agujero, patrones, rosca…) todavía no tienen flecha.
+- **Pruebas:** `design_handles_op.txt` (el vaciado de la caja de 20 mm, 3904 mm³; arrastrado, pasa de 4200);
+  pasan las de Diseño.
+

@@ -1,0 +1,19 @@
+# An operation with one measure has its arrow (cad_design.md, rule 11
+# quinquies): the shell of the 20 mm box, 2 mm thick (3904 mm3); dragged out,
+# the wall is thicker and the volume grows.
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-design 8000
+menu design_dialog_accept
+wait 3
+menu design_group_modify
+menu design_op_shell
+expect-control design_pick_done
+menu design_command
+key enter
+expect-design 3904
+expect-control design_handle_1
+drag-control design_handle_1 40 0
+wait 10
+expect-design-above 4200
