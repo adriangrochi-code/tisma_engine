@@ -13702,3 +13702,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `disconnected()` lo dice. En Windows, macOS e iOS `open` dice que todavía no hay cámaras USB. Prueba: abrir una que
   no existe falla con el motivo. **No probado con una cámara real.** Sigue: la elección por impresora en la
   interfaz (regla 1, sesión de la interfaz) y openpnp-capture en Windows y macOS.
+- **iOS, primer laminado (sesión de la app de iPhone, 12-11-2026):** con el xcframework de f1822c4, en el simulador
+  iPhone 16 Pro con iOS 18.5, `tisma_run_cli` lamina `cube20.stl` con un `--config` mínimo: código 0 y un G-code de
+  más de 1 KB (su corrida 43180443557). `--version` también da 0. El mensaje que confundía (un STL sin `--config` por
+  el camino de los nodos) se arregló en b276520. Sin probar en un iPhone real.
