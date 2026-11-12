@@ -57,7 +57,10 @@ struct MoreView: View {
                     }
                     if let p = account.state?.problem { Text(p.detail).foregroundStyle(.red) }
                 }
-                Section { NavigationLink("Shared library") { LibraryView() } }
+                Section {
+                    NavigationLink("Shared library") { LibraryView() }
+                    NavigationLink("Choose the printer again") { WizardView() }
+                }
                 if let plans = account.state?.plans, !plans.isEmpty {
                     Section("Plans") {
                         ForEach(plans, id: \.name) { p in Text(p.name) }

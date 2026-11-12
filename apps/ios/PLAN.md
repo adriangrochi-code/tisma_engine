@@ -37,6 +37,8 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    temperaturas sobre el perfil (`PrintChanges` en `shared`). El panel completo (12-11): secciones Impresión y Material
    con los niveles Básico, Normal y Avanzado y las reglas de ocultar, del mismo `SettingsLayout` que Android (en
    `shared`); los cambios se aplican al laminar. Las secciones de abajo quedan como pide la regla 5.
+   Asistente de primer uso (12-11, MA1): impresora por modelo, boquilla y filamento del catálogo; se vuelve a abrir
+   desde Más. Orden siguiente (QA, 12-11): avisos de fin de impresión, tarjeta de impresora, Ingeniería.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común

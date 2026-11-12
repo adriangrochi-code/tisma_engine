@@ -7,7 +7,17 @@ final class ScreensTests: XCTestCase {
 
     func testEachSectionOpens() {
         let app = XCUIApplication()
+        app.launchArguments += ["-wizard.done", "NO"]
         app.launch()
+        // MA1: the first start opens the assistant; a printer, then its filament, close it.
+        XCTAssertTrue(app.navigationBars["Welcome to Tisma"].waitForExistence(timeout: 10))
+        keep("wizard")
+        app.buttons.matching(identifier: "wizard_printer").firstMatch.tap()
+        let nozzle = app.buttons["0.40 mm"]
+        if nozzle.waitForExistence(timeout: 2) { nozzle.tap() }
+        let filament = app.buttons.matching(identifier: "wizard_filament").firstMatch
+        XCTAssertTrue(filament.waitForExistence(timeout: 5))
+        filament.tap()
         for (tab, name) in [("Plate", "plate"), ("Print", "print"), ("Material", "material"), ("Printer", "printer"), ("More", "more")] {
             let button = app.tabBars.buttons[tab]
             XCTAssertTrue(button.waitForExistence(timeout: 10), "the \(tab) section is there")

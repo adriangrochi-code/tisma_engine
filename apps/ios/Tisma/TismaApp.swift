@@ -24,6 +24,7 @@ struct TismaApp: App {
 struct RootView: View {
     @State private var tab = 0
     @AppStorage("plate.opened") private var openedPath = ""
+    @AppStorage("wizard.done") private var wizardDone = false
 
     var body: some View {
         TabView(selection: $tab) {
@@ -34,6 +35,8 @@ struct RootView: View {
             PrinterView().tabItem { Label("Printer", systemImage: "printer") }.tag(3)
             MoreView().tabItem { Label("More", systemImage: "ellipsis.circle") }.tag(4)
         }
+        // The first-use assistant (MA1), once.
+        .fullScreenCover(isPresented: Binding(get: { !wizardDone }, set: { _ in })) { WizardView() }
         // «Compartir con Tisma» from another app (MA5): the model goes onto the plate.
         .onOpenURL { url in
             if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 }

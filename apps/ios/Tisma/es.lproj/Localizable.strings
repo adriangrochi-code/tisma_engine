@@ -56,3 +56,10 @@
 "Advanced" = "Avanzado";
 "The settings layout is missing from this build." = "Esta versión no trae el panel de ajustes.";
 "Shared library" = "Biblioteca compartida";
+"Welcome to Tisma" = "Te damos la bienvenida";
+"Later" = "Después";
+"Your printer's model" = "El modelo de tu impresora";
+"Which printer do you have?" = "¿Qué impresora tenés?";
+"Which nozzle?" = "¿Qué boquilla?";
+"Which filament?" = "¿Qué filamento?";
+"Choose the printer again" = "Elegir la impresora de nuevo";
