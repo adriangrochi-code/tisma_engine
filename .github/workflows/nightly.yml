@@ -43,8 +43,10 @@ jobs:
         run: |
           sha="$(gh api "repos/$REPO/commits/dev" --jq .sha)"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          last="$(gh api "repos/$REPO/git/ref/tags/nightly" --jq .object.sha 2>/dev/null || true)"
-          published="$(gh release view nightly --repo "$REPO" --json publishedAt --jq .publishedAt 2>/dev/null || true)"
+          # The built dev commit is in the release notes (the tag stays on main).
+          last="$(gh release view nightly --repo "$REPO" --json body --jq .body 2>/dev/null | sed -n 's/^- Commit: \([0-9a-f]*\).*/\1/p' | head -1)"
+          # When it was built, from its notes: an edited release keeps its first publish date.
+          published="$(gh release view nightly --repo "$REPO" --json body --jq .body 2>/dev/null | sed -n 's/^- Built: \(.*\) UTC.*/\1/p' | head -1)"
           build=true
           if [ "$EVENT" != "workflow_dispatch" ] && [ "$last" = "$sha" ]; then
             echo "::notice::the last nightly is already dev's $sha"
@@ -155,6 +157,20 @@ jobs:
             echo "- Built: $(date -u '+%Y-%m-%d %H:%M UTC')"
             echo "- What changed: the «Sin publicar» section of CHANGELOG.md in the package."
           } > notes.md
-          gh release delete nightly --repo "$REPO" --cleanup-tag --yes 2>/dev/null || true
-          gh release create nightly packages/*.zip --repo "$REPO" --target "$SHA" --prerelease \
-            --title "Tisma engine nightly $(date -u +%Y-%m-%d)" --notes-file notes.md
+          # Never delete first, so there is always a nightly to download. The
+          # tag stays on main: the Actions token may not create a ref on a dev
+          # commit whose workflow files are not on main (HTTP 403, 2026-11-12);
+          # the notes name the dev commit that was built.
+          title="Tisma engine nightly $(date -u +%Y-%m-%d)"
+          if gh release view nightly --repo "$REPO" > /dev/null 2>&1; then
+            gh release upload nightly packages/*.zip --repo "$REPO" --clobber
+            keep=" $(cd packages && ls *.zip | tr '\n' ' ')"
+            for old in $(gh release view nightly --repo "$REPO" --json assets --jq '.assets[].name'); do
+              case "$keep" in *" $old "*) ;; *) gh release delete-asset nightly "$old" --repo "$REPO" --yes ;; esac
+            done
+            gh release edit nightly --repo "$REPO" --prerelease --title "$title" --notes-file notes.md
+          else
+            main="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+            gh release create nightly packages/*.zip --repo "$REPO" --target "$main" --prerelease \
+              --title "$title" --notes-file notes.md
+          fi
