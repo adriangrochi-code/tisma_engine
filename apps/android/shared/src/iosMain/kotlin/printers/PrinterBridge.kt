@@ -2,14 +2,36 @@ package net.tisma.printers
 
 import net.tisma.cloud.PlatformHttp
 
-/** A printer's state as the SwiftUI screen shows it. [percent] is -1 when not printing. */
+/**
+ * A printer's state as the SwiftUI screen shows it. [percent] is -1 when not printing. [event] is what happened since
+ * the last reading of the same printer (docs/MOBILE.md, «Avisos»): "finished", "stopped", "paused", "failed" or
+ * empty; [eventDetail] is the line under the notice's title (the file, or the printer's own words).
+ */
 data class PrinterLine(
     val state: String,
     val file: String,
     val percent: Double,
     val nozzle: String,
     val bed: String,
-)
+    val event: String = "",
+    val eventDetail: String = "",
+) {
+    companion object {
+        /** The line for [after], with the event between [before] and it (the same rules as Android's watcher). */
+        fun of(before: PrinterStatus?, after: PrinterStatus): PrinterLine {
+            fun t(x: Temperature?) = x?.let { "${num(it.actual)} / ${num(it.target)} °C" } ?: ""
+            val (event, detail) = when (val e = PrintEvents.between(before, after)) {
+                null -> "" to ""
+                is PrintEvent.Finished -> "finished" to e.file
+                is PrintEvent.Stopped -> "stopped" to (if (e.state.isBlank()) e.file else "${e.file} · ${e.state}")
+                is PrintEvent.Paused -> "paused" to e.message.ifBlank { e.file }
+                is PrintEvent.Failed -> "failed" to e.message.ifBlank { e.file }
+            }
+            return PrinterLine(after.state.name.lowercase(), after.file, after.percent ?: -1.0, t(after.nozzle), t(after.bed),
+                event, detail)
+        }
+    }
+}
 
 /**
  * The network printers for the iPhone app (printer_connections.md), with the same clients as Android. A Bambu Lab's
@@ -26,6 +48,9 @@ object PrinterBridge {
     /** The last connection, kept for the next call: Bambu Lab's MQTT link stays open between state readings. */
     private var kept: Pair<String, PrinterConnection>? = null
     private val keptLock = net.tisma.io.Lock()
+
+    /** The last reading of each printer, to tell what happened between two (a print finished, paused…). */
+    private val lastSeen = mutableMapOf<String, PrinterStatus>()
 
     private fun connection(kind: String, address: String, user: String, secret: String): PrinterConnection = keptLock.locked {
         val key = listOf(kind, address, user, secret).joinToString("\u0000")
@@ -67,9 +92,11 @@ object PrinterBridge {
 
     @Throws(PrinterException::class)
     fun status(kind: String, address: String, user: String, secret: String): PrinterLine {
+        val key = listOf(kind, address, user).joinToString("\u0000")
+        // A failed reading throws before this: no reading is no event, and the last one stays for the next.
         val s = connection(kind, address, user, secret).status()
-        fun t(x: Temperature?) = x?.let { "${num(it.actual)} / ${num(it.target)} °C" } ?: ""
-        return PrinterLine(s.state.name.lowercase(), s.file, s.percent ?: -1.0, t(s.nozzle), t(s.bed))
+        val before = keptLock.locked { lastSeen[key].also { lastSeen[key] = s } }
+        return PrinterLine.of(before, s)
     }
 
     @Throws(PrinterException::class)

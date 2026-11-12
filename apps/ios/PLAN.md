@@ -39,6 +39,9 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    `shared`); los cambios se aplican al laminar. Las secciones de abajo quedan como pide la regla 5.
    Asistente de primer uso (12-11, MA1): impresora por modelo, boquilla y filamento del catálogo; se vuelve a abrir
    desde Más. Orden siguiente (QA, 12-11): avisos de fin de impresión, tarjeta de impresora, Ingeniería.
+   Avisos de fin de impresión (12-11): PrintWatcher lee la impresora guardada cada 5 s con la app abierta y da un
+   aviso local (terminó, se paró, en pausa, error) con las reglas de PrintEvents de Android; en segundo plano, una
+   tarea BGAppRefresh mientras imprime (iOS decide cuándo: el aviso puede llegar tarde). Sin probar en un iPhone.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común

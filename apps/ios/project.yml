@@ -36,6 +36,9 @@ targets:
       path: Tisma/Info.plist
       properties:
         LSSupportsOpeningDocumentsInPlace: false
+        # The print notices read the printer now and then in the background (PrintWatcher).
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [net.tismaservidores.tisma.watch]
         CFBundleDocumentTypes:
           - CFBundleTypeName: 3D model
             LSHandlerRank: Alternate

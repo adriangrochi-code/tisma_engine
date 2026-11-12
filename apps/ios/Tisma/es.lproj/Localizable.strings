@@ -63,3 +63,7 @@
 "Which nozzle?" = "¿Qué boquilla?";
 "Which filament?" = "¿Qué filamento?";
 "Choose the printer again" = "Elegir la impresora de nuevo";
+"%@ finished printing" = "%@ terminó de imprimir";
+"%@ stopped printing" = "%@ dejó de imprimir";
+"%@ paused" = "%@ está en pausa";
+"%@ has an error" = "%@ tiene un error";

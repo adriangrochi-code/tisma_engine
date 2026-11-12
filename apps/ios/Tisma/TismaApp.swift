@@ -1,5 +1,6 @@
 import CryptoKit
 import SwiftUI
+import UserNotifications
 import UniformTypeIdentifiers
 import TismaShared
 
@@ -14,6 +15,9 @@ struct TismaApp: App {
                 .isValidSignature(signature as Data, for: message as Data) ?? false
             return KotlinBoolean(bool: ok)
         }
+        // The print notices (docs/MOBILE.md, «Avisos»): shown while the app is open too, and read in the background.
+        UNUserNotificationCenter.current().delegate = NoticeDelegate.shared
+        PrintWatcher.registerBackground()
     }
 
     var body: some Scene {
@@ -25,6 +29,7 @@ struct RootView: View {
     @State private var tab = 0
     @AppStorage("plate.opened") private var openedPath = ""
     @AppStorage("wizard.done") private var wizardDone = false
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         TabView(selection: $tab) {
@@ -40,6 +45,13 @@ struct RootView: View {
         // «Compartir con Tisma» from another app (MA5): the model goes onto the plate.
         .onOpenURL { url in
             if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 }
+        }
+        // The saved printer is followed while the app is open; in the background, only while it prints.
+        .onChange(of: phase, initial: true) { _, now in
+            if now == .active { PrintWatcher.shared.start() } else {
+                PrintWatcher.shared.stop()
+                if now == .background && PrintWatcher.shared.printing { PrintWatcher.scheduleBackground() }
+            }
         }
     }
 }

@@ -135,4 +135,12 @@ final class BridgeTests: XCTestCase {
         XCTAssertFalse(panel.set(key: "layers.height", text: "abc"))
         XCTAssertTrue(panel.over(profileJson: #"{"layers":{"height":0.2,"first_height":0.3}}"#).contains("0.12"))
     }
+
+    func testAFinishedPrintsNoticeNamesThePrinterAndFile() {
+        let l = PrinterLine(state: "ready", file: "cube.gcode", percent: -1, nozzle: "", bed: "", event: "finished",
+                            eventDetail: "cube.gcode")
+        let (title, body) = PrintWatcher.text(l, printer: "Klipper (Moonraker)")
+        XCTAssertTrue(title.hasPrefix("Klipper (Moonraker)"))
+        XCTAssertEqual(body, "cube.gcode")
+    }
 }

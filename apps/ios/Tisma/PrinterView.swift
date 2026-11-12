@@ -9,8 +9,9 @@ struct PrinterView: View {
     @AppStorage("printer.address") private var address = ""
     @AppStorage("printer.user") private var user = ""
     @State private var secret = Keychain.read("printer.secret") ?? ""
-    @State private var line: PrinterLine?
+    @ObservedObject private var watcher = PrintWatcher.shared
     @State private var problem: String?
+    private var line: PrinterLine? { watcher.line }
     @State private var tested: String?
 
     var body: some View {
@@ -43,25 +44,11 @@ struct PrinterView: View {
                         }.buttonStyle(.bordered)
                     }
                 }
-                if let problem { Section { Text(problem).foregroundStyle(.red) } }
+                if let problem = problem ?? watcher.problem { Section { Text(problem).foregroundStyle(.red) } }
             }
             .navigationTitle("Printer")
-            // Asked every 5 s only while the screen is shown (as Android's WhileVisible).
-            .task(id: address + kind) { await poll() }
-        }
-    }
-
-    private func poll() async {
-        while !Task.isCancelled && !address.isEmpty {
-            let a = (kind, address, user, secret)
-            let result: Result<PrinterLine, Error> = await Task.detached {
-                Result { try PrinterBridge.shared.status(kind: a.0, address: a.1, user: a.2, secret: a.3) }
-            }.value
-            switch result {
-            case .success(let l): line = l; problem = nil
-            case .failure(let e): problem = e.localizedDescription
-            }
-            try? await Task.sleep(for: .seconds(5))
+            // A changed printer is read at once; the watcher keeps reading it while the app is open.
+            .task(id: address + kind) { await watcher.readOnce() }
         }
     }
 
@@ -74,6 +61,11 @@ struct PrinterView: View {
         }
     }
 
+    static func title(_ kind: String) -> String { PrinterKinds.title(kind) }
+}
+
+/// The printer kinds by the names the person reads.
+enum PrinterKinds {
     static func title(_ kind: String) -> String {
         switch kind {
         case "moonraker": return "Klipper (Moonraker)"
