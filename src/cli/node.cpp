@@ -344,7 +344,10 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             items.clear();
         }
         if (items.empty())
-            return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma, nor a 3MF with a model",
+            // A bare model (STL, OBJ…) comes with its settings: say so.
+            return fail(kExitInput,
+                        "'" + a.project + "' is not a project saved by Tisma, nor a 3MF with a model" +
+                            (a.config.empty() ? std::string(" (a model needs --config)") : std::string()),
                         "not_a_project", "el archivo no es un proyecto de Tisma");
         // The job's settings (--config), else the defaults; another
         // program's own settings over them, translated with the pack's table
