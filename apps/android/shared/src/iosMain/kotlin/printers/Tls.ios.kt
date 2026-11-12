@@ -76,7 +76,7 @@ actual class PinnedTls actual constructor(private val expectedSha256: String?) {
             NSThread.sleepForTimeInterval(0.02)
         }
         check(output, input)
-        return StreamLink(input, output)
+        return StreamLink(input, output, readTimeoutMs)
     }
 
     /**
@@ -120,7 +120,18 @@ actual class PinnedTls actual constructor(private val expectedSha256: String?) {
 
 /** An NSStream pair as a [Link]; reads and writes block, as on Android. */
 @OptIn(ExperimentalForeignApi::class)
-private class StreamLink(private val i: NSInputStream, private val o: NSOutputStream) : Link {
+private class StreamLink(private val i: NSInputStream, private val o: NSOutputStream, private val readTimeoutMs: Int = 0) : Link {
+    /** Waits for bytes up to [readTimeoutMs] (0: as long as it takes), as Android's socket timeout does. */
+    private fun awaitBytes() {
+        if (readTimeoutMs <= 0) return
+        val end = nowMs() + readTimeoutMs
+        while (!i.hasBytesAvailable) {
+            if (i.streamStatus >= platform.Foundation.NSStreamStatusAtEnd) return // the read below says why
+            if (nowMs() > end) throw IOException("The printer sent nothing for ${readTimeoutMs / 1000} s")
+            NSThread.sleepForTimeInterval(0.01)
+        }
+    }
+
     override val input: ByteInput = object : ByteInput() {
         override fun read(): Int {
             val b = ByteArray(1)
@@ -129,6 +140,7 @@ private class StreamLink(private val i: NSInputStream, private val o: NSOutputSt
 
         override fun read(b: ByteArray, off: Int, len: Int): Int {
             if (len == 0) return 0
+            awaitBytes()
             val n = b.usePinned { p -> i.read(p.addressOf(off).reinterpret(), len.convert()) }.toInt()
             if (n < 0) throw IOException(i.streamError?.localizedDescription ?: "The link was cut")
             return if (n == 0) -1 else n

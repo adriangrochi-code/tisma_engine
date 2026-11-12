@@ -12329,6 +12329,6 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   3.1.1, `PinnedTls` con NSStream en iOS y la huella SHA-256 propia, FTPS, cámara); el paquete `.gcode.3mf` en iOS
   con ZIP, CRC-32 y MD5 propios (comprobados contra el JDK). «Probar» fija el certificado la primera vez.
   Sin probar contra una impresora. Riesgos anotados: en iOS el canal de datos FTPS abre una sesión TLS nueva (una
-  impresora que exija reanudarla rechazaría el envío) y las lecturas no tienen límite de tiempo.
-- Siguiente: límite de tiempo en las lecturas de iOS; el motor como biblioteca para iOS (lo pide la sesión del
+  impresora que exija reanudarla rechazaría el envío). Las lecturas tienen límite de tiempo desde el commit siguiente.
+- Siguiente: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
