@@ -43,6 +43,16 @@ final class ScreensTests: XCTestCase {
         report.tap()
         XCTAssertTrue(app.navigationBars["Report a problem"].waitForExistence(timeout: 5))
         keep("report")
+        // Preferences and credits (parity P7).
+        app.navigationBars["Report a problem"].buttons.firstMatch.tap()
+        for (id, title, name) in [("more_preferences", "Preferences", "preferences"), ("more_credits", "Credits and sources", "credits")] {
+            let link = app.buttons[id]
+            if !link.isHittable { app.swipeUp() }
+            link.tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+            keep(name)
+            app.navigationBars[title].buttons.firstMatch.tap()
+        }
     }
 
     private func keep(_ name: String) {

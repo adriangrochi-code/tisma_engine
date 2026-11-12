@@ -52,7 +52,7 @@ struct ReportView: View {
         let (k, t, d, s, e, a) = (kind, title, description, steps, expected, actual)
         Task.detached {
             do {
-                let similar = try CloudBridge.shared.report(server: CloudBridge.shared.defaultServer, token: token, kind: k, title: t,
+                let similar = try CloudBridge.shared.report(server: Prefs.server, token: token, kind: k, title: t,
                                                             description: d, steps: s, expected: e, actual: a, appVersion: version, os: os)
                 let text = similar > 0 ? String(format: String(localized: "Sent. %d people reported something alike."), Int(similar))
                     : String(localized: "Sent. Thank you.")

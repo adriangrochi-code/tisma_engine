@@ -26,6 +26,14 @@ targets:
         buildPhase: resources
       - path: ../android/app/src/main/assets/settings/layout_es.json
         buildPhase: resources
+      # The credits and license notices (credits.md): the engine's, and the iPhone's own list.
+      - path: ../../resources/credits.json
+        buildPhase: resources
+      - path: credits_ios.json
+        buildPhase: resources
+      - path: ../../resources/licenses
+        type: folder
+        buildPhase: resources
     dependencies:
       # The engine as a static library (the engine's CI, apps/ios/PLAN.md step 4); C++ inside, so libc++ too.
       - framework: Engine/TismaEngine.xcframework

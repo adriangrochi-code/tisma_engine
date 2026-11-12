@@ -132,3 +132,10 @@
 "Custom" = "Personalizado";
 "Choose settings…" = "Elegir ajustes…";
 "Choose the settings to show with «Choose settings…»." = "Elige los ajustes que quieres ver con «Elegir ajustes…».";
+"Preferences" = "Preferencias";
+"Tisma Cloud server" = "Servidor de Tisma Cloud";
+"Empty: Tisma's own. The account uses the new server from the next start." = "Vacío: el de Tisma. La cuenta usa el servidor nuevo desde el próximo arranque.";
+"Credits and sources" = "Créditos y fuentes";
+"Based on" = "Basado en";
+"Libraries" = "Bibliotecas";
+"The credits are missing from this build." = "Faltan los créditos en esta compilación.";

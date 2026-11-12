@@ -222,4 +222,19 @@ final class BridgeTests: XCTestCase {
         XCTAssertEqual(again.customLine, "layers.height")
         XCTAssertGreaterThan(again.allSections(tab: "print").flatMap { $0.rows }.count, 10)
     }
+
+    /// credits.md, rule 4 (parity P7): the engine's functions and the libraries the iPhone carries, each notice there.
+    func testTheCreditsReadAndEveryNoticeIsThere() throws {
+        func text(_ n: String) throws -> String {
+            try String(contentsOf: try XCTUnwrap(Bundle.main.url(forResource: n, withExtension: "json")), encoding: .utf8)
+        }
+        let c = try Credits.companion.parse(engineJson: try text("credits"), androidJson: try text("credits_ios"), spanish: false)
+        XCTAssertGreaterThan(c.features.count, 0)
+        XCTAssertTrue(c.libraries.contains { $0.name == "Clipper2" })
+        XCTAssertTrue(c.libraries.contains { $0.name == "Kotlin standard library" })
+        let licenses = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("licenses")
+        for l in c.libraries { for n in l.notices {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: licenses.appendingPathComponent(n).path), "\(l.name): \(n)")
+        } }
+    }
 }

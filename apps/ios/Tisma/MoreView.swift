@@ -11,7 +11,7 @@ final class KeychainTokens: NSObject, TokenStore {
 @MainActor
 final class AccountScreenModel: ObservableObject {
     @Published private(set) var state: AccountState?
-    let model = CloudBridge.shared.accountModel(tokens: KeychainTokens())
+    let model = CloudBridge.shared.accountModel(tokens: KeychainTokens(), server: Prefs.server)
     private var stop: (() -> Void)?
 
     init() {
@@ -61,6 +61,8 @@ struct MoreView: View {
                     NavigationLink("Shared library") { LibraryView() }
                     NavigationLink("Choose the printer again") { WizardView() }
                     NavigationLink("Report a problem") { ReportView() }.accessibilityIdentifier("more_report")
+                    NavigationLink("Preferences") { PrefsView() }.accessibilityIdentifier("more_preferences")
+                    NavigationLink("Credits and sources") { CreditsView() }.accessibilityIdentifier("more_credits")
                 }
                 if let plans = account.state?.plans, !plans.isEmpty {
                     Section("Plans") {

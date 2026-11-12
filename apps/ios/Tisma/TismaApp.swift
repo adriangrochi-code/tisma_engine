@@ -194,7 +194,7 @@ struct PlateView: View {
 
     private func cloudSlice(_ project: URL) {
         busy = true; cloudLine = nil
-        let server = CloudBridge.shared.defaultServer
+        let server = Prefs.server
         let token = Keychain.read("cloud.token") ?? ""
         let spanish = Locale.current.language.languageCode?.identifier == "es"
         Task.detached {
@@ -349,7 +349,7 @@ struct LibraryView: View {
     }
 
     private func refresh() async {
-        let server = CloudBridge.shared.defaultServer
+        let server = Prefs.server
         let why = await Task.detached { LibraryBridge.shared.refresh(server: server, projectKeyHex: LibraryView.projectKey) }.value
         problem = why
         items = LibraryBridge.shared.search(query: query)

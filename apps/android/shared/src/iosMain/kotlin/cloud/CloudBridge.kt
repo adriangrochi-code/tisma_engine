@@ -36,7 +36,8 @@ object CloudBridge {
         ?.let { st -> st.label(spanish) + st.message(spanish).let { m -> if (m.isBlank()) "" else ": $m" } }
 
     /** The account model of the «Más» screen, on the default server, with Swift's Keychain [tokens]. */
-    fun accountModel(tokens: TokenStore): AccountModel = AccountModel(CloudClient.DEFAULT_SERVER, tokens, "iPhone")
+    fun accountModel(tokens: TokenStore, server: String): AccountModel =
+        AccountModel(server.trim().ifEmpty { CloudClient.DEFAULT_SERVER }, tokens, "iPhone")
 
     /**
      * cloud.md, rules 6 to 9: sends the 3MF project at [path] to be sliced in the cloud; the job's id. Read from the
