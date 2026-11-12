@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <mutex>
+#include <cstdlib>
 #include <string>
 #include <thread>
 
@@ -80,6 +81,13 @@ public:
             if (!req.form.has_field("kind") || !req.form.has_field("params") || !req.form.has_file("file")) {
                 res.status = 422;
                 res.set_content(R"({"detail": "kind, params and file are needed"})", "application/json");
+                return;
+            }
+            // A plan that does not include the job (cloud.md, CC16): the
+            // server's own words, which the program must not show.
+            if (std::getenv("TISMA_MOCK_CLOUD_402")) {
+                res.status = 402;
+                res.set_content(R"({"detail": "Payment required: upgrade your subscription"})", "application/json");
                 return;
             }
             const httplib::FormData file = req.form.get_file("file");

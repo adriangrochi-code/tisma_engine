@@ -3482,7 +3482,13 @@ bool row(T label, bool& v, const char* tip = nullptr) {
 }
 
 template <class Enum>
+bool row(T label, Enum& v, const std::vector<std::pair<Enum, const char*>>& options, const char* tip = nullptr);
+template <class Enum>
 bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> options, const char* tip = nullptr) {
+    return row(label, v, std::vector<std::pair<Enum, const char*>>(options), tip);
+}
+template <class Enum>
+bool row(T label, Enum& v, const std::vector<std::pair<Enum, const char*>>& options, const char* tip) {
     label_cell(label, tip);
     // The word the file writes for each choice, for the info card (TR17):
     // each value set in turn and read back as the file has it.
@@ -10446,9 +10452,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::MaxNozzleTemp, "machine.max_nozzle_temp", s.max_nozzle_temp, 0.0, 600.0, "%.0f °C", 0.5f);
         mm(T::MaxBedTemp, "machine.max_bed_temp", s.max_bed_temp, 0.0, 600.0, "%.0f °C", 0.5f);
     } else if (id == "firmware") {
-        if (shown("machine.flavor"))
-            changed |= row(T::Flavor, s.flavor,
-                           {{GcodeFlavor::Marlin, "Marlin 2"},
+        if (shown("machine.flavor")) {
+            std::vector<std::pair<GcodeFlavor, const char*>> flavors{{GcodeFlavor::Marlin, "Marlin 2"},
                             {GcodeFlavor::MarlinLegacy, "Marlin 1"},
                             {GcodeFlavor::Klipper, "Klipper"},
                             {GcodeFlavor::RepRapFirmware, "RepRapFirmware (Duet)"},
@@ -10460,7 +10465,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {GcodeFlavor::Sailfish, "Sailfish (MakerBot)"},
                             {GcodeFlavor::Mach3, "Mach3, LinuxCNC"},
                             {GcodeFlavor::Machinekit, "Machinekit"},
-                            {GcodeFlavor::NoExtrusion, tr(T::FlavorNoExtrusion)}});
+                            {GcodeFlavor::NoExtrusion, tr(T::FlavorNoExtrusion)}};
+            // A printer that names the firmwares it can run offers only those
+            // (machine.flavor_choices, PF15), its own one among them.
+            if (!s.flavor_choices.empty())
+                std::erase_if(flavors, [&](const auto& f) {
+                    return f.first != s.flavor &&
+                           std::find(s.flavor_choices.begin(), s.flavor_choices.end(), f.first) == s.flavor_choices.end();
+                });
+            changed |= row(T::Flavor, s.flavor, flavors);
+        }
         // A firmware that reads the whole file first (gcode_firmware.md, rule 7).
         if (shown("machine.strict_parser"))
             changed |= row(T::StrictParserRow, s.strict_parser,
@@ -18905,7 +18919,12 @@ void App::cloud_engineering_step() {
         cloud_open_ = true;
         return;
     }
-    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+    // 402: the plan does not include it; our own words, not the server's
+    // (cloud.md, CC16).
+    const std::string why = r.error.status == 402
+                                ? format(tr(T::CloudPlanLock),
+                                         cloud::plans_with(cloud_plans_, cloud_eng_kind_ == "aerodynamics" ? "aero" : "fea").c_str())
+                            : r.error.status == 413 ? std::string(tr(T::CloudTooLarge))
                             : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
                             : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
                             : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
@@ -20935,7 +20954,8 @@ void App::cloud_slice_step() {
         cloud_open_ = true;
         return;
     }
-    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+    const std::string why = r.error.status == 402 ? format(tr(T::CloudPlanLock), cloud::plans_with(cloud_plans_, "slice").c_str())
+                            : r.error.status == 413 ? std::string(tr(T::CloudTooLarge))
                             : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
                             : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
                             : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)

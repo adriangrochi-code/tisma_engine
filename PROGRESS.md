@@ -13542,3 +13542,20 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   PrusaSlicer: «N%» del alto de capa. Quedan para después y siguen nombradas en `skipped`: `gcode_template` (pide
   traducir las variables del G-code), `ramming`, `correction` y `resin_notes`. Prueba `[project_import]`: las nueve
   reglas en filas como las de OrcaSlicer y PrusaSlicer.
+
+## 2026-11-11 — interfaz: el 402 de la nube con palabras propias (cloud.md, CC16)
+
+- **Hecho** (QA de la sesión del motor; ficha en `spec/next` c565dfb): si el servidor contesta 402 al laminar o al
+  analizar en la nube, el aviso dice «Incluido en el plan …» con los planes que incluyen ese trabajo (laminar, FEA o
+  aerodinámica), y no el texto del servidor.
+- **Pruebas:** `cloud_slice_402.txt` contra el servidor de prueba (variable nueva `TISMA_MOCK_CLOUD_402`: contesta 402
+  con su propio texto en inglés, que no debe verse); pasan las de la nube.
+
+## 2026-11-11 — interfaz: los firmwares que ofrece cada impresora (PF15)
+
+- **Hecho:** con `machine.flavor_choices` del motor (fed27b1), la fila de firmware ofrece solo esos (más el que la
+  impresora tiene puesto), p. ej. Marlin 2 y Marlin 1 en las impresoras de Cura del paquete; sin la lista, todos como
+  antes. Lo elegido va a `machine.flavor` del perfil propio, como cualquier cambio.
+- **Pruebas:** `flavor_choices.txt` (Klipper no está entre las opciones; la captura muestra solo Marlin 2 y Marlin 1:
+  los textos de un menú abierto no los ve `expect-text`); pasan las 66 de ajustes e impresora.
+
