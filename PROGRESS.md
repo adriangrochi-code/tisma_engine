@@ -13683,3 +13683,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** dos casos en `[camera]`; pasan las de `[device]`.
 - **Sigue:** la captura (regla 6: openpnp-capture, MIT; antes, leer su licencia en la versión exacta y anotarla en
   `THIRD_PARTY.md`), el pedido de permiso en macOS, y en la interfaz la elección por impresora (regla 1).
+- **Decisión (cámara USB, regla 6):** openpnp-capture 0.0.30 (MIT) anotada en `THIRD_PARTY.md`, solo para Windows y
+  macOS. Su parte de Linux trae libjpeg-turbo con la licencia IJG, que no está en la lista permitida; en Linux la
+  captura va a ser propia (V4L2, documentación pública del kernel) y el MJPEG se decodifica con stb_image (MIT, ya
+  anotada). Si el dueño acepta IJG, se puede usar la biblioteca entera.
