@@ -12325,6 +12325,10 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   (Android también lo usa) y firmas con CryptoKit; Impresora (Klipper, OctoPrint, PrusaLink, Duet) con la clave en el
   Llavero; `AccountModel` común para «Más»; una prueba de interfaz guarda una captura de cada sección (artefacto
   `ios-screenshots`). Nada visto en un iPhone de verdad.
-- Siguiente: Bambu en el iPhone. MQTT, FTPS y el empaquetado a `shared`, con un socket TLS común (`expect`/`actual`:
-  `SSLSocket` en Android, Network.framework o CFStream en iOS) y la huella del certificado fijada; después el motor
-  como biblioteca para iOS (lo pide la sesión del motor).
+- Bambu en el iPhone (12-11, verde en el simulador, run 43172111863): el cliente de Bambu está en `shared` (MQTT
+  3.1.1, `PinnedTls` con NSStream en iOS y la huella SHA-256 propia, FTPS, cámara); el paquete `.gcode.3mf` en iOS
+  con ZIP, CRC-32 y MD5 propios (comprobados contra el JDK). «Probar» fija el certificado la primera vez.
+  Sin probar contra una impresora. Riesgos anotados: en iOS el canal de datos FTPS abre una sesión TLS nueva (una
+  impresora que exija reanudarla rechazaría el envío) y las lecturas no tienen límite de tiempo.
+- Siguiente: límite de tiempo en las lecturas de iOS; el motor como biblioteca para iOS (lo pide la sesión del
+  motor); pasar la cuenta de Android a `AccountModel`.
