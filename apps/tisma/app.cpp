@@ -680,6 +680,7 @@ private:
         // Why the plans did not come: -1 not asked, 0 no answer (no
         // connection), else the HTTP status (UI49).
         int plans_failure = -1;
+        std::optional<cloud::ServiceStatus> service; // GET /v1/status (cloud.md, rule 4a)
         std::vector<cloud::Job> jobs; // the account's (rule 10)
         bool jobs_ok = false;
         std::vector<cloud::SentReport> reports; // the account's own (problem_reports.md, rule 11)
@@ -1417,6 +1418,7 @@ private:
     bool cloud_token_read_ = false;
     std::optional<cloud::Account> cloud_account_;
     std::vector<cloud::Plan> cloud_plans_;
+    std::optional<cloud::ServiceStatus> cloud_service_; // the last GET /v1/status that answered (CC21)
     int cloud_plans_failure_ = -1; // CloudReply::plans_failure of the last answer that asked
     std::vector<cloud::Job> cloud_jobs_;
     std::vector<cloud::SentReport> cloud_reports_;
@@ -4254,6 +4256,7 @@ void App::load_preferences(const std::filesystem::path& from) {
             device::host_kind_from(h.value("kind", std::string("octoprint")), host_.kind);
             host_.url = h.value("url", std::string());
             host_.user = h.value("user", std::string());
+            host_.printer = h.value("printer", std::string());
             device_host_ = h.value("chosen", false) && !device_bambu_;
             if (!host_.url.empty()) {
                 if (const std::optional<std::string> k = cloud::load_secret("host-key:" + host_.url))
@@ -4371,7 +4374,7 @@ void App::save_preferences(const std::filesystem::path& to) {
                           {"camera_certificate", bambu_.camera_pinned_sha256}, {"chosen", device_bambu_}};
         if (!host_.url.empty())
             j["print_host"] = {{"kind", device::host_kind_word(host_.kind)}, {"url", host_.url}, {"user", host_.user},
-                               {"chosen", device_host_}};
+                               {"printer", host_.printer}, {"chosen", device_host_}};
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["packs"]["url"] = pack_url_;
@@ -20981,6 +20984,8 @@ void App::cloud_start(CloudReply::Kind kind) {
         cloud::Failure plans_error;
         r.plans_ok = client.plans(r.plans, plans_error);
         r.plans_failure = r.plans_ok ? -1 : plans_error.status;
+        if (cloud::ServiceStatus service; client.status(service, quiet))
+            r.service = std::move(service);
         if (!token.empty()) {
             cloud::Account account;
             if (client.account(account, r.error))
@@ -21013,6 +21018,8 @@ void App::cloud_finished(CloudReply r) {
         cloud_plans_ = std::move(r.plans);
     if (r.plans_ok || r.plans_failure >= 0)
         cloud_plans_failure_ = r.plans_failure;
+    if (r.service)
+        cloud_service_ = std::move(r.service);
     if (!r.billing_url.empty())
         cloud_billing_ = r.billing_url;
     if (!r.ok) {
@@ -21045,6 +21052,14 @@ void App::cloud_finished(CloudReply r) {
     }
 }
 
+// «Tisma Cloud: Down — No nodes are connected.»: the server's own words.
+static std::string service_line(const cloud::ServiceStatus& s, bool spanish) {
+    std::string line = "Tisma Cloud: " + (s.label(spanish).empty() ? s.status : s.label(spanish));
+    if (!s.message(spanish).empty())
+        line += " — " + s.message(spanish);
+    return line;
+}
+
 // Slicing in the cloud (cloud.md, rules 6 to 9; CC3, CC4, CC5): the plate as
 // a project (3MF), sent with the session; its state in the status bar; the
 // G-code, when it comes, opened in the preview as a local slice.
@@ -21066,6 +21081,8 @@ void App::start_cloud_slice() {
         return;
     }
     log_line("cloud: slicing " + utf8(project.filename()) + " on " + cloud_server_);
+    if (cloud_service_ && cloud_service_->warn()) // said before it goes, still sent (CC21)
+        notify(service_line(*cloud_service_, language() == Language::Spanish), cloud_service_->status == "down");
     auto state = std::make_shared<CloudSliceState>();
     cloud_slice_state_ = state;
     cloud_slice_ = std::async(std::launch::async, [state, project, dir, stamp, server = cloud_server_, token = cloud_token_] {
@@ -21172,6 +21189,13 @@ void App::cloud_window() {
     loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::CloudTitle));
     ImGui::PopFont();
     loc::TextDisabled("%s", tr(T::CloudWhat));
+    // The service slow or down (cloud.md, rule 4a; CC21): said, not blocking.
+    if (cloud_service_ && cloud_service_->warn()) {
+        const bool es = language() == Language::Spanish;
+        loc::TextColored(rgb(cloud_service_->status == "down" ? 0xE5484D : 0xE8A33D), "%s",
+                         service_line(*cloud_service_, es).c_str());
+        rect_of("cloud_service");
+    }
     ImGui::Spacing();
     const float label_w = 120.0f * scale_;
     const auto field = [&](T label, const char* id, std::string& value, ImGuiInputTextFlags flags) {
@@ -25394,7 +25418,7 @@ void App::host_panel(float field, float button_h) {
     ImGui::SetNextItemWidth(field * 1.4f);
     if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
         for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
-                                         device::HostKind::Duet})
+                                         device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier})
             if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
                 host_.kind = k;
                 host_tested_ = false;
@@ -25463,6 +25487,11 @@ void App::host_panel(float field, float button_h) {
     } else {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostApiKey), &host_.api_key, ImGuiInputTextFlags_Password);
+        if (host_.kind == device::HostKind::Repetier) { // the printer's slug; empty, the server's first
+            ImGui::SetNextItemWidth(field);
+            if (ImGui::InputTextWithHint(tr(T::HostRepetierPrinter), tr(T::HostRepetierFirst), &host_.printer))
+                host_tested_ = false;
+        }
         if (host_.kind == device::HostKind::PrusaLink) {
             ImGui::SetNextItemWidth(field);
             ImGui::InputText(tr(T::HostUser), &host_.user);
@@ -25507,15 +25536,20 @@ void App::host_panel(float field, float button_h) {
 
     // Sending, pausing, cancelling (devices.md, rule 22: upload, and print if «Start printing»).
     ImGui::Separator();
+    // AstroBox can only be tested and sent to; Repetier-Server cannot pause.
+    const bool can_cancel = host_.kind != device::HostKind::AstroBox;
+    const bool can_pause = can_cancel && host_.kind != device::HostKind::Repetier;
     if (st.printing) {
-        if (st.paused) {
-            if (button("##host_resume", nullptr, tr(T::DeviceResume), true, false, !working, nullptr, button_h))
-                host_command(1);
-        } else if (button("##host_pause", nullptr, tr(T::DevicePause), false, false, !working, nullptr, button_h)) {
-            host_command(0);
+        if (can_pause) {
+            if (st.paused) {
+                if (button("##host_resume", nullptr, tr(T::DeviceResume), true, false, !working, nullptr, button_h))
+                    host_command(1);
+            } else if (button("##host_pause", nullptr, tr(T::DevicePause), false, false, !working, nullptr, button_h)) {
+                host_command(0);
+            }
+            ImGui::SameLine();
         }
-        ImGui::SameLine();
-        if (button("##host_cancel", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
+        if (can_cancel && button("##host_cancel", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
             host_command(2);
     } else if (device_can_print()) {
         ImGui::Checkbox(tr(T::HostStartPrinting), &host_start_);
@@ -26964,7 +26998,7 @@ void App::script_input() {
         else
             return fail_step("unknown bambu step");
         next();
-    } else if (step.verb == "host") { // KIND URL (octoprint, moonraker, prusalink, duet), or test, refresh (Device page)
+    } else if (step.verb == "host") { // KIND URL (octoprint, moonraker, prusalink, duet, astrobox, repetier), or test, refresh (Device page)
         tab_ = Tab::Device;
         device_host_ = true;
         device_bambu_ = false;

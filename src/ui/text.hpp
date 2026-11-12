@@ -797,6 +797,8 @@
     X(HostKindRow, "Programa", "Program") \
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
+    X(HostRepetierPrinter, "Impresora en el servidor", "Printer on the server") \
+    X(HostRepetierFirst, "vacío: la primera", "empty: the first one") \
     X(HostUser, "Usuario", "User") \
     X(HostPassword, "Contraseña", "Password") \
     X(HostBoardPassword, "Contraseña de la placa", "Board password") \

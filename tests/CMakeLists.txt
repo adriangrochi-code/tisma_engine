@@ -346,6 +346,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_print_host_offline PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    # AstroBox and Repetier-Server, chosen by their word, asked by «Test».
+    add_test(NAME ui_print_host_kinds
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/print_host_kinds.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_print_host_kinds.png)
+    set_tests_properties(ui_print_host_kinds PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     # Nothing listens on port 9 (discard) here: the download fails at once.
     add_test(NAME ui_pack_offline_first_run
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -675,6 +684,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud.png)
     set_tests_properties(ui_script_cloud PROPERTIES TIMEOUT 300 ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_secrets.txt")
+    add_test(NAME ui_script_cloud_down
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_down.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_down.png)
+    set_tests_properties(ui_script_cloud_down PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_CLOUD_DOWN=1;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_down_secrets.txt")
     add_test(NAME ui_script_cloud_default
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760

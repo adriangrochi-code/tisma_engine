@@ -13643,3 +13643,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   tiempo. El simulador de pruebas ahora rechaza el vaciado sin caras, como la real.
 - **Pruebas:** `design_shell_no_face.txt` (nueva); `design_operations`, `design_timeline_marker` y
   `design_handles_op` vacían ahora la caja abierta arriba (3392 mm³). Pasan las 6 de Diseño que lo tocan.
+
+## 2026-11-12 — interfaz: estado de Tisma Cloud, AstroBox y Repetier-Server
+
+- **Hecho:** al abrir el diálogo de la nube se pide `GET /v1/status` (cloud.md, regla 4a; CC21). Si el servicio
+  está lento o caído, el diálogo lo dice con las palabras del servidor («Tisma Cloud: Caído — …»), y lo vuelve a
+  avisar al mandar un laminado, sin bloquear el envío. En Dispositivo, el tipo de programa en red suma AstroBox y
+  Repetier-Server; Repetier pide además la impresora del servidor (vacío: la primera), que se guarda con la
+  conexión. Sin pausar en Repetier, y en AstroBox sin pausar ni cancelar (solo probar y mandar).
+- **Pruebas:** `cloud_down.txt` (el simulador de la nube sin nodos) y `print_host_kinds.txt` (los dos tipos nuevos,
+  «Probar» sin respuesta). Pasan con `cloud`, `cloud_slice_402` y `print_host_offline`. No probado con un AstroBox
+  ni con un Repetier-Server de verdad.

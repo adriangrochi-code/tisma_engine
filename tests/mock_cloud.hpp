@@ -21,6 +21,8 @@ using nlohmann::json;
 class MockCloud {
 public:
     MockCloud() {
+        if (std::getenv("TISMA_MOCK_CLOUD_DOWN")) // a UI test of the notice (CC21)
+            service_ = "down";
         // cloud.md, rule 4a: no session; with no node, "down".
         server_.Get("/v1/status", [this](const httplib::Request&, httplib::Response& res) {
             std::lock_guard lock(mutex_);
