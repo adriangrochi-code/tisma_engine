@@ -60,4 +60,26 @@ final class BridgeTests: XCTestCase {
         XCTAssertEqual(r.code, 0, r.err)
         XCTAssertGreaterThan(size, 1000)
     }
+
+    func testTheCatalogIsInTheApp() throws {
+        let c = try XCTUnwrap(Engine.catalog)
+        XCTAssertGreaterThan(c.printers.count, 10)
+        XCTAssertGreaterThan(c.filaments.count, 10)
+    }
+
+    /// MA2 on the iPhone: a printer of the catalog, its profile from the engine, the cube sliced with it.
+    func testTheCubeWithAPrinterProfile() throws {
+        let c = try XCTUnwrap(Engine.catalog)
+        let printer = try XCTUnwrap(c.printers.first { $0.name.contains("Prusa") } ?? c.printers.first)
+        let (config, why) = Engine.profile(printer: printer.name, nozzle: 0.4, filament: nil)
+        let profile = try XCTUnwrap(config, "no profile for \(printer.name): \(why)")
+        let model = FileManager.default.temporaryDirectory.appendingPathComponent("cube20-profile.stl")
+        try Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
+        let (r, _, summary) = Engine.slice(model: model, config: profile)
+        print("ENGINE-SLICE profile=\(printer.name) exit=\(r.code) summary=\(summary?.prefix(300) ?? "") err=\(r.err.prefix(300))")
+        XCTAssertEqual(r.code, 0, r.err)
+        let s = try XCTUnwrap(summary.flatMap { EngineBridge.shared.summary(json: $0) })
+        XCTAssertGreaterThan(s.filamentMm, 0)
+        XCTAssertGreaterThan(s.layers, 50)
+    }
 }

@@ -31,3 +31,8 @@
 "Access code" = "Código de acceso";
 "Engine" = "Motor";
 "Slice the 20 mm cube" = "Laminar el cubo de 20 mm";
+"Choose…" = "Elegir…";
+"Nozzle" = "Boquilla";
+"Filament" = "Filamento";
+"The printer's own" = "El de la impresora";
+"The catalog is missing from this build." = "Esta versión no trae el catálogo.";

@@ -31,17 +31,42 @@ struct RootView: View {
     }
 }
 
-/// «Placa»: for now, the engine's first slice on the iPhone (the 20 mm cube); the plate and settings come next.
+/// «Placa»: the printer and filament from the engine's catalog, and a slice of the 20 mm cube with their profile
+/// (mobile_app.md, rules 11 and 12). Opening the person's models and the preview come next.
 struct PlateView: View {
+    @AppStorage("plate.printer") private var printer = ""
+    @AppStorage("plate.nozzle") private var nozzle = 0.4
+    @AppStorage("plate.filament") private var filament = ""
     @State private var result: String?
     @State private var busy = false
+
+    private var model: CatalogPrinterModel? { Engine.catalog?.printer(name: printer) }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Printer") {
+                    if let c = Engine.catalog {
+                        Picker("Printer", selection: $printer) {
+                            Text("Choose…").tag("")
+                            ForEach(c.printers, id: \.name) { Text($0.name).tag($0.name) }
+                        }
+                        if let m = model {
+                            Picker("Nozzle", selection: $nozzle) {
+                                ForEach(m.nozzles.map { $0.doubleValue }, id: \.self) { Text(String(format: "%.2f mm", $0)).tag($0) }
+                            }
+                            Picker("Filament", selection: $filament) {
+                                Text("The printer's own").tag("")
+                                ForEach(c.filamentsFor(p: m), id: \.fullName) { Text($0.fullName).tag($0.fullName) }
+                            }
+                        }
+                    } else {
+                        Text("The catalog is missing from this build.").foregroundStyle(.red)
+                    }
+                }
                 Section("Engine") {
                     Text(Engine.run(["--version"]).out.trimmingCharacters(in: .whitespacesAndNewlines))
-                    Button("Slice the 20 mm cube") { slice() }.disabled(busy)
+                    Button("Slice the 20 mm cube") { slice() }.disabled(busy || printer.isEmpty)
                     if busy { ProgressView() }
                     if let result { Text(result).font(.footnote.monospaced()) }
                 }
@@ -52,13 +77,23 @@ struct PlateView: View {
 
     private func slice() {
         busy = true
+        let (p, n, f) = (printer, nozzle, filament.isEmpty ? nil : filament)
         Task.detached {
             let dir = FileManager.default.temporaryDirectory
             let model = dir.appendingPathComponent("cube20.stl")
             try? Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
-            let (r, gcode, summary) = Engine.slice(model: model)
-            let size = (try? FileManager.default.attributesOfItem(atPath: gcode.path)[.size] as? Int) ?? 0
-            let text = "exit \(r.code) · G-code \(size) bytes\n" + (summary ?? r.err)
+            let (config, why) = Engine.profile(printer: p, nozzle: n, filament: f)
+            let text: String
+            if let config {
+                let (r, _, summary) = Engine.slice(model: model, config: config)
+                if r.code == 0, let s = summary.flatMap({ EngineBridge.shared.summary(json: $0) }) {
+                    text = "\(s.printTime) · \(String(format: "%.2f m", s.filamentMm / 1000)) · \(String(format: "%.1f g", s.filamentG)) · \(s.layers) layers"
+                } else {
+                    text = "exit \(r.code)\n\(r.err)"
+                }
+            } else {
+                text = "No profile: \(why)"
+            }
             await MainActor.run { result = text; busy = false }
         }
     }

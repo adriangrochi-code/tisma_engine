@@ -6,12 +6,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import net.tisma.app.p2p.foldText
 
 /**
  * The engine's catalog of printers and filaments (docs/CATALOG.md), read from
  * the same JSON files the desktop embeds, for the phone's printer card and
  * pickers (mobile_app.md, rules 6 and 11). The profile itself is made by the
- * engine (EngineRunner.profile).
+ * engine (EngineRunner.profile on Android, `profile` through tisma_run_cli on iOS). Common code.
  */
 class Catalog(val printers: List<PrinterModel>, val filaments: List<FilamentModel>) {
 
@@ -44,8 +45,8 @@ class Catalog(val printers: List<PrinterModel>, val filaments: List<FilamentMode
     private fun sameBrand(a: String, b: String) = a.filter { it.isLetterOrDigit() }.equals(b.filter { it.isLetterOrDigit() }, ignoreCase = true)
 
     fun search(query: String): List<PrinterModel> {
-        val words = searchWords(query)
-        return printers.filter { p -> val n = fold(p.name); words.all { n.contains(it) } }.sortedBy { it.name.lowercase() }
+        val words = foldText(query).trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return printers.filter { p -> val n = foldText(p.name); words.all { n.contains(it) } }.sortedBy { it.name.lowercase() }
     }
 
     fun printer(name: String?): PrinterModel? = printers.firstOrNull { it.name == name }

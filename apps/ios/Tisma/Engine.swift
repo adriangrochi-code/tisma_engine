@@ -1,4 +1,5 @@
 import Foundation
+import TismaShared
 
 /// The engine inside the app (mobile_app.md, rule 1; apps/ios/PLAN.md, step 4): iOS runs no programs, so its command
 /// line is called in process through `tisma_run_cli`, with the same arguments as on Android.
@@ -43,13 +44,33 @@ enum Engine {
         return t + "endsolid cube\n"
     }
 
-    /// Slices [model] into a G-code beside it; the summary's JSON when it worked.
-    static func slice(model: URL) -> (Result, gcode: URL, summary: String?) {
+    /// The catalog the app carries (the engine's printers and filaments).
+    static let catalog: Catalog? = {
+        func text(_ name: String) -> String? {
+            Bundle.main.url(forResource: name, withExtension: "json").flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+        }
+        guard let p = text("printers"), let f = text("filaments") else { return nil }
+        return EngineBridge.shared.catalog(printersJson: p, filamentsJson: f)
+    }()
+
+    /// The engine's settings for a printer of the catalog, its nozzle and a filament (`tisma-engine profile`), as a
+    /// file for --config; nil (and why) when the engine cannot make them.
+    static func profile(printer: String, nozzle: Double, filament: String?) -> (URL?, String) {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("profile-\(UUID().uuidString).json")
+        let r = run(EngineBridge.shared.profileArgs(printer: printer, nozzle: nozzle, filament: filament, out: out.path))
+        return (r.code == 0 && FileManager.default.fileExists(atPath: out.path)) ? (out, r.err) : (nil, r.err)
+    }
+
+    /// Slices [model] into a G-code beside it with [config] (a profile), or the minimal settings without one; the
+    /// summary's JSON when it worked.
+    static func slice(model: URL, config profile: URL? = nil) -> (Result, gcode: URL, summary: String?) {
         let gcode = model.deletingPathExtension().appendingPathExtension("gcode")
         let summary = model.deletingPathExtension().appendingPathExtension("summary.json")
         // A bare model takes its settings from --config, as on Android (docs/CONFIG.md keys; the rest default).
-        let config = model.deletingPathExtension().appendingPathExtension("settings.json")
-        try? #"{"layers":{"height":0.2},"support":{"enabled":false}}"#.write(to: config, atomically: true, encoding: .utf8)
+        let config = profile ?? model.deletingPathExtension().appendingPathExtension("settings.json")
+        if profile == nil {
+            try? #"{"layers":{"height":0.2},"support":{"enabled":false}}"#.write(to: config, atomically: true, encoding: .utf8)
+        }
         let r = run(["slice", model.path, "--config", config.path, "-o", gcode.path, "--summary", summary.path])
         return (r, gcode, try? String(contentsOf: summary, encoding: .utf8))
     }
