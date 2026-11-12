@@ -630,6 +630,7 @@ private:
     bool design_dialog_new_ = false;
     std::optional<cad::Feature> design_dialog_before_;
     void design_handles(); // arrows in the view to drag the step's measures (rule 11 quinquies)
+    void design_ring(cad::Feature& f, bool revolve); // and a ring for an angle
     bool design_dialog_left_ = false;  // the step's panel moved aside: it covered an arrow
     int design_dialog_moved_for_ = -1; // the step it moved for (once a step: no flicker)
     void open_feature_dialog(std::size_t feature, bool fresh) {
@@ -16198,7 +16199,10 @@ void App::design_handles() {
     // (its offset, one arrow per axis) too.
     const bool extrude = f.type == cad::Feature::Type::Sketch && f.operation.kind == cad::SketchOperation::Kind::Extrude;
     const bool move = f.type == cad::Feature::Type::Operation && f.op.kind == cad::OperationKind::Move;
-    if ((f.type != cad::Feature::Type::Primitive && !one_value && !extrude && !move) || f.suppressed)
+    // Angles have a ring: a revolution, a move's turn, a circular pattern.
+    const bool revolve = f.type == cad::Feature::Type::Sketch && f.operation.kind == cad::SketchOperation::Kind::Revolve;
+    const bool circular = f.type == cad::Feature::Type::Operation && f.op.kind == cad::OperationKind::PatternCircular;
+    if ((f.type != cad::Feature::Type::Primitive && !one_value && !extrude && !move && !revolve && !circular) || f.suppressed)
         return;
     const std::size_t bodies = std::count_if(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
         return g.type != cad::Feature::Type::Operation && !g.suppressed;
@@ -16219,6 +16223,8 @@ void App::design_handles() {
         handles = {{0, normal, 1.0}};
     } else if (move) {
         handles = {{0, 0, 1.0}, {1, 1, 1.0}, {2, 2, 1.0}};
+    } else if (revolve || circular) {
+        // no arrow: the ring below
     } else switch (f.kind) {
     case cad::Primitive::Box: handles = {{0, 0, 2.0}, {1, 1, 2.0}, {2, 2, 1.0}}; break;
     case cad::Primitive::Cylinder: handles = {{0, 0, 2.0}, {1, 2, 1.0}}; break;
@@ -16300,6 +16306,96 @@ void App::design_handles() {
         dl->AddCircleFilled(tip, (active ? 8.0f : 6.0f) * scale_, colours[h.axis]);
         dl->AddCircle(tip, (active ? 8.0f : 6.0f) * scale_, IM_COL32(255, 255, 255, 220), 0, 1.5f * scale_);
     }
+    if (move || revolve || circular)
+        design_ring(f, revolve);
+}
+
+// The ring of an angle (rule 11 quinquies): around the body, square to the
+// turn's axis, with a handle at the angle; dragging it round turns the angle
+// by as much as the mouse turned about the ring's centre on the screen.
+void App::design_ring(cad::Feature& f, bool revolve) {
+    constexpr double kPi = 3.14159265358979323846;
+    const BoundingBox& b = design_box_;
+    const Vec3 centre{0.5f * (b.min.x + b.max.x), 0.5f * (b.min.y + b.max.y), 0.5f * (b.min.z + b.max.z)};
+    const float radius = 0.65f * std::max({b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z});
+    // The axis in the world: a sketch's x or y on its plane, else X, Y or Z.
+    int axis = f.op.axis == 'X' ? 0 : f.op.axis == 'Y' ? 1 : 2;
+    if (revolve) {
+        const bool x = f.operation.axis == 'x';
+        switch (f.sketch.plane) {
+        case cad::SketchPlane::XY: axis = x ? 0 : 1; break;
+        case cad::SketchPlane::XZ: axis = x ? 0 : 2; break;
+        case cad::SketchPlane::YZ: axis = x ? 1 : 2; break;
+        }
+    }
+    double& value = revolve ? f.operation.angle : f.op.angle;
+    const double lo = f.type == cad::Feature::Type::Operation && f.op.kind == cad::OperationKind::Move ? -360.0 : 1.0;
+    Vec3 u{0, 0, 0}, v{0, 0, 0};
+    (axis == 0 ? u.y : axis == 1 ? u.z : u.x) = 1.0f; // u, v, axis: right-handed
+    (axis == 0 ? v.z : axis == 1 ? v.x : v.y) = 1.0f;
+    // Zero half way between u and v: clear of the arrows along the axes.
+    const auto at = [&](double degrees) {
+        const float t = float((degrees + 45.0) * kPi / 180.0);
+        return screen_of(centre + u * (radius * std::cos(t)) + v * (radius * std::sin(t)));
+    };
+    const auto c = screen_of(centre);
+    const auto su = at(-45.0), sv = at(45.0);
+    if (!c || !su || !sv)
+        return;
+    // Seen from the side the angle grows clockwise on the screen: the sign.
+    const float turn = (su->x - c->x) * (sv->y - c->y) - (su->y - c->y) * (sv->x - c->x);
+    const float sign = turn >= 0.0f ? 1.0f : -1.0f; // screen y points down
+    const ImU32 colours[3] = {IM_COL32(229, 72, 77, 255), IM_COL32(63, 191, 127, 255), IM_COL32(59, 130, 246, 255)};
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    std::vector<ImVec2> ring;
+    for (int k = 0; k <= 72; ++k)
+        if (const auto p = at(k * 5.0))
+            ring.push_back(*p);
+    dl->AddPolyline(ring.data(), int(ring.size()), (colours[axis] & 0x00FFFFFF) | 0x90000000, 2.0f * scale_, 0);
+    // The swept part, from 0 to the angle, brighter.
+    std::vector<ImVec2> swept;
+    const double end = std::clamp(value, -360.0, 360.0);
+    for (int k = 0; k <= 48; ++k)
+        if (const auto p = at(end * k / 48.0))
+            swept.push_back(*p);
+    dl->AddPolyline(swept.data(), int(swept.size()), colours[axis], 3.5f * scale_, 0);
+    const auto h = at(value);
+    if (!h)
+        return;
+    const float r = 11.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(h->x - r, h->y - r));
+    ImGui::SetNextWindowSize(ImVec2(2.0f * r, 2.0f * r));
+    ImGui::Begin("##design_ring", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    ImGui::SetCursorScreenPos(ImVec2(h->x - r, h->y - r));
+    ImGui::InvisibleButton("##drag", ImVec2(2.0f * r, 2.0f * r));
+    note_rect("design_ring");
+    const bool active = ImGui::IsItemActive();
+    if (ImGui::IsItemHovered() || active)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    if (active) {
+        const ImVec2 m = ImGui::GetIO().MousePos, d = ImGui::GetIO().MouseDelta;
+        const ImVec2 was(m.x - d.x, m.y - d.y);
+        float delta = std::atan2(m.y - c->y, m.x - c->x) - std::atan2(was.y - c->y, was.x - c->x);
+        if (delta > float(kPi))
+            delta -= float(2.0 * kPi);
+        if (delta < -float(kPi))
+            delta += float(2.0 * kPi);
+        if (delta != 0.0f) {
+            value = std::clamp(value + double(sign * delta) * 180.0 / kPi, lo, 360.0);
+            design_edited_ = true;
+        }
+        const std::string shown = format("%s %.1f°", tr(T::OpAngle), value);
+        dl->AddRectFilled(ImVec2(m.x + 14.0f * scale_, m.y + 8.0f * scale_),
+                          ImVec2(m.x + 22.0f * scale_ + ImGui::CalcTextSize(shown.c_str()).x, m.y + 12.0f * scale_ + ImGui::GetFontSize() + 4.0f * scale_),
+                          ImGui::GetColorU32(rgb(theme_.panel, 0.95f)), 4.0f * scale_);
+        dl->AddText(ImVec2(m.x + 18.0f * scale_, m.y + 10.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), shown.c_str());
+    }
+    ImGui::End();
+    dl->AddCircleFilled(*h, (active ? 8.0f : 6.0f) * scale_, colours[axis]);
+    dl->AddCircle(*h, (active ? 8.0f : 6.0f) * scale_, IM_COL32(255, 255, 255, 220), 0, 1.5f * scale_);
 }
 
 void App::design_panel() {
@@ -27624,7 +27720,7 @@ void App::script_input() {
         design_pick_at({x, y, z});
         std::printf("ui-script: design-pick %g %g %g\n", x, y, z);
         next();
-    } else if (step.verb == "expect-feature-above") { // N FIELD VALUE: feature N's (from 1) offset_x/y/z, distance or value over VALUE
+    } else if (step.verb == "expect-feature-above") { // N FIELD VALUE: feature N's (from 1) offset_x/y/z, distance, abs_angle, revolve_angle or value over VALUE
         std::istringstream in(step.value);
         std::string field;
         double want = 0.0;
@@ -27637,6 +27733,8 @@ void App::script_input() {
                            : field == "offset_y" ? g.op.offset[1]
                            : field == "offset_z" ? g.op.offset[2]
                            : field == "distance" ? g.operation.distance
+                           : field == "abs_angle" ? std::abs(g.op.angle)
+                           : field == "revolve_angle" ? g.operation.angle
                                                  : g.op.value;
         std::printf("ui-script: expect-feature-above %s %s: %s%.3f\n", step.key.c_str(), step.value.c_str(), got > want ? "ok, " : "got ", got);
         if (!(got > want))

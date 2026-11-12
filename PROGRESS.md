@@ -13743,3 +13743,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   parpadeo), y las manijas quedan siempre encima.
 - **Pruebas:** `design_handles_move.txt` arrastra ahora la flecha de X (antes tapada) y la de Z; pasan las de flechas,
   operaciones, cuadro, radial y línea de tiempo.
+
+## 2026-11-12 — interfaz: anillos de ángulo en Diseño (regla 11 quinquies)
+
+- **Hecho:** con su cuadro abierto, el giro de Mover, la revolución de un boceto y el patrón circular tienen un
+  anillo alrededor del cuerpo, perpendicular a su eje, con el tramo barrido más fuerte y una manija en el ángulo.
+  Arrastrarla alrededor cambia el ángulo, con el valor junto al puntero. El cero del anillo queda a 45° de los ejes
+  para no tapar las flechas.
+- **Pruebas:** `design_ring_move.txt` (gira la caja con el anillo); pasan las de flechas, operaciones y cuadro. La
+  revolución y el patrón circular usan el mismo anillo, pero no tienen prueba propia.

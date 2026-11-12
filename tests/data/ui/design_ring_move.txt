@@ -1,0 +1,17 @@
+# A ring for an angle (cad_design.md, rule 11 quinquies): a move's turn about
+# Z has a ring round the body with a handle at the angle; dragging it round
+# turns the body.
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-design 8000
+menu design_dialog_accept
+wait 3
+menu design_group_modify
+menu design_op_move
+wait 5
+expect-control design_ring
+drag-control design_ring 0 -60
+wait 10
+expect-feature-above 2 abs_angle 5
+expect-design 8000
