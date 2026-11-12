@@ -50,7 +50,7 @@ struct PlateView: View {
     @AppStorage("printer.address") private var savedAddress = ""
     @AppStorage("printer.user") private var savedUser = ""
 
-    private var model: CatalogPrinterModel? { Engine.catalog?.printer(name: printer) }
+    private var model: Catalog.PrinterModel? { Engine.catalog?.printer(name: printer) }
 
     var body: some View {
         NavigationStack {
