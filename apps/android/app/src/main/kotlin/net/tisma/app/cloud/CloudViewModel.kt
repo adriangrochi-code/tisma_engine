@@ -228,7 +228,7 @@ class CloudViewModel(
             _state.update { it.copy(notice = Notice.PasswordChanged) }
         }
 
-    fun signOut() = launchRequest(quiet = true) {
+    fun signOut() = launchRequest(quiet = true, holds = true) {
         try {
             client.logout()
         } finally {
@@ -426,17 +426,19 @@ class CloudViewModel(
     }
 
     /** Runs the blocking [block] off the main thread; [onDone] runs on the main thread if it did not fail. */
-    /** How many requests are running: busy stays on until the last one ends, not the first. */
+    /**
+     * How many of the person's requests are running: busy stays on until the last one ends, not the first. Quiet
+     * ones (the panel's own refresh: plans, health, the service's state) do not count, so they never hold a button.
+     */
     private val running = java.util.concurrent.atomic.AtomicInteger()
 
-    private fun launchRequest(quiet: Boolean = false, onDone: (() -> Unit)? = null, block: () -> Unit) =
+    private fun launchRequest(quiet: Boolean = false, holds: Boolean = !quiet, onDone: (() -> Unit)? = null, block: () -> Unit) =
         viewModelScope.launch {
-            running.incrementAndGet()
-            _state.update { it.copy(busy = true) }
+            if (holds) { running.incrementAndGet(); _state.update { it.copy(busy = true) } }
             val ok = try {
                 request(quiet) { block(); true } ?: false
             } finally {
-                if (running.decrementAndGet() == 0) _state.update { it.copy(busy = false) }
+                if (holds && running.decrementAndGet() == 0) _state.update { it.copy(busy = false) }
             }
             if (ok) onDone?.invoke()
         }
