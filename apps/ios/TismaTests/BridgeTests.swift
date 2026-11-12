@@ -71,7 +71,9 @@ final class BridgeTests: XCTestCase {
     func testTheCubeWithAPrinterProfile() throws {
         let c = try XCTUnwrap(Engine.catalog)
         let printer = try XCTUnwrap(c.printers.first { $0.name.contains("Prusa") } ?? c.printers.first)
-        let (config, why) = Engine.profile(printer: printer.name, nozzle: 0.4, filament: nil)
+        // A filament gives the profile its temperatures; without one the engine's check refuses the G-code.
+        let filament = c.filamentsFor(p: printer).first?.fullName
+        let (config, why) = Engine.profile(printer: printer.name, nozzle: 0.4, filament: filament)
         let profile = try XCTUnwrap(config, "no profile for \(printer.name): \(why)")
         let model = FileManager.default.temporaryDirectory.appendingPathComponent("cube20-profile.stl")
         try Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)

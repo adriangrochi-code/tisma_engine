@@ -66,7 +66,6 @@ struct PlateView: View {
                                 ForEach(m.nozzles.map { $0.doubleValue }, id: \.self) { Text(String(format: "%.2f mm", $0)).tag($0) }
                             }
                             Picker("Filament", selection: $filament) {
-                                Text("The printer's own").tag("")
                                 ForEach(c.filamentsFor(p: m), id: \.fullName) { Text($0.fullName).tag($0.fullName) }
                             }
                         }
@@ -131,7 +130,9 @@ struct PlateView: View {
 
     private func slice() {
         busy = true
-        let (p, n, f, chosen) = (printer, nozzle, filament.isEmpty ? nil : filament, opened)
+        // A filament gives the temperatures: without one the engine refuses the G-code (nozzle heater at 0).
+        let fallback = Engine.catalog.flatMap { c in model.flatMap { c.filamentsFor(p: $0).first?.fullName } }
+        let (p, n, f, chosen) = (printer, nozzle, filament.isEmpty ? fallback : filament, opened)
         Task.detached {
             let dir = FileManager.default.temporaryDirectory
             let model = chosen ?? dir.appendingPathComponent("cube20.stl")
