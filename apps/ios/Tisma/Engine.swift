@@ -50,7 +50,7 @@ enum Engine {
         // A bare model takes its settings from --config, as on Android (docs/CONFIG.md keys; the rest default).
         let config = model.deletingPathExtension().appendingPathExtension("settings.json")
         try? #"{"layers":{"height":0.2},"support":{"enabled":false}}"#.write(to: config, atomically: true, encoding: .utf8)
-        let r = run(["slice", model.path, "--config", config.path, "-o", gcode.path, "--summary", summary.path, "--no-gpu"])
+        let r = run(["slice", model.path, "--config", config.path, "-o", gcode.path, "--summary", summary.path])
         return (r, gcode, try? String(contentsOf: summary, encoding: .utf8))
     }
 }
