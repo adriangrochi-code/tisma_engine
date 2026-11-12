@@ -744,6 +744,8 @@ TEST_CASE("profile: the settings made from the catalog, ready for slice --config
     r = run({"profile", "--printer", "Creality Ender-3 S1"});
     CHECK(r.code == 0);
     CHECK(parse_settings(r.out).nozzle_diameter == 0.4);
+    // Without a filament the temperatures stay at 0: said at once, not only by the G-code check later.
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("no --filament"));
 
     r = run({"profile", "--printer", "Ender-3"});
     CHECK(r.code == 2);

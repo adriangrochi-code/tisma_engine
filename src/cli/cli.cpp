@@ -482,6 +482,12 @@ int cmd_profile(std::span<const std::string_view> args, std::ostream& out, std::
             return kExitInput;
         }
         settings = with_profile(settings, ProfileKind::Filament, filament_profile(*f).settings);
+    } else {
+        // The temperatures come with the filament: without one they stay at
+        // 0, and the G-code check rejects a slice that extrudes cold. Said here,
+        // where it is chosen (seen from the iOS app, 2026-11-12).
+        err << "warning: no --filament: the nozzle and bed temperatures stay at 0, so a slice with these settings "
+               "is rejected by the G-code check; name one with --filament \"<vendor> <name>\"\n";
     }
     const std::string json = settings_json(settings);
     if (output.empty() || output == "-") {
