@@ -140,9 +140,12 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK(render_template("{print_bed_max[0]}x{print_bed_max[1]}", c, "t") == "250x220");
     CHECK(render_template("{printable_height}", c, "t") == render_template("{max_print_height}", c, "t"));
     // One the engine cannot fill yet: a neutral value, named for the log.
-    CHECK(c.unfilled.contains("curr_bed_type"));
-    CHECK(render_template("[curr_bed_type]", c, "t").empty());
-    CHECK(c.unfilled_used.contains("curr_bed_type"));
+    REQUIRE_FALSE(c.unfilled.empty());
+    const std::string unfilled = *c.unfilled.begin();
+    render_template("[" + unfilled + "]", c, "t");
+    CHECK(c.unfilled_used.contains(unfilled));
+    // No plate chosen: Bambu Studio's «Cool Plate» (rule 10 quater).
+    CHECK(render_template("[curr_bed_type]", c, "t") == "Cool Plate");
     // An index past the list's end gives its last value, named for the log
     // (rule 10 quater, BH45); one too large to read, or with an unknown
     // variable in it, fails.
@@ -2972,6 +2975,14 @@ TEST_CASE("the Bambu Lab H3C's start G-code: its nozzle by physical number (gcod
     s.nozzle_diameters = {0.4, 0.6, 0.4, 0.8};
     s.variables["fins_extrude_safe_temp"] = {"240"};
     TemplateContext four = template_context(s, SlicedModel{});
+    CHECK(render_template("{has_tpu_in_first_layer} {long_retraction_when_ec}", four, "machine.start_gcode") ==
+          "false false");
+    Settings tpu = s;
+    tpu.filament_type = "tpu";
+    tpu.variables["long_retraction_when_ec"] = {"1"};
+    TemplateContext tc = template_context(tpu, SlicedModel{});
+    CHECK(render_template("{if has_tpu_in_first_layer}tpu{endif} {if long_retraction_when_ec}long{endif}", tc,
+                          "machine.start_gcode") == "tpu long");
     CHECK(render_template("{nozzle_diameter_at_nozzle_id[1]} {nozzle_diameter_at_nozzle_id[3]} "
                           "{initial_no_support_nozzle_id} {fins_extrude_safe_temp[0]}",
                           four, "machine.start_gcode") == "0.6 0.8 0 240");

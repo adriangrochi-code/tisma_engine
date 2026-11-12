@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -84,8 +85,8 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     set("filament_type", list_of(TemplateValue::of(s.filament_type)));
     set("spiral_vase", TemplateValue::of(s.vase));
     // The plate chosen to send to a Bambu Lab printer (gcode_macros.md, rule 12).
-    if (!s.bambu_plate.empty())
-        set("curr_bed_type", TemplateValue::of(s.bambu_plate));
+    // Without a plate chosen, Bambu Studio's «Cool Plate» (rule 10 quater).
+    set("curr_bed_type", TemplateValue::of(s.bambu_plate.empty() ? std::string("Cool Plate") : s.bambu_plate));
     set("has_wipe_tower", TemplateValue::of(s.wipe_tower));
     set("standby_temperature_delta", whole(s.standby_delta));
     set("max_fan_speed", list_of(whole(s.fan_max)));
@@ -173,6 +174,15 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     }
     set("initial_no_support_nozzle_id", TemplateValue::of(0LL));
     set("fins_extrude_safe_temp", list_of(TemplateValue::of(0LL)));
+    // Whether a first-layer filament is TPU; the current filament's long
+    // retraction on an extruder change, false unless the pack gives it.
+    {
+        std::string type = s.filament_type;
+        for (char& ch : type)
+            ch = char(std::toupper(static_cast<unsigned char>(ch)));
+        set("has_tpu_in_first_layer", TemplateValue::of(type == "TPU"));
+    }
+    set("long_retraction_when_ec", TemplateValue::of(false));
     set("overall_chamber_temperature", whole(s.chamber_temperature));
     set("min_vitrification_temperature", TemplateValue::of(0LL));
     set("temperature_vitrification", list_of(TemplateValue::of(0LL)));

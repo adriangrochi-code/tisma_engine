@@ -13654,3 +13654,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `cloud_down.txt` (el simulador de la nube sin nodos) y `print_host_kinds.txt` (los dos tipos nuevos,
   «Probar» sin respuesta). Pasan con `cloud`, `cloud_slice_402` y `print_host_offline`. No probado con un AstroBox
   ni con un Repetier-Server de verdad.
+
+## 2026-11-12 — gcode_macros: has_tpu_in_first_layer, long_retraction_when_ec y curr_bed_type (spec/next)
+
+- **Hecho:** `curr_bed_type` es la placa elegida o, sin placa, «Cool Plate»; `has_tpu_in_first_layer` es verdadero si
+  el filamento es TPU; `long_retraction_when_ec` es falso salvo que el paquete la traiga. Con un solo filamento por
+  ahora: con varios, el de la primera capa y el actual (`multi_extruder.md`) quedan para cuando el G-code los cambie.
+- **Pruebas:** pasan las 133 de `[gcode]` (la prueba de variables sin llenar usa ahora otra variable).
