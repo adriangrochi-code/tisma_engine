@@ -60,3 +60,22 @@ class EngineeringPickTest {
         assertTrue("\"face\":\"top\"" in case && "-100.0" in case, case)
     }
 }
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+class EngineeringExtrasTest {
+    @Test
+    fun aPointLoadAlongAnAxisAndTheTemperature() {
+        val s = 20f
+        val v = listOf(floatArrayOf(0f, 0f, 0f), floatArrayOf(s, 0f, 0f), floatArrayOf(s, s, 0f), floatArrayOf(0f, s, 0f),
+            floatArrayOf(0f, 0f, s), floatArrayOf(s, 0f, s), floatArrayOf(s, s, s), floatArrayOf(0f, s, s))
+        val idx = intArrayOf(0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7)
+        val soup = idx.flatMap { v[it].toList() }.toFloatArray()
+        EngineeringBridge.setMesh(soup.usePinned { p -> NSData.create(bytes = p.addressOf(0), length = (soup.size * 4).toULong()) })
+        val p = EngineeringBridge.point(2, 10.0, 10.0, 20.0, 1.0)!!
+        assertEquals(listOf(9.0, 9.0, 19.0, 11.0, 11.0, 21.0), p.box)
+        val case = EngineeringBridge.caseAlong(EngineeringBridge.named("bottom"), p, 50.0, "+x", "bambu-pla-basic", "normal", true)
+        assertTrue("\"box\"" in case && "[50.0,0.0,0.0]" in case.replace(" ", "") || "[50.0,-0.0,-0.0]" in case.replace(" ", ""), case)
+        val hot = EngineeringBridge.withNozzleTemperature("""{"machine":{"variables":{"temperature":210}}}""", 230.0)
+        assertTrue("230" in hot && "210" !in hot, hot)
+    }
+}

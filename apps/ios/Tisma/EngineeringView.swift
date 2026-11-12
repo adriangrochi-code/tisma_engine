@@ -1,3 +1,4 @@
+import SceneKit
 import SwiftUI
 import TismaShared
 
@@ -16,8 +17,11 @@ struct EngineeringView: View {
     @State private var loaded = "top"
     @State private var fixedPick: PickedFace?
     @State private var loadPick: PickedFace?
-    /// What a touch on the part marks: "fixed" or "load".
+    /// What a touch on the part marks: "fixed", "load" (the whole face) or "point" (a load at the touched point).
     @State private var marking = "fixed"
+    @State private var loadPoint: SCNVector3?
+    @State private var direction = "into"
+    @State private var temperature = 0.0
     @State private var mesh: PartMesh?
     @State private var newtons = 100.0
     @State private var material = "bambu-pla-basic"
@@ -47,12 +51,13 @@ struct EngineeringView: View {
                     PartView(mesh: mesh,
                              held: fixed == "touched" ? (fixedPick?.triangles.map { $0.intValue } ?? []) : [],
                              loaded: loaded == "touched" ? (loadPick?.triangles.map { $0.intValue } ?? []) : [],
-                             map: showMap ? map : nil) { touched($0) }
+                             map: showMap ? map : nil, point: loaded == "touched" ? loadPoint : nil) { touched($0, $1) }
                         .frame(height: 260)
                         .listRowInsets(EdgeInsets())
                     Picker("A touch marks", selection: $marking) {
                         Text("Held face").tag("fixed")
                         Text("Loaded face").tag("load")
+                        Text("Point").tag("point")
                     }
                     .pickerStyle(.segmented)
                     if map != nil { Toggle("Safety map", isOn: $showMap) }
@@ -63,6 +68,9 @@ struct EngineeringView: View {
                     LabeledContent("Force", value: String(format: "%.0f N", newtons))
                 }
                 .accessibilityIdentifier("engineering_force")
+                Picker("Direction", selection: $direction) {
+                    ForEach(bridge.directions, id: \.self) { Text(Self.direction($0)).tag($0) }
+                }
             }
             Section("Material and quality") {
                 Picker("Material", selection: $material) { ForEach(bridge.materials, id: \.self) { Text($0).tag($0) } }
@@ -72,6 +80,10 @@ struct EngineeringView: View {
                 }
                 Stepper(value: $safety, in: 1...10, step: 0.5) {
                     LabeledContent("Safety it must keep", value: String(format: "%.1f", safety))
+                }
+                // The nozzle's temperature enters the adhesion between layers (docs/ANALYSIS.md); 0: the filament's.
+                Stepper(value: $temperature, in: 0...350, step: 5) {
+                    LabeledContent("Nozzle temperature", value: temperature > 0 ? String(format: "%.0f °C", temperature) : String(localized: "The filament's"))
                 }
                 Toggle("Quick (the solid part, without slicing)", isOn: $quick)
             }
@@ -111,21 +123,28 @@ struct EngineeringView: View {
         mesh = m
     }
 
-    private func touched(_ triangle: Int) {
-        guard let f = bridge.pick(triangle: Int32(triangle), quality: quality) else { return }
-        if marking == "fixed" { fixedPick = f; fixed = "touched" } else { loadPick = f; loaded = "touched" }
+    private func touched(_ triangle: Int, _ at: SCNVector3) {
+        if marking == "point" {
+            // A point: a box of 1.5 mm around it (Android's point load is a small disc on the surface).
+            guard let f = bridge.point(triangle: Int32(triangle), x: Double(at.x), y: Double(at.y), z: Double(at.z), radius: 1.5) else { return }
+            loadPick = f; loaded = "touched"; loadPoint = at
+        } else {
+            guard let f = bridge.pick(triangle: Int32(triangle), quality: quality) else { return }
+            if marking == "fixed" { fixedPick = f; fixed = "touched" } else { loadPick = f; loaded = "touched"; loadPoint = nil }
+        }
         map = nil; lines = []
     }
 
     private func analyze() {
         busy = true; problem = nil; lines = []; map = nil
         let (p, n, f, chosen) = (printer, nozzle, filament, model)
-        let caseJson = bridge.caseFor(fixed: fixedFace, loaded: loadFace, newtons: newtons, material: material,
-                                      quality: quality, solid: quick)
+        let caseJson = bridge.caseAlong(fixed: fixedFace, loaded: loadFace, newtons: newtons, direction: direction, material: material,
+                                        quality: quality, solid: quick)
         let required = safety
+        let celsius = temperature
         Task.detached {
             let (found, failed, voxels) = Self.run(model: chosen, printer: p, nozzle: n, filament: f, caseJson: caseJson,
-                                                   requiredSafety: required)
+                                                   requiredSafety: required, nozzleTemperature: celsius)
             let colored = voxels.flatMap { EngineeringBridge.shared.stressMap(path: $0.path, maxFaces: 400_000) }
             await MainActor.run { lines = found; problem = failed; map = colored; showMap = colored != nil; busy = false }
         }
@@ -140,11 +159,14 @@ struct EngineeringView: View {
 
     /// Runs `analyze` (off the main thread): the result lines or why there are none, and the safety map's file.
     nonisolated static func run(model chosen: URL?, printer p: String, nozzle n: Double, filament f: String?, caseJson: String,
-                                requiredSafety required: Double) -> ([ReportLine], String?, URL?) {
+                                requiredSafety required: Double, nozzleTemperature: Double = 0) -> ([ReportLine], String?, URL?) {
         let dir = FileManager.default.temporaryDirectory
         let part = chosen ?? cube()
         let (config, why) = Engine.profile(printer: p, nozzle: n, filament: f)
-        guard let config else { return ([], "No profile: \(why)", nil) }
+        guard let profile = config else { return ([], "No profile: \(why)", nil) }
+        let config = dir.appendingPathComponent("engineering_config.json")
+        let base = (try? String(contentsOf: profile, encoding: .utf8)) ?? "{}"
+        try? EngineeringBridge.shared.withNozzleTemperature(configJson: base, celsius: nozzleTemperature).write(to: config, atomically: true, encoding: .utf8)
         let caseFile = dir.appendingPathComponent("case.json")
         let out = dir.appendingPathComponent("report.json")
         let voxels = dir.appendingPathComponent("voxels.ply")
@@ -160,6 +182,18 @@ struct EngineeringView: View {
             return (EngineeringBridge.shared.report(json: report, requiredSafety: required), nil, map)
         }
         return ([], r.err.split(separator: "\n").last.map(String.init) ?? "exit \(r.code)", nil)
+    }
+
+    static func direction(_ d: String) -> String {
+        switch d {
+        case "-z": return String(localized: "Down (−Z)")
+        case "+z": return String(localized: "Up (+Z)")
+        case "-x": return String(localized: "Left (−X)")
+        case "+x": return String(localized: "Right (+X)")
+        case "-y": return String(localized: "Toward the front (−Y)")
+        case "+y": return String(localized: "Toward the back (+Y)")
+        default: return String(localized: "Into the face")
+        }
     }
 
     static func face(_ name: String) -> String {

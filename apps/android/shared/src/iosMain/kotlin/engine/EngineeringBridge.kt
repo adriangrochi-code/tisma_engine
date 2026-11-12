@@ -53,6 +53,47 @@ object EngineeringBridge {
             n.map { it.toDouble() })
     }
 
+    /**
+     * A load at a point (mobile_app.md, rule 13: «en un punto o en toda la cara»): the touched [triangle] at the
+     * point ([x], [y], [z], the model file's coordinates), given to the engine as a box of [radius] mm around it.
+     */
+    fun point(triangle: Int, x: Double, y: Double, z: Double, radius: Double): PickedFace? {
+        if (triangle < 0 || triangle >= positions.size / 9) return null
+        val n = FacePicking.normal(positions, intArrayOf(triangle))
+        return PickedFace(listOf(triangle), null, listOf(x - radius, y - radius, z - radius, x + radius, y + radius, z + radius),
+            n.map { it.toDouble() })
+    }
+
+    /** The directions a load can push: into its face, or along an axis («dirección», mobile_app.md, rule 13). */
+    val directions: List<String> get() = listOf("into", "-z", "+z", "-x", "+x", "-y", "+y")
+
+    /** The case with the load pushed along [direction] (one of [directions]) instead of into its face. */
+    fun caseAlong(fixed: PickedFace, loaded: PickedFace, newtons: Double, direction: String, material: String, quality: String,
+                  solid: Boolean): String {
+        val along = when (direction) {
+            "-z" -> listOf(0.0, 0.0, 1.0); "+z" -> listOf(0.0, 0.0, -1.0)
+            "-x" -> listOf(1.0, 0.0, 0.0); "+x" -> listOf(-1.0, 0.0, 0.0)
+            "-y" -> listOf(0.0, 1.0, 0.0); "+y" -> listOf(0.0, -1.0, 0.0)
+            else -> null
+        }
+        // caseFor pushes against the normal: an axis is given as the normal it pushes against.
+        return caseFor(fixed, if (along == null) loaded else loaded.copy(normal = along), newtons, material, quality, solid)
+    }
+
+    /**
+     * The settings with the nozzle's temperature (°C) the analysis assumes: it enters the adhesion between layers and
+     * lines (docs/ANALYSIS.md; mobile_app.md, rule 13, «la temperatura»). 0 or less keeps the filament's.
+     */
+    fun withNozzleTemperature(configJson: String, celsius: Double): String =
+        if (celsius <= 0) configJson else run {
+            val base = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(configJson) as? kotlinx.serialization.json.JsonObject }
+                .getOrNull() ?: kotlinx.serialization.json.JsonObject(emptyMap())
+            val vars = kotlinx.serialization.json.JsonObject(mapOf("machine" to kotlinx.serialization.json.JsonObject(mapOf("variables" to
+                kotlinx.serialization.json.JsonObject(mapOf("temperature" to kotlinx.serialization.json.JsonPrimitive(celsius),
+                    "first_layer_temperature" to kotlinx.serialization.json.JsonPrimitive(celsius)))))))
+            PrintChanges.merge(base, vars).toString()
+        }
+
     /** One of the engine's own faces, chosen by name. */
     fun named(face: String): PickedFace {
         val into = EngineeringCase.FACES[face] ?: floatArrayOf(0f, 0f, -1f)

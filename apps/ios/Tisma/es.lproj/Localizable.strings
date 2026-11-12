@@ -196,3 +196,13 @@
 "done" = "Listo";
 "From the profile pack" = "Del paquete de perfiles";
 "From the engine's catalog" = "Del catálogo del motor";
+"Point" = "Punto";
+"Direction" = "Dirección";
+"Nozzle temperature" = "Temperatura de la boquilla";
+"Down (−Z)" = "Hacia abajo (−Z)";
+"Up (+Z)" = "Hacia arriba (+Z)";
+"Left (−X)" = "Hacia la izquierda (−X)";
+"Right (+X)" = "Hacia la derecha (+X)";
+"Toward the front (−Y)" = "Hacia adelante (−Y)";
+"Toward the back (+Y)" = "Hacia atrás (+Y)";
+"Into the face" = "Hacia la cara";

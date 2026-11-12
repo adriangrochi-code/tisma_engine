@@ -60,7 +60,10 @@ struct PartView: UIViewRepresentable {
     var bed: [Double]?
     /// A change re-frames the camera («Encuadrar»).
     var frame = 0
-    var onTap: (Int) -> Void = { _ in }
+    /// A point load's place (the model file's coordinates), drawn as a small ball.
+    var point: SCNVector3?
+    /// The touched triangle and the touched point on it (the model file's coordinates).
+    var onTap: (Int, SCNVector3) -> Void = { _, _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
 
@@ -112,7 +115,14 @@ struct PartView: UIViewRepresentable {
             body.name = "part"
             part.addChildNode(body)
             if !held.isEmpty { part.addChildNode(SCNNode(geometry: Self.geometry(Self.subset(mesh.soup, held), color: .systemBlue, lift: 0.05))) }
-            if !loaded.isEmpty { part.addChildNode(SCNNode(geometry: Self.geometry(Self.subset(mesh.soup, loaded), color: .systemOrange, lift: 0.05))) }
+            if !loaded.isEmpty && point == nil { part.addChildNode(SCNNode(geometry: Self.geometry(Self.subset(mesh.soup, loaded), color: .systemOrange, lift: 0.05))) }
+            if let point {
+                let b = mesh.bounds
+                let ball = SCNNode(geometry: SCNSphere(radius: CGFloat(max(b[3] - b[0], b[4] - b[1], b[5] - b[2]) * 0.03)))
+                ball.geometry?.firstMaterial?.diffuse.contents = UIColor.systemOrange
+                ball.position = point
+                part.addChildNode(ball)
+            }
         }
     }
 
@@ -140,13 +150,13 @@ struct PartView: UIViewRepresentable {
 
     final class Coordinator: NSObject {
         var framed = -1
-        var onTap: (Int) -> Void
-        init(onTap: @escaping (Int) -> Void) { self.onTap = onTap }
+        var onTap: (Int, SCNVector3) -> Void
+        init(onTap: @escaping (Int, SCNVector3) -> Void) { self.onTap = onTap }
 
         @objc func tapped(_ g: UITapGestureRecognizer) {
             guard let view = g.view as? SCNView else { return }
             let hits = view.hitTest(g.location(in: view), options: [.searchMode: SCNHitTestSearchMode.closest.rawValue])
-            if let hit = hits.first(where: { $0.node.name == "part" }) { onTap(hit.faceIndex) }
+            if let hit = hits.first(where: { $0.node.name == "part" }) { onTap(hit.faceIndex, hit.localCoordinates) }
         }
     }
 

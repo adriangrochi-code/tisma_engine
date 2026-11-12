@@ -97,7 +97,7 @@ se marca con la fecha.
 | 10 Abrir | STL, 3MF, OBJ, STEP, Compartir, enlace de sitio | STL, 3MF, OBJ, Compartir | P8: STEP; P9: enlaces de sitios de modelos |
 | 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente; el paquete se baja e instala desde Más (P10, 12-11) | P10c: elegir otro filamento del paquete (hoy, el que trae la variante; las impresoras del paquete ya están en el asistente, P10b, 12-11) |
 | 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa; avance por etapas, cancelar y memoria con la API de trabajos del motor (P11, P12, 12-11; en dev desde 4986dc4) | P13: el costo (el motor lo da null por ahora) |
-| 13 Ingeniería | caras tocadas, punto, dirección, temperatura, mapa, relleno mínimo | caras tocadas, mapa | P14: carga en un punto y dirección elegida; P15: temperatura; P16: relleno mínimo |
+| 13 Ingeniería | caras tocadas, punto, dirección, temperatura, mapa, relleno mínimo | caras tocadas, mapa | P16: relleno mínimo (el motor lo hace sobre proyectos 3MF; en una pieza suelta, a preguntar). Carga en un punto, dirección y temperatura: P14, P15, 12-11 |
 | 14 Impresoras | búsqueda en la red, cámara | las cinco clases, mandar, pausar, seguir, parar, avisos | — (búsqueda en la red con Bonjour, P17, y cámara, P18, 12-11) |
 | 15 Nube | Google, analizar en la nube, impresoras remotas, pagos | cuenta, laminar en la nube | P19: analizar en la nube; P20: impresoras remotas de los puentes; restaurar compras con StoreKit 2 al abrir la sesión (12-11); comprar y Google esperan al dueño (cuenta de Apple) |
 | 16 Ayuda sin conexión | sí | la ayuda del paquete en Más, con búsqueda (P21, 12-11) | — |
