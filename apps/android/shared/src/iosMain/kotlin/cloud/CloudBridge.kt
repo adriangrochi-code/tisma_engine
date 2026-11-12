@@ -50,6 +50,17 @@ object CloudBridge {
         return CloudClient(server, token).submit(JobRequest.Slice, name, size) { net.tisma.io.FileInput(path) }.id
     }
 
+    /**
+     * cloud.md, rule 11 (parity P6): a problem report from the iPhone (`app` `ios`), with the session when there is one
+     * ([token] empty: without). [kind] is bug, crash or suggestion; the version and system only when the person
+     * accepted to send them. How many earlier reports are alike.
+     */
+    @Throws(CloudException::class)
+    fun report(server: String, token: String, kind: String, title: String, description: String, steps: String, expected: String,
+               actual: String, appVersion: String, os: String): Int =
+        CloudClient(server, token.ifEmpty { null }).report(ProblemReport(kind, title.trim(), description.trim(), steps.trim(),
+            expected.trim(), actual.trim(), appVersion.ifEmpty { null }, os.ifEmpty { null }, null, app = "ios"))
+
     /** A job's state for the screen: «queued», «running 40 %», «done», or «failed: …» in the phone's language. */
     @Throws(CloudException::class)
     fun jobLine(server: String, token: String, id: String, spanish: Boolean): JobLine {

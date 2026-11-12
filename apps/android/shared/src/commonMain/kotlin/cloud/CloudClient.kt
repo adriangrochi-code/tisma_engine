@@ -370,9 +370,11 @@ data class ProblemReport(
     val appVersion: String? = null,
     val os: String? = null,
     val log: String? = null,
+    /** Which app sends it (cloud.md, rule 11): `android`, or `ios` from the iPhone. */
+    val app: String = "android",
 ) {
     fun toJson(): JsonObject = buildJsonObject {
-        put("app", "android")
+        put("app", app)
         put("kind", kind)
         put("title", title)
         listOf("description" to description, "steps" to steps, "expected" to expected, "actual" to actual)

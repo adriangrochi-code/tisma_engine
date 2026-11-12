@@ -60,6 +60,7 @@ struct MoreView: View {
                 Section {
                     NavigationLink("Shared library") { LibraryView() }
                     NavigationLink("Choose the printer again") { WizardView() }
+                    NavigationLink("Report a problem") { ReportView() }.accessibilityIdentifier("more_report")
                 }
                 if let plans = account.state?.plans, !plans.isEmpty {
                     Section("Plans") {

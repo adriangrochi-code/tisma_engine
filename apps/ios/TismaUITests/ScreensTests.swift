@@ -37,6 +37,12 @@ final class ScreensTests: XCTestCase {
             keep(name)
         }
         XCTAssertTrue(app.navigationBars["More"].waitForExistence(timeout: 5))
+        // Report a problem (parity P6).
+        let report = app.buttons["more_report"]
+        if !report.isHittable { app.swipeUp() }
+        report.tap()
+        XCTAssertTrue(app.navigationBars["Report a problem"].waitForExistence(timeout: 5))
+        keep("report")
     }
 
     private func keep(_ name: String) {

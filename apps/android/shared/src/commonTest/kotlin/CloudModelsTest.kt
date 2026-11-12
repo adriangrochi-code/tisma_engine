@@ -53,4 +53,12 @@ class CloudModelsTest {
         assertFalse(ServiceStatus.from(obj("""{"status":"ok"}""")).worthNotice)
         assertFalse(ServiceStatus.from(obj("""{}""")).worthNotice)
     }
+
+    @Test
+    fun aReportSaysWhichAppSendsIt() {
+        val android = net.tisma.cloud.ProblemReport("bug", "Crash on open").toJson()
+        val ios = net.tisma.cloud.ProblemReport("bug", "Crash on open", app = "ios").toJson()
+        kotlin.test.assertEquals("\"android\"", android["app"].toString())
+        kotlin.test.assertEquals("\"ios\"", ios["app"].toString())
+    }
 }

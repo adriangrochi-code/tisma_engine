@@ -115,3 +115,17 @@
 "This model needs %d MB and the phone has %d MB free: slice it in Tisma Cloud." = "Este modelo necesita %d MB y el teléfono tiene %d MB libres: lamínalo en Tisma Cloud.";
 "Slicing…" = "Laminando…";
 "Cancel" = "Cancelar";
+"Report a problem" = "Informar un problema";
+"Something does not work" = "Algo no funciona";
+"The app closed" = "La app se cerró";
+"A suggestion" = "Una sugerencia";
+"Title" = "Título";
+"What happened" = "Qué pasó";
+"Steps to make it happen" = "Pasos para que pase";
+"What you expected" = "Qué esperabas";
+"What happened instead" = "Qué pasó en cambio";
+"Send the app's version and the system" = "Mandar la versión de la app y el sistema";
+"Send" = "Enviar";
+"Sending…" = "Enviando…";
+"Sent. Thank you." = "Enviado. Gracias.";
+"Sent. %d people reported something alike." = "Enviado. %d personas informaron algo parecido.";
