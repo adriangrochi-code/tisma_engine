@@ -1,0 +1,49 @@
+# The sketch as in rule 11 sexies (cad_design.md): «Finish sketch» on top,
+# the palette at the right (construction, grid, snap, constraints,
+# dimensions, look at; the section seen off as «Próximamente»), the
+# constraints' icons by the geometry, and a dimension's number double-clicked
+# (here the second rule) to type a new value: the 40 mm width of a rectangle fixed at a corner
+# becomes 50.
+menu mode_engineering
+menu tab_design
+menu design_sketch
+menu design_plane_xy
+expect-control sketch_finish
+expect-control sketch_palette
+expect-control sketch_construction
+expect-control sketch_show_rules
+expect-control sketch_show_dims
+expect-control sketch_look_at
+expect-control sketch_section
+menu design_command
+type rec
+key enter
+type 0,0
+key enter
+type 40,30
+key enter
+type fijo
+key enter
+type 0,0
+key enter
+type cota
+key enter
+type 20,0
+key enter
+type 40
+key enter
+expect-sketch-dof 1
+wait 3
+expect-control sketch_dim_2
+double-click-control sketch_dim_2
+wait 3
+expect-control sketch_dim_value
+key ctrl+a
+type 50
+key enter
+wait 3
+expect-sketch-point 1 2 50 30
+menu sketch_look_at
+wait 5
+menu sketch_finish
+expect-no-control sketch_palette

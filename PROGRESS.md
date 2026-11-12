@@ -13752,3 +13752,20 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   para no tapar las flechas.
 - **Pruebas:** `design_ring_move.txt` (gira la caja con el anillo); pasan las de flechas, operaciones y cuadro. La
   revolución y el patrón circular usan el mismo anillo, pero no tienen prueba propia.
+
+## 2026-11-12 — interfaz: el boceto al estilo de la regla 11 sexies
+
+- **Hecho:** al editar un boceto, «Terminar boceto» va en verde arriba a la derecha y, a la derecha de la vista
+  (debajo del cubo), la paleta del boceto:
+  - línea de construcción (las nuevas salen de construcción);
+  - mostrar cuadrícula (cada 10 mm, más marcada cada 50);
+  - ajuste a la cuadrícula (F9);
+  - mostrar restricciones y mostrar cotas;
+  - mirar de frente;
+  - sección, apagada con «Próximamente».
+  Las restricciones se ven como íconos chicos en verde junto a la geometría (H, V, //, L, =, O, T, F), y doble clic
+  sobre el número de una cota abre un campo para escribir el valor nuevo; si contradice al resto, no cambia nada.
+  Se suma `double-click-control` a los guiones de prueba. En el historial, el lado del cuadro del paso sigue al lado
+  real (QA).
+- **Pruebas:** `design_sketch_palette.txt` (la paleta, y la cota de 40 mm cambiada a 50 con doble clic); pasan las 22
+  de Diseño.

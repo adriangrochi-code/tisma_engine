@@ -786,10 +786,13 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
 - [x] Diseño: navegador (11 ter), buscar herramienta con S (11 octies, CD29), menú radial (11 septies, CD28) y el
   cuadro de cada paso a la derecha con Aceptar y Cancelar (11 quinquies; faltan las flechas en la vista) (2026-11-11)
 - [x] Diseño: navegador a la izquierda (11 ter) (2026-11-11; el historial con sus campos sigue debajo)
-- [ ] Diseño: línea de tiempo abajo con marca arrastrable (11 quater, CD27)
-- [ ] Diseño: cuadros de operación flotantes con manipuladores (11 quinquies)
-- [ ] Diseño: boceto de frente con «Terminar boceto» y paleta (11 sexies)
-- [ ] Diseño: menú radial (11 septies, CD28) y buscador con la tecla S (11 octies, CD29)
+- [x] Diseño: línea de tiempo abajo con marca arrastrable (11 quater, CD27) (2026-11-11)
+- [x] Diseño: cuadros de operación flotantes con manipuladores (11 quinquies) (2026-11-12: flechas en primitivas,
+  redondeo, chaflán, vaciado, extruir y mover; anillos en giro, revolución y patrón circular; faltan patrones
+  rectangulares y agujero)
+- [x] Diseño: boceto de frente con «Terminar boceto» y paleta (11 sexies) (2026-11-12; la sección, «Próximamente»)
+- [x] Diseño: menú radial (11 septies, CD28) y buscador con la tecla S (11 octies, CD29) (2026-11-11; fijar a la
+  barra falta)
 - [ ] Diseño: herramientas que faltan, en gris «Próximamente» (11 novies) y tema claro (11 decies)
 
 ### Pedidos del dueño sobre la interfaz (2026-10-28, por el equipo de fichas)

@@ -1747,7 +1747,14 @@
     X(RuleConflicting, "Esa restricción contradice a otras: no se agregó", "That constraint contradicts others: not added") \
     X(SketchSnaps, "Referencias (F3)", "Snaps (F3)") \
     X(SketchOrtho, "Ortogonal (F8)", "Ortho (F8)") \
-    X(SketchGrid, "Cuadrícula (F9)", "Grid (F9)") \
+    X(SketchGrid, "Ajuste a la cuadrícula (F9)", "Snap to grid (F9)") \
+    X(SketchPalette, "Paleta del boceto", "Sketch palette") \
+    X(SketchConstruction, "Línea de construcción", "Construction line") \
+    X(SketchShowGrid, "Mostrar cuadrícula", "Show grid") \
+    X(SketchShowRules, "Mostrar restricciones", "Show constraints") \
+    X(SketchShowDims, "Mostrar cotas", "Show dimensions") \
+    X(SketchLookAt, "Mirar de frente", "Look at") \
+    X(SketchSection, "Sección", "Section") \
     X(SketchPolar, "Polar (F10)", "Polar (F10)") \
     X(SketchLength, "Largo", "Length") \
     X(SketchAngle, "Ángulo", "Angle") \

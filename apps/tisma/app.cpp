@@ -1580,6 +1580,12 @@ private:
         std::optional<cad::Pt> cursor;
         cad::Snap snap;
         bool snaps = true, ortho = false, grid = false, polar = false;
+        // The sketch's palette (rule 11 sexies): new lines as construction,
+        // the grid drawn, the constraints' icons and the dimensions shown.
+        bool construction = false, show_grid = true, show_rules = true, show_dims = true;
+        // A dimension being typed after a double click on its number.
+        std::optional<std::size_t> dim_edit;
+        double dim_value = 0.0;
         double polar_step = 45.0;
         // What each point of the tool snapped to, and the segments typed as lengths.
         struct PointSnap {
@@ -1613,6 +1619,8 @@ private:
     void sketch_resolve_cursor();
     void sketch_overlay();
     void sketch_strip();
+    void sketch_palette(); // rule 11 sexies: «Finish sketch» on top, the palette at the right
+    void sketch_look_at();
     void sketch_cursor_input();
     cad::Sketch* editing_sketch();
     void import_sketch_file(const std::filesystem::path& path, bool svg);
@@ -22558,6 +22566,20 @@ void App::start_sketch(cad::SketchPlane plane) {
     edit_sketch(design_.features.size() - 1);
 }
 
+static StandardView plane_view(cad::SketchPlane plane) {
+    return plane == cad::SketchPlane::XZ ? StandardView::Front : plane == cad::SketchPlane::YZ ? StandardView::Right : StandardView::Top;
+}
+
+// «Look at»: straight at the sketch's plane again, without perspective.
+void App::sketch_look_at() {
+    if (const cad::Sketch* sketch = editing_sketch()) {
+        camera_.orthographic = true;
+        OrbitCamera at = camera_;
+        at.set_view(plane_view(sketch->plane));
+        turn_view_to(at.yaw, at.pitch, false);
+    }
+}
+
 void App::edit_sketch(std::size_t feature) {
     if (feature >= design_.features.size() || design_.features[feature].type != cad::Feature::Type::Sketch)
         return;
@@ -22567,7 +22589,7 @@ void App::edit_sketch(std::size_t feature) {
     // Looking straight at the plane, without perspective (rule 4).
     sketch_prev_ortho_ = camera_.orthographic;
     camera_.orthographic = true;
-    camera_.set_view(plane == cad::SketchPlane::XZ ? StandardView::Front : plane == cad::SketchPlane::YZ ? StandardView::Right : StandardView::Top);
+    camera_.set_view(plane_view(plane));
     set_tab(Tab::Design);
     // Framed on what is drawn, at least 80 mm across, around the origin.
     const cad::Sketch& sketch = design_.features[feature].sketch;
@@ -22651,6 +22673,7 @@ void App::sketch_end_tool(bool close) {
     }
     if (entity) {
         const std::size_t index = sketch->entities.size();
+        entity->construction = e.construction;
         sketch->entities.push_back(*entity);
         for (const SketchEdit::PointSnap& ps : e.point_snaps) {
             if (ps.snap.entity >= index)
@@ -23618,8 +23641,75 @@ void App::sketch_overlay() {
             dl->AddPolyline(q, 4, edge, 1.5f * scale_, ImDrawFlags_Closed);
         }
     }
-    // Each dimension's value beside what it measures.
-    for (const cad::GeoConstraint& r : sketch->rules) {
+    // The grid, fine, every 10 mm with a stronger line every 50 (rule 11 sexies).
+    if (e.show_grid) {
+        const ImU32 fine = ImGui::GetColorU32(rgb(theme_.dark ? 0xFFFFFF : 0x000000, 0.06f));
+        const ImU32 strong = ImGui::GetColorU32(rgb(theme_.dark ? 0xFFFFFF : 0x000000, 0.13f));
+        for (int k = -30; k <= 30; ++k) {
+            ImVec2 a, b;
+            const double at = k * 10.0;
+            const ImU32 c = k % 5 == 0 ? strong : fine;
+            if (project({at, -300.0}, a) && project({at, 300.0}, b))
+                dl->AddLine(a, b, c, 1.0f);
+            if (project({-300.0, at}, a) && project({300.0, at}, b))
+                dl->AddLine(a, b, c, 1.0f);
+        }
+    }
+    // Each constraint's small icon by what it holds (rule 11 sexies).
+    if (e.show_rules) {
+        using K = cad::GeoConstraint::Kind;
+        std::map<std::pair<std::size_t, std::size_t>, int> stacked; // icons on the same segment, side by side
+        for (const cad::GeoConstraint& r : sketch->rules) {
+            const char* icon = r.kind == K::Horizontal      ? "H"
+                               : r.kind == K::Vertical      ? "V"
+                               : r.kind == K::Parallel      ? "//"
+                               : r.kind == K::Perpendicular ? "L"
+                               : r.kind == K::Equal         ? "="
+                               : r.kind == K::Concentric    ? "O"
+                               : r.kind == K::Tangent       ? "T"
+                               : r.kind == K::Fixed         ? "F"
+                                                            : nullptr;
+            if (!icon || r.a.entity >= sketch->entities.size())
+                continue;
+            const auto place = [&](const cad::EntityPoint& ref) {
+                if (ref.entity >= sketch->entities.size())
+                    return;
+                const cad::Entity& en = sketch->entities[ref.entity];
+                std::optional<cad::Pt> at;
+                if (r.kind == K::Fixed) {
+                    at = cad::point_of(en, ref.index);
+                } else if (en.kind == cad::Entity::Kind::Circle || en.kind == cad::Entity::Kind::Arc) {
+                    if (!en.points.empty())
+                        at = en.points[0];
+                } else {
+                    const auto segments = cad::segments_of(en);
+                    if (ref.index < segments.size())
+                        at = cad::Pt{0.5 * (segments[ref.index].first.x + segments[ref.index].second.x),
+                                     0.5 * (segments[ref.index].first.y + segments[ref.index].second.y)};
+                }
+                ImVec2 q;
+                if (!at || !project(*at, q))
+                    return;
+                const int n = stacked[{ref.entity, ref.index}]++;
+                const ImVec2 size = ImGui::CalcTextSize(icon);
+                const float side = std::max(size.x, size.y) * 0.8f + 4.0f * scale_;
+                const ImVec2 lo(q.x + 8.0f * scale_ + float(n) * (side + 2.0f * scale_), q.y + 6.0f * scale_);
+                dl->AddRectFilled(lo, ImVec2(lo.x + side, lo.y + side), ImGui::GetColorU32(rgb(0x3FBF7F, 0.9f)), 3.0f * scale_);
+                ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.8f);
+                const ImVec2 small = ImGui::CalcTextSize(icon);
+                dl->AddText(ImVec2(lo.x + 0.5f * (side - small.x), lo.y + 0.5f * (side - small.y)), IM_COL32(255, 255, 255, 255), icon);
+                ImGui::PopFont();
+            };
+            place(r.a);
+            if (r.kind == K::Parallel || r.kind == K::Perpendicular || r.kind == K::Equal || r.kind == K::Concentric ||
+                r.kind == K::Tangent)
+                place(r.b);
+        }
+    }
+    // Each dimension's value beside what it measures; a double click on it
+    // types a new one (rule 11 sexies).
+    for (std::size_t ri = 0; ri < sketch->rules.size() && e.show_dims; ++ri) {
+        const cad::GeoConstraint& r = sketch->rules[ri];
         if (!cad::is_dimension(r.kind) || r.a.entity >= sketch->entities.size())
             continue;
         const cad::Entity& en = sketch->entities[r.a.entity];
@@ -23650,6 +23740,13 @@ void App::sketch_overlay() {
             const ImVec2 hi(q.x + 0.5f * size.x + 3.0f * scale_, q.y + 0.5f * size.y + 1.0f * scale_);
             dl->AddRectFilled(lo, hi, ImGui::GetColorU32(rgb(theme_.dark ? 0x1E1E24 : 0xFFFFFF, 0.85f)), 3.0f * scale_);
             dl->AddText(ImVec2(lo.x + 3.0f * scale_, lo.y + 1.0f * scale_), ink, text.c_str());
+            g_menu_rects["sketch_dim_" + std::to_string(ri + 1)] = ImVec4(lo.x, lo.y, hi.x, hi.y);
+            const ImVec2 m = ImGui::GetIO().MousePos;
+            if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && m.x >= lo.x && m.x <= hi.x && m.y >= lo.y && m.y <= hi.y &&
+                ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                e.dim_edit = ri;
+                e.dim_value = r.value;
+            }
         }
     }
     for (const SketchEdit::Pick& pick : e.picks) {
@@ -23828,13 +23925,96 @@ void App::sketch_strip() {
     if (button("sketch_revolve", nullptr, tr(T::SketchRevolve), false, false, sketch->has_region(), nullptr, h))
         sketch_command("rev", "rev");
     named("sketch_revolve");
-    ImGui::SameLine();
-    if (button("sketch_finish", nullptr, tr(T::SketchFinish), true, false, true, nullptr, h))
-        finish_sketch();
-    named("sketch_finish");
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+}
+
+// Rule 11 sexies: «Finish sketch» in green at the top of the view, and the
+// sketch's palette at the right, under the view cube.
+void App::sketch_palette() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    const float h = 30.0f * scale_;
+    // At the top right, on the toolbar's row: clear of its tools.
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 16.0f * scale_, view_pos_.y + 12.0f * scale_), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("##sketch_finish_bar", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(0x2F9E62));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x3FBF7F));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(0x26804F));
+    ImGui::PushStyleColor(ImGuiCol_Text, rgb(0xFFFFFF));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f * scale_);
+    if (ImGui::Button((std::string(tr(T::SketchFinish)) + "###sketch_finish").c_str(), ImVec2(0, h)))
+        finish_sketch();
+    note_rect("sketch_finish");
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
+    ImGui::End();
+    ImGui::PopStyleVar();
+
+    const float w = 220.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 12.0f * scale_, view_pos_.y + 190.0f * scale_), ImGuiCond_Always,
+                            ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * scale_, 10.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##sketch_palette", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    note_rect("sketch_palette");
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::SketchPalette));
+    ImGui::Separator();
+    const auto check = [&](const char* id, T label, bool& flag) {
+        ImGui::Checkbox((std::string(tr(label)) + "##" + id).c_str(), &flag);
+        note_rect(id);
+    };
+    check("sketch_construction", T::SketchConstruction, e.construction);
+    check("sketch_show_grid", T::SketchShowGrid, e.show_grid);
+    check("sketch_snap_grid", T::SketchGrid, e.grid);
+    check("sketch_show_rules", T::SketchShowRules, e.show_rules);
+    check("sketch_show_dims", T::SketchShowDims, e.show_dims);
+    if (ImGui::Button((std::string(tr(T::SketchLookAt)) + "##sketch_look_at").c_str()))
+        sketch_look_at();
+    note_rect("sketch_look_at");
+    // The section of the view is not here yet: seen off, never hidden (rule 11 novies).
+    ImGui::BeginDisabled();
+    ImGui::Button((std::string(tr(T::SketchSection)) + " · " + tr(T::ComingSoon) + "##sketch_section").c_str());
+    note_rect("sketch_section");
+    ImGui::EndDisabled();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+
+    // A dimension's number double-clicked: its value typed here (rule 11 sexies).
+    if (e.dim_edit && *e.dim_edit < sketch->rules.size()) {
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().MousePos.x + 8.0f * scale_, ImGui::GetIO().MousePos.y + 8.0f * scale_), ImGuiCond_Appearing);
+        ImGui::Begin("##sketch_dim_edit", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::SetNextItemWidth(110.0f * scale_);
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        const bool done = ImGui::InputDouble("##dim_value", &e.dim_value, 0.0, 0.0, "%.4g", ImGuiInputTextFlags_EnterReturnsTrue);
+        note_rect("sketch_dim_value");
+        if (done) {
+            cad::Sketch trial = *sketch;
+            trial.rules[*e.dim_edit].value = e.dim_value;
+            if (cad::solve_sketch(trial).solved)
+                *sketch = std::move(trial);
+            else
+                command_message_ = tr(T::RuleConflicting);
+            e.dim_edit.reset();
+        } else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            e.dim_edit.reset();
+        }
+        ImGui::End();
+    }
 }
 
 // The input next to the cursor (rule 14): the segment's length and angle,
@@ -24845,7 +25025,7 @@ void App::layout() {
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
             design_command_line(), design_timeline(), design_handles();
             if (sketch_edit_) {
-                sketch_strip();
+                sketch_strip(), sketch_palette();
                 sketch_cursor_input();
                 sketch_overlay();
             } else {
@@ -27896,6 +28076,20 @@ void App::script_input() {
         if (!ok)
             return fail_step("the quality is " + view_quality_);
         next();
+    } else if (step.verb == "double-click-control") { // two quick left clicks on a named control's middle
+        const auto it = g_menu_rects.find(step.key);
+        if (f == 0 && it == g_menu_rects.end())
+            return fail_step("it is not on the screen");
+        if (f == 0)
+            drag_from_ = ImVec2(0.5f * (it->second.x + it->second.z), 0.5f * (it->second.y + it->second.w));
+        if (f == 0)
+            io.AddMousePosEvent(drag_from_.x, drag_from_.y);
+        else if (f == 2 || f == 4)
+            io.AddMouseButtonEvent(0, true);
+        else if (f == 3 || f == 5)
+            io.AddMouseButtonEvent(0, false);
+        else if (f >= 8)
+            next();
     } else if (step.verb == "drag-control") { // press on a named control's middle, move by "dx dy" over 8 frames, release
         const auto it = g_menu_rects.find(step.key);
         if (f == 0 && it == g_menu_rects.end())
