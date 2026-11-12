@@ -47,8 +47,13 @@ jobs:
           xcodegen generate
           device=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r,l in d.items() if "iOS" in r for x in l if x["name"].startswith("iPhone")))')
           echo "Simulator $device"
-          xcodebuild test -project Tisma.xcodeproj -scheme Tisma -destination "id=$device" -resultBundlePath "$RUNNER_TEMP/Tisma.xcresult" | tail -60
-          exit ${PIPESTATUS[0]}
+          set +e
+          xcodebuild test -project Tisma.xcodeproj -scheme Tisma -destination "id=$device" -resultBundlePath "$RUNNER_TEMP/Tisma.xcresult" > "$RUNNER_TEMP/xcodebuild.log" 2>&1
+          code=$?
+          # The compiler's errors first, then the end (the tests).
+          grep -E ': error: |Test Case .* failed' "$RUNNER_TEMP/xcodebuild.log" | head -40
+          tail -40 "$RUNNER_TEMP/xcodebuild.log"
+          exit $code
       - name: Keep the test reports
         if: always()
         uses: actions/upload-artifact@v4

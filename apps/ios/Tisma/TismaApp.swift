@@ -46,7 +46,7 @@ struct LibraryView: View {
     static let projectKey = ""
 
     @State private var query = ""
-    @State private var items: [LibraryItem] = []
+    @State private var items: [SharedModel] = []
     @State private var problem: String?
 
     var body: some View {

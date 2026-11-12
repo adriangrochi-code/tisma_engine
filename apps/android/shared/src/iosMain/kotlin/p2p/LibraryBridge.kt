@@ -18,7 +18,7 @@ import platform.Foundation.writeToFile
 import platform.posix.memcpy
 
 /** One model of the shared library as the SwiftUI list shows it. */
-data class LibraryItem(val id: String, val name: String, val author: String, val license: String, val checked: Boolean)
+data class SharedModel(val id: String, val name: String, val author: String, val license: String, val checked: Boolean)
 
 /**
  * The shared library for the iPhone app (p2p_library.md, rule 6), with the same fetch as Android ([LibraryFetch]).
@@ -51,9 +51,9 @@ object LibraryBridge {
     }
 
     /** The models that match [query] (name, tag, author, license; accents ignored), blocked ones left out. */
-    fun search(query: String): List<LibraryItem> {
+    fun search(query: String): List<SharedModel> {
         val r = last ?: return emptyList()
-        return r.index?.search(query, r.list).orEmpty().map { LibraryItem(it.id, it.name, it.author, it.license, it.checked) }
+        return r.index?.search(query, r.list).orEmpty().map { SharedModel(it.id, it.name, it.author, it.license, it.checked) }
     }
 
     private fun hexBytes(h: String): ByteArray {
