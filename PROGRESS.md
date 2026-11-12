@@ -12321,5 +12321,10 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - cloud.md 4a (spec/next dd61f25): `GET /v1/status`. Android lo pide al abrir el panel de la nube y antes de mandar un
   trabajo, y con `slow` o `down` muestra la etiqueta y el motivo en su idioma, sin bloquear (`CloudScreensTest`, CC21).
   iPhone lo muestra en «Más»; mandar trabajos desde el iPhone todavía no está.
-- Siguiente: Biblioteca en el iPhone con el índice común; Bambu con TLS en iOS; el motor como biblioteca para iOS
-  (lo pide la sesión del motor).
+- iPhone, después (12-11, todo en verde en el simulador de la CI): Biblioteca compartida con `LibraryFetch` común
+  (Android también lo usa) y firmas con CryptoKit; Impresora (Klipper, OctoPrint, PrusaLink, Duet) con la clave en el
+  Llavero; `AccountModel` común para «Más»; una prueba de interfaz guarda una captura de cada sección (artefacto
+  `ios-screenshots`). Nada visto en un iPhone de verdad.
+- Siguiente: Bambu en el iPhone. MQTT, FTPS y el empaquetado a `shared`, con un socket TLS común (`expect`/`actual`:
+  `SSLSocket` en Android, Network.framework o CFStream en iOS) y la huella del certificado fijada; después el motor
+  como biblioteca para iOS (lo pide la sesión del motor).
