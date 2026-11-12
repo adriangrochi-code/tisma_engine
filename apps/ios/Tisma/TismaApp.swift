@@ -1,5 +1,6 @@
 import CryptoKit
 import SwiftUI
+import UniformTypeIdentifiers
 import TismaShared
 
 /// Tisma for iPhone: the same sections as the Android app (mobile_app.md, rule 5). Slicing waits for the engine as a
@@ -40,6 +41,9 @@ struct PlateView: View {
     @State private var result: String?
     @State private var busy = false
     @State private var gcode: URL?
+    /// The model on the plate: the person's (copied into the app) or, until one is opened, the 20 mm cube.
+    @State private var opened: URL?
+    @State private var picking = false
 
     private var model: CatalogPrinterModel? { Engine.catalog?.printer(name: printer) }
 
@@ -65,25 +69,47 @@ struct PlateView: View {
                         Text("The catalog is missing from this build.").foregroundStyle(.red)
                     }
                 }
+                Section("Model") {
+                    Text(opened?.lastPathComponent ?? String(localized: "The 20 mm cube"))
+                    Button("Open a model…") { picking = true }
+                }
                 Section("Engine") {
                     Text(Engine.run(["--version"]).out.trimmingCharacters(in: .whitespacesAndNewlines))
-                    Button("Slice the 20 mm cube") { slice() }.disabled(busy || printer.isEmpty)
+                    Button("Slice") { slice() }.disabled(busy || printer.isEmpty)
                     if busy { ProgressView() }
                     if let result { Text(result).font(.footnote.monospaced()) }
                     if let gcode { NavigationLink("Preview") { PreviewView(gcode: gcode) } }
                 }
             }
             .navigationTitle("Plate")
+            // mobile_app.md, rule 10: STL, OBJ and 3MF from the phone's files (STEP waits for the engine).
+            .fileImporter(isPresented: $picking, allowedContentTypes: Self.modelTypes) { r in
+                if case .success(let url) = r { opened = Self.copyIn(url); gcode = nil; result = nil }
+            }
         }
+    }
+
+    static let modelTypes: [UTType] = ["stl", "obj", "3mf"].compactMap { UTType(filenameExtension: $0) } + [.data]
+
+    /// A picked file is copied into the app (the picker's access ends); nil when it cannot be read or is no model.
+    static func copyIn(_ url: URL) -> URL? {
+        guard ["stl", "obj", "3mf"].contains(url.pathExtension.lowercased()) else { return nil }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("models", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appendingPathComponent(url.lastPathComponent)
+        try? FileManager.default.removeItem(at: dest)
+        return (try? FileManager.default.copyItem(at: url, to: dest)) != nil ? dest : nil
     }
 
     private func slice() {
         busy = true
-        let (p, n, f) = (printer, nozzle, filament.isEmpty ? nil : filament)
+        let (p, n, f, chosen) = (printer, nozzle, filament.isEmpty ? nil : filament, opened)
         Task.detached {
             let dir = FileManager.default.temporaryDirectory
-            let model = dir.appendingPathComponent("cube20.stl")
-            try? Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
+            let model = chosen ?? dir.appendingPathComponent("cube20.stl")
+            if chosen == nil { try? Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8) }
             let (config, why) = Engine.profile(printer: p, nozzle: n, filament: f)
             let text: String
             var made: URL?

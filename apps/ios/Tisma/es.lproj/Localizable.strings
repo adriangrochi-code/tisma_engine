@@ -38,3 +38,7 @@
 "The catalog is missing from this build." = "Esta versión no trae el catálogo.";
 "Preview" = "Vista previa";
 "The G-code does not read" = "El G-code no se puede leer";
+"Model" = "Modelo";
+"The 20 mm cube" = "El cubo de 20 mm";
+"Open a model…" = "Abrir un modelo…";
+"Slice" = "Laminar";

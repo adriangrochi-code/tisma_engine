@@ -85,4 +85,15 @@ final class BridgeTests: XCTestCase {
         let g = try XCTUnwrap(EngineBridge.shared.preview(path: model.deletingPathExtension().appendingPathExtension("gcode").path))
         XCTAssertGreaterThan(g.layers.count, 50)
     }
+
+    func testAPickedModelIsCopiedIntoTheAppAndOtherFilesAreRefused() throws {
+        let src = FileManager.default.temporaryDirectory.appendingPathComponent("picked-cube.stl")
+        try Engine.cubeStl().write(to: src, atomically: true, encoding: .utf8)
+        let copy = try XCTUnwrap(PlateView.copyIn(src))
+        XCTAssertNotEqual(copy, src)
+        XCTAssertEqual(try String(contentsOf: copy, encoding: .utf8), Engine.cubeStl())
+        let txt = FileManager.default.temporaryDirectory.appendingPathComponent("notes.txt")
+        try "hi".write(to: txt, atomically: true, encoding: .utf8)
+        XCTAssertNil(PlateView.copyIn(txt))
+    }
 }
