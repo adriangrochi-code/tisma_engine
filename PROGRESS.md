@@ -13785,6 +13785,20 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `design_sketch_edit` y `design_sketch_fillet` buscan ahora sus herramientas en los grupos de la barra;
   pasan las 22 de Diseño. Captura revisada a 1400 × 860.
 
+## 2026-11-12 — interfaz: barra de vista abajo al centro (interface.md, navegación, regla 3)
+
+- **Hecho:** la barra de la vista pasa de arriba a abajo al centro, encima de lo que haya abajo (la línea de comandos
+  y la línea de tiempo de Diseño, la barra de movimientos de la vista previa). Tiene:
+  - Girar, Desplazar y Acercar: con uno elegido, arrastrar con el izquierdo hace eso; Esc o tocarlo otra vez vuelve;
+  - Encuadrar todo;
+  - perspectiva u ortogonal, con el ícono de la que está;
+  - el modo de imagen de antes, como estilo.
+  En la vista previa queda arriba, porque abajo están la leyenda, los movimientos y Exportar. Las vistas fijas
+  quedan en el cubo de vistas. El aspecto (degradé en los dos temas, grilla cada 10 mm con una
+  marcada cada 50) ya estaba.
+- **Pruebas:** `view_bar.txt` (girar, desplazar y acercar con el izquierdo, Esc, perspectiva y encuadrar). Capturas
+  revisadas en Preparar y Diseño a 1400 × 860. Falta el estilo con aristas y en alambre (necesita la vista Vulkan).
+
 ## 2026-11-12 — API en C: trabajos para el iPhone
 
 - **Pedido:** la sesión del iPhone necesita la API de trabajos de `tisma_engine.h` para el avance, cancelar y la

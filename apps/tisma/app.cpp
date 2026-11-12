@@ -648,6 +648,15 @@ private:
     std::string last_design_tool_;
     char tool_search_[64] = "";
     float view_top_inset_ = 0.0f;  // what the toolbar takes from the view's top, this frame
+    // What the windows at the view's bottom take (the view bar goes above
+    // them), gathered as they are drawn and read once a frame.
+    float view_bottom_used_ = 0.0f;
+    void note_view_bottom() {
+        view_bottom_used_ = std::max(view_bottom_used_, view_pos_.y + view_size_.y - ImGui::GetWindowPos().y);
+    }
+    // What a left drag in the view does when picked in the view bar: 0 the
+    // usual, 1 turn, 2 move, 3 zoom (interface.md, navigation, rule 3).
+    int view_drag_ = 0;
     void design_command_line();
     void run_command(std::string text);
     void add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxSizes>& sizes);
@@ -11168,7 +11177,18 @@ void App::viewport() {
         }
     }
     if (ImGui::IsItemActive()) {
-        if (pressed_object_ >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
+        if (view_drag_ != 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) && !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            // The view bar's mode: the left button turns, moves or zooms.
+            if (view_drag_ == 1)
+                camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
+            else if (view_drag_ == 2)
+                camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
+            else
+                camera_.zoom(-io.MouseDelta.y / 40.0f);
+            view_turn_.reset();
+            moved_frame_ = ImGui::GetFrameCount();
+            camera_framed_ = false;
+        } else if (pressed_object_ >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
             if (const auto p = bed_point(drag_anchor_.z)) {
                 // The view shifts the model; its mesh is made again once, when
                 // the drag ends (a million triangles took 200 ms a frame).
@@ -11338,24 +11358,26 @@ void App::viewport() {
 }
 
 // The camera's buttons, a row at the top of the view.
+namespace {
+void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c); // drawn below, with the Design tools
+}
+
 void App::view_tools() {
-    struct Tool {
-        const char* icon;
-        T tip;
-        int action; // a StandardView, or -1/-2/-3 for zoom in, out and frame
-    };
-    const Tool tools[] = {{"tisma_view", T::ViewIso, int(StandardView::Iso)},
-                          {"tisma_view_top", T::ViewTop, int(StandardView::Top)},
-                          {"tisma_view_front", T::ViewFront, int(StandardView::Front)},
-                          {"tisma_view_back", T::ViewBack, int(StandardView::Back)},
-                          {"tisma_view_left", T::ViewLeft, int(StandardView::Left)},
-                          {"tisma_view_right", T::ViewRight, int(StandardView::Right)},
-                          {"tisma_zoom_in", T::ZoomIn, -1},
-                          {"tisma_zoom_out", T::ZoomOut, -2},
-                          {"tisma_zoom_fit", T::ZoomFit, -3}};
+    // The view bar, at the bottom in the middle (interface.md, «Navegación de
+    // la vista 3D», rule 3): turn, move and zoom with the left button, frame
+    // all, perspective or orthographic, and how the view is drawn. The fixed
+    // views are in the view cube.
     const float size = 32.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + view_top_inset_ + 10.0f * scale_),
-                            ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    const float above = std::max(view_bottom_used_, 0.0f);
+    view_bottom_used_ = 0.0f;
+    // In the preview the legend, the moves and the export fill the bottom:
+    // there it stays at the top, as before.
+    if (tab_ == Tab::Preview)
+        ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + view_top_inset_ + 10.0f * scale_),
+                                ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    else
+        ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + view_size_.y - above - 10.0f * scale_),
+                                ImGuiCond_Always, ImVec2(0.5f, 1.0f));
     ImGui::SetNextWindowBgAlpha(0.85f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale_, 4.0f * scale_));
@@ -11364,26 +11386,36 @@ void App::view_tools() {
     ImGui::Begin("##view_tools", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    for (const Tool& t : tools) {
-        if (t.action == -1)
-            ImGui::SameLine(0, 10.0f * scale_);
-        if (icon_button(t.icon, t.icon, tr(t.tip), size)) {
-            if (t.action >= 0) {
-                camera_.set_view(static_cast<StandardView>(t.action));
-                frame_all();
-            } else if (t.action == -1) {
-                camera_.zoom(1.0f);
-                camera_framed_ = false;
-            } else if (t.action == -2) {
-                camera_.zoom(-1.0f);
-                camera_framed_ = false;
-            } else {
-                frame_all();
-            }
-        }
+    const ImU32 ink = ImGui::GetColorU32(rgb(theme_.text));
+    const auto tool = [&](const char* id, const char* icon, T tip, bool on) {
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const bool hit = ImGui::InvisibleButton(id, ImVec2(size, size));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (on || ImGui::IsItemHovered())
+            dl->AddRectFilled(at, ImVec2(at.x + size, at.y + size), ImGui::GetColorU32(rgb(theme_.accent, on ? 0.6f : 0.3f)), 6.0f * scale_);
+        cad_icon(dl, icon, ImVec2(at.x + size * 0.18f, at.y + size * 0.18f), size * 0.64f, ink);
+        note_rect(id);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+            loc::SetTooltip("%s", tr(tip));
         ImGui::SameLine();
-    }
-
+        return hit;
+    };
+    const int drags[] = {1, 2, 3};
+    const char* drag_ids[] = {"view_orbit", "view_pan", "view_zoom"};
+    const char* drag_icons[] = {"rotate", "pan", "zoom"};
+    const T drag_tips[] = {T::ViewOrbitTip, T::ViewPanTip, T::ViewZoomTip};
+    for (int k = 0; k < 3; ++k)
+        if (tool(drag_ids[k], drag_icons[k], drag_tips[k], view_drag_ == drags[k]))
+            view_drag_ = view_drag_ == drags[k] ? 0 : drags[k];
+    // Esc leaves the mode, as any tool.
+    if (view_drag_ != 0 && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        view_drag_ = 0;
+    ImGui::SameLine(0, 8.0f * scale_);
+    if (tool("view_fit", "fit", T::ZoomFit, false))
+        frame_all();
+    if (tool("view_projection", camera_.orthographic ? "orthographic" : "perspective",
+             camera_.orthographic ? T::ViewOrthographicTip : T::ViewPerspectiveTip, false))
+        camera_.orthographic = !camera_.orthographic, camera_framed_ = false;
     // How the view is drawn.
     ImGui::SameLine(0, 10.0f * scale_);
     const T modes[] = {T::RenderFast, T::RenderAmbient, T::RenderRay};
@@ -11392,7 +11424,7 @@ void App::view_tools() {
     // view's edge, so the button keeps only its icon and names the mode in its
     // tooltip, as the top bar's tabs do.
     const float label_w = ImGui::CalcTextSize(tr(modes[int(render_mode_)])).x + 2.0f * ImGui::GetStyle().FramePadding.x;
-    const float bar_w = float(std::size(tools)) * (size + 4.0f * scale_) + 20.0f * scale_ + 12.0f * scale_;
+    const float bar_w = 5.0f * (size + 4.0f * scale_) + 20.0f * scale_ + 12.0f * scale_;
     const bool narrow = bar_w + label_w > view_size_.x - 24.0f * scale_;
     const std::string render_tip = narrow ? std::string(tr(modes[int(render_mode_)])) + ": " + tr(T::RenderTip)
                                           : std::string(tr(T::RenderTip));
@@ -14782,6 +14814,7 @@ void App::preview_panels() {
             ImGui::Begin("##moves", nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    note_view_bottom(); // the view bar goes above it
             move_slider(std::max(w, 120.0f * scale_));
             moves_top_ = ImGui::GetWindowPos().y; // the Slice panel goes above it (UI23)
             g_menu_rects["moves"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
@@ -15654,6 +15687,23 @@ void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c) {
         dl->PathStroke(c, t);
     } else if (id == "finish") {
         line(0.15f, 0.5f, 0.4f, 0.75f), line(0.4f, 0.75f, 0.85f, 0.25f);
+    } else if (id == "pan") { // four arrows out of the middle
+        line(0.5f, 0.12f, 0.5f, 0.88f), line(0.12f, 0.5f, 0.88f, 0.5f);
+        line(0.5f, 0.12f, 0.4f, 0.24f), line(0.5f, 0.12f, 0.6f, 0.24f), line(0.5f, 0.88f, 0.4f, 0.76f), line(0.5f, 0.88f, 0.6f, 0.76f);
+        line(0.12f, 0.5f, 0.24f, 0.4f), line(0.12f, 0.5f, 0.24f, 0.6f), line(0.88f, 0.5f, 0.76f, 0.4f), line(0.88f, 0.5f, 0.76f, 0.6f);
+    } else if (id == "zoom") { // a magnifier
+        dl->AddCircle(p(0.42f, 0.42f), 0.25f * w, c, 20, t);
+        line(0.6f, 0.6f, 0.86f, 0.86f);
+        line(0.32f, 0.42f, 0.52f, 0.42f), line(0.42f, 0.32f, 0.42f, 0.52f);
+    } else if (id == "fit") { // four corners round the whole
+        line(0.12f, 0.12f, 0.35f, 0.12f), line(0.12f, 0.12f, 0.12f, 0.35f), line(0.88f, 0.12f, 0.65f, 0.12f), line(0.88f, 0.12f, 0.88f, 0.35f);
+        line(0.12f, 0.88f, 0.35f, 0.88f), line(0.12f, 0.88f, 0.12f, 0.65f), line(0.88f, 0.88f, 0.65f, 0.88f), line(0.88f, 0.88f, 0.88f, 0.65f);
+        box(0.35f, 0.35f, 0.65f, 0.65f);
+    } else if (id == "perspective") { // a box drawn smaller far away
+        const ImVec2 q[4] = {p(0.12f, 0.85f), p(0.88f, 0.85f), p(0.7f, 0.2f), p(0.3f, 0.2f)};
+        dl->AddPolyline(q, 4, c, t, ImDrawFlags_Closed);
+    } else if (id == "orthographic") {
+        box(0.18f, 0.2f, 0.82f, 0.85f);
     } else if (id == "trim") { // a line cut where it crosses another
         line(0.15f, 0.5f, 0.42f, 0.5f), line(0.58f, 0.5f, 0.85f, 0.5f), line(0.5f, 0.15f, 0.5f, 0.85f);
     } else if (id == "extend") {
@@ -16154,6 +16204,7 @@ void App::design_timeline() {
     ImGui::Begin("##design_timeline", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_HorizontalScrollbar);
+    note_view_bottom(); // the view bar goes above it
     g_menu_rects["design_timeline"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
                                              ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
                                              ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
@@ -22216,6 +22267,7 @@ void App::design_command_line() {
     ImGui::Begin("##design_command", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+    note_view_bottom(); // the view bar goes above it
     std::string prompt;
     if (operation_prompt_ && operation_prompt_->feature < design_.features.size()) {
         const cad::SketchOperation& op = design_.features[operation_prompt_->feature].operation;

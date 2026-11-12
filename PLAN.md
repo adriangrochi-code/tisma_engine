@@ -778,8 +778,10 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
   la pieza de muestras `palette_piece` (CM8) cargada en la placa con sus mezclas y la lista de nombres
 - [x] Selección de varios modelos (Ctrl/Mayús suman; el rectángulo elige todos) y el contorno de lo elegido, también a
   través de otras piezas (2026-11-11; mover varios juntos falta)
-- [ ] Barra de vista abajo al centro (girar, desplazar, acercar, encuadrar, perspectiva/ortogonal, estilo)
-- [ ] Aspecto: degradé gris claro en el tema claro, grilla con líneas cada 10 mm marcadas
+- [x] Barra de vista abajo al centro (girar, desplazar, acercar, encuadrar, perspectiva/ortogonal, estilo) (2026-11-12;
+  el estilo es el modo de imagen de antes: sombreado con aristas y alambre todavía no)
+- [x] Aspecto: degradé gris claro en el tema claro, grilla con líneas cada 10 mm marcadas (ya estaba: degradé en los dos
+  temas, grilla cada 10 mm con una marcada cada 50; revisado 2026-11-12)
 - [x] Diseño: barra de herramientas con pestañas y grupos (11 bis, CD26) (2026-11-11; Extruir con su panel a la
   derecha llega con los cuadros flotantes, 11 quinquies)
 - [x] Diseño: línea de tiempo abajo con la marca para volver atrás (11 quater, CD27) (2026-11-11)
