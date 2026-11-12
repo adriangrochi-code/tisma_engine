@@ -243,4 +243,14 @@ final class BridgeTests: XCTestCase {
         XCTAssertThrowsError(try PrinterBridge.shared.cameraShot(kind: "moonraker", address: "http://127.0.0.1:9", user: "", secret: ""))
         PrinterBridge.shared.stopCamera()
     }
+
+    /// The network search's list (parity P17): an announced OctoPrint shows with its path, and leaves when lost.
+    func testAFoundOctoPrintIsListedUntilLost() {
+        PrinterBridge.shared.seen(type: "_octoprint._tcp.", name: "Ender", host: "192.168.1.30", port: 80, path: "/octo/", model: "Creality Ender 3")
+        let f = PrinterBridge.shared.found(savedAddress: "")
+        XCTAssertTrue(f.contains { $0.url == "http://192.168.1.30:80/octo" && $0.kind == "octoprint" })
+        XCTAssertTrue(PrinterBridge.shared.found(savedAddress: "http://192.168.1.30:80/octo").allSatisfy { $0.name != "Ender" })
+        PrinterBridge.shared.lost(host: "192.168.1.30", port: 80)
+        XCTAssertFalse(PrinterBridge.shared.found(savedAddress: "").contains { $0.name == "Ender" })
+    }
 }

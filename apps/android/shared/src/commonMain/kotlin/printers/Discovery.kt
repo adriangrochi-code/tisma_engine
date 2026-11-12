@@ -31,26 +31,26 @@ data class FoundPrinter(
 /** The list the menu shows: each printer once, gone after 3 minutes without news (rules 2 and 3). */
 class FoundPrinters(private val forgetAfterMs: Long = 3 * 60_000L) {
     private val seen = linkedMapOf<String, Pair<FoundPrinter, Long>>()
+    private val lock = net.tisma.io.Lock()
 
     /** Adds or refreshes a printer. OctoPrint's own service wins over a plain web one at the same address. */
-    @Synchronized
-    fun seen(p: FoundPrinter, now: Long) {
+    fun seen(p: FoundPrinter, now: Long) = lock.locked {
         val old = seen[p.key]?.first
         val keep = if (old != null && old.kind == PrinterKind.OCTOPRINT && p.kind != PrinterKind.OCTOPRINT) old else p
         seen[p.key] = keep to now
     }
 
-    @Synchronized
-    fun lost(host: String, port: Int) {
+    fun lost(host: String, port: Int) = lock.locked {
         seen.remove("${host.lowercase()}:$port")
+        Unit
     }
 
     /** The printers heard from in the last 3 minutes, without the ones already saved (by address). */
-    @Synchronized
-    fun current(now: Long, saved: Collection<String> = emptyList()): List<FoundPrinter> {
-        seen.entries.removeAll { now - it.value.second > forgetAfterMs }
+    fun current(now: Long, saved: Collection<String> = emptyList()): List<FoundPrinter> = lock.locked {
+        val old = seen.entries.filter { now - it.value.second > forgetAfterMs }.map { it.key }
+        old.forEach { seen.remove(it) }
         val savedUrls = saved.map { it.trimEnd('/').lowercase() }.toSet()
-        return seen.values.map { it.first }.filter { it.url.lowercase() !in savedUrls }
+        seen.values.map { it.first }.filter { it.url.lowercase() !in savedUrls }
     }
 }
 

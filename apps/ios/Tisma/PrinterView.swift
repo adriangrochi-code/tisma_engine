@@ -13,6 +13,7 @@ struct PrinterView: View {
     @State private var problem: String?
     private var line: PrinterLine? { watcher.line }
     @State private var tested: String?
+    @StateObject private var discovery = PrinterDiscovery()
     @State private var showCamera = false
     @State private var shot: UIImage?
     @State private var cameraProblem: String?
@@ -20,6 +21,21 @@ struct PrinterView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // printer_connections.md, «Búsqueda en la red» (parity P17): a tap fills in the address.
+                if !discovery.found.isEmpty {
+                    Section("On the network") {
+                        ForEach(discovery.found, id: \.url) { f in
+                            Button {
+                                kind = f.kind; address = f.url
+                            } label: {
+                                VStack(alignment: .leading) {
+                                    Text(f.name).foregroundStyle(.primary)
+                                    Text("\(Self.title(f.kind)) · \(f.url)\(f.model.isEmpty ? "" : " · " + f.model)").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
                 Section("Connection") {
                     Picker("Kind", selection: $kind) {
                         ForEach(PrinterBridge.shared.kinds, id: \.self) { Text(Self.title($0)).tag($0) }
@@ -62,6 +78,8 @@ struct PrinterView: View {
                 if let problem = problem ?? watcher.problem { Section { Text(problem).foregroundStyle(.red) } }
             }
             .navigationTitle("Printer")
+            .onAppear { discovery.start(saved: address) }
+            .onDisappear { discovery.stop() }
             // A changed printer is read at once; the watcher keeps reading it while the app is open.
             .task(id: address + kind) { await watcher.readOnce() }
         }

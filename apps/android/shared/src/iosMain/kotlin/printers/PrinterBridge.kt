@@ -36,6 +36,9 @@ data class PrinterLine(
     }
 }
 
+/** A printer found on the network as the list shows it: its kind's saved name, the announced name, the address. */
+data class FoundLine(val kind: String, val name: String, val url: String, val model: String)
+
 /** One image of the printer's camera (a JPEG) and how the printer's settings turn it. */
 data class CameraShot(val jpeg: platform.Foundation.NSData, val flipHorizontal: Boolean, val flipVertical: Boolean, val rotation: Int)
 
@@ -156,4 +159,33 @@ object PrinterBridge {
     @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
     private fun ByteArray.toNSData(): platform.Foundation.NSData = if (isEmpty()) platform.Foundation.NSData() else
         usePinned { p -> platform.Foundation.NSData.create(bytes = p.addressOf(0), length = size.toULong()) }
+
+    // ---- Searching the network (printer_connections.md, «Búsqueda en la red»; parity P17) ----
+
+    private val found = FoundPrinters()
+
+    /** The DNS-SD types the iPhone browses (the same table as Android). */
+    val discoveryTypes: List<String> get() = listOf(DiscoveryTypes.OCTOPRINT, DiscoveryTypes.MOONRAKER, DiscoveryTypes.HTTP)
+
+    /**
+     * A service the system resolved: [type] one of [discoveryTypes], OctoPrint's TXT `path` and `model`. A plain web
+     * service counts as Klipper only when Moonraker answers there (asked here, so call it off the main thread).
+     */
+    fun seen(type: String, name: String, host: String, port: Int, path: String, model: String) {
+        val now = net.tisma.io.nowMs()
+        when (type.trimEnd('.')) {
+            DiscoveryTypes.OCTOPRINT -> found.seen(FoundPrinter(PrinterKind.OCTOPRINT, name, host, port, path.ifBlank { "/" }, model), now)
+            DiscoveryTypes.MOONRAKER -> found.seen(FoundPrinter(PrinterKind.MOONRAKER, name, host, port), now)
+            else -> {
+                val p = FoundPrinter(PrinterKind.MOONRAKER, name, host, port)
+                if (runCatching { MoonrakerConnection(p.url, null, PlatformHttp).test() }.isSuccess) found.seen(p, now)
+            }
+        }
+    }
+
+    fun lost(host: String, port: Int) = found.lost(host, port)
+
+    /** The printers heard from lately, without the one saved at [savedAddress]. */
+    fun found(savedAddress: String): List<FoundLine> =
+        found.current(net.tisma.io.nowMs(), listOf(savedAddress)).map { FoundLine(it.kind.wire, it.name, it.url, it.model) }
 }

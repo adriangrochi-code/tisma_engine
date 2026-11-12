@@ -98,7 +98,7 @@ se marca con la fecha.
 | 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente | P10: el paquete de perfiles |
 | 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa; la app ya usa la API de trabajos del motor si la biblioteca la tiene (12-11) | P11–P13: la biblioteca de iOS del motor todavía no exporta la API de trabajos (pedido al motor el 12-11); hasta entonces, la línea de comandos sin avance ni cancelar |
 | 13 Ingeniería | caras tocadas, punto, dirección, temperatura, mapa, relleno mínimo | caras tocadas, mapa | P14: carga en un punto y dirección elegida; P15: temperatura; P16: relleno mínimo |
-| 14 Impresoras | búsqueda en la red, cámara | las cinco clases, mandar, pausar, seguir, parar, avisos | P17: búsqueda en la red (Bonjour); cámara (P18, 12-11) |
+| 14 Impresoras | búsqueda en la red, cámara | las cinco clases, mandar, pausar, seguir, parar, avisos | — (búsqueda en la red con Bonjour, P17, y cámara, P18, 12-11) |
 | 15 Nube | Google, analizar en la nube, impresoras remotas, pagos | cuenta, laminar en la nube | P19: analizar en la nube; P20: impresoras remotas de los puentes; Google y pagos esperan al dueño (cuenta de Apple) |
 | 16 Ayuda sin conexión | sí | no | P21: ayuda (`assistant.md`) |
 | 17 Teclado numérico | sí | teclado decimal (P22, 12-11; con signo en los desplazamientos) | — |
