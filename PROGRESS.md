@@ -12354,5 +12354,13 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   modo rápido: aguanta, seguridad mínima 67,4, desplazamiento 0,0024 mm. El test de interfaz pasa por el asistente.
   Sin probar en un iPhone real ni con impresoras. Falta en Ingeniería: marcar caras tocando la pieza y el mapa de
   seguridad.
+- iPhone, paridad con Android (12-11, tabla en `apps/ios/PLAN.md`, CI de iOS verde hasta ab793b9, run 43308158952):
+  caras tocando la pieza y mapa de seguridad en Ingeniería (FacePicking y StressMap compartidos); la cama y el modelo
+  en 3D en Placa y compartir el G-code (P1, P2); vista Personalizada (P4); Calibración (P5, `Calibrations`
+  compartido); informar un problema con `app` `ios` (P6; el servidor lo acepta desde cc28f98 de tisma-cloud);
+  preferencias y créditos (P7, `Credits` compartido; `stb_image_write` agregada en las dos apps); búsqueda en la red
+  con Bonjour (P17, `Discovery` compartido) y cámara (P18); teclado decimal (P22). Avance, cancelar y memoria al
+  laminar (P11–P13) esperan la API de trabajos en la biblioteca de iOS del motor (4986dc4, camino a dev); la app la
+  busca al arrancar y, sin ella, lamina por la línea de comandos. Sin probar en un iPhone real ni con impresoras.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
