@@ -49,6 +49,10 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    pieza en 3D todavía), fuerza, material, calidad, seguridad pedida y modo rápido; `analyze` dentro de la app y el
    veredicto, la seguridad mínima, desplazamiento, tensión y avisos, como Android (EngineeringCase en el módulo
    compartido). Falta: el mapa de seguridad sobre la pieza y marcar caras tocando el modelo.
+   Caras tocando la pieza y mapa de seguridad (12-11, QA): la pieza en 3D (SceneKit; STL y OBJ leídos con ModelIO,
+   un 3MF sigue con las caras por nombre); un toque marca la cara sujeta o la cargada (la cara plana alrededor, su
+   caja o la cara propia del motor, con FacePicking del módulo compartido, igual que Android); tras analizar, la
+   superficie de vóxeles coloreada por seguridad (`analyze --mesh`, StressMap compartido).
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común

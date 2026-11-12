@@ -25,6 +25,14 @@ final class ScreensTests: XCTestCase {
             if tab == "Plate" {
                 // The printer card: no printer saved yet, so its connection icon says none (rule 42).
                 XCTAssertTrue(app.buttons["connection_none"].waitForExistence(timeout: 10), "the printer card is on the plate")
+                // Engineering, with the part to touch (the cube).
+                let engineering = app.buttons["plate_engineering"]
+                if !engineering.isHittable { app.swipeUp() }
+                engineering.tap()
+                XCTAssertTrue(app.navigationBars["Engineering"].waitForExistence(timeout: 10))
+                XCTAssertTrue(app.otherElements["engineering_part"].waitForExistence(timeout: 10), "the part in 3D")
+                keep("engineering")
+                app.navigationBars["Engineering"].buttons.firstMatch.tap()
             }
             keep(name)
         }

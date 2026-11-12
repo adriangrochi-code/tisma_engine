@@ -1,5 +1,9 @@
 package net.tisma.app.engine
 
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+import platform.Foundation.NSData
+import platform.Foundation.create
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -29,8 +33,27 @@ class EngineeringBridgeTest {
     fun theCaseAndArgumentsAreAndroids() {
         val case = EngineeringBridge.caseJson("bottom", "top", 80.0, "bambu-petg-basic", "normal", false)
         assertTrue("\"face\":\"bottom\"" in case && "-80.0" in case && "bambu-petg-basic" in case)
-        assertEquals(listOf("analyze", "m.stl", "--config", "c.json", "--case", "k.json", "-o", "r.json"),
-            EngineeringBridge.analyzeArgs("m.stl", "c.json", "k.json", "r.json"))
+        assertEquals(listOf("analyze", "m.stl", "--config", "c.json", "--case", "k.json", "-o", "r.json", "--mesh", "v.ply"),
+            EngineeringBridge.analyzeArgs("m.stl", "c.json", "k.json", "r.json", "v.ply"))
         assertEquals(ReportLine("verdict", "holds"), EngineeringBridge.report("""{"valid":true,"result":{"min_safety":4}}""", 2.0).first())
+    }
+}
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+class EngineeringPickTest {
+    @Test
+    fun aTouchedTopIsTheEnginesTopAndPushesDown() {
+        val s = 20f
+        val v = listOf(floatArrayOf(0f, 0f, 0f), floatArrayOf(s, 0f, 0f), floatArrayOf(s, s, 0f), floatArrayOf(0f, s, 0f),
+            floatArrayOf(0f, 0f, s), floatArrayOf(s, 0f, s), floatArrayOf(s, s, s), floatArrayOf(0f, s, s))
+        val idx = intArrayOf(0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7)
+        val soup = idx.flatMap { v[it].toList() }.toFloatArray()
+        val data = soup.usePinned { p -> NSData.create(bytes = p.addressOf(0), length = (soup.size * 4).toULong()) }
+        assertEquals(12, EngineeringBridge.setMesh(data))
+        val top = EngineeringBridge.pick(2, "normal")!!
+        assertEquals("top", top.face)
+        assertEquals(setOf(2, 3), top.triangles.toSet())
+        val case = EngineeringBridge.caseFor(EngineeringBridge.named("bottom"), top, 100.0, "bambu-pla-basic", "normal", true)
+        assertTrue("\"face\":\"top\"" in case && "-100.0" in case, case)
     }
 }

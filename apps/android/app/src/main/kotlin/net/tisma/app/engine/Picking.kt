@@ -1,7 +1,6 @@
 package net.tisma.app.engine
 
 import kotlin.math.abs
-import kotlin.math.sqrt
 
 /**
  * Touching the model in the 3D view (mobile_app.md, rule 13): the ray under
@@ -51,68 +50,13 @@ object Picking {
         return found
     }
 
-    /**
-     * The flat face of [seed]: the triangles reached through shared corners
-     * whose normal is within [maxAngleDeg] of the seed's and whose corners lie
-     * within [tolerance] mm of its plane.
-     */
-    fun flatFace(mesh: MeshFile, seed: Int, maxAngleDeg: Double = 5.0, tolerance: Float = 0.05f): IntArray {
-        val p = mesh.positions; val n = mesh.normals
-        val byCorner = HashMap<Long, MutableList<Int>>()
-        fun key(i: Int): Long {
-            val q = 1000f
-            val x = Math.round(p[i] * q).toLong(); val y = Math.round(p[i + 1] * q).toLong(); val z = Math.round(p[i + 2] * q).toLong()
-            return (x * 73856093L) xor (y * 19349663L) xor (z * 83492791L)
-        }
-        for (t in 0 until mesh.triangles) for (k in 0..2) byCorner.getOrPut(key(9 * t + 3 * k)) { ArrayList(6) }.add(t)
-        val sx = n[3 * seed]; val sy = n[3 * seed + 1]; val sz = n[3 * seed + 2]
-        val planeD = sx * p[9 * seed] + sy * p[9 * seed + 1] + sz * p[9 * seed + 2]
-        val cosMax = kotlin.math.cos(Math.toRadians(maxAngleDeg)).toFloat()
-        fun fits(t: Int): Boolean {
-            if (n[3 * t] * sx + n[3 * t + 1] * sy + n[3 * t + 2] * sz < cosMax) return false
-            for (k in 0..2) {
-                val i = 9 * t + 3 * k
-                if (abs(sx * p[i] + sy * p[i + 1] + sz * p[i + 2] - planeD) > tolerance) return false
-            }
-            return true
-        }
-        val seen = BooleanArray(mesh.triangles)
-        val out = ArrayList<Int>()
-        val queue = ArrayDeque<Int>()
-        queue += seed; seen[seed] = true
-        while (queue.isNotEmpty()) {
-            val t = queue.removeFirst()
-            out += t
-            for (k in 0..2) for (o in byCorner[key(9 * t + 3 * k)].orEmpty()) {
-                if (!seen[o] && fits(o)) { seen[o] = true; queue += o }
-            }
-        }
-        return out.toIntArray()
-    }
+    /** The flat face of [seed] (the shared [FacePicking], also the iPhone's). */
+    fun flatFace(mesh: MeshFile, seed: Int, maxAngleDeg: Double = 5.0, tolerance: Float = 0.05f): IntArray =
+        FacePicking.flatFace(mesh.positions, mesh.normals, seed, maxAngleDeg, tolerance)
 
     /** The box around [triangles] (min x y z, max x y z), [pad] mm larger on every side. */
-    fun box(mesh: MeshFile, triangles: IntArray, pad: Float): FloatArray {
-        val b = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
-        for (t in triangles) for (k in 0..2) for (a in 0..2) {
-            val v = mesh.positions[9 * t + 3 * k + a]
-            if (v < b[a]) b[a] = v
-            if (v > b[a + 3]) b[a + 3] = v
-        }
-        for (a in 0..2) { b[a] -= pad; b[a + 3] += pad }
-        return b
-    }
+    fun box(mesh: MeshFile, triangles: IntArray, pad: Float): FloatArray = FacePicking.box(mesh.positions, triangles, pad)
 
     /** The area-weighted normal of [triangles], unit length. */
-    fun normal(mesh: MeshFile, triangles: IntArray): FloatArray {
-        var x = 0f; var y = 0f; var z = 0f
-        val p = mesh.positions
-        for (t in triangles) {
-            val i = 9 * t
-            val ux = p[i + 3] - p[i]; val uy = p[i + 4] - p[i + 1]; val uz = p[i + 5] - p[i + 2]
-            val vx = p[i + 6] - p[i]; val vy = p[i + 7] - p[i + 1]; val vz = p[i + 8] - p[i + 2]
-            x += uy * vz - uz * vy; y += uz * vx - ux * vz; z += ux * vy - uy * vx
-        }
-        val l = sqrt(x * x + y * y + z * z).takeIf { it > 0 } ?: 1f
-        return floatArrayOf(x / l, y / l, z / l)
-    }
+    fun normal(mesh: MeshFile, triangles: IntArray): FloatArray = FacePicking.normal(mesh.positions, triangles)
 }

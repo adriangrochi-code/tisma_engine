@@ -144,16 +144,29 @@ final class BridgeTests: XCTestCase {
         XCTAssertEqual(body, "cube.gcode")
     }
 
-    /// Engineering on the 20 mm cube, held below and pushed from above, quick (solid) mode: the engine answers.
+    /// Engineering on the 20 mm cube, held below by name and pushed on its top as touched (ModelIO reads the cube),
+    /// quick (solid) mode: the engine answers and colors the part.
     func testEngineeringOnTheCube() {
         guard let printer = Engine.catalog?.printers.first else { return XCTFail("no catalog") }
         let f = Engine.catalog?.filamentsFor(p: printer).first?.fullName
-        let caseJson = EngineeringBridge.shared.caseJson(fixedFace: "bottom", loadFace: "top", newtons: 100, material: "bambu-pla-basic",
-                                                         quality: "normal", solid: true)
-        let (lines, problem) = EngineeringView.run(model: nil, printer: printer.name, nozzle: printer.nozzles.first?.doubleValue ?? 0.4,
-                                                   filament: f, caseJson: caseJson, requiredSafety: 2)
-        print("ENGINE-ANALYZE lines=\(lines.map { "\($0.key)=\($0.value)" }) problem=\(problem ?? "")")
+        guard let mesh = PartMesh.load(EngineeringView.cube()) else { return XCTFail("ModelIO did not read the cube") }
+        XCTAssertEqual(mesh.triangles, 12)
+        XCTAssertEqual(EngineeringBridge.shared.setMesh(soup: mesh.soup), 12)
+        // The top: the triangle whose corners are all at z = 20.
+        let top = (0..<12).first { t in
+            mesh.soup.withUnsafeBytes { raw in (0..<3).allSatisfy { k in raw.load(fromByteOffset: (9 * t + 3 * k + 2) * 4, as: Float.self) == 20 } }
+        }
+        guard let top, let touched = EngineeringBridge.shared.pick(triangle: Int32(top), quality: "normal") else { return XCTFail("no top") }
+        XCTAssertEqual(touched.face, "top")
+        XCTAssertEqual(touched.triangles.count, 2)
+        let caseJson = EngineeringBridge.shared.caseFor(fixed: EngineeringBridge.shared.named(face: "bottom"), loaded: touched,
+                                                        newtons: 100, material: "bambu-pla-basic", quality: "normal", solid: true)
+        let (lines, problem, voxels) = EngineeringView.run(model: nil, printer: printer.name, nozzle: printer.nozzles.first?.doubleValue ?? 0.4,
+                                                           filament: f, caseJson: caseJson, requiredSafety: 2)
+        let map = voxels.flatMap { EngineeringBridge.shared.stressMap(path: $0.path, maxFaces: 400_000) }
+        print("ENGINE-ANALYZE lines=\(lines.map { "\($0.key)=\($0.value)" }) problem=\(problem ?? "") map=\(map?.triangles ?? -1)")
         XCTAssertNil(problem)
         XCTAssertEqual(lines.first?.key, "verdict")
+        XCTAssertGreaterThan(map?.triangles ?? 0, 0, "the safety map")
     }
 }

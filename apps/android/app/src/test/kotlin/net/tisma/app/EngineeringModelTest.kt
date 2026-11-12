@@ -11,6 +11,7 @@ import net.tisma.app.engine.EngineRunner
 import net.tisma.app.engine.EngineeringCase
 import net.tisma.app.engine.MeshFile
 import net.tisma.app.engine.endFace
+import net.tisma.app.engine.read
 import net.tisma.app.engine.Picking
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
