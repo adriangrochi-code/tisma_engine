@@ -41,13 +41,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The newest dev run that kept the artifact (its iOS job does not fail the run yet, so any finished run).
-          for run in $(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch dev --limit 15 --json databaseId,status \
-              --jq '.[] | select(.status=="completed") | .databaseId'); do
-            if gh run download "$run" -R "$GITHUB_REPOSITORY" -n tisma-engine-ios-xcframework -D Engine/TismaEngine.xcframework 2>/dev/null; then
-              echo "Engine from run $run"; break
-            fi
-          done
+          # The newest dev artifact that has not expired, even from a run still going (its iOS job ends early).
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=tisma-engine-ios-xcframework&per_page=30" \
+            --jq '[.artifacts[] | select(.expired == false and .workflow_run.head_branch == "dev")] | sort_by(.created_at) | last | .id // empty')
+          if [ -n "$id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$RUNNER_TEMP/engine.zip"
+            mkdir -p Engine/TismaEngine.xcframework && unzip -q "$RUNNER_TEMP/engine.zip" -d Engine/TismaEngine.xcframework
+            echo "Engine from artifact $id"
+          fi
           test -d Engine/TismaEngine.xcframework || { echo "::error::No TismaEngine.xcframework from dev"; exit 1; }
           find Engine/TismaEngine.xcframework -maxdepth 3 | head -20
       - name: Get XcodeGen (THIRD_PARTY.md, build tools)
