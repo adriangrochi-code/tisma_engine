@@ -5,8 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
-import java.io.InputStream
-import java.util.zip.ZipInputStream
+import net.tisma.io.ByteInput
 
 /** What a job asks for: its `kind` and its `params` (cloud.md, rule 6). */
 sealed class JobRequest {
@@ -82,7 +81,7 @@ enum class AeroQuality(val wire: String) { FRICTION("friction"), FAST("fast"), N
 enum class AeroDirection(val wire: String) { X("x"), MINUS_X("-x"), Y("y"), MINUS_Y("-y"), Z("z"), MINUS_Z("-z") }
 
 /** Sends a [JobRequest]. */
-fun CloudClient.submit(request: JobRequest, filename: String, length: Long, open: () -> InputStream): Job =
+fun CloudClient.submit(request: JobRequest, filename: String, length: Long, open: () -> ByteInput): Job =
     submit(request.kind, request.params(), filename, length, open)
 
 /** Whether a plan lets a calculation run (rule 10b). A slice counts if the plan has either slice class. */
@@ -103,7 +102,7 @@ fun List<Plan>.including(request: JobRequest): List<Plan> = filter { it.allows(r
  * its own text), so a valid package a ZIP reader dislikes (for example, one
  * with data descriptors on stored entries) is never refused on the phone.
  */
-fun looksLikeZip(input: InputStream): Boolean {
+fun looksLikeZip(input: ByteInput): Boolean {
     val head = ByteArray(4)
     var n = 0
     while (n < 4) {
@@ -113,17 +112,6 @@ fun looksLikeZip(input: InputStream): Boolean {
     }
     return n == 4 && head[0] == 0x50.toByte() && head[1] == 0x4B.toByte() && head[2] == 3.toByte() && head[3] == 4.toByte()
 }
-fun isThreeMfPackage(input: InputStream): Boolean = try {
-    ZipInputStream(input).use { zip ->
-        generateSequence { zip.nextEntry }.any { e ->
-            val name = e.name.replace('\\', '/').trimStart('/')
-            !e.isDirectory && name.startsWith("3D/", ignoreCase = true) && name.endsWith(".model", ignoreCase = true)
-        }
-    }
-} catch (e: Exception) {
-    false
-}
-
 /** Error codes of a failed job (rule 19a). */
 object JobErrorCodes {
     val KNOWN = listOf("bad_mode", "bad_quality", "not_in_cloud", "needs_conditions", "no_valid_result", "usage", "error")

@@ -105,4 +105,10 @@ final class BridgeTests: XCTestCase {
         XCTAssertThrowsError(try PrinterBridge.shared.upload(kind: "octoprint", address: "127.0.0.1:9", user: "", secret: "k",
                                                              path: f.path, name: "send.gcode", start: true))
     }
+
+    func testACloudSliceRefusesAFileThatIsNoProject() throws {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("not-a-project.3mf")
+        try "solid x".write(to: f, atomically: true, encoding: .utf8)
+        XCTAssertThrowsError(try CloudBridge.shared.submitSlice(server: "http://127.0.0.1:9", token: "t", path: f.path, name: "x.3mf"))
+    }
 }

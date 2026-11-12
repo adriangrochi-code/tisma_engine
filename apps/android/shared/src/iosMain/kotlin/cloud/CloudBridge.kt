@@ -38,9 +38,48 @@ object CloudBridge {
     /** The account model of the «Más» screen, on the default server, with Swift's Keychain [tokens]. */
     fun accountModel(tokens: TokenStore): AccountModel = AccountModel(CloudClient.DEFAULT_SERVER, tokens, "iPhone")
 
+    /**
+     * cloud.md, rules 6 to 9: sends the 3MF project at [path] to be sliced in the cloud; the job's id. Read from the
+     * file in order; a file that does not start like a ZIP is refused here (the server checks the rest).
+     */
+    @Throws(CloudException::class)
+    fun submitSlice(server: String, token: String, path: String, name: String): String {
+        val looks = net.tisma.io.FileInput(path).use { looksLikeZip(it) }
+        if (!looks) throw CloudException(422, "Not a 3MF project")
+        val size = net.tisma.io.FileInput(path).use { measure(it) }
+        return CloudClient(server, token).submit(JobRequest.Slice, name, size) { net.tisma.io.FileInput(path) }.id
+    }
+
+    /** A job's state for the screen: «queued», «running 40 %», «done», or «failed: …» in the phone's language. */
+    @Throws(CloudException::class)
+    fun jobLine(server: String, token: String, id: String, spanish: Boolean): JobLine {
+        val j = CloudClient(server, token).job(id)
+        val text = when (j.status) {
+            JobStatus.RUNNING -> "${j.status.wire} ${j.progress} %"
+            JobStatus.FAILED -> "failed: " + (j.failure()?.message(spanish) { null } ?: j.error)
+            else -> j.status.wire
+        }
+        return JobLine(text, j.status.finished, j.status == JobStatus.DONE)
+    }
+
+    /** Downloads a finished slice's G-code to [dest] (through a file on iOS: results go up to 1 GB). */
+    @Throws(CloudException::class)
+    fun downloadResult(server: String, token: String, id: String, dest: String) {
+        val out = net.tisma.io.FileOutput(dest)
+        try {
+            out.use { CloudClient(server, token).download(id, it) }
+        } catch (e: CloudException) {
+            platform.posix.remove(dest)
+            throw e
+        }
+    }
+
     /** The default server (cloud.md, rule 1). */
     val defaultServer: String get() = CloudClient.DEFAULT_SERVER
 
     /** Search folding, as Android's (accents off, lower case). */
     fun fold(text: String): String = foldText(text)
 }
+
+/** A cloud job as the iPhone's list shows it. */
+data class JobLine(val text: String, val finished: Boolean, val done: Boolean)

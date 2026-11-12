@@ -53,6 +53,7 @@ struct PlateView: View {
     private var opened: URL? { openedPath.isEmpty ? nil : URL(fileURLWithPath: openedPath) }
     @State private var picking = false
     @State private var sent: String?
+    @State private var cloudLine: String?
     // The printer saved on the Printer screen.
     @AppStorage("printer.kind") private var savedKind = "moonraker"
     @AppStorage("printer.address") private var savedAddress = ""
@@ -84,6 +85,13 @@ struct PlateView: View {
                 Section("Model") {
                     Text(opened?.lastPathComponent ?? String(localized: "The 20 mm cube"))
                     Button("Open a model…") { picking = true }
+                }
+                // cloud.md, rules 6 to 9 (MA10): a 3MF project sliced in the cloud, followed, and its G-code previewed.
+                if let o = opened, o.pathExtension.lowercased() == "3mf", Keychain.read("cloud.token") != nil {
+                    Section("Tisma Cloud") {
+                        Button("Slice in the cloud") { cloudSlice(o) }.disabled(busy)
+                        if let cloudLine { Text(cloudLine).font(.footnote) }
+                    }
                 }
                 Section("Engine") {
                     Text(Engine.run(["--version"]).out.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -117,6 +125,36 @@ struct PlateView: View {
         let dest = dir.appendingPathComponent(url.lastPathComponent)
         try? FileManager.default.removeItem(at: dest)
         return (try? FileManager.default.copyItem(at: url, to: dest)) != nil ? dest : nil
+    }
+
+    private func cloudSlice(_ project: URL) {
+        busy = true; cloudLine = nil
+        let server = CloudBridge.shared.defaultServer
+        let token = Keychain.read("cloud.token") ?? ""
+        let spanish = Locale.current.language.languageCode?.identifier == "es"
+        Task.detached {
+            do {
+                let id = try CloudBridge.shared.submitSlice(server: server, token: token, path: project.path, name: project.lastPathComponent)
+                // Followed every 2 s (rule 8) until it ends.
+                while true {
+                    let line = try CloudBridge.shared.jobLine(server: server, token: token, id: id, spanish: spanish)
+                    await MainActor.run { cloudLine = line.text }
+                    if line.finished {
+                        if line.done {
+                            let dest = FileManager.default.temporaryDirectory.appendingPathComponent("cloud-\(id).gcode")
+                            try CloudBridge.shared.downloadResult(server: server, token: token, id: id, dest: dest.path)
+                            await MainActor.run { gcode = dest }
+                        }
+                        break
+                    }
+                    try await Task.sleep(for: .seconds(2))
+                }
+            } catch {
+                let m = error.localizedDescription
+                await MainActor.run { cloudLine = m }
+            }
+            await MainActor.run { busy = false }
+        }
     }
 
     /// mobile_app.md, rule 14 (MA7): the G-code goes to the saved printer, which starts it.
