@@ -105,6 +105,13 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
       - `initial_no_support_nozzle_id`: el número de la boquilla física (empieza en 0) que imprime el primer
         filamento que no es de soporte; se fija una vez al empezar (0 con una sola boquilla). La Bambu Lab H3C lo usa
         como índice de `nozzle_diameter_at_nozzle_id` (paquete de perfiles, Bambu Studio 930fe93, 12-11-2026);
+      - `has_tpu_in_first_layer`: verdadero si algún filamento de la primera capa tiene `filament.type` `TPU`; se fija
+        al empezar;
+      - `long_retraction_when_ec`: del filamento actual, la opción de retracción larga al cambiar de extrusor (falso
+        si el paquete no la trae); se fija al empezar y en cada cambio de filamento;
+      - `curr_bed_type`: el nombre de la placa del proyecto («Cool Plate», «Engineering Plate», «High Temp Plate»,
+        «Textured PEI Plate», «Supertack Plate», los de `plate_temperature` en `profile_pack_format.md`); sin placa
+        elegida, «Cool Plate» (Bambu Studio 930fe93, paquete de perfiles 12-11-2026);
       - `fins_extrude_safe_temp[i]`: del filamento `i`, en °C (0 a 350; 0 = apagado, el valor si el paquete no lo
         trae): la temperatura segura de la boquilla para extruir las aletas;
       - `overall_chamber_temperature`: la mayor temperatura de cámara de los filamentos (0 sin cámara);
