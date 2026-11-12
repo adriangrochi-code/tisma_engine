@@ -15,6 +15,10 @@ struct TismaApp: App {
                 .isValidSignature(signature as Data, for: message as Data) ?? false
             return KotlinBoolean(bool: ok)
         }
+        // UI tests start as on a new phone (a launch argument would shadow the app's own write of wizard.done).
+        if ProcessInfo.processInfo.arguments.contains("--first-start") {
+            UserDefaults.standard.removeObject(forKey: "wizard.done")
+        }
         // The print notices (docs/MOBILE.md, «Avisos»): shown while the app is open too, and read in the background.
         UNUserNotificationCenter.current().delegate = NoticeDelegate.shared
         PrintWatcher.registerBackground()

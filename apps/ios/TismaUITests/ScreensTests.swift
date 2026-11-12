@@ -7,7 +7,7 @@ final class ScreensTests: XCTestCase {
 
     func testEachSectionOpens() {
         let app = XCUIApplication()
-        app.launchArguments += ["-wizard.done", "NO"]
+        app.launchArguments += ["--first-start"]
         app.launch()
         // MA1: the first start opens the assistant; a printer, then its filament, close it.
         XCTAssertTrue(app.navigationBars["Welcome to Tisma"].waitForExistence(timeout: 10))
