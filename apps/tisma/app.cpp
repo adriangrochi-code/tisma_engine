@@ -15142,6 +15142,15 @@ T op_label(cad::OperationKind kind) {
 }
 
 // The operations that take points in the view (edges, faces, hole places).
+T need_picks_text(cad::OperationKind kind) {
+    switch (kind) {
+    case cad::OperationKind::Shell: return T::OpNeedFaceShell;
+    case cad::OperationKind::Fillet:
+    case cad::OperationKind::Chamfer: return T::OpNeedEdge;
+    default: return T::OpNeedPoint;
+    }
+}
+
 bool takes_points(cad::OperationKind kind) {
     return kind == cad::OperationKind::Fillet || kind == cad::OperationKind::Chamfer || kind == cad::OperationKind::Shell ||
            kind == cad::OperationKind::Hole || kind == cad::OperationKind::Thread || kind == cad::OperationKind::Draft;
@@ -16738,6 +16747,18 @@ void App::design_panel() {
             std::string why = design_failure_;
             if (const std::size_t colon = why.find("refused the design: "); colon != std::string::npos)
                 why = why.substr(colon + std::strlen("refused the design: "));
+            // One line, not the tool's JSON: what is missing in the person's
+            // words, or the failed command's error.
+            if (f.type == cad::Feature::Type::Operation && takes_points(f.op.kind) && f.op.refs.empty()) {
+                why = tr(need_picks_text(f.op.kind));
+            } else if (const std::size_t brace = why.find('{'); brace != std::string::npos) {
+                try {
+                    const nlohmann::json j = nlohmann::json::parse(why.substr(brace));
+                    if (j.contains("failed") && j.at("failed").contains("error") && j.at("failed").at("error").is_string())
+                        why = j.at("failed").at("error").get<std::string>();
+                } catch (const std::exception&) {
+                }
+            }
             ImGui::PushTextWrapPos(0.0f);
             loc::TextColored(rgb(0xE5484D), tr(T::DesignFails), why.c_str());
             ImGui::PopTextWrapPos();
@@ -16776,8 +16797,19 @@ void App::design_panel() {
             }
             ImGui::Separator();
             const bool typing = ImGui::GetIO().WantTextInput;
-            const bool accept = ImGui::Button(tr(T::DesignAccept), ImVec2(130.0f * scale_, 0)) ||
-                                (!typing && ImGui::IsKeyPressed(ImGuiKey_Enter, false) && !command_focus_);
+            // An operation that needs faces or edges waits for them (the real
+            // tool refuses none): OK stays grey and says what to pick.
+            const bool needs_picks = f.type == cad::Feature::Type::Operation && takes_points(f.op.kind) && f.op.refs.empty();
+            if (needs_picks) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(need_picks_text(f.op.kind)));
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::BeginDisabled(needs_picks);
+            const bool accept = (ImGui::Button(tr(T::DesignAccept), ImVec2(130.0f * scale_, 0)) ||
+                                 (!typing && ImGui::IsKeyPressed(ImGuiKey_Enter, false) && !command_focus_)) &&
+                                !needs_picks;
+            ImGui::EndDisabled();
             rect_of("design_dialog_accept");
             ImGui::SameLine();
             const bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(130.0f * scale_, 0)) ||

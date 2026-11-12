@@ -13576,6 +13576,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Hecho:** Redondeo, Chaflán y Vaciado, con su cuadro abierto, tienen una flecha desde la arista de arriba que
   cambia su medida (radio, distancia o espesor) al arrastrarla, con el valor junto al puntero. Las demás operaciones
   (agujero, patrones, rosca…) todavía no tienen flecha.
-- **Pruebas:** `design_handles_op.txt` (el vaciado de la caja de 20 mm, 3904 mm³; arrastrado, pasa de 4200);
+- **Pruebas:** `design_handles_op.txt` (el vaciado de la caja de 20 mm, ahora abierta arriba, 3392 mm³; arrastrado, pasa de 4200);
   pasan las de Diseño.
 
+
+## 2026-11-12 — interfaz: Vaciado sin caras (regla 7)
+
+- **Hecho:** la herramienta real (0.30.0) exige de 1 a 1000 caras para vaciar. Mientras no hay caras elegidas, el
+  cuadro de Vaciado deja Aceptar en gris y dice «Elegí al menos una cara para vaciar» (Redondeo y Chaflán: «Elegí al
+  menos una arista»). Si el paso termina igual sin caras, el historial dice esa línea en vez del JSON crudo de la
+  herramienta (para otros fallos muestra solo el error del comando que falló) y el paso queda rojo en la línea de
+  tiempo. El simulador de pruebas ahora rechaza el vaciado sin caras, como la real.
+- **Pruebas:** `design_shell_no_face.txt` (nueva); `design_operations`, `design_timeline_marker` y
+  `design_handles_op` vacían ahora la caja abierta arriba (3392 mm³). Pasan las 6 de Diseño que lo tocan.

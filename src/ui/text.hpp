@@ -1522,6 +1522,9 @@
     X(DesignRepeatNone, "Repetir (todavía nada)", "Repeat (nothing yet)") \
     X(DesignTipRepeat, "Vuelve a empezar la última herramienta usada.", "Starts the last tool used again.") \
     X(DesignTipDeleteLast, "Borra el último paso del diseño.", "Deletes the design's last step.") \
+    X(OpNeedFaceShell, "Elegí al menos una cara para vaciar", "Pick at least one face to open") \
+    X(OpNeedEdge, "Elegí al menos una arista", "Pick at least one edge") \
+    X(OpNeedPoint, "Elegí al menos un punto en la pieza", "Pick at least one point on the part") \
     X(DesignAccept, "Aceptar", "OK") \
     X(DesignInPanel, "Se edita en el cuadro de la derecha", "Being edited in the panel on the right") \
     X(ImportTitle, "Proyecto de %s", "%s project") \
