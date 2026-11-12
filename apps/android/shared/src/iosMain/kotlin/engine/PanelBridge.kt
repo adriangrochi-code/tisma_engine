@@ -32,15 +32,37 @@ class PanelBridge(layoutJson: String, changesJson: String) {
         runCatching { Json.parseToJsonElement(r.value.ifBlank { r.default }) }.getOrNull()
     }
 
-    /** The sections of [tab] with their rows at [level] (0 Basic, 1 Normal, 2 Advanced); empty sections left out. */
+    /** The keys the person chose for the Custom view (settings_panel.md, rule 7), kept by the app as one line. */
+    private val custom = LinkedHashSet<String>()
+
+    /** The chosen keys as one line (comma separated), to keep between runs; [setCustomLine] reads it back. */
+    val customLine: String get() = custom.joinToString(",")
+
+    fun setCustomLine(line: String) { custom.clear(); line.split(',').map { it.trim() }.filter { it in layout.rows }.forEach { custom += it } }
+
+    fun isCustom(key: String): Boolean = key in custom
+
+    fun toggleCustom(key: String) { if (!custom.remove(key) && key in layout.rows) custom += key }
+
+    /**
+     * The sections of [tab] with their rows at [level] (0 Basic, 1 Normal, 2 Advanced, 3 Custom: the chosen rows);
+     * empty sections left out.
+     */
     fun sections(tab: String, level: Int): List<PanelSection> {
-        val view = PanelVisibility.View.entries[level.coerceIn(0, 2)]
+        val view = PanelVisibility.View.entries[level.coerceIn(0, 3)]
         val t = layout.tab(tab) ?: return emptyList()
         return t.sections.map { s ->
             PanelSection(s.id, s.title, s.subsections.flatMap { it.rows }.filter { r ->
-                PanelVisibility.visible(r, s.id, view, emptySet(), r.key in changes) { value(it) }
+                PanelVisibility.visible(r, s.id, view, custom, r.key in changes) { value(it) }
             }.map { r -> row(r) })
         }.filter { it.rows.isNotEmpty() }
+    }
+
+    /** Every row of [tab] by section, for choosing the Custom view's rows. */
+    fun allSections(tab: String): List<PanelSection> {
+        val t = layout.tab(tab) ?: return emptyList()
+        return t.sections.map { s -> PanelSection(s.id, s.title, s.subsections.flatMap { it.rows }.map { row(it) }) }
+            .filter { it.rows.isNotEmpty() }
     }
 
     private fun row(r: SettingsLayout.Row): PanelRow {

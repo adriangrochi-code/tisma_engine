@@ -208,4 +208,18 @@ final class BridgeTests: XCTestCase {
         print("ENGINE-SLICE cancel outcome=\(String(describing: outcome)) in \(Date().timeIntervalSince(started)) s")
         if case .failed(let why) = outcome { XCTFail(why) }
     }
+
+    /// The Custom view (settings_panel.md, rule 7; parity P4): only the chosen rows, kept as one line.
+    func testTheCustomViewShowsTheChosenRows() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "layout_en", withExtension: "json"))
+        let panel = PanelBridge(layoutJson: try String(contentsOf: url, encoding: .utf8), changesJson: "{}")
+        XCTAssertTrue(panel.sections(tab: "print", level: 3).isEmpty)
+        panel.toggleCustom(key: "layers.height")
+        XCTAssertEqual(panel.sections(tab: "print", level: 3).flatMap { $0.rows }.map { $0.key }, ["layers.height"])
+        XCTAssertEqual(panel.customLine, "layers.height")
+        let again = PanelBridge(layoutJson: try String(contentsOf: url, encoding: .utf8), changesJson: "{}")
+        again.setCustomLine(line: panel.customLine + ",not.a.key")
+        XCTAssertEqual(again.customLine, "layers.height")
+        XCTAssertGreaterThan(again.allSections(tab: "print").flatMap { $0.rows }.count, 10)
+    }
 }

@@ -13,10 +13,14 @@ final class PanelModel: ObservableObject {
         let lang = Locale.current.language.languageCode?.identifier == "es" ? "es" : "en"
         let text = Bundle.main.url(forResource: "layout_\(lang)", withExtension: "json").flatMap { try? String(contentsOf: $0, encoding: .utf8) }
         bridge = text.map { PanelBridge(layoutJson: $0, changesJson: UserDefaults.standard.string(forKey: "panel.changes") ?? "{}") }
+        bridge?.setCustomLine(line: UserDefaults.standard.string(forKey: "panel.custom") ?? "")
     }
 
     func changed() {
-        if let b = bridge { UserDefaults.standard.set(b.changesJson(), forKey: "panel.changes") }
+        if let b = bridge {
+            UserDefaults.standard.set(b.changesJson(), forKey: "panel.changes")
+            UserDefaults.standard.set(b.customLine, forKey: "panel.custom")
+        }
         version += 1
     }
 }
@@ -32,12 +36,20 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Picker("Level", selection: $level) {
-                    Text("Basic").tag(0); Text("Normal").tag(1); Text("Advanced").tag(2)
+                    Text("Basic").tag(0); Text("Normal").tag(1); Text("Advanced").tag(2); Text("Custom").tag(3)
                 }
                 .pickerStyle(.segmented)
                 if let b = panel.bridge {
                     let _ = panel.version
-                    ForEach(b.sections(tab: tab, level: Int32(level)), id: \.id) { s in
+                    // settings_panel.md, rule 7: the Custom view shows the rows the person chose.
+                    if level == 3 {
+                        NavigationLink("Choose settings…") { CustomPicker(tab: tab) }.accessibilityIdentifier("panel_choose")
+                    }
+                    let sections = b.sections(tab: tab, level: Int32(level))
+                    if sections.isEmpty && level == 3 {
+                        Text("Choose the settings to show with «Choose settings…».").foregroundStyle(.secondary)
+                    }
+                    ForEach(sections, id: \.id) { s in
                         Section(s.title) { ForEach(s.rows, id: \.key) { RowView(row: $0) } }
                     }
                 } else {
@@ -101,5 +113,34 @@ private struct RowView: View {
     private func commit() {
         bad = !(panel.bridge?.set(key: row.key, text: text) ?? false)
         if !bad { panel.changed() }
+    }
+}
+
+/// Choosing the Custom view's rows: every row of the tab, by section, with a check.
+private struct CustomPicker: View {
+    let tab: String
+    @ObservedObject private var panel = PanelModel.shared
+
+    var body: some View {
+        List {
+            if let b = panel.bridge {
+                let _ = panel.version
+                ForEach(b.allSections(tab: tab), id: \.id) { s in
+                    Section(s.title) {
+                        ForEach(s.rows, id: \.key) { r in
+                            Button { b.toggleCustom(key: r.key); panel.changed() } label: {
+                                HStack {
+                                    Text(r.label).foregroundStyle(.primary)
+                                    Spacer()
+                                    if b.isCustom(key: r.key) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                                }
+                            }
+                            .accessibilityIdentifier("pick_" + r.key)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Choose settings…")
     }
 }
