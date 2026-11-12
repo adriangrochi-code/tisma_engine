@@ -1,4 +1,5 @@
 import net.tisma.io.Md5
+import net.tisma.io.Sha256
 import net.tisma.io.hex
 import net.tisma.printers.Digest
 import net.tisma.printers.num
@@ -42,5 +43,15 @@ class PrinterCommonTest {
         assertEquals("12000000", num(1.2e7))
         assertEquals("0", num(-0.0))
         assertEquals("210", num(210.0))
+    }
+
+    @Test
+    fun sha256MatchesFips180Examples() {
+        // FIPS 180-4 examples (NIST «SHA256.pdf»): "abc", the empty message and the two-block message.
+        assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", hex(Sha256.digest("abc".encodeToByteArray())))
+        assertEquals("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hex(Sha256.digest(ByteArray(0))))
+        assertEquals("248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+            hex(Sha256.digest("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".encodeToByteArray())))
+        assertEquals(95, Sha256.fingerprint("abc".encodeToByteArray()).length)
     }
 }

@@ -2,7 +2,6 @@ package net.tisma.printers
 
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
@@ -18,11 +17,13 @@ import javax.net.ssl.X509TrustManager
  * not the IP. One context serves the MQTT and FTPS sockets, so the FTPS data
  * connection can resume the control connection's session.
  */
-class PinnedTls(private val expectedSha256: String?) {
-    @Volatile var seenSha256: String? = null
+actual class PinnedTls actual constructor(private val expectedSha256: String?) {
+    @Volatile actual var seenSha256: String? = null
         private set
-    @Volatile var seenName: String? = null
+    @Volatile actual var seenName: String? = null
         private set
+
+    actual fun open(host: String, port: Int, timeoutMs: Int): net.tisma.io.Link = net.tisma.io.SocketLink(socket(host, port, timeoutMs))
 
     private val trust = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =
@@ -67,7 +68,6 @@ class PinnedTls(private val expectedSha256: String?) {
     }
 
     companion object {
-        fun fingerprint(der: ByteArray): String =
-            MessageDigest.getInstance("SHA-256").digest(der).joinToString(":") { "%02X".format(it) }
+        fun fingerprint(der: ByteArray): String = net.tisma.io.Sha256.fingerprint(der)
     }
 }
