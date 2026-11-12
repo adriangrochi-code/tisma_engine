@@ -26,8 +26,10 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    motor. Hasta que llegue, la app de iPhone funciona sin laminar: biblioteca, impresoras, cámara, nube y Compartida.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
+   Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común
+   (`CloudBridge`, con `@Throws` para que un error llegue a Swift como error), textos en inglés y español.
 6. **CI**: `.github/workflows/ios.yml` en macOS: las pruebas de `shared` en el simulador de iPhone (hecho, 11-11);
-   después `xcodebuild test` con la app de SwiftUI y capturas como artefacto. Las pruebas de `shared` también corren
+   después `xcodebuild test` con la app de SwiftUI (12-11; las capturas como artefacto, después). Las pruebas de `shared` también corren
    aquí en la JVM.
 7. **Planes** (dueño, 10-11; `cloud.md` 5b, spec/next cada191): se compran dentro de la app con la tienda. En iOS,
    StoreKit 2 con suscripciones que se renuevan solas, con los mismos ids de producto que Google Play donde se pueda;

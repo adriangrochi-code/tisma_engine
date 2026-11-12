@@ -1,0 +1,13 @@
+"Plate" = "Placa";
+"Library" = "Biblioteca";
+"Printer" = "Impresora";
+"More" = "Más";
+"Slicing on the iPhone is coming" = "El laminado en el iPhone está por llegar";
+"The engine is not in this build yet. Library, printers and the cloud work." = "El motor todavía no está en esta versión. La biblioteca, las impresoras y la nube funcionan.";
+"No models yet" = "Todavía no hay modelos";
+"No printers" = "No hay impresoras";
+"Klipper, OctoPrint, PrusaLink and Duet come first." = "Primero llegan Klipper, OctoPrint, PrusaLink y Duet.";
+"Server" = "Servidor";
+"Email" = "Correo";
+"Password" = "Contraseña";
+"Sign in" = "Entrar";
