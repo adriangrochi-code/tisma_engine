@@ -13593,3 +13593,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** en Linux compila sin cambios; el archivo `.mm` solo lo compila la CI de macOS. No probado a mano en una
   Mac.
 - **Sigue (macOS):** la vista (MoltenVK o OpenGL), la cámara USB con AVFoundation, la biblioteca para iOS.
+
+## 2026-11-12 — nube: el estado del servicio (cloud.md regla 4a, spec/next dd61f25)
+
+- **Hecho:** `cloud::Client::status` lee `GET /v1/status` sin sesión: `status` (`ok`, `slow`, `down`), las etiquetas
+  y el motivo en los dos idiomas, los tipos de cálculo que nadie hace, la espera más larga, los nodos y la hora.
+  `ServiceStatus::warn()` dice si hay que avisar; `label(es)` y `message(es)` dan el texto en el idioma de la
+  interfaz. El servidor simulado de las pruebas lo contesta.
+- **Pruebas:** un caso nuevo en `[cloud]` (CC21 del lado del motor); pasan las 32.
+- **Sigue:** la interfaz lo pide al abrir el panel de la nube y antes de mandar, y muestra el aviso sin bloquear
+  (sesión de la interfaz).

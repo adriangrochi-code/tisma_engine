@@ -21,6 +21,22 @@ using nlohmann::json;
 class MockCloud {
 public:
     MockCloud() {
+        // cloud.md, rule 4a: no session; with no node, "down".
+        server_.Get("/v1/status", [this](const httplib::Request&, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            const bool down = service_ == "down";
+            res.set_content(json{{"status", service_},
+                                 {"label_es", down ? "Caído" : "Funcionando"},
+                                 {"label_en", down ? "Down" : "Working"},
+                                 {"message_es", down ? "No hay nodos conectados." : ""},
+                                 {"message_en", down ? "No nodes are connected." : ""},
+                                 {"unavailable", down ? json::array({"slice", "fea"}) : json::array()},
+                                 {"longest_wait_s", down ? 742 : 0},
+                                 {"nodes_online", down ? 0 : 3},
+                                 {"checked_at", "2026-11-12T05:00:00Z"}}
+                                .dump(),
+                            "application/json");
+        });
         server_.Get("/v1/health", [](const httplib::Request&, httplib::Response& res) {
             res.set_content(R"({"ok": true, "billing_url": "https://cloud.example/account"})", "application/json");
         });
@@ -195,6 +211,7 @@ public:
     json last_report_;
     std::string report_token_, kind_, params_, filename_, project_, state_;
     int polls_ = 0, cancels_ = 0;
+    std::string service_ = "ok"; // what GET /v1/status says
 
 private:
     // T1 is a good session; "disabled" an account the administrator turned
