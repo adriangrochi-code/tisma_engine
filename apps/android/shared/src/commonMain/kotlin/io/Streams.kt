@@ -78,3 +78,15 @@ class BytesOutput : ByteOutput() {
 expect class Lock() {
     fun <T> locked(block: () -> T): T
 }
+
+/** A two-way byte link (a TCP or TLS socket): what the MQTT and FTP clients talk over. */
+interface Link : AutoCloseable {
+    val input: ByteInput
+    val output: ByteOutput
+}
+
+/** Runs [block] on a background thread of its own that does not keep the app alive. */
+expect fun startDaemon(name: String, block: () -> Unit)
+
+/** The wall clock in milliseconds. */
+fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()

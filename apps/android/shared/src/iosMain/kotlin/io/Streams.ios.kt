@@ -39,3 +39,7 @@ actual class Lock actual constructor() {
         try { return block() } finally { lock.unlock() }
     }
 }
+
+actual fun startDaemon(name: String, block: () -> Unit) {
+    platform.Foundation.NSThread.detachNewThreadWithBlock { block() }
+}

@@ -1,34 +1,38 @@
 package net.tisma.printers
 
-import java.io.DataInputStream
-import java.io.EOFException
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
-import java.net.Socket
-import java.util.concurrent.atomic.AtomicInteger
+import net.tisma.io.ByteInput
+import net.tisma.io.ByteOutput
+import net.tisma.io.BytesOutput
+import net.tisma.io.IOException
+import net.tisma.io.Link
+import net.tisma.io.Lock
+import net.tisma.io.nowMs
+import net.tisma.io.readInto
+import net.tisma.io.startDaemon
+import kotlin.concurrent.Volatile
 
 /**
  * A small MQTT 3.1.1 client (OASIS Standard, 29 October 2014), written from the
  * specification for what Bambu Lab's local mode needs (printer_connections.md,
  * «Bambu Lab en red local»): CONNECT with user and password, SUBSCRIBE, PUBLISH
  * at QoS 0 and 1, PINGREQ and DISCONNECT. The socket (TLS for the printer) is
- * opened by the caller. Incoming messages go to [onMessage] from a reader thread.
+ * opened by the caller (a [Link]: TLS for the printer). Incoming messages go to [onMessage] from a reader thread.
+ * Common code, for Android and iOS.
  */
 class MqttClient(
-    private val socket: Socket,
+    private val socket: Link,
     private val clientId: String,
     private val onMessage: (topic: String, payload: ByteArray) -> Unit,
     private val onClosed: (Throwable?) -> Unit = {},
 ) {
-    private val input = DataInputStream(socket.getInputStream().buffered())
-    private val output: OutputStream = socket.getOutputStream()
-    private val ids = AtomicInteger(0)
+    private val input: ByteInput = socket.input
+    private val output: ByteOutput = socket.output
+    private val lock = Lock()
+    private var ids = 0
     @Volatile var connected = false
         private set
-    private var reader: Thread? = null
     /** When the last packet came in (ms). A link lost without a close (Wi-Fi gone) shows here as silence. */
-    @Volatile var lastReceived: Long = System.currentTimeMillis()
+    @Volatile var lastReceived: Long = nowMs()
         private set
 
     /** Section 3.1: CONNECT; waits for CONNACK. Throws [PrinterException] AUTH on a refused login. */
@@ -53,7 +57,7 @@ class MqttClient(
             else -> throw IOException("CONNACK refused: ${payload[1]}")
         }
         connected = true
-        reader = Thread({ readLoop() }, "mqtt-reader").apply { isDaemon = true; start() }
+        startDaemon("mqtt-reader") { readLoop() }
     }
 
     /** Section 3.8: SUBSCRIBE at QoS 0 (the SUBACK is read by the reader thread). */
@@ -82,7 +86,11 @@ class MqttClient(
         runCatching { socket.close() }
     }
 
-    private fun nextId(): Int = (ids.incrementAndGet() and 0xFFFF).let { if (it == 0) ids.incrementAndGet() and 0xFFFF else it }
+    private fun nextId(): Int = lock.locked {
+        ids = (ids + 1) and 0xFFFF
+        if (ids == 0) ids = 1
+        ids
+    }
 
     private fun readLoop() {
         var error: Throwable? = null
@@ -93,7 +101,7 @@ class MqttClient(
                     3 -> { // PUBLISH
                         val qos = (type shr 1) and 3
                         val tlen = ((body[0].toInt() and 0xFF) shl 8) or (body[1].toInt() and 0xFF)
-                        val topic = String(body, 2, tlen, Charsets.UTF_8)
+                        val topic = body.decodeToString(2, 2 + tlen)
                         var pos = 2 + tlen
                         if (qos > 0) {
                             val id = ((body[pos].toInt() and 0xFF) shl 8) or (body[pos + 1].toInt() and 0xFF)
@@ -114,25 +122,25 @@ class MqttClient(
         }
     }
 
-    @Synchronized
-    private fun send(header: Int, body: ByteArray) {
+    private fun send(header: Int, body: ByteArray) = lock.locked {
         val out = Bytes()
         out.byte(header)
         out.varint(body.size)
         out.raw(body)
-        output.write(out.toByteArray())
+        val b = out.toByteArray()
+        output.write(b, 0, b.size)
         output.flush()
     }
 
     /** One packet: its first byte and its body (section 2.2: the remaining length as a varint). */
     private fun readPacket(): Pair<Int, ByteArray> {
         val first = input.read()
-        if (first < 0) throw EOFException()
+        if (first < 0) throw IOException("The printer closed the link")
         var mult = 1
         var len = 0
         while (true) {
             val b = input.read()
-            if (b < 0) throw EOFException()
+            if (b < 0) throw IOException("The printer closed the link")
             len += (b and 0x7F) * mult
             if (b and 0x80 == 0) break
             mult *= 128
@@ -142,18 +150,18 @@ class MqttClient(
         // hundreds of MB of the phone's memory.
         if (len > MAX_PACKET) throw IOException("MQTT packet too big: $len bytes")
         val body = ByteArray(len)
-        input.readFully(body)
-        lastReceived = System.currentTimeMillis()
+        if (input.readInto(body) < len) throw IOException("The printer closed the link")
+        lastReceived = nowMs()
         return first to body
     }
 
     /** A byte buffer with MQTT's encodings. */
     private class Bytes {
-        private val out = java.io.ByteArrayOutputStream()
+        private val out = BytesOutput()
         fun byte(b: Int) = out.write(b and 0xFF)
         fun short(v: Int) { out.write((v shr 8) and 0xFF); out.write(v and 0xFF) }
-        fun raw(b: ByteArray) = out.write(b)
-        fun string(s: String) { val b = s.toByteArray(Charsets.UTF_8); short(b.size); raw(b) }
+        fun raw(b: ByteArray) = out.write(b, 0, b.size)
+        fun string(s: String) { val b = s.encodeToByteArray(); short(b.size); raw(b) }
         fun varint(v: Int) {
             var x = v
             do {
@@ -170,7 +178,7 @@ class MqttClient(
         const val MAX_PACKET = 16 * 1024 * 1024
 
         /** Reads one MQTT packet from a stream (for the simulator's broker). */
-        fun readFrom(input: InputStream): Pair<Int, ByteArray>? {
+        fun readFrom(input: ByteInput): Pair<Int, ByteArray>? {
             val first = input.read()
             if (first < 0) return null
             var mult = 1
@@ -183,15 +191,18 @@ class MqttClient(
                 mult *= 128
             }
             val body = ByteArray(len)
-            DataInputStream(input).readFully(body)
+            if (input.readInto(body) < len) return null
             return first to body
         }
 
         /** Writes one MQTT packet (for the simulator's broker). */
-        fun writeTo(out: OutputStream, header: Int, body: ByteArray) {
+        fun writeTo(out: ByteOutput, header: Int, body: ByteArray) {
             val b = Bytes()
             b.byte(header); b.varint(body.size); b.raw(body)
-            synchronized(out) { out.write(b.toByteArray()); out.flush() }
+            val bytes = b.toByteArray()
+            writeLock.locked { out.write(bytes, 0, bytes.size); out.flush() }
         }
+
+        private val writeLock = Lock()
     }
 }

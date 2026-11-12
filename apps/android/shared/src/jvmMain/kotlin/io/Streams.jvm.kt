@@ -11,3 +11,14 @@ actual fun secureRandomBytes(n: Int): ByteArray = ByteArray(n).also { secureRand
 actual class Lock actual constructor() {
     actual fun <T> locked(block: () -> T): T = synchronized(this) { block() }
 }
+
+actual fun startDaemon(name: String, block: () -> Unit) {
+    Thread(block, name).apply { isDaemon = true; start() }
+}
+
+/** A socket as a [Link], buffered for reading. */
+class SocketLink(val socket: java.net.Socket) : Link {
+    override val input: ByteInput = socket.getInputStream().buffered()
+    override val output: ByteOutput = socket.getOutputStream()
+    override fun close() = socket.close()
+}

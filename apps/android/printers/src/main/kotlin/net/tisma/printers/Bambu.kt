@@ -50,7 +50,7 @@ class BambuConnection(
             val socket = tls.socket(host, mqttPort)
             val sn = tls.seenName ?: throw PrinterException(PrinterException.Kind.UNEXPECTED, "The printer's certificate has no name")
             serial = sn
-            val c = MqttClient(socket, "tisma-" + System.nanoTime().toString(36), onMessage = { _, payload -> merge(payload) })
+            val c = MqttClient(net.tisma.io.SocketLink(socket), "tisma-" + System.nanoTime().toString(36), onMessage = { _, payload -> merge(payload) })
             try {
                 c.connect("bblp", accessCode)
             } catch (e: java.io.IOException) {

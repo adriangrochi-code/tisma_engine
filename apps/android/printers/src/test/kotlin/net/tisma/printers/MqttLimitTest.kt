@@ -21,7 +21,7 @@ class MqttLimitTest {
                     Thread.sleep(5_000)
                 }
             }
-            val client = MqttClient(Socket("127.0.0.1", server.localPort), "t", { _, _ -> })
+            val client = MqttClient(net.tisma.io.SocketLink(Socket("127.0.0.1", server.localPort)), "t", { _, _ -> })
             val e = assertFailsWith<IOException> { client.connect("bblp", "code") }
             assertTrue("too big" in e.message.orEmpty())
         }
