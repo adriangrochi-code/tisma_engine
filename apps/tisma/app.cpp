@@ -16190,7 +16190,11 @@ void App::design_handles() {
     const bool one_value = f.type == cad::Feature::Type::Operation &&
                            (f.op.kind == cad::OperationKind::Fillet || f.op.kind == cad::OperationKind::Chamfer ||
                             f.op.kind == cad::OperationKind::Shell);
-    if ((f.type != cad::Feature::Type::Primitive && !one_value) || f.suppressed)
+    // An extruded sketch (its distance, along the plane's normal) and a move
+    // (its offset, one arrow per axis) too.
+    const bool extrude = f.type == cad::Feature::Type::Sketch && f.operation.kind == cad::SketchOperation::Kind::Extrude;
+    const bool move = f.type == cad::Feature::Type::Operation && f.op.kind == cad::OperationKind::Move;
+    if ((f.type != cad::Feature::Type::Primitive && !one_value && !extrude && !move) || f.suppressed)
         return;
     const std::size_t bodies = std::count_if(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
         return g.type != cad::Feature::Type::Operation && !g.suppressed;
@@ -16206,6 +16210,11 @@ void App::design_handles() {
     std::vector<Handle> handles;
     if (one_value) {
         handles = {{0, 0, 1.0}}; // along X from the top edge, a millimetre for a millimetre
+    } else if (extrude) {
+        const int normal = f.sketch.plane == cad::SketchPlane::XZ ? 1 : f.sketch.plane == cad::SketchPlane::YZ ? 0 : 2;
+        handles = {{0, normal, 1.0}};
+    } else if (move) {
+        handles = {{0, 0, 1.0}, {1, 1, 1.0}, {2, 2, 1.0}};
     } else switch (f.kind) {
     case cad::Primitive::Box: handles = {{0, 0, 2.0}, {1, 1, 2.0}, {2, 2, 1.0}}; break;
     case cad::Primitive::Cylinder: handles = {{0, 0, 2.0}, {1, 2, 1.0}}; break;
@@ -16219,9 +16228,9 @@ void App::design_handles() {
     const ImU32 colours[3] = {IM_COL32(229, 72, 77, 255), IM_COL32(63, 191, 127, 255), IM_COL32(59, 130, 246, 255)};
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     for (const Handle& h : handles) {
-        if (!one_value && h.size >= cad::size_count(f.kind))
+        if (f.type == cad::Feature::Type::Primitive && h.size >= cad::size_count(f.kind))
             continue;
-        double& value = one_value ? f.op.value : f.sizes[h.size];
+        double& value = one_value ? f.op.value : extrude ? f.operation.distance : move ? f.op.offset[h.size] : f.sizes[h.size];
         Vec3 face = centre, dir{0, 0, 0};
         (h.axis == 0 ? face.x : h.axis == 1 ? face.y : face.z) = h.axis == 0 ? b.max.x : h.axis == 1 ? b.max.y : b.max.z;
         if (one_value)
@@ -16258,14 +16267,16 @@ void App::design_handles() {
             const ImVec2 d = ImGui::GetIO().MouseDelta;
             const double mm = double(d.x * s.x + d.y * s.y) / double(px_per_mm);
             if (mm != 0.0) {
-                value = std::max(0.1, value + mm * h.per_mm);
+                value = move ? value + mm * h.per_mm : std::max(0.1, value + mm * h.per_mm); // a move goes either way
                 design_edited_ = true;
             }
+            const char* axis_name[] = {"X", "Y", "Z"};
+            const std::string label = move ? std::string("Δ") + axis_name[h.axis] : extrude ? std::string(tr(T::SketchDistance)) : std::string();
             const T name = !one_value                                     ? size_label(f.kind, h.size)
                            : f.op.kind == cad::OperationKind::Fillet ? T::OpRadius
                            : f.op.kind == cad::OperationKind::Chamfer ? T::OpDistance
                                                                        : T::OpThickness;
-            const std::string shown = format("%s %.2f mm", tr(name), value);
+            const std::string shown = format("%s %.2f mm", label.empty() ? tr(name) : label.c_str(), value);
             const ImVec2 m = ImGui::GetIO().MousePos;
             dl->AddRectFilled(ImVec2(m.x + 14.0f * scale_, m.y + 8.0f * scale_),
                               ImVec2(m.x + 22.0f * scale_ + ImGui::CalcTextSize(shown.c_str()).x, m.y + 12.0f * scale_ + ImGui::GetFontSize() + 4.0f * scale_),
@@ -27581,6 +27592,24 @@ void App::script_input() {
             return fail_step("no operation is taking points, or the point is not X Y Z");
         design_pick_at({x, y, z});
         std::printf("ui-script: design-pick %g %g %g\n", x, y, z);
+        next();
+    } else if (step.verb == "expect-feature-above") { // N FIELD VALUE: feature N's (from 1) offset_x/y/z, distance or value over VALUE
+        std::istringstream in(step.value);
+        std::string field;
+        double want = 0.0;
+        in >> field >> want;
+        const std::size_t n = std::size_t(std::max(0, std::atoi(step.key.c_str()) - 1));
+        if (n >= design_.features.size())
+            return fail_step("no feature " + step.key);
+        const cad::Feature& g = design_.features[n];
+        const double got = field == "offset_x"   ? g.op.offset[0]
+                           : field == "offset_y" ? g.op.offset[1]
+                           : field == "offset_z" ? g.op.offset[2]
+                           : field == "distance" ? g.operation.distance
+                                                 : g.op.value;
+        std::printf("ui-script: expect-feature-above %s %s: %s%.3f\n", step.key.c_str(), step.value.c_str(), got > want ? "ok, " : "got ", got);
+        if (!(got > want))
+            return fail_step(field + " is " + std::to_string(got));
         next();
     } else if (step.verb == "expect-design-above") { // the design's volume more than VALUE mm3, once built
         if (design_job_.running() || !solidcraft_probed_ || design_dirty_ || design_edited_)

@@ -13726,3 +13726,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `usb_camera_choice.txt` (sin cámaras en esta máquina: la lista lo dice, en USB y en red). Pasan con
   `print_host_*`, `bambu_print` y `device_*`. **No probado con una cámara real:** en Windows y macOS la lista sale
   vacía hasta que el motor tenga su captura.
+
+## 2026-11-12 — interfaz: flechas en extruir y mover (regla 11 quinquies)
+
+- **Hecho:** con su cuadro abierto, un boceto extruido tiene una flecha a lo largo de la normal de su plano que cambia
+  la distancia, y Mover tiene una flecha por eje (X, Y, Z) que cambia el desplazamiento, en los dos sentidos. Se suma
+  `expect-feature-above` a los guiones de prueba. Faltan los anillos de ángulo (revolución, giro, patrón circular) y
+  las flechas de los patrones y el agujero.
+- **Pruebas:** `design_handles_move.txt` y `design_handles_extrude.txt`; pasan las 7 de flechas, operaciones,
+  cuadro y línea de tiempo.

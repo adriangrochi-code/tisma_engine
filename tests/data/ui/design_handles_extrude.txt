@@ -1,0 +1,36 @@
+# The extrusion's arrow (cad_design.md, rule 11 quinquies): a 40 x 30 sketch
+# extruded 20 mm (24 000 mm3); its arrow along the plane's normal, dragged
+# up, makes it taller.
+menu mode_engineering
+menu tab_design
+menu design_sketch
+menu design_plane_xy
+menu design_command
+type L
+key enter
+type 0,0
+key enter
+type @40,0
+key enter
+type @0,30
+key enter
+type @-40,0
+key enter
+type C
+key enter
+key escape
+key escape
+expect-no-control sketch_line
+menu design_edit_sketch_1
+menu design_command
+type E
+key enter
+type 20
+key enter
+expect-design 24000
+wait 5
+expect-control design_handle_1
+drag-control design_handle_1 0 -40
+wait 10
+expect-feature-above 1 distance 21
+expect-design-above 25000
