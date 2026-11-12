@@ -13696,3 +13696,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   completados con las típicas de T.81 (Anexo K.3), que muchas cámaras UVC no mandan. Prueba: un JPEG escrito con
   stb_image_write, sin sus tablas, sale mal; con las de K.3 sale idéntico. Sigue: la captura V4L2 (`VIDIOC_REQBUFS`,
   `mmap`, `VIDIOC_DQBUF`) y su uso en la interfaz (la decodifica `ui::decode_image`).
+- **Cámara USB en Linux, la captura:** `UsbCapture` abre la cámara en el formato elegido (`VIDIOC_S_FMT`, el ritmo con
+  `VIDIOC_S_PARM`), comparte 4 búferes (`VIDIOC_REQBUFS`, `mmap`), arranca (`VIDIOC_STREAMON`) y `read` espera hasta
+  el tiempo dado y devuelve la imagen más nueva, devolviendo las demás a la cámara (regla 3); si la cámara se va,
+  `disconnected()` lo dice. En Windows, macOS e iOS `open` dice que todavía no hay cámaras USB. Prueba: abrir una que
+  no existe falla con el motivo. **No probado con una cámara real.** Sigue: la elección por impresora en la
+  interfaz (regla 1, sesión de la interfaz) y openpnp-capture en Windows y macOS.

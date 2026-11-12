@@ -8,6 +8,7 @@
 // same on every system. Own design; see PROVENANCE.md.
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -69,5 +70,34 @@ struct UsbCamera {
 // VIDIOC_ENUM_FRAMESIZES, VIDIOC_ENUM_FRAMEINTERVALS), only MJPEG and YUYV,
 // the two the engine can show; elsewhere empty until its capture is built.
 std::vector<UsbCamera> list_usb_cameras();
+
+// One camera streaming in one format (rules 2 and 3). On Linux through V4L2
+// with memory-mapped buffers; elsewhere open() fails until its capture is
+// built. The frames are what the camera sends: MJPEG (complete it with
+// mjpeg_with_huffman_tables) or YUYV (yuyv_to_rgba). The images stay in
+// memory only (rule 4).
+class UsbCapture {
+public:
+    UsbCapture();
+    ~UsbCapture();
+    UsbCapture(const UsbCapture&) = delete;
+    UsbCapture& operator=(const UsbCapture&) = delete;
+
+    // Opens the camera `id` (from list_usb_cameras) in `format`; false with
+    // the reason in English when it cannot.
+    bool open(const std::string& id, const CameraFormat& format, std::string& error);
+    // The newest frame within `timeout_s`: older ones queued meanwhile are
+    // dropped (rule 3). False on a timeout or when the camera went away
+    // (disconnected() then says which).
+    bool read(std::string& frame, double timeout_s);
+    bool disconnected() const;
+    // The format the camera actually took (it may round the size or rate).
+    const CameraFormat& format() const;
+    void close();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 } // namespace tisma::device

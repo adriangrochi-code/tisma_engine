@@ -16,7 +16,10 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstring>
 #include <filesystem>
+#include <poll.h>
+#include <sys/mman.h>
 #endif
 
 namespace tisma::device {
@@ -151,8 +154,148 @@ std::vector<UsbCamera> list_usb_cameras() {
     }
     return out;
 }
+
+struct UsbCapture::Impl {
+    int fd = -1;
+    struct Buffer {
+        void* data = MAP_FAILED;
+        std::size_t length = 0;
+    };
+    std::vector<Buffer> buffers;
+    CameraFormat format;
+    bool gone = false;
+};
+
+bool UsbCapture::open(const std::string& id, const CameraFormat& format, std::string& error) {
+    close();
+    Impl& d = *impl_;
+    d.fd = ::open(id.c_str(), O_RDWR | O_NONBLOCK);
+    if (d.fd < 0) {
+        error = "cannot open the camera " + id + ": " + std::strerror(errno);
+        return false;
+    }
+    const auto fail = [&](const char* what) {
+        error = std::string("the camera ") + id + " " + what + ": " + std::strerror(errno);
+        close();
+        return false;
+    };
+    v4l2_format f{};
+    f.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    f.fmt.pix.width = std::uint32_t(format.width);
+    f.fmt.pix.height = std::uint32_t(format.height);
+    f.fmt.pix.pixelformat = format.mjpeg ? V4L2_PIX_FMT_MJPEG : V4L2_PIX_FMT_YUYV;
+    f.fmt.pix.field = V4L2_FIELD_NONE;
+    if (query(d.fd, VIDIOC_S_FMT, &f) != 0)
+        return fail("refused the format");
+    d.format = {int(f.fmt.pix.width), int(f.fmt.pix.height), format.fps,
+                f.fmt.pix.pixelformat == V4L2_PIX_FMT_MJPEG};
+    if (format.fps > 0.0) { // the rate is a request: the camera may keep its own
+        v4l2_streamparm parm{};
+        parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        parm.parm.capture.timeperframe.numerator = 1000;
+        parm.parm.capture.timeperframe.denominator = std::uint32_t(format.fps * 1000.0 + 0.5);
+        if (query(d.fd, VIDIOC_S_PARM, &parm) == 0 && parm.parm.capture.timeperframe.numerator > 0)
+            d.format.fps = double(parm.parm.capture.timeperframe.denominator) /
+                           double(parm.parm.capture.timeperframe.numerator);
+    }
+    v4l2_requestbuffers req{};
+    req.count = 4;
+    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    req.memory = V4L2_MEMORY_MMAP;
+    if (query(d.fd, VIDIOC_REQBUFS, &req) != 0 || req.count < 2)
+        return fail("gave no buffers");
+    for (std::uint32_t i = 0; i < req.count; ++i) {
+        v4l2_buffer b{};
+        b.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        b.memory = V4L2_MEMORY_MMAP;
+        b.index = i;
+        if (query(d.fd, VIDIOC_QUERYBUF, &b) != 0)
+            return fail("did not describe its buffers");
+        Impl::Buffer buf;
+        buf.length = b.length;
+        buf.data = mmap(nullptr, b.length, PROT_READ | PROT_WRITE, MAP_SHARED, d.fd, b.m.offset);
+        if (buf.data == MAP_FAILED)
+            return fail("could not share its buffers");
+        d.buffers.push_back(buf);
+        if (query(d.fd, VIDIOC_QBUF, &b) != 0)
+            return fail("did not take its buffers");
+    }
+    v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (query(d.fd, VIDIOC_STREAMON, &type) != 0)
+        return fail("did not start");
+    return true;
+}
+
+bool UsbCapture::read(std::string& frame, double timeout_s) {
+    Impl& d = *impl_;
+    if (d.fd < 0 || d.gone)
+        return false;
+    pollfd p{d.fd, POLLIN, 0};
+    const int waited = ::poll(&p, 1, int(timeout_s * 1000.0));
+    if (waited <= 0)
+        return false;
+    if (p.revents & (POLLERR | POLLHUP)) {
+        d.gone = true;
+        return false;
+    }
+    // Every frame ready now; keep the newest, give the others back.
+    bool got = false;
+    for (;;) {
+        v4l2_buffer b{};
+        b.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        b.memory = V4L2_MEMORY_MMAP;
+        if (query(d.fd, VIDIOC_DQBUF, &b) != 0) {
+            if (errno == ENODEV || errno == EIO)
+                d.gone = true;
+            break;
+        }
+        if (b.index < d.buffers.size() && !(b.flags & V4L2_BUF_FLAG_ERROR)) {
+            frame.assign(static_cast<const char*>(d.buffers[b.index].data),
+                         std::min<std::size_t>(b.bytesused, d.buffers[b.index].length));
+            got = true;
+        }
+        query(d.fd, VIDIOC_QBUF, &b);
+    }
+    return got;
+}
+
+void UsbCapture::close() {
+    Impl& d = *impl_;
+    if (d.fd >= 0) {
+        v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        query(d.fd, VIDIOC_STREAMOFF, &type);
+    }
+    for (const Impl::Buffer& b : d.buffers)
+        if (b.data != MAP_FAILED)
+            munmap(b.data, b.length);
+    d.buffers.clear();
+    if (d.fd >= 0)
+        ::close(d.fd);
+    d.fd = -1;
+    d.gone = false;
+}
 #else
 std::vector<UsbCamera> list_usb_cameras() { return {}; }
+
+struct UsbCapture::Impl {
+    CameraFormat format;
+};
+
+bool UsbCapture::open(const std::string&, const CameraFormat&, std::string& error) {
+    error = "USB cameras are not supported on this system yet";
+    return false;
+}
+bool UsbCapture::read(std::string&, double) { return false; }
+void UsbCapture::close() {}
+#endif
+
+UsbCapture::UsbCapture() : impl_(std::make_unique<Impl>()) {}
+UsbCapture::~UsbCapture() { close(); }
+const CameraFormat& UsbCapture::format() const { return impl_->format; }
+#if defined(__linux__)
+bool UsbCapture::disconnected() const { return impl_->gone; }
+#else
+bool UsbCapture::disconnected() const { return false; }
 #endif
 
 } // namespace tisma::device

@@ -147,3 +147,14 @@ TEST_CASE("USB camera: YUYV to RGBA by BT.601", "[device][camera]") {
     CHECK(red[2] <= 5);
     CHECK(yuyv_to_rgba(grey, 4, 1).empty()); // size mismatch
 }
+
+TEST_CASE("USB camera: opening one that is not there says why, and reading gives nothing", "[device][camera]") {
+    UsbCapture capture;
+    std::string error;
+    CHECK_FALSE(capture.open("/dev/video-not-there", {640, 480, 30, true}, error));
+    CHECK_FALSE(error.empty());
+    std::string frame;
+    CHECK_FALSE(capture.read(frame, 0.01));
+    CHECK(frame.empty());
+}
+
