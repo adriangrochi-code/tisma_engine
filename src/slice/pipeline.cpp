@@ -2,6 +2,8 @@
 
 #include "slice/pipeline.hpp"
 
+#include "slice/job.hpp"
+
 #include "adhesion/adhesion.hpp"
 #include "gcode/order.hpp"
 #include "geom/bead.hpp"
@@ -2184,6 +2186,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         first_settings.wall_width = first_beading.preferred_width = first_bead(settings);
         first_settings.outer_wall_width = first_beading.outer_width = first_settings.wall_width;
     }
+    job_step("walls", 15);
     // Each layer's beads overlap by its height's share (perimeters.md, rule 1).
     const auto beading_at = [&](std::size_t l) {
         BeadingParams b = l == 0 ? first_beading : beading;
@@ -2286,6 +2289,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         make_polyholes(out.regions, po);
         tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) { build_walls(l); });
     }
+    job_step("surfaces", 30);
     // What holds a layer up, and what its skins see: with several extruders,
     // every part's (the skins their own with surfaces.interface_shells).
     const std::vector<Polygons>& held = frame && frame->cover ? *frame->cover : out.regions;
@@ -2463,6 +2467,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         });
     }
     out.support_areas.resize(out.layers.size());
+    job_step("support", 40);
     // support.z_gap in layers, layer by layer: with variable heights a fixed
     // count of nominal layers is not the gap asked for.
     std::vector<double> layer_thickness;
@@ -2603,6 +2608,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         }
         out.on_support[l] = std::move(on);
     });
+    job_step("infill", 50);
     // Adaptive and support cubic infill (docs/INFILL.md): how deep each point
     // lies in the whole sparse infill, from all its surfaces or from the ones
     // it holds up, before stress bands and the rest take parts of it.

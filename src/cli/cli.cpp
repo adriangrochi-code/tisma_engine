@@ -36,6 +36,7 @@
 #include "gcode/preview.hpp"
 #include "perimeters/sites.hpp"
 #include "perimeters/transitions.hpp"
+#include "slice/job.hpp"
 #include "slice/layers.hpp"
 #include "slice/color_mix.hpp"
 #include "slice/pipeline.hpp"
@@ -781,6 +782,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+    job_step("slicing", 5);
     // A face on the bed (orca_2_5.md, rule 25), before the transforms and the placement.
     if (parsed->ground != SliceArgs::Ground::None) {
         if (!stl.negative.empty() || !stl.support_blockers.empty() || !stl.support_enforcers.empty()) {
@@ -920,6 +922,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, mixes.empty() ? nullptr : &mixes, cut,
                              nullptr, &support_volumes);
     }
+    job_step("gcode", 60);
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {
         err << "error: " << reason << "\n";
@@ -976,6 +979,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     const std::vector<GcodeThumbnail> thumbnails = gcode_thumbnails(stl.mesh, settings, &warnings);
     const GcodeExport exported = export_gcode(target, sliced, settings, &warnings, thumbnails);
+    job_step("finishing", 95);
     if (!exported.written) {
         err << "error: " << exported.error << "\n";
         for (const GcodeProblem& p : exported.check.problems)

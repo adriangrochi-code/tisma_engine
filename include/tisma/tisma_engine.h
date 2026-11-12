@@ -1,7 +1,10 @@
 /* Tisma engine C API (docs/C_API.md; mobile_app.md, rule 2): the engine for
  * apps that cannot link C++ directly (the Android app through the NDK).
- * Plain C, no platform dependency. Status: interface agreed on 2026-11-04,
- * not implemented yet; apps build against it with a fake.
+ * Plain C, no platform dependency. Status: interface agreed on 2026-11-04;
+ * since 2026-11-12 the context, opening, settings, the memory estimate, the
+ * slice with progress and cancel, the summary and the G-code are
+ * implemented. The preview by layers and the analysis answer TISMA_ERROR
+ * ("not implemented yet").
  *
  * Threads: a context is used from one thread at a time. Slicing and
  * analysing run on the engine's own worker; the caller polls. No callback

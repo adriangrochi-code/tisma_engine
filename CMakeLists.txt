@@ -204,6 +204,7 @@ add_library(tisma_core
   src/config/profiles.cpp
   src/slice/painted.cpp
   src/slice/pipeline.cpp
+  src/slice/job.cpp
   src/geom/medial_axis.cpp
   src/geom/voronoi.cpp
   src/perimeters/beading.cpp
@@ -324,6 +325,7 @@ add_library(tisma_core
   src/ui/project_slice.cpp
   src/cli/cli.cpp
   src/cli/c_cli.cpp
+  src/cli/c_api.cpp
   src/cli/node.cpp
   src/cli/pack_cli.cpp
   src/cli/part_cli.cpp

@@ -1406,6 +1406,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
   `TismaEngine.xcframework` (iPhone y simulador, desde iOS 16.3) con `tisma_run_cli`, y el trabajo cuenta. Falta
   probarlo en un iPhone real: en el simulador la app ya lamina con `tisma_run_cli` (12-11-2026); sin GPU ni scripts
   de posprocesado en iOS.
+  La API de trabajos de `tisma_engine.h` (contexto, abrir, ajustes, memoria, laminar con avance y cancelar, resumen y
+  G-code) está implementada desde el 2026-11-12 y va en la misma biblioteca (pedido de la sesión del iPhone,
+  `mobile_app.md`, reglas 12 y 19). Faltan la vista previa por capas y el análisis.
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 

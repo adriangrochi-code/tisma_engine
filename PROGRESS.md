@@ -13784,3 +13784,37 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   panel izquierdo quedan solo las restricciones y los grados de libertad.
 - **Pruebas:** `design_sketch_edit` y `design_sketch_fillet` buscan ahora sus herramientas en los grupos de la barra;
   pasan las 22 de Diseño. Captura revisada a 1400 × 860.
+
+## 2026-11-12 — API en C: trabajos para el iPhone
+
+- **Pedido:** la sesión del iPhone necesita la API de trabajos de `tisma_engine.h` para el avance, cancelar y la
+  memoria al laminar (`mobile_app.md`, reglas 12 y 19). Hasta hoy la biblioteca solo tenía `tisma_run_cli`.
+- **Hecho:**
+  - `src/cli/c_api.cpp`: contexto, `tisma_open_path`/`_bytes`, ajustes en JSON (poner y leer), estimación y límite de
+    memoria, `tisma_slice_start`/`_poll`/`_cancel`, resumen JSON, G-code a una ruta o por pedazos.
+  - Laminar corre el `slice` de la línea de comandos en un hilo del contexto.
+  - `src/slice/job.*`: un gancho por hilo con el avance por etapas; cancelar se nota en la próxima etapa.
+  - La vista previa y el análisis responden «not implemented yet».
+  - La CI de iOS comprueba que las 14 funciones estén en las dos partes de la biblioteca.
+  - Detalle en `docs/C_API.md`.
+- **Medido (Linux x86_64, pico de memoria del proceso `slice`, 4 hilos):**
+
+  | Modelo | Triángulos | Capas | Pico | Estimado |
+  | --- | ---: | ---: | ---: | ---: |
+  | cubo de 10 mm | 12 | 50 | 65 MB | 80 MB |
+  | esfera de 100 mm | 8 064 | 500 | 98 MB | 158 MB |
+  | Benchy | 225 706 | 240 | 128 MB | 130 MB |
+  | esfera de 100 mm | 319 200 | 500 | 178 MB | 217 MB |
+  | esfera de 100 mm | 1 998 000 | 500 | 323 MB | 538 MB |
+
+  Cancelar a mitad de esa esfera de 319 200 triángulos tarda entre 0,05 y 0,5 s, según la etapa.
+- **Pruebas:** `[c_api]`, 5 casos:
+  - errores por código;
+  - laminado completo con resumen y G-code;
+  - lectura por pedazos igual al archivo;
+  - límite de memoria;
+  - cancelar y volver a laminar;
+  - destruir con un trabajo en marcha.
+- **Sin probar:** en un iPhone real; la memoria en iOS no está medida.
+- **Sigue:** la vista previa por capas y el análisis por la API; los ajustes de un proyecto 3MF.
+

@@ -45,6 +45,7 @@ add_executable(tisma_tests
   test_polyholes.cpp
   test_unsupported_walls.cpp
   test_c_cli.cpp
+  test_c_api.cpp
   test_number.cpp
   test_template.cpp
   test_binary.cpp
