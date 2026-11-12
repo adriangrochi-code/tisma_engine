@@ -105,6 +105,9 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
       cancelar o reembolsar, sin la app;
     - la app manda de nuevo sus compras activas al abrir la sesión («restaurar compras»): así un equipo nuevo con la
       misma cuenta de la tienda recupera el plan;
+      en iOS (StoreKit 2), cada transacción de `Transaction.currentEntitlements`, una por una, a
+      `POST /v1/me/purchases` con `store` `app_store` y `signed_transaction`; el servidor acepta la misma transacción
+      dos veces y responde lo mismo;
     - `GET /v1/me` trae `subscription`: `store`, `product_id`, `expires` y `auto_renew`, o `null`; con eso la app
       muestra «Administrar la suscripción» y abre la página de esa tienda (CC21 a CC23).
 
@@ -166,7 +169,8 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 ## Informar un problema
 
 11. `POST /v1/reports` con:
-    - `app`: `pc`, `android`, `ios` o `web`;
+    - `app`: `pc` (el programa de computadora, también en macOS), `android`, `ios` (iPhone y iPad) o `web`; en los
+      filtros del panel, un `system` de iPadOS se agrupa con iOS;
     - `kind`: `bug`, `crash` o `suggestion`;
     - `title` (3 caracteres o más), `description`, `steps`, `expected` y `actual`.
 
