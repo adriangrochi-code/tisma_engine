@@ -12330,5 +12330,9 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   con ZIP, CRC-32 y MD5 propios (comprobados contra el JDK). «Probar» fija el certificado la primera vez.
   Sin probar contra una impresora. Riesgos anotados: en iOS el canal de datos FTPS abre una sesión TLS nueva (una
   impresora que exija reanudarla rechazaría el envío). Las lecturas tienen límite de tiempo desde el commit siguiente.
-- Siguiente: el motor como biblioteca para iOS (lo pide la sesión del
+- El motor dentro de la app del iPhone (12-11, run 43180443557, simulador): la CI baja el `TismaEngine.xcframework`
+  de `dev`, la app lo enlaza y Swift llama a `tisma_run_cli`; la Placa lamina el cubo de 20 mm (código 0, G-code
+  generado). Hizo falta `--config` (como Android) y sin `--no-gpu` (solo para proyectos). Con los valores por defecto
+  de máquina: falta pasar la impresora y las velocidades del perfil, como Android.
+- Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
