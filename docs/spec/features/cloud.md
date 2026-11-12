@@ -166,7 +166,7 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 ## Informar un problema
 
 11. `POST /v1/reports` con:
-    - `app`: `pc`, `android` o `web`;
+    - `app`: `pc`, `android`, `ios` o `web`;
     - `kind`: `bug`, `crash` o `suggestion`;
     - `title` (3 caracteres o más), `description`, `steps`, `expected` y `actual`.
 
