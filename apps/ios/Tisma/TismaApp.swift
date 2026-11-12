@@ -44,6 +44,11 @@ struct PlateView: View {
     /// The model on the plate: the person's (copied into the app) or, until one is opened, the 20 mm cube.
     @State private var opened: URL?
     @State private var picking = false
+    @State private var sent: String?
+    // The printer saved on the Printer screen.
+    @AppStorage("printer.kind") private var savedKind = "moonraker"
+    @AppStorage("printer.address") private var savedAddress = ""
+    @AppStorage("printer.user") private var savedUser = ""
 
     private var model: CatalogPrinterModel? { Engine.catalog?.printer(name: printer) }
 
@@ -78,7 +83,11 @@ struct PlateView: View {
                     Button("Slice") { slice() }.disabled(busy || printer.isEmpty)
                     if busy { ProgressView() }
                     if let result { Text(result).font(.footnote.monospaced()) }
-                    if let gcode { NavigationLink("Preview") { PreviewView(gcode: gcode) } }
+                    if let gcode {
+                        NavigationLink("Preview") { PreviewView(gcode: gcode) }
+                        Button("Send to the printer and start") { send(gcode) }.disabled(busy || savedAddress.isEmpty)
+                        if let sent { Text(sent).font(.footnote) }
+                    }
                 }
             }
             .navigationTitle("Plate")
@@ -101,6 +110,23 @@ struct PlateView: View {
         let dest = dir.appendingPathComponent(url.lastPathComponent)
         try? FileManager.default.removeItem(at: dest)
         return (try? FileManager.default.copyItem(at: url, to: dest)) != nil ? dest : nil
+    }
+
+    /// mobile_app.md, rule 14 (MA7): the G-code goes to the saved printer, which starts it.
+    private func send(_ file: URL) {
+        busy = true; sent = nil
+        let a = (savedKind, savedAddress, savedUser, Keychain.read("printer.secret") ?? "")
+        let name = (opened?.deletingPathExtension().lastPathComponent ?? "cube20") + ".gcode"
+        Task.detached {
+            let text: String
+            do {
+                try PrinterBridge.shared.upload(kind: a.0, address: a.1, user: a.2, secret: a.3, path: file.path, name: name, start: true)
+                text = String(localized: "Sent; the printer starts it.")
+            } catch {
+                text = error.localizedDescription
+            }
+            await MainActor.run { sent = text; busy = false }
+        }
     }
 
     private func slice() {

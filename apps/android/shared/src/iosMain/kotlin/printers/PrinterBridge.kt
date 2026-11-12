@@ -80,4 +80,16 @@ object PrinterBridge {
 
     @Throws(PrinterException::class)
     fun cancel(kind: String, address: String, user: String, secret: String) = connection(kind, address, user, secret).cancel()
+
+    /**
+     * Sends the G-code at [path] to the printer as [name] and, with [start], starts it (mobile_app.md, rule 14; MA7).
+     * Read from the file in order, never whole in memory.
+     */
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    @Throws(PrinterException::class)
+    fun upload(kind: String, address: String, user: String, secret: String, path: String, name: String, start: Boolean) {
+        val length = platform.Foundation.NSFileManager.defaultManager.attributesOfItemAtPath(path, null)
+            ?.get(platform.Foundation.NSFileSize)?.let { (it as? platform.Foundation.NSNumber)?.longLongValue } ?: -1L
+        connection(kind, address, user, secret).upload(name, length, start) { net.tisma.io.FileInput(path) }
+    }
 }

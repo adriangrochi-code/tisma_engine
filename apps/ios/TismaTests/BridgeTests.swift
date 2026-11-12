@@ -96,4 +96,11 @@ final class BridgeTests: XCTestCase {
         try "hi".write(to: txt, atomically: true, encoding: .utf8)
         XCTAssertNil(PlateView.copyIn(txt))
     }
+
+    func testSendingToAPrinterThatDoesNotAnswerIsAnError() throws {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("send.gcode")
+        try "G28\n".write(to: f, atomically: true, encoding: .utf8)
+        XCTAssertThrowsError(try PrinterBridge.shared.upload(kind: "octoprint", address: "127.0.0.1:9", user: "", secret: "k",
+                                                             path: f.path, name: "send.gcode", start: true))
+    }
 }
