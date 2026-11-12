@@ -12334,5 +12334,10 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   de `dev`, la app lo enlaza y Swift llama a `tisma_run_cli`; la Placa lamina el cubo de 20 mm (código 0, G-code
   generado). Hizo falta `--config` (como Android) y sin `--no-gpu` (solo para proyectos). Con los valores por defecto
   de máquina: falta pasar la impresora y las velocidades del perfil, como Android.
+- iPhone, la Placa completa (12-11, run 43238492556, verde en el simulador): impresora, boquilla y filamento del
+  catálogo del motor (`Catalog` en `shared`) y `tisma-engine profile` para el `--config`; abrir STL, OBJ y 3MF de los
+  archivos y por «Compartir con Tisma»; vista previa por capas (`GcodeLayers` en `shared`); mandar el G-code a la
+  impresora guardada. Siempre con un filamento: sin él el perfil deja la boquilla a 0 °C y el control del motor
+  rechaza el G-code (el motor ahora lo avisa, 5cf8071). Nada probado en un iPhone real ni contra una impresora.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
