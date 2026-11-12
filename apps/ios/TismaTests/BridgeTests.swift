@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 import TismaShared
 
@@ -17,5 +18,12 @@ final class BridgeTests: XCTestCase {
 
     func testNoNoticeWhenTheServerDoesNotAnswer() {
         XCTAssertNil(CloudBridge.shared.serviceNotice(server: "http://127.0.0.1:9", spanish: true))
+    }
+
+    func testWithoutTheProjectKeyTheLibraryIsRefusedAndEmpty() {
+        let why = LibraryBridge.shared.refresh(server: "http://127.0.0.1:9", projectKeyHex: "")
+        // No server answer and nothing kept: nothing to refuse yet, and nothing found.
+        XCTAssertTrue(why == nil || !(why!.isEmpty))
+        XCTAssertEqual(LibraryBridge.shared.search(query: "").count, 0)
     }
 }

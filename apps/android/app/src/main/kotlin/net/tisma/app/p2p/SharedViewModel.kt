@@ -36,17 +36,6 @@ data class SharedState(
 }
 
 /**
- * Where the library's files come from: the server's routes without a session (rule 3 bis), and «Denunciar»
- * (rule 7). Null pieces mean «not reachable now»: the last ones kept on the phone are used (rule 6).
- */
-interface LibraryServer {
-    fun file(name: String): ByteArray
-    fun report(model: String?, sha256: String?, reason: String): String
-    /** The server these files come from: another one (Preferences) has its own sequences and key. */
-    val origin: String get() = ""
-}
-
-/**
  * [projectKey] is the project's Ed25519 key (BuildConfig.UPDATES_KEY); it certifies the library key (rule 3
  * quinquies). Empty until the owner's key exists: then nothing is accepted and nothing is shared.
  */
@@ -61,70 +50,32 @@ class SharedViewModel(
     private val _state = MutableStateFlow(SharedState(sharing = saved?.p2pSharing ?: false, uploadCapMb = saved?.p2pUploadCapMb ?: 500))
     val state: StateFlow<SharedState> = _state.asStateFlow()
 
-    private fun kept(name: String) = File(dir, name)
-
-    /** Fetches [name] (and keeps it) or, without an answer, the copy kept from last time. */
-    private fun fetchOrKept(name: String): ByteArray? {
-        val fresh = server?.let { s -> runCatching { s.file(name) }.onFailure { AppLog.line("p2p: $name ${it.message}") }.getOrNull() }
-        return fresh ?: kept(name).takeIf { it.isFile }?.readBytes()
+    /** The kept pieces in [dir]; the sequences and the server in [saved] (none kept without it, as before). */
+    private val store = object : LibraryStore {
+        private fun kept(name: String) = File(dir, name)
+        override fun read(name: String) = kept(name).takeIf { it.isFile }?.readBytes()
+        override fun write(name: String, bytes: ByteArray) { kept(name).apply { parentFile?.mkdirs(); writeBytes(bytes) } }
+        override fun delete(name: String) { kept(name).delete() }
+        override var listSequence: Long
+            get() = saved?.p2pListSequence ?: -1L
+            set(v) { saved?.p2pListSequence = v }
+        override var indexSequence: Long
+            get() = saved?.p2pIndexSequence ?: -1L
+            set(v) { saved?.p2pIndexSequence = v }
+        override var origin: String?
+            get() = saved?.p2pOrigin
+            set(v) { if (v != null) saved?.p2pOrigin = v }
     }
-
-    /**
-     * A file and its signature, both fresh or both kept: a network lost between the two must not pair a new file
-     * with the old signature (refused, though the kept pair is good). Null when neither pair is there.
-     */
-    private fun fetchPair(name: String): Pair<ByteArray, ByteArray>? {
-        val s = server
-        if (s != null) {
-            val fresh = runCatching { s.file(name) to s.file("$name.sig") }.onFailure { AppLog.line("p2p: $name ${it.message}") }.getOrNull()
-            if (fresh != null) return fresh
-        }
-        val json = kept(name).takeIf { it.isFile }?.readBytes() ?: return null
-        val sig = kept("$name.sig").takeIf { it.isFile }?.readBytes() ?: return null
-        return json to sig
-    }
-
-    /**
-     * The person changed the cloud server (Preferences): the last server's sequences and kept files are not this
-     * one's. Kept, its lists would be refused for ever as «older» than the other's.
-     */
-    private fun forgetOtherServer() {
-        val s = saved ?: return
-        val origin = server?.origin.orEmpty()
-        if (origin.isEmpty() || s.p2pOrigin == origin) return
-        if (s.p2pOrigin.isNotEmpty()) {
-            listOf("key", "blocklist.json", "blocklist.json.sig", "index.json", "index.json.sig").forEach { kept(it).delete() }
-            s.p2pListSequence = -1
-            s.p2pIndexSequence = -1
-        }
-        s.p2pOrigin = origin
-    }
-
-    private fun keep(name: String, b: ByteArray) = kept(name).apply { parentFile?.mkdirs(); writeBytes(b) }
 
     /** Rule 6: on opening the library (and every 6 h while sharing): the key, the list (applied), then the index. */
     fun refresh() {
         viewModelScope.launch {
             val r = withContext(io) {
                 runCatching {
-                    forgetOtherServer()
-                    val keyJson = fetchOrKept("key") ?: return@runCatching Triple<BlockList?, LibraryIndex?, List<SharedCopies.Copy>>(null, null, emptyList())
-                    val key = LibraryKey.read(keyJson, projectKey)
-                    keep("key", keyJson)
-                    val lastList = saved?.p2pListSequence ?: -1L
-                    val list = fetchPair("blocklist.json")?.let { (json, sig) ->
-                        BlockList.read(json, sig, key, lastList).also {
-                            keep("blocklist.json", json); keep("blocklist.json.sig", sig)
-                            saved?.p2pListSequence = it.sequence
-                        }
-                    }
+                    val fetched = LibraryFetch(projectKey, server, store) { AppLog.line(it) }.refresh()
+                    val list = fetched.list
+                    val index = fetched.index
                     val removed = list?.let { copies.apply(it) }.orEmpty()
-                    val index = fetchPair("index.json")?.let { (json, sig) ->
-                        LibraryIndex.read(json, sig, key, saved?.p2pIndexSequence ?: -1L).also {
-                            keep("index.json", json); keep("index.json.sig", sig)
-                            saved?.p2pIndexSequence = it.sequence
-                        }
-                    }
                     Triple(list, index, removed)
                 }
             }
