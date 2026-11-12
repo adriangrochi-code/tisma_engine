@@ -630,9 +630,13 @@ private:
     bool design_dialog_new_ = false;
     std::optional<cad::Feature> design_dialog_before_;
     void design_handles(); // arrows in the view to drag the step's measures (rule 11 quinquies)
+    bool design_dialog_left_ = false;  // the step's panel moved aside: it covered an arrow
+    int design_dialog_moved_for_ = -1; // the step it moved for (once a step: no flicker)
     void open_feature_dialog(std::size_t feature, bool fresh) {
         design_dialog_ = feature < design_.features.size() ? int(feature) : -1;
         design_dialog_new_ = fresh;
+        design_dialog_left_ = false;
+        design_dialog_moved_for_ = -1;
         design_dialog_before_.reset();
         if (design_dialog_ >= 0)
             design_dialog_before_ = design_.features[feature];
@@ -16244,6 +16248,14 @@ void App::design_handles() {
         const float px_per_mm = std::max(std::hypot(s.x, s.y), 1e-3f);
         s = ImVec2(s.x / px_per_mm, s.y / px_per_mm);
         const ImVec2 tip(a->x + s.x * 50.0f * scale_, a->y + s.y * 50.0f * scale_);
+        // The step's panel over the arrow's handle: the panel goes to the other side.
+        if (const auto d = g_menu_rects.find("design_dialog"); d != g_menu_rects.end() && design_dialog_moved_for_ != design_dialog_ &&
+                                                              !ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+                                                              tip.x > d->second.x - 12.0f * scale_ && tip.x < d->second.z + 12.0f * scale_ &&
+                                                              tip.y > d->second.y - 12.0f * scale_ && tip.y < d->second.w + 12.0f * scale_) {
+            design_dialog_left_ = !design_dialog_left_;
+            design_dialog_moved_for_ = design_dialog_;
+        }
         dl->AddLine(*a, tip, colours[h.axis], 2.5f * scale_);
         const ImVec2 n(-s.y, s.x);
         const float head = 9.0f * scale_;
@@ -16257,6 +16269,7 @@ void App::design_handles() {
         ImGui::Begin(id.c_str(), nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings |
                          ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow()); // above the step's panel, always grabbable
         ImGui::SetCursorScreenPos(ImVec2(tip.x - r, tip.y - r));
         ImGui::InvisibleButton("##drag", ImVec2(2.0f * r, 2.0f * r));
         note_rect("design_handle_" + std::to_string(h.size + 1));
@@ -16826,8 +16839,13 @@ void App::design_panel() {
             loc::TextDisabled("%s", tr(T::DesignInPanel));
             const float w = 300.0f * scale_;
             // At the bottom right, over the command line: the view cube stays free.
-            ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 16.0f * scale_, view_pos_.y + view_size_.y - 130.0f * scale_),
-                                    ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+            // At the left instead when it would cover a drag arrow (design_handles).
+            if (design_dialog_left_)
+                ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 16.0f * scale_, view_pos_.y + view_size_.y - 130.0f * scale_),
+                                        ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+            else
+                ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 16.0f * scale_, view_pos_.y + view_size_.y - 130.0f * scale_),
+                                        ImGuiCond_Always, ImVec2(1.0f, 1.0f));
             ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
             ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
             ImGui::Begin("##design_dialog", nullptr,
@@ -16946,9 +16964,22 @@ void App::design_panel() {
                 break;
             }
             case cad::OperationKind::Move: {
-                ImGui::SetNextItemWidth(200.0f * scale_);
-                if (ImGui::InputScalarN(tr(T::OpOffset), ImGuiDataType_Double, o.offset.data(), 3, nullptr, nullptr, "%.2f"))
-                    design_edited_ = true;
+                // The label over its three fields, each named: it fits the panel.
+                loc::Text("%s", tr(T::OpOffset));
+                ImGui::BeginGroup();
+                for (int a = 0; a < 3; ++a) {
+                    if (a > 0)
+                        ImGui::SameLine(0.0f, 8.0f * scale_);
+                    ImGui::PushID(a);
+                    ImGui::AlignTextToFramePadding();
+                    loc::Text("%s", a == 0 ? "X" : a == 1 ? "Y" : "Z");
+                    ImGui::SameLine(0.0f, 3.0f * scale_);
+                    ImGui::SetNextItemWidth(62.0f * scale_);
+                    if (ImGui::InputDouble("##offset", &o.offset[std::size_t(a)], 0.0, 0.0, "%.2f"))
+                        design_edited_ = true;
+                    ImGui::PopID();
+                }
+                ImGui::EndGroup();
                 rect_of(("design_op_offset_" + row).c_str());
                 number(T::OpTurn, o.angle, "%.1f", 15.0, "angle");
                 int axis = o.axis == 'X' ? 0 : o.axis == 'Y' ? 1 : 2;

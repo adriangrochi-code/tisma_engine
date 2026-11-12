@@ -13735,3 +13735,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   las flechas de los patrones y el agujero.
 - **Pruebas:** `design_handles_move.txt` y `design_handles_extrude.txt`; pasan las 7 de flechas, operaciones,
   cuadro y línea de tiempo.
+
+## 2026-11-12 — interfaz: el cuadro de Mover y las flechas tapadas (QA)
+
+- **Hecho:** en Mover cuerpo, «Desplazar (mm)» va arriba y sus tres campos llevan X, Y y Z al lado: ya no se corta. Si
+  una flecha cae debajo del cuadro del paso, el cuadro pasa al otro lado de la vista (una vez por paso, sin
+  parpadeo), y las manijas quedan siempre encima.
+- **Pruebas:** `design_handles_move.txt` arrastra ahora la flecha de X (antes tapada) y la de Z; pasan las de flechas,
+  operaciones, cuadro, radial y línea de tiempo.

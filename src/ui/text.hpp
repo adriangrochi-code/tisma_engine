@@ -1580,7 +1580,7 @@
     X(OpSplit, "Partir", "Split") \
     X(OpDraft, "Desmoldeo", "Draft") \
     X(OpPickDraft, "Hacé clic en las caras a inclinar; Enter termina", "Click the faces to tilt; Enter finishes") \
-    X(OpOffset, "Desplazar X, Y, Z (mm)", "Offset X, Y, Z (mm)") \
+    X(OpOffset, "Desplazar (mm)", "Offset (mm)") \
     X(OpTurn, "Girar (°)", "Turn (°)") \
     X(OpCopyBody, "Copia (deja el original)", "Copy (keeps the original)") \
     X(OpPlaneOffset, "Corrido (mm)", "Moved by (mm)") \

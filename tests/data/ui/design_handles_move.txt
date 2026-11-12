@@ -1,5 +1,7 @@
 # Arrows on a move too (cad_design.md, rule 11 quinquies): one per axis from
-# the moved body; dragging the Z one up lifts it.
+# the moved body. The X one fell under the step's panel, so the panel moves to
+# the other side; dragging it out moves the body farther, and the Z one up
+# lifts it.
 menu mode_engineering
 menu tab_design
 menu design_box
@@ -12,6 +14,10 @@ wait 5
 expect-control design_handle_1
 expect-control design_handle_2
 expect-control design_handle_3
+expect-apart design_handle_1 design_dialog
+drag-control design_handle_1 40 0
+wait 10
+expect-feature-above 2 offset_x 12
 drag-control design_handle_3 0 -40
 wait 10
 expect-feature-above 2 offset_z 2
