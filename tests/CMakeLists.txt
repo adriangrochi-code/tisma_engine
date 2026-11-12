@@ -93,6 +93,7 @@ add_executable(tisma_tests
   test_orient.cpp
   test_catalog.cpp
   test_device.cpp
+  test_usb_camera.cpp
   test_cad.cpp
   test_sketch_io.cpp
   test_sketch_edit.cpp

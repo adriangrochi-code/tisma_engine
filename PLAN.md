@@ -1392,6 +1392,7 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 - [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows): escritos (2026-11-12, NSOpenPanel y NSSavePanel en
   `apps/tisma/file_dialog_macos.mm`); compila la CI de macOS, sin probar a mano en una Mac.
 - [ ] Cámara USB con AVFoundation y el permiso de cámara (`printer_connections.md`, regla 7 de macOS).
+  Hecha la parte sin cámara (2026-11-12: formato y ritmo, `src/device/usb_camera.*`); falta la captura y el permiso.
 - [ ] Paquete `.dmg`; sin firmar hasta que el dueño tenga la cuenta de Apple Developer, después firma y notarización.
   Hecho sin firmar (754e4c0, b2a2963: Tisma.app en el .zip y el .dmg de la versión); falta la firma.
 - [ ] El motor como biblioteca para iOS (arm64, sin GPU por ahora o Metal vía MoltenVK), para la app de iPhone que

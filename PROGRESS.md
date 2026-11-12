@@ -13672,3 +13672,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   66cb7e6 lo arregla compilando solo `file_dialog_macos.mm` como Objective-C++; macOS volvió a verde (corrida 927).
 - **No probado:** el xcframework desde una app de iPhone; los diálogos de macOS a mano.
 - **Sigue (macOS):** la cámara USB con AVFoundation, la vista (MoltenVK u OpenGL), la firma del .dmg (cuenta del dueño).
+
+## 2026-11-12 — cámara USB de la computadora: la parte sin cámara (printer_connections.md, reglas 2 y 3)
+
+- **Hecho:** `src/device/usb_camera.*`, igual en todos los sistemas: `choose_camera_format` (el mayor hasta
+  1280 × 720 con 10 imágenes por segundo o más, MJPEG antes que sin comprimir; si ninguno llega, el más rápido y después
+  el más chico), `camera_format_text` para la línea de al lado de la elección, y `FramePacer` (hasta 15 por segundo en
+  pantalla, siempre la más nueva, las tardías salteadas y no acumuladas, aviso tras 10 s sin imágenes o al
+  desconectarse). `Info.plist` ya declara el uso de la cámara (regla 7).
+- **Pruebas:** dos casos en `[camera]`; pasan las de `[device]`.
+- **Sigue:** la captura (regla 6: openpnp-capture, MIT; antes, leer su licencia en la versión exacta y anotarla en
+  `THIRD_PARTY.md`), el pedido de permiso en macOS, y en la interfaz la elección por impresora (regla 1).
