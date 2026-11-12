@@ -1010,6 +1010,11 @@
     X(RenderTip, "Cómo se dibuja la vista: luz, oclusión ambiental, ray tracing y suavizado de bordes",                \
       "How the view is drawn: light, ambient occlusion, ray tracing and anti-aliasing")                               \
     X(RenderFast, "Rápida", "Fast")                                                                                   \
+    X(ViewOrbitTip, "Girar: arrastrar con el botón izquierdo gira la vista (Esc vuelve)", "Orbit: dragging with the left button turns the view (Esc goes back)") \
+    X(ViewPanTip, "Desplazar: arrastrar con el botón izquierdo mueve la vista (Esc vuelve)", "Pan: dragging with the left button moves the view (Esc goes back)") \
+    X(ViewZoomTip, "Acercar: arrastrar con el botón izquierdo acerca y aleja (Esc vuelve)", "Zoom: dragging with the left button zooms in and out (Esc goes back)") \
+    X(ViewPerspectiveTip, "En perspectiva: tocar pasa a ortogonal", "Perspective: click for orthographic") \
+    X(ViewOrthographicTip, "Ortogonal: tocar pasa a perspectiva", "Orthographic: click for perspective") \
     X(RenderAmbient, "Oclusión ambiental", "Ambient occlusion")                                                       \
     X(RenderRay, "Ray tracing", "Ray tracing")                                                                        \
     X(RenderFastTip, "Luz por píxel, sin oclusión: lo más liviano", "Per-pixel light, no occlusion: the lightest")     \
