@@ -8,7 +8,7 @@ name: Nightly
 # It runs:
 # - every day at 05:23 UTC (a schedule runs from the default branch's copy of
 #   this file, so it starts once this file reaches main);
-# - on a push to dev, at most once every 20 hours (so daily builds work before
+# - on a push to dev, at most once every 6 hours (so daily builds work before
 #   this file reaches main);
 # - by hand (workflow_dispatch), which builds even if dev did not change.
 on:
@@ -52,7 +52,7 @@ jobs:
           fi
           if [ "$EVENT" = "push" ] && [ -n "$published" ]; then
             age=$(( $(date -u +%s) - $(date -u -d "$published" +%s) ))
-            if [ "$age" -lt 72000 ]; then
+            if [ "$age" -lt 21600 ]; then
               echo "::notice::the last nightly is $((age / 3600)) h old: the next one waits"
               build=false
             fi
