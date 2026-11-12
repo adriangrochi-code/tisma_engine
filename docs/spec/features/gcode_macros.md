@@ -100,7 +100,13 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
       - `filament_ids`: una lista de textos, uno por filamento (vacíos si el perfil no da uno);
       - `curr_y_acceleration_limit`: la aceleración máxima en Y de la impresora;
       - `max_print_z`: la Z más alta que se imprime;
-      - `nozzle_diameter_at_nozzle_id`: el diámetro de la boquilla;
+      - `nozzle_diameter_at_nozzle_id`: la lista de diámetros por número de boquilla física (empieza en 0); con una
+        sola boquilla, `[diámetro]`;
+      - `initial_no_support_nozzle_id`: el número de la boquilla física (empieza en 0) que imprime el primer
+        filamento que no es de soporte; se fija una vez al empezar (0 con una sola boquilla). La Bambu Lab H3C lo usa
+        como índice de `nozzle_diameter_at_nozzle_id` (paquete de perfiles, Bambu Studio 930fe93, 12-11-2026);
+      - `fins_extrude_safe_temp[i]`: del filamento `i`, en °C (0 a 350; 0 = apagado, el valor si el paquete no lo
+        trae): la temperatura segura de la boquilla para extruir las aletas;
       - `overall_chamber_temperature`: la mayor temperatura de cámara de los filamentos (0 sin cámara);
       - `min_vitrification_temperature`, `temperature_vitrification[i]`: la de transición vítrea del filamento si el
         paquete la trae; si no, 0;
