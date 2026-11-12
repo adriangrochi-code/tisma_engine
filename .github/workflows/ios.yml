@@ -67,7 +67,7 @@ jobs:
           TEST_RUNNER_SCREENSHOT_DIR="$RUNNER_TEMP/screens" xcodebuild test -project Tisma.xcodeproj -scheme Tisma -destination "id=$device" -resultBundlePath "$RUNNER_TEMP/Tisma.xcresult" > "$RUNNER_TEMP/xcodebuild.log" 2>&1
           code=$?
           # The compiler's errors first, then the end (the tests).
-          grep -E ': error: |Test Case .* failed|ENGINE-SLICE|ENGINE-ANALYZE|ENGINE-CAL' "$RUNNER_TEMP/xcodebuild.log" | head -40
+          grep -E ': error: |Test Case .* failed|ENGINE-SLICE|ENGINE-ANALYZE|ENGINE-CAL|ENGINE-PACK' "$RUNNER_TEMP/xcodebuild.log" | head -40
           tail -40 "$RUNNER_TEMP/xcodebuild.log"
           exit $code
       - name: Keep the screenshots

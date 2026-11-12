@@ -270,4 +270,17 @@ final class BridgeTests: XCTestCase {
         XCTAssertGreaterThan(t.segments.count, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: model.path))
     }
+
+    /// The profile pack (parity P10): the engine plans the first download (the index), and the help reads empty
+    /// without a pack. The download itself needs the pack's server: printed, not required.
+    func testThePackPlanAndAnEmptyHelp() {
+        do {
+            let files = try Pack.plan(index: nil)
+            print("ENGINE-PACK first plan: \(files.map { $0.name })")
+            XCTAssertTrue(files.contains { $0.name == "index.json" })
+        } catch {
+            print("ENGINE-PACK plan refused: \(error.localizedDescription)")
+        }
+        XCTAssertTrue(PackBridge.shared.help(dir: "/nonexistent").isEmpty)
+    }
 }

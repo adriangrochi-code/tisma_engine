@@ -60,6 +60,8 @@ struct MoreView: View {
                 Section {
                     NavigationLink("Shared library") { LibraryView() }
                     NavigationLink("Choose the printer again") { WizardView() }
+                    NavigationLink("Help") { HelpView() }.accessibilityIdentifier("more_help")
+                    NavigationLink("Profile pack") { PackView() }.accessibilityIdentifier("more_pack")
                     NavigationLink("Report a problem") { ReportView() }.accessibilityIdentifier("more_report")
                     NavigationLink("Preferences") { PrefsView() }.accessibilityIdentifier("more_preferences")
                     NavigationLink("Credits and sources") { CreditsView() }.accessibilityIdentifier("more_credits")

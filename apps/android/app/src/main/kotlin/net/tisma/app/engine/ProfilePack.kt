@@ -198,7 +198,7 @@ class ProfilePack(
                 download(item, File(staging, item.name))
                 onProgress(10 + 80 * (i + 1) / rest.downloads.size.coerceAtLeast(1))
             }
-            val report = run(listOf("pack", "install", "--data", dataDir.path, "--from", staging.path))
+            val report = run(PackData.installArgs(dataDir.path, staging.path))
             onProgress(100)
             val o = runCatching { Json.parseToJsonElement(report) as JsonObject }.getOrNull()
             return (o?.get("pack_version") as? JsonPrimitive)?.contentOrNull ?: rest.published
@@ -208,32 +208,16 @@ class ProfilePack(
     }
 
     fun plan(index: File?, vendors: List<String>, url: String?): Plan {
-        val args = mutableListOf("pack", "plan", "--data", dataDir.path)
-        index?.let { args += listOf("--index", it.path) }
-        if (vendors.isNotEmpty()) args += listOf("--vendors", vendors.joinToString(","))
-        url?.let { args += listOf("--url", it) }
-        val o = runCatching { Json.parseToJsonElement(run(args)) as JsonObject }.getOrNull()
+        // The arguments and the answer's reading are shared with the iPhone (PackData).
+        val p = PackData.parsePlan(run(PackData.planArgs(dataDir.path, index?.path, vendors, url)))
             ?: throw PackException("Unexpected plan from the engine")
-        val list = (o["downloads"] as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty().map { d ->
-            fun s(k: String) = (d[k] as? JsonPrimitive)?.contentOrNull.orEmpty()
-            Item(s("url"), s("name"), (d["size"] as? JsonPrimitive)?.longOrNull ?: 0, s("sha256"))
-        }
-        fun v(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
-        return Plan(list, v("installed"), v("published"))
+        return Plan(p.downloads.map { Item(it.url, it.name, it.size, it.sha256) }, p.installed, p.published)
     }
 
     /** The printers of the installed pack (`pack list`), or empty when there is none. */
     fun printers(): List<Printer> {
-        val text = runCatching { run(listOf("pack", "list", "--data", dataDir.path)) }.getOrNull() ?: return emptyList()
-        val o = runCatching { Json.parseToJsonElement(text) as JsonObject }.getOrNull() ?: return emptyList()
-        fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull.orEmpty()
-        return (o["vendors"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().flatMap { v ->
-            (v["models"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().flatMap { m ->
-                (m["variants"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().map { va ->
-                    Printer(v.s("id"), m.s("name"), (va["nozzle"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull() ?: 0.0, va.s("printer"))
-                }
-            }
-        }
+        val text = runCatching { run(PackData.listArgs(dataDir.path)) }.getOrNull() ?: return emptyList()
+        return PackData.parseList(text).map { Printer(it.vendor, it.name, it.nozzle, it.id) }
     }
 
     /** Downloads one file; only https (or the test server's http on this machine), only inside the staging folder. */
@@ -241,7 +225,7 @@ class ProfilePack(
         require(item.name.isNotBlank() && !item.name.contains("..") && !item.name.contains('/') && !item.name.startsWith("\\")) {
             "Bad name in the plan"
         }
-        if (!item.url.startsWith("https://") && !item.url.startsWith("http://127.0.0.1")) throw PackException("Not an https address")
+        if (!PackData.safe(PackData.Item(item.url, item.name, item.size, item.sha256))) throw PackException("Not an https address")
         target.parentFile!!.mkdirs()
         val r = try {
             http.send(HttpRequest("GET", item.url, mapOf("Accept" to "*/*"), timeoutMs = 120_000))

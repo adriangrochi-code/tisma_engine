@@ -6,7 +6,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import java.io.File
 
 /**
  * The offline help (mobile_app.md, rule 16; assistant.md): problems,
@@ -35,10 +34,13 @@ class Knowledge(
     val empty get() = problems.isEmpty() && procedures.isEmpty() && glossary.isEmpty() && materials.isEmpty() && calibrations.isEmpty()
 
     companion object {
-        /** Reads `<dir>` (the pack's `knowledge` folder); an empty help when it is not there. */
-        fun read(dir: File): Knowledge {
-            fun load(name: String): JsonObject? = File(dir, "$name.json").takeIf { it.isFile }?.let {
-                runCatching { Json.parseToJsonElement(it.readText()) as JsonObject }.getOrNull()
+        /**
+         * Reads the pack's `knowledge` folder through [file] (a name such as `problems.json` to its text, or null when
+         * it is not there); an empty help when nothing is.
+         */
+        fun parse(file: (String) -> String?): Knowledge {
+            fun load(name: String): JsonObject? = file("$name.json")?.let {
+                runCatching { Json.parseToJsonElement(it) as JsonObject }.getOrNull()
             }
             fun JsonObject.s(k: String) = when (val v = this[k]) {
                 is JsonPrimitive -> v.contentOrNull.orEmpty()

@@ -93,14 +93,14 @@ se marca con la fecha.
 | 6 Placa | cama y modelo en 3D, tarjeta, Laminar, salida (guardar, compartir, mandar), gestos, tiras de herramientas | tarjeta, Laminar, vista previa, mandar; la cama y el modelo en 3D con gestos y Encuadrar (P1, 12-11); compartir y guardar el G-code (P2, 12-11) | P3: tiras de herramientas (Archivo, Vista, Ingeniería, Laminar) |
 | 7 Impresión y Material | niveles y vista Personalizada | niveles y vista Personalizada (P4, 12-11) | — |
 | 8 Impresora | Conexión y Calibración | Conexión y Calibración (P5, 12-11) | — |
-| 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | ayuda pendiente (P21); informar un problema (P6, `app` `ios`, 12-11: el servidor lo acepta desde cc28f98 de tisma-cloud, en producción cuando el dueño actualice); preferencias (el servidor) y créditos (P7, 12-11; la lista de bibliotecas del motor en iOS la confirma el motor) |
+| 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | ayuda (P21, 12-11); informar un problema (P6, `app` `ios`, 12-11: el servidor lo acepta desde cc28f98 de tisma-cloud, en producción cuando el dueño actualice); preferencias (el servidor) y créditos (P7, 12-11; la lista de bibliotecas del motor en iOS la confirma el motor) |
 | 10 Abrir | STL, 3MF, OBJ, STEP, Compartir, enlace de sitio | STL, 3MF, OBJ, Compartir | P8: STEP; P9: enlaces de sitios de modelos |
-| 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente | P10: el paquete de perfiles |
+| 11 Perfiles | paquete de perfiles y asistente | catálogo del motor y asistente; el paquete se baja e instala desde Más (P10, 12-11) | P10b: las impresoras y filamentos del paquete en el asistente y la placa |
 | 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa; la app ya usa la API de trabajos del motor si la biblioteca la tiene (12-11) | P11–P13: la biblioteca de iOS del motor todavía no exporta la API de trabajos (pedido al motor el 12-11); hasta entonces, la línea de comandos sin avance ni cancelar |
 | 13 Ingeniería | caras tocadas, punto, dirección, temperatura, mapa, relleno mínimo | caras tocadas, mapa | P14: carga en un punto y dirección elegida; P15: temperatura; P16: relleno mínimo |
 | 14 Impresoras | búsqueda en la red, cámara | las cinco clases, mandar, pausar, seguir, parar, avisos | — (búsqueda en la red con Bonjour, P17, y cámara, P18, 12-11) |
 | 15 Nube | Google, analizar en la nube, impresoras remotas, pagos | cuenta, laminar en la nube | P19: analizar en la nube; P20: impresoras remotas de los puentes; Google y pagos esperan al dueño (cuenta de Apple) |
-| 16 Ayuda sin conexión | sí | no | P21: ayuda (`assistant.md`) |
+| 16 Ayuda sin conexión | sí | la ayuda del paquete en Más, con búsqueda (P21, 12-11) | — |
 | 17 Teclado numérico | sí | teclado decimal (P22, 12-11; con signo en los desplazamientos) | — |
 | 18, 19 Rendimiento | medido | sin medir | se mide en un iPhone cuando haya cuenta de Apple |
 
