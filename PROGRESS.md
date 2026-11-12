@@ -12346,5 +12346,13 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   sin cambios); secciones Impresión y Material con los niveles Básico, Normal y Avanzado y las reglas de ocultar; los
   cambios se guardan y se aplican sobre el perfil al laminar. La barra de abajo: Placa, Impresión, Material,
   Impresora y Más (regla 5), con la biblioteca en Más.
+- iPhone, hacia la beta en el orden de QA (12-11, run 43272326689, verde en el simulador): asistente de primer uso
+  (impresora, boquilla y filamento del catálogo); avisos de fin de impresión (PrintWatcher cada 5 s con la app
+  abierta, BGAppRefreshTask en segundo plano, reglas de PrintEvents); tarjeta de impresora en Placa con los dibujos
+  de Android (tablas en `shared`) y el icono de conexión; Ingeniería con `analyze` en proceso (EngineeringCase en
+  `shared`; caras propias del motor por nombre). Medido en la CI: el cubo de 20 mm sujeto abajo y con 100 N arriba,
+  modo rápido: aguanta, seguridad mínima 67,4, desplazamiento 0,0024 mm. El test de interfaz pasa por el asistente.
+  Sin probar en un iPhone real ni con impresoras. Falta en Ingeniería: marcar caras tocando la pieza y el mapa de
+  seguridad.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
