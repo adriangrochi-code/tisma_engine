@@ -21,6 +21,8 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    Bambu (MQTT con TLS, FTPS implícito, cámara del puerto 6000) necesita sockets TLS con el certificado propio de la
    impresora: `expect`/`actual` con Network.framework en iOS.
 3. **ViewModels en `shared`** (StateFlow), expuestos a Swift con envoltorios propios simples.
+   Empezado (12-11): `AccountModel` (sesión, cuenta, planes, estado del servicio, sesión vencida), que «Más» del
+   iPhone mira con `watch`; el token en el Llavero. Android sigue con su `CloudViewModel` hasta pasarse a este.
 4. **Motor**: iOS no deja lanzar procesos. Hace falta el motor (y SolidCraft) como biblioteca: un `xcframework` con
    una entrada C que reciba los mismos argumentos que la línea de comandos y devuelva su salida. Lo pide la sesión del
    motor. Hasta que llegue, la app de iPhone funciona sin laminar: biblioteca, impresoras, cámara, nube y Compartida.

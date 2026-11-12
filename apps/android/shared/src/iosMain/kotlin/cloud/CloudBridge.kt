@@ -35,6 +35,9 @@ object CloudBridge {
         ?.takeIf { it.worthNotice }
         ?.let { st -> st.label(spanish) + st.message(spanish).let { m -> if (m.isBlank()) "" else ": $m" } }
 
+    /** The account model of the «Más» screen, on the default server, with Swift's Keychain [tokens]. */
+    fun accountModel(tokens: TokenStore): AccountModel = AccountModel(CloudClient.DEFAULT_SERVER, tokens, "iPhone")
+
     /** The default server (cloud.md, rule 1). */
     val defaultServer: String get() = CloudClient.DEFAULT_SERVER
 
