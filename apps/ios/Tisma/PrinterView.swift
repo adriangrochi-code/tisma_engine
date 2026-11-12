@@ -63,6 +63,10 @@ struct PrinterView: View {
                         }.buttonStyle(.bordered)
                     }
                 }
+                // mobile_app.md, rule 8 (parity P5): Connection and Calibration.
+                Section {
+                    NavigationLink("Calibration") { CalibrationView() }.accessibilityIdentifier("printer_calibration")
+                }
                 // mobile_app.md, rule 14 (parity P18): the printer's camera, read while it is shown.
                 if !address.isEmpty {
                     Section("Camera") {

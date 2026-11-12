@@ -87,6 +87,16 @@ class PanelBridge(layoutJson: String, changesJson: String) {
 
     fun setToggle(key: String, on: Boolean) { changes[key] = JsonPrimitive(on) }
 
+    /**
+     * A calibration's result (`calibration apply`): the settings it changed from [before] become the person's changes,
+     * as on Android. How many.
+     */
+    fun adopt(before: String, applied: String): Int {
+        val c = Calibrations.changed(before, applied)
+        changes.putAll(c)
+        return c.size
+    }
+
     /** Back to the profile's value. */
     fun reset(key: String) { changes.remove(key) }
 

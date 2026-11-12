@@ -253,4 +253,21 @@ final class BridgeTests: XCTestCase {
         PrinterBridge.shared.lost(host: "192.168.1.30", port: 80)
         XCTAssertFalse(PrinterBridge.shared.found(savedAddress: "").contains { $0.name == "Ender" })
     }
+
+    /// Calibration (parity P5): the engine makes the temperature tower for a printer of the catalog, with its bands.
+    func testTheEngineMakesATemperatureTower() throws {
+        let c = try XCTUnwrap(Engine.catalog)
+        let printer = try XCTUnwrap(c.printers.first { $0.name.contains("Prusa") } ?? c.printers.first)
+        let (config, why) = Engine.profile(printer: printer.name, nozzle: 0.4, filament: c.filamentsFor(p: printer).first?.fullName)
+        let profile = try XCTUnwrap(config, why)
+        let dir = FileManager.default.temporaryDirectory
+        let model = dir.appendingPathComponent("cal-test.stl"), settings = dir.appendingPathComponent("cal-test.json")
+        let r = Engine.run(CalibrationBridge.shared.args(kind: "temperature", config: profile.path, model: model.path,
+                                                         settings: settings.path, start: 0, end: 0, step: 0))
+        print("ENGINE-CAL temperature exit=\(r.code) out=\(r.out.prefix(300)) err=\(r.err.suffix(300))")
+        XCTAssertEqual(r.code, 0, r.err)
+        let t = try XCTUnwrap(CalibrationBridge.shared.parse(stdout: r.out), r.out)
+        XCTAssertGreaterThan(t.segments.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: model.path))
+    }
 }
