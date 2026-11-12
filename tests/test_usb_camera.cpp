@@ -67,3 +67,13 @@ TEST_CASE("USB camera: at most 15 frames a second, the late ones skipped, 10 s w
     CHECK_FALSE(none.stalled(105.0));
     CHECK(none.stalled(110.0));
 }
+
+TEST_CASE("USB camera: listing the connected cameras never fails, and each one has formats (rule 1)", "[device][camera]") {
+    // No camera on the test machines: an empty list, no error. With one, each has a name and its formats.
+    for (const UsbCamera& cam : list_usb_cameras()) {
+        CHECK_FALSE(cam.id.empty());
+        CHECK_FALSE(cam.formats.empty());
+        CHECK(choose_camera_format(cam.formats));
+    }
+}
+

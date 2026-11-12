@@ -57,4 +57,17 @@ private:
     bool disconnected_ = false;
 };
 
+// A camera the computer sees, with every format it offers.
+struct UsbCamera {
+    std::string id;   // what opens it again: on Linux its /dev/videoN
+    std::string name; // what the person sees: «HD Webcam C270»
+    std::vector<CameraFormat> formats;
+};
+
+// The cameras connected now (rule 1). On Linux through V4L2 (the kernel's
+// Video for Linux 2 API: VIDIOC_QUERYCAP, VIDIOC_ENUM_FMT,
+// VIDIOC_ENUM_FRAMESIZES, VIDIOC_ENUM_FRAMEINTERVALS), only MJPEG and YUYV,
+// the two the engine can show; elsewhere empty until its capture is built.
+std::vector<UsbCamera> list_usb_cameras();
+
 } // namespace tisma::device

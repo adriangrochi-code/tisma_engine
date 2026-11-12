@@ -13687,3 +13687,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   macOS. Su parte de Linux trae libjpeg-turbo con la licencia IJG, que no está en la lista permitida; en Linux la
   captura va a ser propia (V4L2, documentación pública del kernel) y el MJPEG se decodifica con stb_image (MIT, ya
   anotada). Si el dueño acepta IJG, se puede usar la biblioteca entera.
+- **Cámara USB en Linux, la lista (regla 1):** `list_usb_cameras()` recorre `/dev/video*` por V4L2 (documentación
+  pública de la API del kernel) y da nombre y formatos MJPEG y YUYV con sus tamaños e imágenes por segundo; los nodos
+  sin formatos (metadatos) no cuentan. En Windows y macOS da vacío hasta compilar openpnp-capture. Sin cámara en esta
+  máquina: la prueba solo comprueba que no falla. **No probado con una cámara real.** Sigue: abrir y leer imágenes
+  (V4L2 `VIDIOC_REQBUFS`/`mmap`/`VIDIOC_DQBUF`, MJPEG con stb_image).
