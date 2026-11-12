@@ -76,10 +76,8 @@ enum Engine {
         return (r, gcode, try? String(contentsOf: summary, encoding: .utf8))
     }
 
-    /// A slice as a job of the engine's library (tisma_engine.h): its progress, a way to cancel it, and the memory it
-    /// needs checked first (mobile_app.md, rules 12 and 19). One job per object. The job functions are looked up when
-    /// the app runs: an engine library without them (the iOS build exports the command line only, for now) makes
-    /// every job `refused`, and the plate slices through the command line as before.
+    /// A slice as a job of the engine's library (tisma_engine.h, docs/C_API.md): its progress by stage, a way to cancel
+    /// it, and the memory it needs checked first (mobile_app.md, rules 12 and 19). One job per object.
     final class SliceJob: @unchecked Sendable {
         enum Outcome {
             case done(summary: String)
@@ -87,63 +85,35 @@ enum Engine {
             /// More memory than the phone has left for the app: the cloud is offered.
             case tooLarge(needed: UInt64, available: UInt64)
             case failed(String)
-            /// The library refused before slicing, or has no job functions (what the command line may still do).
+            /// The library refused before slicing (what the command line may still do).
             case refused(String)
         }
 
-        private typealias Create = @convention(c) () -> OpaquePointer?
-        private typealias Destroy = @convention(c) (OpaquePointer?) -> Void
-        private typealias WithPath = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> tisma_status
-        private typealias Start = @convention(c) (OpaquePointer?) -> tisma_status
-        private typealias Poll = @convention(c) (OpaquePointer?) -> tisma_progress
-        private typealias Estimate = @convention(c) (OpaquePointer?) -> UInt64
-        private typealias Text = @convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?
+        private let ctx = tisma_create()
+        deinit { tisma_destroy(ctx) }
 
-        private struct Api {
-            let create: Create, destroy: Destroy, cancel: Destroy, open: WithPath, settings: WithPath, estimate: Estimate
-            let start: Start, poll: Poll, write: WithPath, summary: Text
-        }
-
-        private static let api: Api? = {
-            let h = UnsafeMutableRawPointer(bitPattern: -2) // RTLD_DEFAULT
-            func f<T>(_ name: String, _: T.Type) -> T? { dlsym(h, name).map { unsafeBitCast($0, to: T.self) } }
-            guard let create = f("tisma_create", Create.self), let destroy = f("tisma_destroy", Destroy.self),
-                  let cancel = f("tisma_cancel", Destroy.self), let open = f("tisma_open_path", WithPath.self),
-                  let settings = f("tisma_set_settings_json", WithPath.self), let estimate = f("tisma_estimate_memory", Estimate.self),
-                  let start = f("tisma_slice_start", Start.self), let poll = f("tisma_poll", Poll.self),
-                  let write = f("tisma_write_gcode", WithPath.self), let summary = f("tisma_summary_json", Text.self) else { return nil }
-            return Api(create: create, destroy: destroy, cancel: cancel, open: open, settings: settings, estimate: estimate,
-                       start: start, poll: poll, write: write, summary: summary)
-        }()
-
-        /// Whether this engine library has the job functions.
-        static var available: Bool { api != nil }
-
-        private let ctx: OpaquePointer?
-        init() { ctx = Self.api?.create() }
-        deinit { if let api = Self.api { api.destroy(ctx) } }
-
-        func cancel() { Self.api?.cancel(ctx) }
+        /// Stops at the next stage (0.05 to 0.5 s on a computer).
+        func cancel() { tisma_cancel(ctx) }
 
         private static func text(_ s: tisma_status) -> String { s.message.map { String(cString: $0) } ?? "code \(s.code.rawValue)" }
 
         func run(model: URL, settings: String, gcode: URL, progress: @escaping (Int, String) -> Void) -> Outcome {
-            guard let api = Self.api, ctx != nil else { return .refused("this engine library has no job functions") }
-            var s = api.open(ctx, model.path)
+            guard ctx != nil else { return .refused("the engine has no context") }
+            var s = tisma_open_path(ctx, model.path)
             guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
-            s = api.settings(ctx, settings)
+            s = tisma_set_settings_json(ctx, settings)
             guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
-            let needed = api.estimate(ctx)
+            let needed = tisma_estimate_memory(ctx)
             let available = UInt64(os_proc_available_memory())
             if available > 0 && needed > available { return .tooLarge(needed: needed, available: available) }
-            s = api.start(ctx)
+            s = tisma_slice_start(ctx)
             guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
             while true {
-                let p = api.poll(ctx)
+                let p = tisma_poll(ctx)
                 if p.state == TISMA_DONE {
-                    let w = api.write(ctx, gcode.path)
+                    let w = tisma_write_gcode(ctx, gcode.path)
                     guard w.code == TISMA_OK else { return .failed(Self.text(w)) }
-                    return .done(summary: api.summary(ctx).map { String(cString: $0) } ?? "{}")
+                    return .done(summary: tisma_summary_json(ctx).map { String(cString: $0) } ?? "{}")
                 }
                 if p.state == TISMA_STOPPED { return .cancelled }
                 if p.state == TISMA_FAILED { return .failed(Self.text(p.error)) }

@@ -1,1 +1,11 @@
 "Plate" = "Plate";
+
+"loading" = "Loading the model";
+"slicing" = "Slicing into layers";
+"walls" = "Walls";
+"surfaces" = "Surfaces";
+"support" = "Supports";
+"infill" = "Infill";
+"gcode" = "Writing the G-code";
+"finishing" = "Finishing";
+"done" = "Done";

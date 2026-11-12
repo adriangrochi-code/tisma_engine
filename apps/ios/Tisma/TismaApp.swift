@@ -151,7 +151,7 @@ struct PlateView: View {
                     Button("Slice") { slice() }.disabled(busy || printer.isEmpty)
                     // rule 12: the slice in the background, with its progress and a way to stop it.
                     if busy {
-                        ProgressView(value: Double(percent), total: 100) { Text(stageText.isEmpty ? String(localized: "Slicing…") : stageText) }
+                        ProgressView(value: Double(percent), total: 100) { Text(stageText.isEmpty ? String(localized: "Slicing…") : String(localized: String.LocalizationValue(stageText))) }
                         if let job { Button("Cancel", role: .cancel) { job.cancel() }.accessibilityIdentifier("plate_cancel") }
                     }
                     if let result { Text(result).font(.footnote.monospaced()) }

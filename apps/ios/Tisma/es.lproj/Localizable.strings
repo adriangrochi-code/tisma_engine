@@ -185,3 +185,12 @@
 "Materials" = "Materiales";
 "Calibration guides" = "Guías de calibración";
 "Sources" = "Fuentes";
+"loading" = "Cargando el modelo";
+"slicing" = "Cortando en capas";
+"walls" = "Paredes";
+"surfaces" = "Superficies";
+"support" = "Soportes";
+"infill" = "Relleno";
+"gcode" = "Escribiendo el G-code";
+"finishing" = "Terminando";
+"done" = "Listo";

@@ -188,7 +188,7 @@ final class BridgeTests: XCTestCase {
             print("ENGINE-SLICE job done progress=\(seen.count) summary=\(json.prefix(300))")
             XCTAssertGreaterThan(s?.layers ?? 0, 0)
             XCTAssertTrue(FileManager.default.fileExists(atPath: gcode.path))
-        case .refused(let why): print("ENGINE-SLICE job refused: \(why)")
+        case .refused(let why): XCTFail("the library refused: \(why)")
         case .failed(let why): XCTFail("the job failed: \(why)")
         case .cancelled: XCTFail("cancelled without asking")
         case .tooLarge(let n, let a): XCTFail("too large: \(n) of \(a)")
