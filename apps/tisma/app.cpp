@@ -16932,7 +16932,7 @@ void App::design_panel() {
         // the right of the view (rule 11 quinquies), drawn from here.
         const bool in_dialog = design_dialog_ == int(i);
         if (in_dialog) {
-            loc::TextDisabled("%s", tr(T::DesignInPanel));
+            loc::TextDisabled("%s", tr(design_dialog_left_ ? T::DesignInPanelLeft : T::DesignInPanel)); // the side it is on
             const float w = 300.0f * scale_;
             // At the bottom right, over the command line: the view cube stays free.
             // At the left instead when it would cover a drag arrow (design_handles).

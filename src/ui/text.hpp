@@ -1538,6 +1538,7 @@
     X(OpNeedPoint, "Elegí al menos un punto en la pieza", "Pick at least one point on the part") \
     X(DesignAccept, "Aceptar", "OK") \
     X(DesignInPanel, "Se edita en el cuadro de la derecha", "Being edited in the panel on the right") \
+    X(DesignInPanelLeft, "Se edita en el cuadro de la izquierda", "Being edited in the panel on the left") \
     X(ImportTitle, "Proyecto de %s", "%s project") \
     X(ImportSummary, "Proyecto de %s: %d piezas, %d placa. Ajustes: %d traducidos, %d parecidos, %d sin equivalente", "%s project: %d pieces, %d plate. Settings: %d translated, %d similar, %d without equivalent") \
     X(ImportPrinter, "Impresora del proyecto: %s", "The project's printer: %s") \

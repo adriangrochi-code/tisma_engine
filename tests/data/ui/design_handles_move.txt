@@ -22,3 +22,4 @@ drag-control design_handle_3 0 -40
 wait 10
 expect-feature-above 2 offset_z 2
 expect-design 8000
+expect-text Se edita en el cuadro de la izquierda
