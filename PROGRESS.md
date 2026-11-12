@@ -13706,3 +13706,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   iPhone 16 Pro con iOS 18.5, `tisma_run_cli` lamina `cube20.stl` con un `--config` mínimo: código 0 y un G-code de
   más de 1 KB (su corrida 43180443557). `--version` también da 0. El mensaje que confundía (un STL sin `--config` por
   el camino de los nodos) se arregló en b276520. Sin probar en un iPhone real.
+- **Cámara USB en Windows y macOS, plan (para un bloque de día, con la CI a la vista):** compilar las fuentes de
+  openpnp-capture 0.0.30 en un objetivo propio (`common/` + `win/` o `mac/`, con un `version.h` propio) y no su
+  `CMakeLists.txt`, que fija `/MT` en MSVC (choca con el `/MD` del motor) y suma sus pruebas; primero en un trabajo de
+  la CI que no haga fallar la corrida, como se hizo con iOS. Su API da las imágenes en RGB24 (`Cap_captureFrame`):
+  `UsbCapture` tiene que decir el tipo de imagen (MJPEG, YUYV o RGB). En macOS, pedir el permiso de cámara
+  (`AVCaptureDevice requestAccessForMediaType:`) antes de abrirla (regla 7). Al compilarla pasa a la tabla de
+  `THIRD_PARTY.md` con su entrada en `resources/credits.json` y su licencia en `resources/licenses/`.
