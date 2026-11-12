@@ -237,4 +237,10 @@ final class BridgeTests: XCTestCase {
             XCTAssertTrue(FileManager.default.fileExists(atPath: licenses.appendingPathComponent(n).path), "\(l.name): \(n)")
         } }
     }
+
+    /// The camera (parity P18): a printer that does not answer is an error, not a crash.
+    func testTheCameraOfAnAbsentPrinterIsAnError() {
+        XCTAssertThrowsError(try PrinterBridge.shared.cameraShot(kind: "moonraker", address: "http://127.0.0.1:9", user: "", secret: ""))
+        PrinterBridge.shared.stopCamera()
+    }
 }

@@ -13,6 +13,9 @@ struct PrinterView: View {
     @State private var problem: String?
     private var line: PrinterLine? { watcher.line }
     @State private var tested: String?
+    @State private var showCamera = false
+    @State private var shot: UIImage?
+    @State private var cameraProblem: String?
 
     var body: some View {
         NavigationStack {
@@ -44,12 +47,63 @@ struct PrinterView: View {
                         }.buttonStyle(.bordered)
                     }
                 }
+                // mobile_app.md, rule 14 (parity P18): the printer's camera, read while it is shown.
+                if !address.isEmpty {
+                    Section("Camera") {
+                        Toggle("Show the camera", isOn: $showCamera).accessibilityIdentifier("printer_camera")
+                        if showCamera {
+                            if let shot { Image(uiImage: shot).resizable().scaledToFit() }
+                            else if let cameraProblem { Text(cameraProblem).foregroundStyle(.secondary) }
+                            else { ProgressView() }
+                        }
+                    }
+                    .task(id: showCamera) { await followCamera() }
+                }
                 if let problem = problem ?? watcher.problem { Section { Text(problem).foregroundStyle(.red) } }
             }
             .navigationTitle("Printer")
             // A changed printer is read at once; the watcher keeps reading it while the app is open.
             .task(id: address + kind) { await watcher.readOnce() }
         }
+    }
+
+    /// A new image every 2 s (or as a Bambu Lab sends them) while the camera is shown.
+    private func followCamera() async {
+        defer { PrinterBridge.shared.stopCamera(); shot = nil }
+        guard showCamera else { return }
+        let a = (kind, address, user, secret)
+        while !Task.isCancelled && showCamera {
+            let r: Result<CameraShot?, Error> = await Task.detached {
+                Result { try PrinterBridge.shared.cameraShot(kind: a.0, address: a.1, user: a.2, secret: a.3) }
+            }.value
+            switch r {
+            case .success(let s?): shot = Self.image(s); cameraProblem = nil
+            case .success(nil): cameraProblem = String(localized: "This printer has no camera."); return
+            case .failure(let e): cameraProblem = e.localizedDescription
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
+    /// The JPEG turned and flipped as the printer's settings say.
+    static func image(_ s: CameraShot) -> UIImage? {
+        guard let img = UIImage(data: s.jpeg as Data), let cg = img.cgImage else { return nil }
+        // A vertical flip is a horizontal one turned half a turn; both flips are half a turn.
+        var turn = Int(s.rotation)
+        if s.flipVertical { turn += 180 }
+        let mirrored = s.flipHorizontal != s.flipVertical
+        let base: UIImage.Orientation
+        switch (turn % 360, mirrored) {
+        case (90, false): base = .right
+        case (180, false): base = .down
+        case (270, false): base = .left
+        case (0, true): base = .upMirrored
+        case (90, true): base = .rightMirrored
+        case (180, true): base = .downMirrored
+        case (270, true): base = .leftMirrored
+        default: base = .up
+        }
+        return UIImage(cgImage: cg, scale: 1, orientation: base)
     }
 
     /// Runs a printer call off the main thread and shows its error, if any.

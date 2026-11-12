@@ -139,3 +139,6 @@
 "Based on" = "Basado en";
 "Libraries" = "Bibliotecas";
 "The credits are missing from this build." = "Faltan los créditos en esta compilación.";
+"Camera" = "Cámara";
+"Show the camera" = "Mostrar la cámara";
+"This printer has no camera." = "Esta impresora no tiene cámara.";

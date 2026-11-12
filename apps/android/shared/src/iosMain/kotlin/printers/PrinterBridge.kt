@@ -1,6 +1,9 @@
 package net.tisma.printers
 
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import net.tisma.cloud.PlatformHttp
+import platform.Foundation.create
 
 /**
  * A printer's state as the SwiftUI screen shows it. [percent] is -1 when not printing. [event] is what happened since
@@ -32,6 +35,9 @@ data class PrinterLine(
         }
     }
 }
+
+/** One image of the printer's camera (a JPEG) and how the printer's settings turn it. */
+data class CameraShot(val jpeg: platform.Foundation.NSData, val flipHorizontal: Boolean, val flipVertical: Boolean, val rotation: Int)
 
 /**
  * The network printers for the iPhone app (printer_connections.md), with the same clients as Android. A Bambu Lab's
@@ -119,4 +125,35 @@ object PrinterBridge {
             ?.get(platform.Foundation.NSFileSize)?.let { (it as? platform.Foundation.NSNumber)?.longLongValue } ?: -1L
         connection(kind, address, user, secret).upload(name, length, start) { net.tisma.io.FileInput(path) }
     }
+
+    /** A camera that sends its own images (Bambu Lab A1 and P1), kept open while the camera is shown. */
+    private var frames: Pair<String, CameraFrames>? = null
+
+    /**
+     * The next image of the printer's camera (printer_connections.md; mobile_app.md, rule 14; parity P18): its
+     * snapshot address when it has one, else the images a Bambu Lab sends itself; null when it has no camera.
+     */
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    @Throws(PrinterException::class)
+    fun cameraShot(kind: String, address: String, user: String, secret: String): CameraShot? {
+        val c = connection(kind, address, user, secret)
+        val cam = c.camera()
+        val url = cam?.snapshotUrl?.takeIf { it.isNotBlank() }
+        if (url != null) return CameraShot(Snapshot.fetch(url).toNSData(), cam.flipHorizontal, cam.flipVertical, cam.rotation)
+        val key = listOf(kind, address, user, secret).joinToString("\u0000")
+        val f = keptLock.locked {
+            frames?.takeIf { it.first == key }?.second ?: c.cameraFrames()?.also { n ->
+                frames?.second?.let { runCatching { it.close() } }
+                frames = key to n
+            }
+        } ?: return null
+        return CameraShot(f.next().toNSData(), false, false, 0)
+    }
+
+    /** Stops a camera that sends its own images (the screen no longer shows it). */
+    fun stopCamera() = keptLock.locked { frames?.second?.let { runCatching { it.close() } }; frames = null }
+
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    private fun ByteArray.toNSData(): platform.Foundation.NSData = if (isEmpty()) platform.Foundation.NSData() else
+        usePinned { p -> platform.Foundation.NSData.create(bytes = p.addressOf(0), length = size.toULong()) }
 }
