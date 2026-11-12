@@ -31,6 +31,8 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    Biblioteca (12-11): la misma bajada que Android (`LibraryFetch` en `shared`: clave, lista e índice, guardados
    para cuando no hay red), firmas comprobadas con CryptoKit, búsqueda sin tildes. Sin la clave del proyecto (pendiente
    del dueño) no acepta nada, igual que Android.
+   Impresora (12-11): Klipper, OctoPrint, PrusaLink y Duet con los clientes comunes (`PrinterBridge`), estado cada
+   5 s solo con la pantalla a la vista, pausar, seguir y parar; la clave en el Llavero del iPhone. Bambu después.
 6. **CI**: `.github/workflows/ios.yml` en macOS: las pruebas de `shared` en el simulador de iPhone (hecho, 11-11);
    después `xcodebuild test` con la app de SwiftUI (12-11; las capturas como artefacto, después). Las pruebas de `shared` también corren
    aquí en la JVM.

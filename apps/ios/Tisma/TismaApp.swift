@@ -78,13 +78,3 @@ struct LibraryView: View {
         items = LibraryBridge.shared.search(query: query)
     }
 }
-
-struct PrinterView: View {
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView("No printers", systemImage: "printer",
-                                   description: Text("Klipper, OctoPrint, PrusaLink and Duet come first."))
-                .navigationTitle("Printer")
-        }
-    }
-}

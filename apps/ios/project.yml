@@ -25,7 +25,9 @@ targets:
         # The shared Kotlin module, built by Gradle before Xcode (`:shared:linkDebugFrameworkIosSimulatorArm64`).
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../android/shared/build/bin/iosSimulatorArm64/debugFramework
         OTHER_LDFLAGS: -framework TismaShared
-        CODE_SIGNING_ALLOWED: NO
+        # Signed to run locally (no team): the simulator's Keychain needs a signed app.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
   TismaTests:
     type: bundle.unit-test
     platform: iOS
@@ -36,7 +38,8 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../android/shared/build/bin/iosSimulatorArm64/debugFramework
-        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
 schemes:
   Tisma:
     build:

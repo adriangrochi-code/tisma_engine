@@ -1,6 +1,7 @@
 import CryptoKit
 import XCTest
 import TismaShared
+@testable import Tisma
 
 /// The SwiftUI app reaches the shared Kotlin code: errors come back as Swift errors, not crashes.
 final class BridgeTests: XCTestCase {
@@ -25,5 +26,21 @@ final class BridgeTests: XCTestCase {
         // No server answer and nothing kept: nothing to refuse yet, and nothing found.
         XCTAssertTrue(why == nil || !(why!.isEmpty))
         XCTAssertEqual(LibraryBridge.shared.search(query: "").count, 0)
+    }
+
+    func testPrinterKindsWithoutBambuYet() {
+        XCTAssertEqual(PrinterBridge.shared.kinds, ["moonraker", "octoprint", "prusalink", "duet"])
+    }
+
+    func testAPrinterThatDoesNotAnswerIsAnError() {
+        XCTAssertThrowsError(try PrinterBridge.shared.status(kind: "moonraker", address: "127.0.0.1:9", user: "", secret: ""))
+        XCTAssertThrowsError(try PrinterBridge.shared.status(kind: "bambu", address: "127.0.0.1", user: "", secret: ""))
+    }
+
+    func testTheKeychainKeepsAndForgetsASecret() {
+        Keychain.write("test.secret", "abc123")
+        XCTAssertEqual(Keychain.read("test.secret"), "abc123")
+        Keychain.write("test.secret", "")
+        XCTAssertNil(Keychain.read("test.secret"))
     }
 }

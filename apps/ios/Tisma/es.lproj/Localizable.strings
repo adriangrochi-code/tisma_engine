@@ -11,3 +11,16 @@
 "Email" = "Correo";
 "Password" = "Contraseña";
 "Sign in" = "Entrar";
+"Connection" = "Conexión";
+"Kind" = "Tipo";
+"Address" = "Dirección";
+"User" = "Usuario";
+"API key" = "Clave de la API";
+"Test" = "Probar";
+"State" = "Estado";
+"File" = "Archivo";
+"Nozzle" = "Boquilla";
+"Bed" = "Cama";
+"Pause" = "Pausar";
+"Resume" = "Seguir";
+"Stop" = "Parar";
