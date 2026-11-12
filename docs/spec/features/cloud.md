@@ -52,7 +52,8 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
    - `status`: `ok`, `slow` o `down`;
    - `label_es` y `label_en` («Funcionando» / «Working», «Con demoras» / «Delayed», «Caído» / «Down»);
    - `message_es` y `message_en`, el motivo en una frase;
-   - `unavailable`: los tipos de cálculo (los nombres de cola de la regla 10b) que ningún nodo conectado hace ahora;
+   - `unavailable`: los tipos de cálculo (los nombres de cola de la regla 10b) que algún nodo habilitado hace pero
+     ninguno de esos está conectado ahora (un tipo que ningún nodo habilitado hace no cuenta como demora);
    - `longest_wait_s`: lo que lleva esperando el trabajo más viejo de la cola;
    - `nodes_online` y `checked_at`.
    `down` si ningún nodo respondió en los últimos minutos; `slow` si el trabajo más viejo espera más de 10 min (lo
