@@ -22,3 +22,5 @@ class SocketLink(val socket: java.net.Socket) : Link {
     override val output: ByteOutput = socket.getOutputStream()
     override fun close() = socket.close()
 }
+
+actual fun sleepMs(ms: Long) = Thread.sleep(ms)

@@ -4,11 +4,15 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.io.InputStream
-import java.net.URI
-import java.security.MessageDigest
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
+import net.tisma.io.ByteInput
+import net.tisma.io.IOException
+import net.tisma.io.Lock
+import net.tisma.io.Md5
+import net.tisma.io.hex
+import net.tisma.io.nowMs
+import net.tisma.io.readInto
+import net.tisma.io.sleepMs
+import kotlin.concurrent.Volatile
 
 /**
  * A Bambu Lab printer in its local mode (printer_connections.md, «Bambu Lab en
@@ -21,7 +25,8 @@ import java.util.zip.ZipOutputStream
  * - Controls with `gcode_line`. The access code is never logged (rule 8).
  *
  * The connection stays open while the app uses it: reports come by themselves,
- * and some models send only what changed (so the state is merged).
+ * and some models send only what changed (so the state is merged). Common code: Android and iOS share it; the
+ * project file is packed by each platform ([packForBambu]).
  */
 class BambuConnection(
     private val host: String,
@@ -37,7 +42,7 @@ class BambuConnection(
     @Volatile private var mqtt: MqttClient? = null
     @Volatile private var serial: String? = null
     private val state = mutableMapOf<String, kotlinx.serialization.json.JsonElement>()
-    private val lock = Object()
+    private val lock = Lock()
 
     /** The serial number and certificate fingerprint seen (for the person to confirm the first time). */
     val seenSerial get() = tls.seenName
@@ -45,20 +50,23 @@ class BambuConnection(
 
     private fun client(): MqttClient {
         mqtt?.takeIf { it.connected }?.let { return it }
-        synchronized(lock) {
-            mqtt?.takeIf { it.connected }?.let { return it }
-            val socket = tls.socket(host, mqttPort)
+        return lock.locked { mqtt?.takeIf { it.connected } ?: connect() }
+    }
+
+    private fun connect(): MqttClient {
+        run {
+            val socket = tls.open(host, mqttPort)
             val sn = tls.seenName ?: throw PrinterException(PrinterException.Kind.UNEXPECTED, "The printer's certificate has no name")
             serial = sn
-            val c = MqttClient(net.tisma.io.SocketLink(socket), "tisma-" + System.nanoTime().toString(36), onMessage = { _, payload -> merge(payload) })
+            val c = MqttClient(socket, "tisma-" + kotlin.random.Random.nextLong().toULong().toString(36), onMessage = { _, payload -> merge(payload) })
             try {
                 c.connect("bblp", accessCode)
-            } catch (e: java.io.IOException) {
+            } catch (e: IOException) {
                 throw PrinterException(PrinterException.Kind.NETWORK, e.message ?: "MQTT failed", e)
             }
             // A new link starts from the printer's own report, not from what the last one left. Cleared before
             // subscribing: a report that arrives right after the subscription is kept, not wiped.
-            synchronized(lock) { state.clear() }
+            lock.locked { state.clear() }
             c.subscribe("device/$sn/report")
             mqtt = c
             request(buildJsonObject {
@@ -71,17 +79,14 @@ class BambuConnection(
     }
 
     private fun merge(payload: ByteArray) {
-        val o = runCatching { Json.parseToJsonElement(payload.toString(Charsets.UTF_8)) as JsonObject }.getOrNull() ?: return
+        val o = runCatching { Json.parseToJsonElement(payload.decodeToString()) as JsonObject }.getOrNull() ?: return
         val print = o["print"] as? JsonObject ?: return
-        synchronized(lock) {
-            state.putAll(print)
-            lock.notifyAll()
-        }
+        lock.locked { state.putAll(print) }
     }
 
     private fun request(o: JsonObject, qos: Int = 0) {
         val c = mqtt ?: client()
-        c.publish("device/${serial}/request", o.toString().toByteArray(), qos)
+        c.publish("device/${serial}/request", o.toString().encodeToByteArray(), qos)
     }
 
     private fun printCommand(command: String, extra: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit = {}, qos: Int = 1) {
@@ -96,30 +101,28 @@ class BambuConnection(
     }
 
     private fun waitForState(ms: Long) {
-        val end = System.currentTimeMillis() + ms
-        synchronized(lock) {
-            while (!state.containsKey("gcode_state") && System.currentTimeMillis() < end) lock.wait(100)
-        }
+        val end = nowMs() + ms
+        while (!lock.locked { state.containsKey("gcode_state") } && nowMs() < end) sleepMs(50)
     }
 
     override fun status(): PrinterStatus {
         val c = client()
         // Ask for everything again when it has been quiet, and give up on a link that stays silent: a Wi-Fi lost
         // without the socket closing would otherwise show the last state («printing 45 %») for ever.
-        val quiet = System.currentTimeMillis() - c.lastReceived
+        val quiet = nowMs() - c.lastReceived
         if (quiet > staleMs / 3) {
             runCatching { request(buildJsonObject { put("pushing", buildJsonObject {
                 put("sequence_id", "0"); put("command", "pushall"); put("version", 1); put("push_target", 1) }) }) }
-            val asked = System.currentTimeMillis()
-            synchronized(lock) { while (c.lastReceived < asked && System.currentTimeMillis() - asked < 3_000) lock.wait(50) }
-            if (c.lastReceived < asked && System.currentTimeMillis() - c.lastReceived > staleMs) {
+            val asked = nowMs()
+            while (c.lastReceived < asked && nowMs() - asked < 3_000) sleepMs(50)
+            if (c.lastReceived < asked && nowMs() - c.lastReceived > staleMs) {
                 close()
-                synchronized(lock) { state.clear() }
+                lock.locked { state.clear() }
                 throw PrinterException(PrinterException.Kind.NETWORK, "The printer stopped answering")
             }
         }
         waitForState(3_000)
-        val s = synchronized(lock) { JsonObject(state.toMap()) }
+        val s = lock.locked { JsonObject(state.toMap()) }
         if (!s.containsKey("gcode_state")) return PrinterStatus(PrinterState.BUSY)
         // Bambu Lab publishes no specification of these values (spec team, 04-11-2026): only IDLE is in the
         // community documentation. RUNNING and PAUSE are taken as printing and paused, to be confirmed on a
@@ -145,7 +148,7 @@ class BambuConnection(
             bed = s.num("bed_temper")?.let { Temperature(it, s.num("bed_target_temper") ?: 0.0) },
             chamber = s.num("chamber_temper")?.let { Temperature(it, 0.0) },
             message = when {
-                error != 0L -> "Error ${"%08X".format(error)}"
+                error != 0L -> "Error " + error.toString(16).uppercase().padStart(8, '0')
                 st == PrinterState.BUSY -> raw
                 else -> ""
             },
@@ -156,19 +159,18 @@ class BambuConnection(
     override fun resume() = printCommand("resume", { put("param", "") })
     override fun cancel() = printCommand("stop", { put("param", "") })
 
-    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) =
+    override fun upload(name: String, length: Long, start: Boolean, open: () -> ByteInput) =
         upload(name, length, start, PrintOptions(), open)
 
-    override fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> InputStream) {
+    override fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> ByteInput) {
         client()
         val base = name.substringAfterLast('/').removeSuffix(".gcode").removeSuffix(".3mf")
         val remote = "$base.gcode.3mf"
         // Through a temporary file, never whole in memory: a long print's G-code is hundreds of MB.
-        val packed = java.io.File.createTempFile("bambu", ".gcode.3mf")
+        val packed = open().use { packForBambu(it) }
         val gcodeMd5 = try {
-            val sum = open().use { pack(it, packed) }
-            FtpsUpload(tls, host, ftpPort).store("bblp", accessCode, remote, packed.length()) { packed.inputStream().buffered() }
-            sum
+            FtpsUpload(tls, host, ftpPort).store("bblp", accessCode, remote, packed.length) { packed.open() }
+            packed.md5
         } finally {
             packed.delete()
         }
@@ -194,39 +196,42 @@ class BambuConnection(
      */
     override fun cameraFrames(): CameraFrames {
         val socket = try {
-            tls.socket(host, cameraPort)
+            tls.open(host, cameraPort, readTimeoutMs = 10_000)
         } catch (e: PrinterException) {
             throw e
-        } catch (e: java.io.IOException) {
+        } catch (e: IOException) {
             throw PrinterException(PrinterException.Kind.NETWORK, "The camera does not answer on port $cameraPort", e)
         }
         try {
-            socket.soTimeout = 10_000
-            socket.getOutputStream().apply { write(cameraLogin(accessCode)); flush() }
-        } catch (e: java.io.IOException) {
+            val login = cameraLogin(accessCode)
+            socket.output.write(login, 0, login.size); socket.output.flush()
+        } catch (e: IOException) {
             socket.close()
             throw PrinterException(PrinterException.Kind.NETWORK, "The camera closed the connection", e)
         }
-        val input = java.io.DataInputStream(socket.getInputStream().buffered())
+        val input = socket.input
         return object : CameraFrames {
             private var seen = false
             override fun next(): ByteArray {
                 val head = ByteArray(16)
-                try {
-                    input.readFully(head)
-                } catch (e: java.io.EOFException) {
+                val got = try {
+                    input.readInto(head)
+                } catch (e: IOException) {
+                    // A read that waited too long (Android's socket timeout): nothing comes.
+                    throw PrinterException(PrinterException.Kind.UNEXPECTED, "The camera sends no images", e)
+                }
+                if (got < head.size) {
                     // Closed before any image: the access code was refused.
                     throw PrinterException(if (seen) PrinterException.Kind.NETWORK else PrinterException.Kind.AUTH,
-                        if (seen) "The camera stopped" else "The camera refused the access code", e)
-                } catch (e: java.net.SocketTimeoutException) {
-                    throw PrinterException(PrinterException.Kind.UNEXPECTED, "The camera sends no images", e)
+                        if (seen) "The camera stopped" else "The camera refused the access code")
                 }
                 val size = le32(head, 0)
                 if (size <= 0 || size > 8 * 1024 * 1024) throw PrinterException(PrinterException.Kind.UNEXPECTED, "A camera image of $size bytes")
                 val jpeg = ByteArray(size.toInt())
-                try { input.readFully(jpeg) } catch (e: java.io.IOException) {
+                val n = try { input.readInto(jpeg) } catch (e: IOException) {
                     throw PrinterException(PrinterException.Kind.NETWORK, "The camera stopped", e)
                 }
+                if (n < jpeg.size) throw PrinterException(PrinterException.Kind.NETWORK, "The camera stopped")
                 val ok = jpeg.size >= 4 && jpeg[0] == 0xFF.toByte() && jpeg[1] == 0xD8.toByte() &&
                     jpeg[jpeg.size - 2] == 0xFF.toByte() && jpeg[jpeg.size - 1] == 0xD9.toByte()
                 if (!ok) throw PrinterException(PrinterException.Kind.UNEXPECTED, "A camera image is not a JPEG")
@@ -258,48 +263,44 @@ class BambuConnection(
     companion object {
         /** From a saved address, `bambu://host` (tests may give other ports: `bambu://host:mqtt?ftp=port`). */
         fun of(url: String, accessCode: String, pinned: String?, staleMs: Long = 30_000): BambuConnection {
-            val u = URI(if (url.startsWith("bambu://")) url else "bambu://$url")
-            fun q(k: String) = u.query?.split('&')?.firstOrNull { it.startsWith("$k=") }?.substringAfter('=')?.toIntOrNull()
-            return BambuConnection(u.host, accessCode, pinned, if (u.port > 0) u.port else 8883, q("ftp") ?: 990, q("cam") ?: 6000, staleMs)
+            val rest = url.removePrefix("bambu://").substringAfter("://")
+            val authority = rest.substringBefore('/').substringBefore('?')
+            val query = rest.substringAfter('?', "")
+            fun q(k: String) = query.split('&').firstOrNull { it.startsWith("$k=") }?.substringAfter('=')?.toIntOrNull()
+            val host = if (authority.startsWith("[")) authority.substringAfter('[').substringBefore(']') else authority.substringBefore(':')
+            val port = (if (authority.startsWith("[")) authority.substringAfter("]:", "") else authority.substringAfter(':', "")).toIntOrNull()
+            return BambuConnection(host, accessCode, pinned, port ?: 8883, q("ftp") ?: 990, q("cam") ?: 6000, staleMs)
         }
 
         /** The camera's 80-byte login: the header, then `bblp` and the access code, 32 bytes each. */
         fun cameraLogin(accessCode: String): ByteArray {
-            val b = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-            b.putInt(0x40); b.putInt(0x3000); b.putInt(0); b.putInt(0)
-            fun field(v: String) { val raw = v.toByteArray(Charsets.US_ASCII).copyOf(32); b.put(raw) }
-            field("bblp"); field(accessCode)
-            return b.array()
+            val b = ByteArray(80)
+            fun le(at: Int, v: Int) { for (i in 0 until 4) b[at + i] = (v ushr (8 * i)).toByte() }
+            le(0, 0x40); le(4, 0x3000)
+            fun field(at: Int, v: String) { v.encodeToByteArray().copyOf(32).copyInto(b, at) }
+            field(16, "bblp"); field(48, accessCode)
+            return b
         }
 
         private fun le32(b: ByteArray, at: Int): Long =
             (b[at].toLong() and 0xFF) or ((b[at + 1].toLong() and 0xFF) shl 8) or
                 ((b[at + 2].toLong() and 0xFF) shl 16) or ((b[at + 3].toLong() and 0xFF) shl 24)
 
-        /** The G-code packed as Bambu Lab's local mode reads it: `Metadata/plate_1.gcode` and its MD5. */
-        /**
-         * Streams [gcode] into a Bambu project file at [out] (the G-code and its MD5 beside it) and returns that MD5.
-         * The G-code is read once, to a temporary copy, so its MD5 is known before the ZIP is written.
-         */
-        fun pack(gcode: InputStream, out: java.io.File): String {
-            val copy = java.io.File.createTempFile("bambu", ".gcode")
-            try {
-                val md = MessageDigest.getInstance("MD5")
-                copy.outputStream().buffered().use { o ->
-                    val b = ByteArray(64 * 1024)
-                    while (true) { val n = gcode.read(b); if (n < 0) break; md.update(b, 0, n); o.write(b, 0, n) }
-                }
-                val sum = md.digest().joinToString("") { "%02x".format(it) }
-                ZipOutputStream(out.outputStream().buffered()).use { z ->
-                    z.putNextEntry(ZipEntry("Metadata/plate_1.gcode")); copy.inputStream().use { it.copyTo(z, 64 * 1024) }; z.closeEntry()
-                    z.putNextEntry(ZipEntry("Metadata/plate_1.gcode.md5")); z.write(sum.toByteArray()); z.closeEntry()
-                }
-                return sum
-            } finally {
-                copy.delete()
-            }
-        }
-
-        fun md5(b: ByteArray): String = MessageDigest.getInstance("MD5").digest(b).joinToString("") { "%02x".format(it) }
+        fun md5(b: ByteArray): String = hex(Md5.digest(b))
     }
 }
+
+/** A packed project waiting to be sent: kept outside memory (a file), [delete]d once sent. */
+interface PackedProject {
+    val length: Long
+    /** The MD5 of the G-code inside, which `project_file` names. */
+    val md5: String
+    fun open(): ByteInput
+    fun delete()
+}
+
+/**
+ * Packs [gcode] as Bambu Lab's local mode reads it: a ZIP with `Metadata/plate_1.gcode` and its MD5 beside it, in a
+ * temporary file. Each platform writes it its own way.
+ */
+expect fun packForBambu(gcode: ByteInput): PackedProject

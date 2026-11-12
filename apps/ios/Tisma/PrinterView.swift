@@ -23,7 +23,7 @@ struct PrinterView: View {
                     TextField("Address", text: $address)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     if kind == "prusalink" { TextField("User", text: $user).textInputAutocapitalization(.never) }
-                    SecureField(kind == "octoprint" || kind == "moonraker" ? "API key" : "Password", text: $secret)
+                    SecureField(kind == "bambu" ? "Access code" : kind == "octoprint" || kind == "moonraker" ? "API key" : "Password", text: $secret)
                         .onChange(of: secret) { _, v in Keychain.write("printer.secret", v) }
                     Button("Test") { run { tested = try PrinterBridge.shared.test(kind: $0.0, address: $0.1, user: $0.2, secret: $0.3) } }
                         .disabled(address.isEmpty)
@@ -80,6 +80,7 @@ struct PrinterView: View {
         case "octoprint": return "OctoPrint"
         case "prusalink": return "PrusaLink"
         case "duet": return "Duet"
+        case "bambu": return "Bambu Lab (LAN)"
         default: return kind
         }
     }

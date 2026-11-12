@@ -90,3 +90,6 @@ expect fun startDaemon(name: String, block: () -> Unit)
 
 /** The wall clock in milliseconds. */
 fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+/** Waits [ms] on the calling (background) thread. */
+expect fun sleepMs(ms: Long)

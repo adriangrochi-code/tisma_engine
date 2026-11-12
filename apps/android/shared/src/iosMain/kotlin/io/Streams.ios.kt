@@ -43,3 +43,5 @@ actual class Lock actual constructor() {
 actual fun startDaemon(name: String, block: () -> Unit) {
     platform.Foundation.NSThread.detachNewThreadWithBlock { block() }
 }
+
+actual fun sleepMs(ms: Long) = platform.Foundation.NSThread.sleepForTimeInterval(ms / 1000.0)

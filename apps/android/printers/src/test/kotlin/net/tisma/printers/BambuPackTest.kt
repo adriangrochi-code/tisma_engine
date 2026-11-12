@@ -28,7 +28,7 @@ class BambuPackTest {
         val size = 400L * 1024 * 1024
         val out = File.createTempFile("pack", ".3mf")
         try {
-            val sum = BambuConnection.pack(Gcode(size), out)
+            val sum = BambuPackFile.pack(Gcode(size), out)
             val md = MessageDigest.getInstance("MD5")
             Gcode(size).use { i -> val b = ByteArray(1 shl 16); while (true) { val n = i.read(b); if (n < 0) break; md.update(b, 0, n) } }
             assertEquals(md.digest().joinToString("") { "%02x".format(it) }, sum)

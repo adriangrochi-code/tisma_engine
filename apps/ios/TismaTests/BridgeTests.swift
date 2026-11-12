@@ -28,13 +28,13 @@ final class BridgeTests: XCTestCase {
         XCTAssertEqual(LibraryBridge.shared.search(query: "").count, 0)
     }
 
-    func testPrinterKindsWithoutBambuYet() {
-        XCTAssertEqual(PrinterBridge.shared.kinds, ["moonraker", "octoprint", "prusalink", "duet"])
+    func testPrinterKindsWithBambu() {
+        XCTAssertEqual(PrinterBridge.shared.kinds, ["moonraker", "octoprint", "prusalink", "duet", "bambu"])
     }
 
     func testAPrinterThatDoesNotAnswerIsAnError() {
         XCTAssertThrowsError(try PrinterBridge.shared.status(kind: "moonraker", address: "127.0.0.1:9", user: "", secret: ""))
-        XCTAssertThrowsError(try PrinterBridge.shared.status(kind: "bambu", address: "127.0.0.1", user: "", secret: ""))
+        XCTAssertThrowsError(try PrinterBridge.shared.status(kind: "bambu", address: "127.0.0.1:9", user: "", secret: "12345678"))
     }
 
     func testTheKeychainKeepsAndForgetsASecret() {
