@@ -314,6 +314,7 @@ add_library(tisma_core
   src/device/serial_port.cpp
   src/device/simulator.cpp
   src/device/stream.cpp
+  src/device/camera_frame.cpp
   src/device/usb_camera.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
   # The plate and the slicing job behind the interface's buttons, without

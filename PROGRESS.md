@@ -13692,3 +13692,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   sin formatos (metadatos) no cuentan. En Windows y macOS da vacío hasta compilar openpnp-capture. Sin cámara en esta
   máquina: la prueba solo comprueba que no falla. **No probado con una cámara real.** Sigue: abrir y leer imágenes
   (V4L2 `VIDIOC_REQBUFS`/`mmap`/`VIDIOC_DQBUF`, MJPEG con stb_image).
+- **Cámara USB, las imágenes:** `src/device/camera_frame.*`: YUYV a RGBA (BT.601) y los MJPEG sin tablas de Huffman
+  completados con las típicas de T.81 (Anexo K.3), que muchas cámaras UVC no mandan. Prueba: un JPEG escrito con
+  stb_image_write, sin sus tablas, sale mal; con las de K.3 sale idéntico. Sigue: la captura V4L2 (`VIDIOC_REQBUFS`,
+  `mmap`, `VIDIOC_DQBUF`) y su uso en la interfaz (la decodifica `ui::decode_image`).
