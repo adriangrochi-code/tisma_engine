@@ -32,7 +32,6 @@
 "Engine" = "Motor";
 "Slice the 20 mm cube" = "Laminar el cubo de 20 mm";
 "Choose…" = "Elegir…";
-"Nozzle" = "Boquilla";
 "Filament" = "Filamento";
 "The printer's own" = "El de la impresora";
 "The catalog is missing from this build." = "Esta versión no trae el catálogo.";
@@ -45,3 +44,9 @@
 "Send to the printer and start" = "Mandar a la impresora y empezar";
 "Sent; the printer starts it." = "Enviado; la impresora lo empieza.";
 "Slice in the cloud" = "Laminar en la nube";
+"Print" = "Impresión";
+"Layer height" = "Altura de capa";
+"Infill" = "Relleno";
+"Supports" = "Soportes";
+"Material" = "Material";
+"The filament's" = "La del filamento";

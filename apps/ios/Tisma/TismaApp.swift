@@ -54,6 +54,12 @@ struct PlateView: View {
     @State private var picking = false
     @State private var sent: String?
     @State private var cloudLine: String?
+    // Print and Material (mobile_app.md, rule 7): the usual changes over the printer's profile.
+    @AppStorage("print.layer") private var layerHeight = 0.2
+    @AppStorage("print.infill") private var infill = 20.0
+    @AppStorage("print.supports") private var supports = false
+    @AppStorage("material.nozzle") private var nozzleTemp = 0.0
+    @AppStorage("material.bed") private var bedTemp = 0.0
     // The printer saved on the Printer screen.
     @AppStorage("printer.kind") private var savedKind = "moonraker"
     @AppStorage("printer.address") private var savedAddress = ""
@@ -80,6 +86,24 @@ struct PlateView: View {
                         }
                     } else {
                         Text("The catalog is missing from this build.").foregroundStyle(.red)
+                    }
+                }
+                Section("Print") {
+                    Stepper(value: $layerHeight, in: 0.05...0.4, step: 0.02) {
+                        LabeledContent("Layer height", value: String(format: "%.2f mm", layerHeight))
+                    }
+                    VStack(alignment: .leading) {
+                        LabeledContent("Infill", value: "\(Int(infill)) %")
+                        Slider(value: $infill, in: 0...100, step: 5)
+                    }
+                    Toggle("Supports", isOn: $supports)
+                }
+                Section("Material") {
+                    Stepper(value: $nozzleTemp, in: 0...320, step: 5) {
+                        LabeledContent("Nozzle", value: nozzleTemp > 0 ? "\(Int(nozzleTemp)) °C" : String(localized: "The filament's"))
+                    }
+                    Stepper(value: $bedTemp, in: 0...120, step: 5) {
+                        LabeledContent("Bed", value: bedTemp > 0 ? "\(Int(bedTemp)) °C" : String(localized: "The filament's"))
                     }
                 }
                 Section("Model") {
@@ -179,6 +203,7 @@ struct PlateView: View {
         // A filament gives the temperatures: without one the engine refuses the G-code (nozzle heater at 0).
         let fallback = Engine.catalog.flatMap { c in model.flatMap { c.filamentsFor(p: $0).first?.fullName } }
         let (p, n, f, chosen) = (printer, nozzle, filament.isEmpty ? fallback : filament, opened)
+        let changes = (layerHeight, infill, supports, nozzleTemp, bedTemp)
         Task.detached {
             let dir = FileManager.default.temporaryDirectory
             let model = chosen ?? dir.appendingPathComponent("cube20.stl")
@@ -186,8 +211,11 @@ struct PlateView: View {
             let (config, why) = Engine.profile(printer: p, nozzle: n, filament: f)
             let text: String
             var made: URL?
-            if let config {
-                let (r, out, summary) = Engine.slice(model: model, config: config)
+            if let profile = config {
+                let config = profile.deletingPathExtension().appendingPathExtension("changed.json")
+                let applied = EngineBridge.shared.applyChanges(profilePath: profile.path, outPath: config.path,
+                    layerHeight: changes.0, infillPercent: changes.1, supports: changes.2, nozzleTemp: changes.3, bedTemp: changes.4)
+                let (r, out, summary) = Engine.slice(model: model, config: applied ? config : profile)
                 if r.code == 0 { made = out }
                 if r.code == 0, let s = summary.flatMap({ EngineBridge.shared.summary(json: $0) }) {
                     text = "\(s.printTime) · \(String(format: "%.2f m", s.filamentMm / 1000)) · \(String(format: "%.1f g", s.filamentG)) · \(s.layers) layers"

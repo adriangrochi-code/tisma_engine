@@ -28,6 +28,18 @@ object EngineBridge {
         net.tisma.io.FileInput(path).use { GcodeLayers.read(it.lines()) }
     }.getOrNull()
 
+    /**
+     * The printer's profile at [profilePath] with the person's changes over it, written to [outPath] for --config.
+     * Temperatures of 0 or less keep the filament's.
+     */
+    fun applyChanges(profilePath: String, outPath: String, layerHeight: Double, infillPercent: Double, supports: Boolean,
+                     nozzleTemp: Double, bedTemp: Double): Boolean = runCatching {
+        val text = net.tisma.io.FileInput(profilePath).use { it.lines().joinToString("\n") }
+        val merged = PrintChanges(layerHeight, infillPercent, supports, nozzleTemp.takeIf { it > 0 }, bedTemp.takeIf { it > 0 }).over(text)
+        net.tisma.io.FileOutput(outPath).use { val b = merged.encodeToByteArray(); it.write(b, 0, b.size) }
+        true
+    }.getOrDefault(false)
+
     /** Reads `--summary`; null when the text is not a summary. */
     fun summary(json: String): SliceSummary? {
         val o = runCatching { Json.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return null

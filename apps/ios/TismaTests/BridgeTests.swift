@@ -111,4 +111,16 @@ final class BridgeTests: XCTestCase {
         try "solid x".write(to: f, atomically: true, encoding: .utf8)
         XCTAssertThrowsError(try CloudBridge.shared.submitSlice(server: "http://127.0.0.1:9", token: "t", path: f.path, name: "x.3mf"))
     }
+
+    func testPrintChangesGoOverTheProfile() throws {
+        let dir = FileManager.default.temporaryDirectory
+        let profile = dir.appendingPathComponent("p-changes.json"), out = dir.appendingPathComponent("p-changed.json")
+        try #"{"layers":{"height":0.2},"machine":{"variables":{"temperature":215}}}"#.write(to: profile, atomically: true, encoding: .utf8)
+        XCTAssertTrue(EngineBridge.shared.applyChanges(profilePath: profile.path, outPath: out.path, layerHeight: 0.12,
+                                                      infillPercent: 40, supports: true, nozzleTemp: 0, bedTemp: 65))
+        let text = try String(contentsOf: out, encoding: .utf8)
+        XCTAssertTrue(text.contains("\"height\":0.12"))
+        XCTAssertTrue(text.contains("\"temperature\":215"), "the filament's nozzle temperature is kept")
+        XCTAssertTrue(text.contains("\"bed_temperature\":65.0"))
+    }
 }
