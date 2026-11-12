@@ -2,6 +2,7 @@ package net.tisma.app
 
 import net.tisma.app.engine.BinaryGcode
 import net.tisma.app.engine.GcodeLayers
+import net.tisma.app.engine.read
 import java.io.File
 import org.junit.Test
 import kotlin.test.assertEquals

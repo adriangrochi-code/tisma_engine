@@ -70,6 +70,7 @@ class BytesOutput : ByteOutput() {
     override fun write(b: ByteArray, off: Int, len: Int) { grow(len); b.copyInto(buf, n, off, off + len); n += len }
     private fun grow(more: Int) { if (n + more > buf.size) buf = buf.copyOf(maxOf(buf.size * 2, n + more)) }
     fun toByteArray(): ByteArray = buf.copyOf(n)
+    fun reset() { n = 0 }
     override fun flush() {}
     override fun close() {}
 }
@@ -93,3 +94,25 @@ fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
 /** Waits [ms] on the calling (background) thread. */
 expect fun sleepMs(ms: Long)
+
+/** The text lines of [this] (UTF-8, `\n` or `\r\n`), read as they are asked for: a G-code of 1 GB is never whole. */
+fun ByteInput.lines(): Sequence<String> = sequence {
+    val line = BytesOutput()
+    val buf = ByteArray(64 * 1024)
+    var hasLine = false
+    while (true) {
+        val n = read(buf, 0, buf.size)
+        if (n < 0) break
+        var start = 0
+        for (i in 0 until n) {
+            if (buf[i] == '\n'.code.toByte()) {
+                line.write(buf, start, i - start)
+                yield(line.toByteArray().decodeToString().removeSuffix("\r"))
+                line.reset(); hasLine = false
+                start = i + 1
+            }
+        }
+        if (start < n) { line.write(buf, start, n - start); hasLine = true }
+    }
+    if (hasLine) yield(line.toByteArray().decodeToString().removeSuffix("\r"))
+}

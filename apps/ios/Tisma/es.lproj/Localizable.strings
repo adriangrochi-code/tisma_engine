@@ -36,3 +36,5 @@
 "Filament" = "Filamento";
 "The printer's own" = "El de la impresora";
 "The catalog is missing from this build." = "Esta versión no trae el catálogo.";
+"Preview" = "Vista previa";
+"The G-code does not read" = "El G-code no se puede leer";

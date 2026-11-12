@@ -39,6 +39,7 @@ struct PlateView: View {
     @AppStorage("plate.filament") private var filament = ""
     @State private var result: String?
     @State private var busy = false
+    @State private var gcode: URL?
 
     private var model: CatalogPrinterModel? { Engine.catalog?.printer(name: printer) }
 
@@ -69,6 +70,7 @@ struct PlateView: View {
                     Button("Slice the 20 mm cube") { slice() }.disabled(busy || printer.isEmpty)
                     if busy { ProgressView() }
                     if let result { Text(result).font(.footnote.monospaced()) }
+                    if let gcode { NavigationLink("Preview") { PreviewView(gcode: gcode) } }
                 }
             }
             .navigationTitle("Plate")
@@ -84,8 +86,10 @@ struct PlateView: View {
             try? Engine.cubeStl().write(to: model, atomically: true, encoding: .utf8)
             let (config, why) = Engine.profile(printer: p, nozzle: n, filament: f)
             let text: String
+            var made: URL?
             if let config {
-                let (r, _, summary) = Engine.slice(model: model, config: config)
+                let (r, out, summary) = Engine.slice(model: model, config: config)
+                if r.code == 0 { made = out }
                 if r.code == 0, let s = summary.flatMap({ EngineBridge.shared.summary(json: $0) }) {
                     text = "\(s.printTime) · \(String(format: "%.2f m", s.filamentMm / 1000)) · \(String(format: "%.1f g", s.filamentG)) · \(s.layers) layers"
                 } else {
@@ -94,7 +98,7 @@ struct PlateView: View {
             } else {
                 text = "No profile: \(why)"
             }
-            await MainActor.run { result = text; busy = false }
+            await MainActor.run { result = text; gcode = made; busy = false }
         }
     }
 }

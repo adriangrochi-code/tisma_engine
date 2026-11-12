@@ -29,7 +29,8 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    Llegó (12-11): la CI del motor arma `TismaEngine.xcframework` con `tisma_run_cli`; la CI de iOS lo baja de `dev`,
    la app lo enlaza y Swift llama a la línea de comandos en el proceso. Lamina el cubo de 20 mm en el simulador
    (12-11). Perfiles (12-11): impresora, boquilla y filamento del catálogo del motor (`Catalog` en `shared`) y
-   `tisma-engine profile` para el `--config`. Falta: abrir modelos, vista previa y mandar a la impresora.
+   `tisma-engine profile` para el `--config`. Vista previa por capas (12-11, `GcodeLayers` en `shared`). Falta: abrir
+   modelos y mandar a la impresora.
 5. **Pantallas en SwiftUI** (`apps/ios/`), en este orden: Biblioteca, Impresora (con Material), Más (cuenta, ajustes),
    Placa (cuando llegue el motor), Ingeniería al final.
    Empezado (12-11): `project.yml` (XcodeGen), las cuatro secciones, «Más» entra a la cuenta por el cliente común

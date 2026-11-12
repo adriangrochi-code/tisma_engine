@@ -1,6 +1,5 @@
 package net.tisma.app.engine
 
-import java.io.BufferedReader
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.ceil
@@ -87,7 +86,8 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
         /** The binary G-code format starts with these bytes; read through [BinaryGcode]. */
         val BINARY_MAGIC = byteArrayOf('G'.code.toByte(), 'C'.code.toByte(), 'D'.code.toByte(), 'E'.code.toByte())
 
-        fun read(reader: BufferedReader): GcodeLayers = Parser().run(reader)
+        /** Reads the G-code's lines in order (Android gives a file's reader, iOS a file's lines). Common code. */
+        fun read(lines: Sequence<String>): GcodeLayers = Parser().run(lines)
     }
 
     private class Builder(val z: Float, var height: Float) {
@@ -144,8 +144,8 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
             return Builder(target, if (tagHeight > 0) tagHeight else (target - prevZ)).also { current = it }
         }
 
-        fun run(reader: BufferedReader): GcodeLayers {
-            reader.forEachLine { raw -> line(raw) }
+        fun run(lines: Sequence<String>): GcodeLayers {
+            lines.forEach { raw -> line(raw) }
             current?.takeIf { it.n > 0 }?.let { layers += it.build() }
             return GcodeLayers(layers, types)
         }
@@ -245,10 +245,10 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
             val r = hypot(x - cx, y - cy)
             var a0 = atan2(y - cy, x - cx)
             var a1 = atan2(ny - cy, nx - cx)
-            if (clockwise && a1 >= a0) a1 -= 2 * Math.PI
-            if (!clockwise && a1 <= a0) a1 += 2 * Math.PI
+            if (clockwise && a1 >= a0) a1 -= 2 * kotlin.math.PI
+            if (!clockwise && a1 <= a0) a1 += 2 * kotlin.math.PI
             if (de > 1e-9 && r > 1e-6) {
-                val steps = ceil(abs(a1 - a0) / (Math.PI / 36)).toInt().coerceIn(1, 360)
+                val steps = ceil(abs(a1 - a0) / (kotlin.math.PI / 36)).toInt().coerceIn(1, 360)
                 val layer = layerFor(nz)
                 if (type < 0) type = typeIndex("Custom")
                 var px = x; var py = y

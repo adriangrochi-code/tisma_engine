@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import net.tisma.io.lines
 
 /** A slice's summary as the iPhone shows it (the engine's `--summary`, the same keys Android reads). */
 data class SliceSummary(val printTime: String, val printTimeS: Double, val filamentMm: Double, val filamentG: Double, val layers: Int)
@@ -21,6 +22,11 @@ object EngineBridge {
     fun profileArgs(printer: String, nozzle: Double, filament: String?, out: String): List<String> =
         listOf("profile", "--printer", printer, "--nozzle", nozzle.toString(), "-o", out) +
             (filament?.let { listOf("--filament", it) } ?: emptyList())
+
+    /** The preview's layers of the G-code at [path] (read line by line), or null when it does not read. */
+    fun preview(path: String): GcodeLayers? = runCatching {
+        net.tisma.io.FileInput(path).use { GcodeLayers.read(it.lines()) }
+    }.getOrNull()
 
     /** Reads `--summary`; null when the text is not a summary. */
     fun summary(json: String): SliceSummary? {

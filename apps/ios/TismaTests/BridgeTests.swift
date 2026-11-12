@@ -81,5 +81,8 @@ final class BridgeTests: XCTestCase {
         let s = try XCTUnwrap(summary.flatMap { EngineBridge.shared.summary(json: $0) })
         XCTAssertGreaterThan(s.filamentMm, 0)
         XCTAssertGreaterThan(s.layers, 50)
+        // The preview reads the same G-code, layer by layer.
+        let g = try XCTUnwrap(EngineBridge.shared.preview(path: model.deletingPathExtension().appendingPathExtension("gcode").path))
+        XCTAssertGreaterThan(g.layers.count, 50)
     }
 }
