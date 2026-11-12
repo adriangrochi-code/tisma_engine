@@ -14,7 +14,7 @@ data class PrinterLine(
 /**
  * The network printers for the iPhone app (printer_connections.md), with the same clients as Android. A Bambu Lab's
  * certificate is pinned the first time «Test» reads it (rule 4: the serial and fingerprint are shown to the person);
- * sending files to it is not ready on iOS yet. Calls block and declare their errors for Swift.
+ * Calls block and declare their errors for Swift.
  */
 object PrinterBridge {
     /** The kinds the iPhone can use now, by their saved names. */
