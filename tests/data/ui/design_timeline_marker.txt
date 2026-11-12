@@ -8,9 +8,10 @@ menu design_box
 expect-design 8000
 menu design_op_shell
 expect-control design_pick_done
+design-pick 0 0 20
 menu design_command
 key enter
-expect-design 3904
+expect-design 3392
 expect-control design_timeline_1
 expect-control design_timeline_2
 drag-control design_timeline_marker -38 0
@@ -18,4 +19,4 @@ wait 5
 expect-design 8000
 drag-control design_timeline_marker 38 0
 wait 5
-expect-design 3904
+expect-design 3392

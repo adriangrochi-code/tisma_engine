@@ -1766,6 +1766,20 @@ private:
     // What another program's project brought that has no equivalent
     // (project_import.md, rules 6 and 9: «sin equivalente», by name and value).
     std::vector<std::string> import_skipped_;
+    // The dialog on opening another program's project (project_import.md,
+    // rule 9): what it is, its settings in their three groups, and the
+    // choice between the project's printer and the one in use.
+    struct ProjectImport {
+        bool open = false, detail = false;
+        std::string program, printer;      // the printer the project names
+        int items = 0;
+        SettingSort sort;
+        std::vector<std::pair<std::string, std::string>> own; // as the project has them
+        TranslationTable table;
+        char filter[64] = "";
+    };
+    ProjectImport import_;
+    void project_import_dialog();
     bool host_searched_ = false;
     std::string host_dialog_name_;
     device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
@@ -4531,6 +4545,7 @@ void App::load_model(const std::filesystem::path& path) {
                                         : format(tr(T::ProjectFromProgramOne), source.program.c_str()));
                 // Its settings by the pack's translation table, when it has
                 // one for this program (rules 6, 9 and 11).
+                bool brought = false;
                 if (pack_index_)
                     if (const auto table_path = pack_index_->translation.find(translation_dialect(source));
                         table_path != pack_index_->translation.end()) {
@@ -4542,24 +4557,43 @@ void App::load_model(const std::filesystem::path& path) {
                             if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
                                 const TranslationTable parsed = parse_translation(table);
                                 const SettingSort sort = sort_settings(parsed, own);
+                                // The dialog (rule 9), with the printer the project names.
+                                import_ = ProjectImport{};
+                                import_.open = true;
+                                import_.program = source.program;
+                                import_.items = source.items;
+                                import_.sort = sort;
+                                import_.own = own;
+                                import_.table = parsed;
+                                for (const auto& [key, value] : own)
+                                    if (key == "printer_settings_id")
+                                        import_.printer = value;
                                 // Translated and similar ones as changes by hand over the
                                 // printer and profiles chosen (rule 8); the rest named.
                                 const ProjectSettings got = translate_settings(parsed, own, settings_);
+                                brought = true;
                                 settings_ = got.settings;
                                 settings_changed();
                                 import_skipped_ = got.skipped;
                                 notify(format(tr(T::ProjectSettingsSorted), sort.translated, sort.similar, sort.none));
                                 if (!import_skipped_.empty()) {
+                                    // Their keys only, short: the values can be whole G-code scripts.
                                     std::string some;
-                                    for (std::size_t k = 0; k < import_skipped_.size() && k < 3; ++k)
-                                        some += (k ? ", " : "") + import_skipped_[k];
+                                    for (std::size_t k = 0; k < import_skipped_.size() && k < 3; ++k) {
+                                        std::string key = import_skipped_[k].substr(0, import_skipped_[k].find(" ="));
+                                        if (key.size() > 32)
+                                            key = key.substr(0, 31) + "…";
+                                        some += (k ? ", " : "") + key;
+                                    }
                                     notify(format(tr(T::ProjectSettingsSkipped), int(import_skipped_.size()), some.c_str()));
                                 }
                             }
                         } catch (const TranslationError&) {
-                            // A table this program cannot read: the notice above stands.
+                            // A table this program cannot read: Tisma's settings stay.
                         }
                     }
+                if (!brought)
+                    notify(tr(T::ProjectSettingsKept));
             }
             else if (source.program.empty() && source.application.find("Tisma") == std::string::npos)
                 notify(tr(T::ProjectFromUnknown));
@@ -13297,6 +13331,96 @@ void App::load_palette_piece() {
     plate_changed();
 }
 
+
+void App::project_import_dialog() {
+    if (!import_.open)
+        return;
+    // The project's printer, when the pack or the catalog has it by that name.
+    const auto project_printer = [&]() -> const Profile* {
+        if (import_.printer.empty())
+            return nullptr;
+        if (const Profile* p = find_profile(ProfileKind::Printer, import_.printer))
+            return p;
+        return nullptr;
+    };
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.45f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f * scale_, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowFocus();
+    bool open = true;
+    const std::string title = format(tr(T::ImportTitle), import_.program.c_str()) + "###project_import";
+    if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        g_menu_rects["project_import"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                                ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                                ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+        ImGui::PushTextWrapPos(0.0f);
+        loc::Text("%s", format(tr(T::ImportSummary), import_.program.c_str(), import_.items, 1, import_.sort.translated,
+                               import_.sort.similar, import_.sort.none).c_str());
+        if (!import_.printer.empty())
+            loc::TextDisabled("%s", format(tr(T::ImportPrinter), import_.printer.c_str()).c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        if (ImGui::Button(tr(import_.detail ? T::ImportHideDetail : T::ImportShowDetail)))
+            import_.detail = !import_.detail;
+        note_rect("import_detail");
+        if (import_.detail) {
+            // The three groups, each with its keys and values; a search narrows them.
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##import_filter", tr(T::ImportSearch), import_.filter, sizeof import_.filter);
+            std::string want = import_.filter;
+            for (char& c : want)
+                c = char(std::tolower(static_cast<unsigned char>(c)));
+            ImGui::BeginChild("##import_list", ImVec2(0, 260.0f * scale_), ImGuiChildFlags_Borders);
+            const std::pair<SettingGroup, T> groups[] = {{SettingGroup::Translated, T::ImportTranslated},
+                                                         {SettingGroup::Similar, T::ImportSimilar},
+                                                         {SettingGroup::None, T::ImportNone}};
+            for (const auto& [group, label] : groups) {
+                int count = 0;
+                for (const auto& [key, g] : import_.sort.detail)
+                    count += g == group;
+                const std::string head = std::string(tr(label)) + " (" + std::to_string(count) + ")";
+                if (!ImGui::CollapsingHeader(head.c_str(), group == SettingGroup::None ? 0 : ImGuiTreeNodeFlags_DefaultOpen))
+                    continue;
+                for (const auto& [key, g] : import_.sort.detail) {
+                    if (g != group)
+                        continue;
+                    std::string value;
+                    for (const auto& [k, v] : import_.own)
+                        if (k == key)
+                            value = v;
+                    std::string line = key + " = " + value, low = line;
+                    for (char& c : low)
+                        c = char(std::tolower(static_cast<unsigned char>(c)));
+                    if (!want.empty() && low.find(want) == std::string::npos)
+                        continue;
+                    loc::Text("%s", line.c_str());
+                }
+            }
+            ImGui::EndChild();
+        }
+        ImGui::Separator();
+        // Whose printer: the project's (when the pack has it) or the one in use (rule 8).
+        const Profile* theirs = project_printer();
+        ImGui::BeginDisabled(!theirs);
+        if (ImGui::Button(tr(T::ImportUseTheirs))) {
+            choose_profile(ProfileKind::Printer, *theirs);
+            settings_ = translate_settings(import_.table, import_.own, settings_).settings;
+            settings_changed();
+            open = false;
+        }
+        ImGui::EndDisabled();
+        note_rect("import_use_theirs");
+        if (!theirs && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::ImportPrinterMissing));
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::ImportUseMine)))
+            open = false;
+        note_rect("import_use_mine");
+    }
+    ImGui::End();
+    import_.open = open;
+}
+
 void App::mixing_dialog() {
     if (!mixing_open_)
         return;
@@ -15018,6 +15142,15 @@ T op_label(cad::OperationKind kind) {
 }
 
 // The operations that take points in the view (edges, faces, hole places).
+T need_picks_text(cad::OperationKind kind) {
+    switch (kind) {
+    case cad::OperationKind::Shell: return T::OpNeedFaceShell;
+    case cad::OperationKind::Fillet:
+    case cad::OperationKind::Chamfer: return T::OpNeedEdge;
+    default: return T::OpNeedPoint;
+    }
+}
+
 bool takes_points(cad::OperationKind kind) {
     return kind == cad::OperationKind::Fillet || kind == cad::OperationKind::Chamfer || kind == cad::OperationKind::Shell ||
            kind == cad::OperationKind::Hole || kind == cad::OperationKind::Thread || kind == cad::OperationKind::Draft;
@@ -16010,7 +16143,11 @@ void App::design_handles() {
     if (design_dialog_ < 0 || std::size_t(design_dialog_) >= design_.features.size() || design_box_.empty)
         return;
     cad::Feature& f = design_.features[std::size_t(design_dialog_)];
-    if (f.type != cad::Feature::Type::Primitive || f.suppressed)
+    // An operation with one measure (radius, distance, thickness) has it too.
+    const bool one_value = f.type == cad::Feature::Type::Operation &&
+                           (f.op.kind == cad::OperationKind::Fillet || f.op.kind == cad::OperationKind::Chamfer ||
+                            f.op.kind == cad::OperationKind::Shell);
+    if ((f.type != cad::Feature::Type::Primitive && !one_value) || f.suppressed)
         return;
     const std::size_t bodies = std::count_if(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
         return g.type != cad::Feature::Type::Operation && !g.suppressed;
@@ -16024,7 +16161,9 @@ void App::design_handles() {
         double per_mm;
     };
     std::vector<Handle> handles;
-    switch (f.kind) {
+    if (one_value) {
+        handles = {{0, 0, 1.0}}; // along X from the top edge, a millimetre for a millimetre
+    } else switch (f.kind) {
     case cad::Primitive::Box: handles = {{0, 0, 2.0}, {1, 1, 2.0}, {2, 2, 1.0}}; break;
     case cad::Primitive::Cylinder: handles = {{0, 0, 2.0}, {1, 2, 1.0}}; break;
     case cad::Primitive::Sphere: handles = {{0, 0, 2.0}}; break;
@@ -16037,10 +16176,13 @@ void App::design_handles() {
     const ImU32 colours[3] = {IM_COL32(229, 72, 77, 255), IM_COL32(63, 191, 127, 255), IM_COL32(59, 130, 246, 255)};
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     for (const Handle& h : handles) {
-        if (h.size >= cad::size_count(f.kind))
+        if (!one_value && h.size >= cad::size_count(f.kind))
             continue;
+        double& value = one_value ? f.op.value : f.sizes[h.size];
         Vec3 face = centre, dir{0, 0, 0};
         (h.axis == 0 ? face.x : h.axis == 1 ? face.y : face.z) = h.axis == 0 ? b.max.x : h.axis == 1 ? b.max.y : b.max.z;
+        if (one_value)
+            face.z = b.max.z; // on the top edge, where a fillet or a chamfer shows
         (h.axis == 0 ? dir.x : h.axis == 1 ? dir.y : dir.z) = 1.0f;
         const auto a = screen_of(face), one = screen_of(face + dir);
         if (!a || !one)
@@ -16073,15 +16215,19 @@ void App::design_handles() {
             const ImVec2 d = ImGui::GetIO().MouseDelta;
             const double mm = double(d.x * s.x + d.y * s.y) / double(px_per_mm);
             if (mm != 0.0) {
-                f.sizes[h.size] = std::max(0.1, f.sizes[h.size] + mm * h.per_mm);
+                value = std::max(0.1, value + mm * h.per_mm);
                 design_edited_ = true;
             }
-            const std::string value = format("%s %.2f mm", tr(size_label(f.kind, h.size)), f.sizes[h.size]);
+            const T name = !one_value                                     ? size_label(f.kind, h.size)
+                           : f.op.kind == cad::OperationKind::Fillet ? T::OpRadius
+                           : f.op.kind == cad::OperationKind::Chamfer ? T::OpDistance
+                                                                       : T::OpThickness;
+            const std::string shown = format("%s %.2f mm", tr(name), value);
             const ImVec2 m = ImGui::GetIO().MousePos;
             dl->AddRectFilled(ImVec2(m.x + 14.0f * scale_, m.y + 8.0f * scale_),
-                              ImVec2(m.x + 22.0f * scale_ + ImGui::CalcTextSize(value.c_str()).x, m.y + 12.0f * scale_ + ImGui::GetFontSize() + 4.0f * scale_),
+                              ImVec2(m.x + 22.0f * scale_ + ImGui::CalcTextSize(shown.c_str()).x, m.y + 12.0f * scale_ + ImGui::GetFontSize() + 4.0f * scale_),
                               ImGui::GetColorU32(rgb(theme_.panel, 0.95f)), 4.0f * scale_);
-            dl->AddText(ImVec2(m.x + 18.0f * scale_, m.y + 10.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), value.c_str());
+            dl->AddText(ImVec2(m.x + 18.0f * scale_, m.y + 10.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), shown.c_str());
         }
         ImGui::End();
         dl->AddCircleFilled(tip, (active ? 8.0f : 6.0f) * scale_, colours[h.axis]);
@@ -16601,6 +16747,18 @@ void App::design_panel() {
             std::string why = design_failure_;
             if (const std::size_t colon = why.find("refused the design: "); colon != std::string::npos)
                 why = why.substr(colon + std::strlen("refused the design: "));
+            // One line, not the tool's JSON: what is missing in the person's
+            // words, or the failed command's error.
+            if (f.type == cad::Feature::Type::Operation && takes_points(f.op.kind) && f.op.refs.empty()) {
+                why = tr(need_picks_text(f.op.kind));
+            } else if (const std::size_t brace = why.find('{'); brace != std::string::npos) {
+                try {
+                    const nlohmann::json j = nlohmann::json::parse(why.substr(brace));
+                    if (j.contains("failed") && j.at("failed").contains("error") && j.at("failed").at("error").is_string())
+                        why = j.at("failed").at("error").get<std::string>();
+                } catch (const std::exception&) {
+                }
+            }
             ImGui::PushTextWrapPos(0.0f);
             loc::TextColored(rgb(0xE5484D), tr(T::DesignFails), why.c_str());
             ImGui::PopTextWrapPos();
@@ -16639,8 +16797,19 @@ void App::design_panel() {
             }
             ImGui::Separator();
             const bool typing = ImGui::GetIO().WantTextInput;
-            const bool accept = ImGui::Button(tr(T::DesignAccept), ImVec2(130.0f * scale_, 0)) ||
-                                (!typing && ImGui::IsKeyPressed(ImGuiKey_Enter, false) && !command_focus_);
+            // An operation that needs faces or edges waits for them (the real
+            // tool refuses none): OK stays grey and says what to pick.
+            const bool needs_picks = f.type == cad::Feature::Type::Operation && takes_points(f.op.kind) && f.op.refs.empty();
+            if (needs_picks) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(need_picks_text(f.op.kind)));
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::BeginDisabled(needs_picks);
+            const bool accept = (ImGui::Button(tr(T::DesignAccept), ImVec2(130.0f * scale_, 0)) ||
+                                 (!typing && ImGui::IsKeyPressed(ImGuiKey_Enter, false) && !command_focus_)) &&
+                                !needs_picks;
+            ImGui::EndDisabled();
             rect_of("design_dialog_accept");
             ImGui::SameLine();
             const bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(130.0f * scale_, 0)) ||
@@ -24459,6 +24628,7 @@ void App::layout() {
             object_settings_window();
         }
         mixing_dialog();
+        project_import_dialog();
         if (tab_ == Tab::Prepare && mixing_open_)
             gradient_overlay();
         if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && !engineering_tab(tab_)) // those panels have their own buttons

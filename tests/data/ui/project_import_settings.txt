@@ -6,3 +6,13 @@ expect-toast Proyecto de PrusaSlicer: 1 pieza.
 expect-toast Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente
 expect-toast Sin equivalente (
 expect-setting walls.outer_width 0.45
+# The dialog (rule 9): the summary, the detail in three groups, and whose
+# printer (the project's MK4 is not in the test pack: «Usar la mía»).
+expect-control project_import
+expect-text Impresora del proyecto: Original Prusa MK4 Input Shaper 0.4 nozzle
+menu import_detail
+wait 2
+expect-text layer_height = 0.2
+menu import_use_mine
+wait 2
+expect-no-control project_import

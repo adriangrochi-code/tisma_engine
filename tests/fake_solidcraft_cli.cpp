@@ -625,6 +625,11 @@ int run(const std::vector<std::string>& args) {
                 std::fprintf(stderr, "solid.shell: the stand-in hollows only a box body\n");
                 return 1;
             }
+            // Like the real tool (0.30.0): a shell opens 1 to 1000 faces.
+            if (!p.contains("faces") || !p.at("faces").is_array() || p.at("faces").empty() || p.at("faces").size() > 1000) {
+                std::fprintf(stderr, "invalid parameters for `solid.shell`: select 1…1000 faces\n");
+                return 1;
+            }
             const double t = number(p, "thickness", "solid.shell");
             std::array<double, 3> lo = b->lo, hi = b->hi;
             for (int a = 0; a < 3; ++a)

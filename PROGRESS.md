@@ -13612,3 +13612,34 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `tisma_run_cli` esté en las dos y sube el xcframework; no hace fallar la corrida mientras se pone en marcha.
 - **Pruebas:** ninguna aquí (necesita Xcode); el primer resultado sale de la CI de GitHub.
 - **Sigue:** lo que diga esa corrida.
+
+## 2026-11-12 — interfaz: el diálogo al abrir un proyecto de otro programa (project_import.md, regla 9; beta, ítem 4)
+
+- **Hecho:** al abrir un proyecto con tabla de traducción, un diálogo «Proyecto de <programa>»: «N piezas, 1 placa.
+  Ajustes: A traducidos, B parecidos, C sin equivalente», la impresora que nombra el proyecto, «Ver detalle» (los
+  tres grupos con cada clave y su valor, con buscador) y «Usar la impresora del proyecto» (si el paquete la tiene por
+  ese nombre: la elige y vuelve a poner encima los ajustes del proyecto) o «Usar la mía». El aviso de los sin
+  equivalente nombra solo las claves, cortas (antes copiaba G-codes enteros); el primer aviso ya no dice que los
+  ajustes no se traen, y otro lo dice solo cuando de verdad no se traen (no hay tabla para ese programa). Las
+  placas se cuentan como una hasta que la lectura las dé.
+- **Pruebas:** `project_import_settings.txt` (el diálogo, la impresora del proyecto, el detalle, «Usar la mía»);
+  pasan las 60 de importar, proyecto y 3MF. Captura revisada.
+
+## 2026-11-12 — interfaz: flechas también en las operaciones de Diseño (regla 11 quinquies)
+
+- **Hecho:** Redondeo, Chaflán y Vaciado, con su cuadro abierto, tienen una flecha desde la arista de arriba que
+  cambia su medida (radio, distancia o espesor) al arrastrarla, con el valor junto al puntero. Las demás operaciones
+  (agujero, patrones, rosca…) todavía no tienen flecha.
+- **Pruebas:** `design_handles_op.txt` (el vaciado de la caja de 20 mm, ahora abierta arriba, 3392 mm³; arrastrado, pasa de 4200);
+  pasan las de Diseño.
+
+
+## 2026-11-12 — interfaz: Vaciado sin caras (regla 7)
+
+- **Hecho:** la herramienta real (0.30.0) exige de 1 a 1000 caras para vaciar. Mientras no hay caras elegidas, el
+  cuadro de Vaciado deja Aceptar en gris y dice «Elegí al menos una cara para vaciar» (Redondeo y Chaflán: «Elegí al
+  menos una arista»). Si el paso termina igual sin caras, el historial dice esa línea en vez del JSON crudo de la
+  herramienta (para otros fallos muestra solo el error del comando que falló) y el paso queda rojo en la línea de
+  tiempo. El simulador de pruebas ahora rechaza el vaciado sin caras, como la real.
+- **Pruebas:** `design_shell_no_face.txt` (nueva); `design_operations`, `design_timeline_marker` y
+  `design_handles_op` vacían ahora la caja abierta arriba (3392 mm³). Pasan las 6 de Diseño que lo tocan.
