@@ -48,6 +48,18 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 | `GET /v1/plans` | Planes públicos | — |
 | `GET /v1/me/sessions`, `DELETE /v1/me/sessions/{id}`, `POST /v1/me/sessions/close-others` | Ver y cerrar sesiones | — |
 
+4a. **Estado del servicio** (propuesta del servidor, 12-11-2026): `GET /v1/status`, sin sesión, devuelve:
+   - `status`: `ok`, `slow` o `down`;
+   - `label_es` y `label_en` («Funcionando» / «Working», «Con demoras» / «Delayed», «Caído» / «Down»);
+   - `message_es` y `message_en`, el motivo en una frase;
+   - `unavailable`: los tipos de cálculo (los nombres de cola de la regla 10b) que ningún nodo conectado hace ahora;
+   - `longest_wait_s`: lo que lleva esperando el trabajo más viejo de la cola;
+   - `nodes_online` y `checked_at`.
+   `down` si ningún nodo respondió en los últimos minutos; `slow` si el trabajo más viejo espera más de 10 min (lo
+   ajusta la administración) o hay tipos de cálculo que nadie hace; si no, `ok`. Se recalcula como mucho cada 15 s y no
+   trae datos de ninguna cuenta. La interfaz lo pide al abrir el panel de la nube y antes de mandar un trabajo; con
+   `slow` o `down` muestra `label_*` y `message_*` en su idioma como aviso, sin bloquear (los trabajos esperan en la
+   cola). Para las personas, lo mismo en `<servidor>/estado`.
 5. **El cobro no pasa por el motor:** pagar y cambiar de plan se hace en la página de la cuenta, en el navegador. El
    motor abre esa página; no maneja datos de pago.
 5b. **Cobro por las tiendas oficiales** (decisión del dueño, 10-11-2026: «usar Google Play, la tienda de Mac y tiendas
@@ -287,6 +299,7 @@ Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
 | CC14 | La administración da 3 horas a una cuenta de un plan de 5 | El panel muestra 8 horas del mes al volver a pedir `/v1/me` |
 | CC15 | La administración deshabilita la cuenta con la sesión abierta | El próximo pedido da 401; la interfaz pide entrar de nuevo |
 | CC16 | Plan que incluye solo `slice`; pedir un análisis aerodinámico | Candado e «Incluido en el plan …» antes de mandar; si se manda, 402 y la interfaz muestra su propio texto, en español |
+| CC21 | Sin nodos conectados, mandar un trabajo | `GET /v1/status` da `down`; la interfaz muestra «Caído» y el motivo antes de mandar, sin bloquear |
 | CC17 | `tisma-engine aero` de un cubo de 20 mm, `--quality fast --speed 10 --direction x --sandbox` | Archivo `.taero`, resumen con `cd` entre 0,8 y 1,3 (un cubo de cara al aire, Hoerner) y código 0 |
 | CC18 | `tisma-engine orient` de una pieza en L apoyada de canto | JSON con `rotation`; `cost` no mayor que `cost_before` (regla 1 de `orientation.md`) |
 | CC19 | `tisma-engine slice … --threads 1` en una máquina de 4 núcleos | El proceso no pasa de un núcleo ocupado; el G-code es el mismo que sin la opción |
