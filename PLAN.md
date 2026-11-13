@@ -340,8 +340,8 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   únicos huecos son las esquinas redondeadas de los extremos (0,13–0,43 % en tiras de 30 mm). Cuña de 0,3 a 1,2 mm:
   huecos 0,3 %, superposición 1,3 %, en las transiciones
 - [x] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`. Hecho (2026-11-13,
-  `tests/test_perimeters_spec.cpp` con P3 a P7 y P9; P1, P2, P10 y P12 a P14 ya tenían prueba). Queda una diferencia
-  con la fila P4 (el motor intercala los cordones del agujero y los de afuera); P8 no se contrasta
+  `tests/test_perimeters_spec.cpp` con P3 a P7 y P9; P1, P2, P10 y P12 a P14 ya tenían prueba). P4 agrupado por
+  contorno (QA, 2026-11-13); P8 no se contrasta
 
 ## Estado de F3
 

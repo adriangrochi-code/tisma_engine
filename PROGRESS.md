@@ -14225,3 +14225,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   los cordones del agujero y los de afuera por profundidad; la fila P4 pone primero los tres del agujero. Pregunta a
   QA si la fila manda.
 - Pasa la batería completa (1103 casos). No probado en una impresora.
+
+## 2026-11-13 — Paredes agrupadas por contorno (P4, decisión de QA)
+
+- **QA:** manda la fila P4: primero todos los cordones de un contorno, de adentro hacia afuera, y después el
+  siguiente; intercalar por profundidad suma un viaje por cordón (toolpath_time.md, regla 6).
+- **Hecho** (`src/gcode/writer.cpp`, `wall_contours`): en una isla con más de un contorno (y sin
+  `walls.unsupported_last`), cada pared va con la pared externa más cercana a su primer punto; se imprimen los
+  agujeros primero y después el borde de afuera, cada uno en el orden de siempre (o al revés con `walls.outer_first`).
+  La prueba P4 ahora pide el orden de la fila.
+- **Medido, Benchy:** 13 539 → 15 219 viajes, 30,1 → 33,4 m de viaje, 2226 → 2339 retracciones, 1h11m43 → 1h12m33
+  (+50 s, +1,2 %). En el Benchy, con paredes finas entre agujeros y borde, agrupar viaja más que intercalar. Avisado a
+  QA con los números; si QA prefiere, el orden de los contornos puede salir del más cercano a la boquilla.
+- Pasa la batería completa (1103 casos). No probado en una impresora.

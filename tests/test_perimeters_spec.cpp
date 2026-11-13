@@ -145,18 +145,16 @@ TEST_CASE("perimeters.md P4: the hole's beads, innermost first, then the outside
         if (l.layer == 10)
             reach.push_back(std::max(std::abs(l.x - kCx), std::abs(l.y - kCy)));
     REQUIRE(reach.size() == 6);
-    // Rule 4: each contour's beads inside out, the hole's towards the hole,
-    // the outside's towards the outside. (The row P4 also lays the hole's
-    // three first; the engine interleaves the two by depth: PROGRESS.md.)
-    std::vector<double> hole, outside;
-    for (double r : reach)
-        (r < 7.5 ? hole : outside).push_back(r);
-    REQUIRE(hole.size() == 3);
-    REQUIRE(outside.size() == 3);
-    CHECK(hole[0] > hole[1]);
-    CHECK(hole[1] > hole[2]);
-    CHECK(outside[0] < outside[1]);
-    CHECK(outside[1] < outside[2]);
+    // The hole's band (5 mm out) first, then the outside's (10 mm out), each
+    // inside out: away from the hole towards it, then outwards.
+    for (int k = 0; k < 3; ++k)
+        CHECK(reach[std::size_t(k)] < 7.5);
+    for (int k = 3; k < 6; ++k)
+        CHECK(reach[std::size_t(k)] > 7.5);
+    CHECK(reach[0] > reach[1]);
+    CHECK(reach[1] > reach[2]);
+    CHECK(reach[3] < reach[4]);
+    CHECK(reach[4] < reach[5]);
 }
 
 TEST_CASE("perimeters.md P5-P7, P9: where the outer wall starts", "[perimeters-spec]") {
