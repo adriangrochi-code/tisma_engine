@@ -13993,3 +13993,25 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   cambios; la preparación pasa de 6 s sin torre a 258 s con torre y queda por debajo del total.
 - **Con esto, la regla 14 está completa.** Las reglas 11 y 15 (aprender de la impresora) necesitan la impresora.
 
+## 2026-11-13 — toolpath_time.md: medición y un choque entre fichas (bloque de noche, sin cambio de código)
+
+- **Medido hoy** (perfil por defecto, `tests/data/settings.json`):
+  - Benchy: 13 430 viajes, 9 418 de menos de 1 mm (contados por segmento), 29,9 m de viaje, 2 209 retracciones,
+    1 h 11 min 30 s;
+  - viajes entre líneas de superficie de arriba: 654; entre líneas de puente: 203;
+  - cubo de 20 mm al 20 % de relleno: 347 retracciones, 20 min 11 s.
+- **Regla 1:** el relleno sólido ya une sus líneas. La superficie de arriba es monótona: la regla une solo líneas que
+  siguen en el mismo sentido, y en la monótona eso no pasa nunca, así que no hay uniones. Las líneas de puente van
+  sueltas a propósito: el código dice que «una unión por el borde quedaría en el aire», y la regla 1 incluye los
+  puentes. **Pregunta para la sesión de fichas:** ¿se unen los puentes, y por dónde va la unión?
+- **Regla 5 probada y revertida:** si un viaje que queda entero dentro de la pieza no retrae (por largo que sea):
+  - el cubo baja de 347 a 1 retracción, que es TT6;
+  - el Benchy baja de 2 209 a 356 retracciones y de 1 h 11 min 30 s a 1 h 5 min 53 s (−7,9 %; TT4 pide −8 %
+    contra 1 h 12 min 28 s, y da −9,1 %).
+  - Pero 16 casos de prueba fallan, sobre todo los de `retraction_travel.md` (R1, R3, R4, R5, R6, R10, R11 y
+    OR1 «alrededor de viajes largos solamente»), además de enfriamiento, velocidad en Z y algunos de análisis.
+    Arman viajes por dentro que esperan retraer por pasar `retraction.min_travel`.
+  - Las dos fichas chocan: la regla 5 de `toolpath_time.md` contra el largo mínimo de `retraction_travel.md` y la
+    regla 5 de `gcode_motion.md`. Pregunté a la sesión de fichas cuál manda y si conviene un ajuste (por ejemplo,
+    retraer dentro solo con `retraction.min_travel` explícito). Hasta la respuesta queda como estaba.
+
