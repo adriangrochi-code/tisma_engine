@@ -14083,3 +14083,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Sigue:** la regla 9 (ordenar por tiempo y no por distancia) y la regla 8 (retraer mientras viaja, meta RT5 a
   aprobar).
 
+## 2026-11-13 — V3: `;WIDTH` solo cuando cambia de verdad (GCODE_OUTPUT.md, «Ancho variable»; bloque de noche)
+
+- **Hecho:** `;WIDTH` se escribe cuando el ancho se aparta más de 0,005 mm del último escrito, y después de cada
+  `;TYPE` nuevo, como pide la ficha. Antes bastaba un cambio en la tercera cifra.
+  - La E de cada movimiento sigue su ancho real: solo se ahorra el comentario.
+- **Medido en el Benchy:**
+  - líneas `;WIDTH`, de 28 374 a 14 829 (la referencia de la ficha es 18 976);
+  - archivo, de 3,62 a 3,45 MB;
+  - mismo largo extruido por tipo y mismo tiempo.
+- **Prueba cambiada:** la torre de flujo (`[calibration]`) calculaba el caudal desde `;WIDTH`; ahora lo calcula desde
+  la E y el largo de cada movimiento, que es exacto. Con escalones de 0,005 mm, `;WIDTH` lo leía hasta 1 % de más.
+  Pasa la batería completa de pruebas unitarias.
+

@@ -1194,7 +1194,8 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   RV2 las capas de abajo suman 8 % con tolerancia 0 (antes 200 s contra 7,5 s) y 22 % con 0,005 (meta 25 %); RV3
   suman de 0,17 a 0,25 s con 1 a 6 paredes (meta 0,3 s). RV6: el G-code cambia en una sola capa del Benchy (ver
   `PROGRESS.md`). Faltan RV4 (V10) y RV5 (V11)
-- [ ] V3: `;WIDTH` solo cuando cambia el ancho (hoy, 21 % del archivo)
+- [x] V3: `;WIDTH` solo cuando cambia el ancho (hecho 2026-11-13: más de 0,005 mm del último escrito, o con un `;TYPE`
+  nuevo; Benchy de 28 374 a 14 829 líneas, referencia 18 976)
 - [ ] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hace el doble de movimientos)
 - [x] V5: armar el G-code de cada capa en paralelo y unirlo en orden (hecho 2026-10-26). Cada capa se planea (orden y
   costuras, que siguen de la capa de abajo) y se escribe por separado, en un pipeline de oneTBB: mientras se escribe

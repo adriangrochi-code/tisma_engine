@@ -1619,6 +1619,9 @@ public:
             text_ += t;
             text_ += '\n';
             type_ = t;
+            // A new type writes its width again (GCODE_OUTPUT.md, «Ancho variable»).
+            width_.clear();
+            width_value_ = std::numeric_limits<double>::quiet_NaN();
             note_ = notes_of(t).extrude;
             tower_ = std::strcmp(t, "Wipe tower") == 0;
             // Overhang perimeters get the bridges' fan (walls_extra.md, rule 8).
@@ -2160,11 +2163,17 @@ private:
         return feed;
     }
 
-    // ;WIDTH: before the moves of another width (the same width writes the same text).
+    // ;WIDTH: when the width differs by more than kWidthStep from the last
+    // one written, and after each new ;TYPE (docs/spec/GCODE_OUTPUT.md, «Ancho
+    // variable»). The E of each move follows its real width either way: only
+    // the comment the previews read is spared.
+    static constexpr double kWidthStep = 0.005; // mm
     void show_width(double width) {
         if (width == width_value_)
             return;
         width_value_ = width;
+        if (!width_.empty() && std::fabs(width - width_written_) <= kWidthStep + 1e-9)
+            return;
         char w[kNumberCapacity];
         const std::string_view width_text(w, format_fixed(w, width, 3));
         if (width_text != width_) {
@@ -2172,6 +2181,7 @@ private:
             text_ += width_text;
             text_ += '\n';
             width_.assign(width_text);
+            width_written_ = width;
         }
     }
 
@@ -2422,6 +2432,7 @@ private:
     double tool_restart_ = 0.0;
     std::string x_, y_, z_, e_text_, width_;
     double width_value_ = std::numeric_limits<double>::quiet_NaN(); // the width width_ was last checked for
+    double width_written_ = 0.0; // the width of the last ;WIDTH written
     long f_ = std::numeric_limits<long>::min(); // none written yet
     const char* type_ = nullptr;
     bool surface_ = false; // the current paths are surface walls
