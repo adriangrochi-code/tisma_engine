@@ -49,71 +49,6 @@
 namespace tisma {
 namespace {
 
-// Each wall path's contour (perimeters.md, P4): the outer walls (index 0)
-// are the contours, holes first (an outer wall inside another), then the
-// rest; every other wall belongs to the outer wall nearest its first point.
-// Empty when there is one contour or none: the walls go as they are.
-std::map<int, std::vector<int>> wall_contours(const std::map<int, std::vector<Toolpath>, std::greater<int>>& walls) {
-    const auto found = walls.find(0);
-    if (found == walls.end() || found->second.size() < 2)
-        return {};
-    const std::vector<Toolpath>& rims = found->second;
-    const auto inside = [](const Toolpath& loop, const Point2d& p) {
-        bool in = false;
-        const std::size_t n = loop.points.size();
-        for (std::size_t a = 0, b = n - 1; a < n; b = a++) {
-            const Point2d& u = loop.points[a].p;
-            const Point2d& v = loop.points[b].p;
-            if ((u.y > p.y) != (v.y > p.y) && p.x < (v.x - u.x) * (p.y - u.y) / (v.y - u.y) + u.x)
-                in = !in;
-        }
-        return in;
-    };
-    // Holes first, each keeping its place among the holes; then the rest.
-    std::vector<int> rank(rims.size());
-    std::vector<std::size_t> holes, rest;
-    for (std::size_t k = 0; k < rims.size(); ++k) {
-        bool hole = false;
-        if (rims[k].closed && !rims[k].points.empty())
-            for (std::size_t j = 0; j < rims.size() && !hole; ++j)
-                hole = j != k && rims[j].closed && rims[j].points.size() > 2 && inside(rims[j], rims[k].points.front().p);
-        (hole ? holes : rest).push_back(k);
-    }
-    int next = 0;
-    for (std::size_t k : holes)
-        rank[k] = next++;
-    for (std::size_t k : rest)
-        rank[k] = next++;
-    const auto nearest_rim = [&](const Point2d& p) {
-        std::size_t best = 0;
-        double least = std::numeric_limits<double>::max();
-        for (std::size_t k = 0; k < rims.size(); ++k) {
-            const std::vector<ToolpathPoint>& pts = rims[k].points;
-            for (std::size_t a = 0; a + 1 < pts.size() + (rims[k].closed ? 1 : 0); ++a) {
-                const Point2d& u = pts[a].p;
-                const Point2d& v = pts[(a + 1) % pts.size()].p;
-                const double dx = v.x - u.x, dy = v.y - u.y, len2 = dx * dx + dy * dy;
-                const double f = len2 > 0.0 ? std::clamp(((p.x - u.x) * dx + (p.y - u.y) * dy) / len2, 0.0, 1.0) : 0.0;
-                const double d = std::hypot(p.x - u.x - f * dx, p.y - u.y - f * dy);
-                if (d < least)
-                    least = d, best = k;
-            }
-        }
-        return best;
-    };
-    std::map<int, std::vector<int>> out;
-    for (const auto& [index, paths] : walls) {
-        std::vector<int>& of = out[index];
-        of.reserve(paths.size());
-        for (std::size_t k = 0; k < paths.size(); ++k)
-            of.push_back(index == 0 ? rank[k] : paths[k].points.empty() ? 0 : rank[nearest_rim(paths[k].points.front().p)]);
-    }
-    return out;
-}
-
-int contour_count(const std::map<int, std::vector<int>>& contour_of) { return int(contour_of.at(0).size()); }
-
-
 // A number with fixed decimals, as printf's "%.*f" writes it (std::to_chars
 // is specified to round the same way), without a negative zero. Returns the
 // length written to buffer.
@@ -4441,9 +4376,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     s.unsupported_last && l > 0 && l - 1 < model.regions.size()
                         ? unsupported_turns(i.walls, model.regions[l - 1])
                         : std::map<int, std::vector<char>>{};
-                // `only`: the paths of one contour (perimeters.md, P4), or all.
-                auto walls = [&](int index, const std::vector<Toolpath>& paths, char turn = 0,
-                                 const std::vector<int>* only = nullptr, int contour = 0) {
+                auto walls = [&](int index, const std::vector<Toolpath>& paths, char turn = 0) {
                     const bool outer = index == 0;
                     const auto found = i.candidates.find(index);
                     std::span<const std::vector<std::size_t>* const> candidates =
@@ -4451,7 +4384,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     const auto feed = speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed);
                     const char* type = outer ? "External perimeter" : "Perimeter";
                     const auto own = turns.find(index);
-                    if (own == turns.end() && !only) {
+                    if (own == turns.end()) {
                         if (turn == 0)
                             group(paths, type, feed, s.seam, true, candidates);
                         return;
@@ -4459,7 +4392,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     std::vector<Toolpath> kept;
                     std::vector<const std::vector<std::size_t>*> kept_candidates;
                     for (std::size_t k = 0; k < paths.size(); ++k)
-                        if ((own == turns.end() ? turn == 0 : own->second[k] == turn) && (!only || (*only)[k] == contour)) {
+                        if (own->second[k] == turn) {
                             kept.push_back(paths[k]);
                             if (k < candidates.size())
                                 kept_candidates.push_back(candidates[k]);
@@ -4491,26 +4424,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     fills();
                 // From the inside out, or with walls.outer_first from the outer
                 // wall in (perimeters.md, rule 4).
-                // With several contours (an island with holes), one contour's
-                // beads after another's: the holes first, then the outside
-                // (perimeters.md, rule 4 and P4); not interleaved by depth,
-                // which would travel between them for every bead.
-                const std::map<int, std::vector<int>> contour_of = turns.empty() ? wall_contours(i.walls) : std::map<int, std::vector<int>>{};
-                const int contours = contour_of.empty() ? 1 : contour_count(contour_of);
-                for (int c = 0; c < contours; ++c) {
-                    const auto one = [&](int index, const std::vector<Toolpath>& paths) {
-                        if (contour_of.empty())
-                            walls(index, paths);
-                        else
-                            walls(index, paths, 0, &contour_of.at(index), c);
-                    };
-                    if (s.walls_outer_first)
-                        for (auto w = i.walls.rbegin(); w != i.walls.rend(); ++w)
-                            one(w->first, w->second);
-                    else
-                        for (const auto& [index, paths] : i.walls)
-                            one(index, paths);
-                }
+                if (s.walls_outer_first)
+                    for (auto w = i.walls.rbegin(); w != i.walls.rend(); ++w)
+                        walls(w->first, w->second);
+                else
+                    for (const auto& [index, paths] : i.walls)
+                        walls(index, paths);
                 // The loops held only through other loops, after the walls that
                 // hold them, inside out (orca_2_5.md, rule 3).
                 if (!turns.empty())

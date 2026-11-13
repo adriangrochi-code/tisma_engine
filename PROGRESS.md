@@ -14238,3 +14238,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   (+50 s, +1,2 %). En el Benchy, con paredes finas entre agujeros y borde, agrupar viaja más que intercalar. Avisado a
   QA con los números; si QA prefiere, el orden de los contornos puede salir del más cercano a la boquilla.
 - Pasa la batería completa (1103 casos). No probado en una impresora.
+
+## 2026-11-13 — P4: vuelta al intercalado (decisión de QA con los números)
+
+- QA cambió P4 en spec/next: la regla 4 dentro de cada contorno; el orden entre contornos y el intercalado, por menor
+  viaje. Probado ordenar los contornos por cercanía a la boquilla: Benchy 14 681 viajes, 32,8 m, 1h12m23, todavía
+  peor que intercalar (13 539 viajes, 30,1 m, 1h11m43). Se vuelve al intercalado por profundidad (`writer.cpp` como en
+  2e4364c); la prueba P4 comprueba la regla 4 en cada contorno.
