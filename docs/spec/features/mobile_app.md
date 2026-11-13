@@ -68,11 +68,9 @@ táctil:
 ## Funciones
 
 10. **Abrir:** STL, 3MF, OBJ y STEP desde los archivos del teléfono, desde «Compartir con Tisma» de otra app, o desde
-    un enlace de un sitio de modelos (si la persona lo permite, `preferences.md`). Los enlaces son
-    `tisma://open?file=<dirección https codificada>` y `prusaslicer://open?file=<…>` (el que usa el botón de Printables);
-    solo se baja de printables.com, media.printables.com, files.printables.com, thingiverse.com y cdn.thingiverse.com,
-    por https, hasta 200 MB, con extensión STL, OBJ, 3MF, STEP o ZIP. Antes de bajar se pregunta «¿Abrir <archivo> de
-    <sitio>?»; con «Permitir descargas de sitios compatibles» apagado (por defecto) el diálogo ofrece prenderlo.
+    la biblioteca de Tisma (`p2p_library.md`). Decisión del dueño (13-11-2026): «la idea de las app es usar nuestra
+    biblioteca nomás y abandonar el resto»; las apps no abren enlaces de otros sitios de modelos (Printables,
+    Thingiverse ni otros) ni bajan archivos de ellos.
 11. **Perfiles:** el paquete libre de perfiles (`profile_pack.md`), bajado la primera vez, con el mismo asistente de
     primer uso que el escritorio: impresora por modelo, boquilla aparte y filamentos.
 12. **Laminar en el teléfono:**
