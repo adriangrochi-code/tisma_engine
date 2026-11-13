@@ -14184,3 +14184,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Respuesta de QA:** la franja tapada por la capa 31 es correcta según la regla 2; W4 (spec/next) ahora comprueba
   solo el relleno sólido de `vertical_shell` (+18,39 mm; el motor +17,0). Los 20,95 y 75,22 mm quedan de referencia.
   Ítem cerrado sin cambios; W7 y los escalones no se tocan.
+
+## 2026-11-13 — Contraste del corte con `slicing.md` (C1 a C16)
+
+- **Hecho:** `tests/test_slicing_spec.cpp`, con las piezas de la ficha armadas en la prueba:
+  - C1 a C4: cantidad de capas y Z (cubo, prismas de 10,1 y 10,09 mm, primera capa de 0,3);
+  - C5: el borde del cono es su radio a mitad de la capa (9,85; 6,85; 3,85; 0,85 mm, dentro de 0,01);
+  - C9 a C11: normales invertidas, prismas superpuestos (una isla) y `even_odd` (dos islas de 5 × 20);
+  - C12, C13 y C16: marcos con agujero, `xy_offset` −0,2 y `fill_holes`;
+  - C14 y C15: `xy_offset` 0,2 y `first_layer_shrink` 0,2.
+  Cumplen todos sin cambiar el motor.
+- **Sigue:** C6 a C8 (grietas de 0,05, 5 y 12 mm), C17 (tramos del perímetro con `simplify_tolerance` 0 y 0,5),
+  C18 y C19 (capas más altas que la boquilla).

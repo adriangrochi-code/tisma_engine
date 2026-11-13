@@ -35,6 +35,7 @@ add_executable(tisma_tests
   test_sites.cpp
   test_coverage.cpp
   test_surfaces.cpp
+  test_slicing_spec.cpp
   test_infill.cpp
   test_gcode.cpp
   test_resolution.cpp
