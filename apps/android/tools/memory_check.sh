@@ -32,7 +32,7 @@ for model in "$@"; do
     out=$(adb shell "run-as $PKG sh -c '
         start=\$(date +%s%N)
         $lib/libtisma_engine.so slice /data/local/tmp/mem/$name --config /data/local/tmp/mem/config.json \
-            -o cache/mem.gcode --summary cache/mem.json --no-gpu > /dev/null 2>&1 &
+            -o cache/mem.gcode --summary cache/mem.json > /dev/null 2> cache/mem.err &
         pid=\$!; peak=0
         while kill -0 \$pid 2>/dev/null; do
             h=\$(sed -n \"s/^VmHWM: *\\([0-9]*\\).*/\\1/p\" /proc/\$pid/status 2>/dev/null)
@@ -42,6 +42,7 @@ for model in "$@"; do
         wait \$pid; code=\$?
         end=\$(date +%s%N)
         rm -f cache/mem.gcode cache/mem.json
+        [ \$code != 0 ] && tail -3 cache/mem.err >&2
         echo \$code \$((peak / 1024)) \$(((end - start) / 1000000))
     '" | tr -d '\r')
     read -r code peak ms <<< "$out"
