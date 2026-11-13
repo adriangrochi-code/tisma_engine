@@ -12398,5 +12398,15 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   Tamaño: APK beta arm64 7,2 → 6,5 MB (solo es/en, recursos sin uso fuera); lo que más pesa: código 3,1 MB y motor
   2,8 MB comprimido. iPhone (Release, sin firmar): IPA 4,9 MB, .app 16 MB, casi todo el ejecutable (motor, módulo
   compartido y Swift; `__text` 9 MB).
+- 3DBenchy real (dev 80351f6, CC0) en la prueba de memoria: 225 706 triángulos, pico 67 MB, unos 2 s, 240 capas
+  (2 GB). Esferas en 2 GB: 5 s (224 mil), 7 s (2 M), 13 s (5,1 M), en segundos enteros.
+- Perfil de arranque de Android (`:baselineprofile`, androidx.baselineprofile 1.4.1, workflow «Android startup
+  profile»): 20 349 reglas generadas en el emulador, en `app/src/main/generated/baselineProfiles`. Arranque del beta
+  con el perfil: 2 GB 1,7–2,8 s (mediana 2,08), 3 GB 2,0–2,5 s (mediana 2,11): sin cambio medible frente a antes
+  (~2,0 s). Estos emuladores dibujan sin GPU (swiftshader), y el primer cuadro parece llevarse la mayor parte; falta
+  medir en un teléfono real para saber si baja de 2 s. Sin probar en hardware.
+- iPhone: Ingeniería por la biblioteca del motor (dev 76d53f8: `tisma_analyze_case_start`, informe y mapa), con avance
+  y Cancelar; la línea de comandos queda si la biblioteca se niega. Prueba: mismo veredicto que la línea de comandos y
+  mapa de seguridad (CI de iOS verde, b818563).
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
