@@ -14303,3 +14303,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   de W4 (techo, cono, hongo), los 30 cubos y el cubo de 20 mm con seis juegos de ajustes (de fábrica; `vertical_shell`
   `enabled` con costura `nearest` y una pared; soporte con gyroid; capas de 0,12 con bufanda; modo vaso; paredes
   `fixed`, la externa primero y relleno al 100 %): 30 laminados, todos pasan el chequeo.
+- **Fuzz, más semillas** (35613c4): 2026111305 (2000 casos, 0 fallas, 18 rechazadas) y 2026111306 (2000, 0 fallas,
+  14 rechazadas).
+- **CI completa en 35613c4:** gcc 1341 de 1341 y clang 1341 de 1341; la parte con ASan seguía corriendo al pausar.
+
+## 2026-11-13, 09:21 UTC — Pausa (pedido del dueño, por QA)
+
+- El trabajo queda pausado hasta que el dueño diga que se sigue. No queda nada a medias: `dev` está en el último
+  commit de esta entrada, con gcc y clang en verde.
+- **Sigue al retomar:** ver el resultado de la parte ASan de la CI sobre 35613c4; la multigrilla con huecos (nota de
+  diseño arriba); lo que diga QA.
