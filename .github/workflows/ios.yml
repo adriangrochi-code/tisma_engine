@@ -75,6 +75,7 @@ jobs:
       # most in it. The download is about the zipped size; the App Store thins it further per device.
       - name: The app's size (Release, device)
         continue-on-error: true
+        working-directory: .
         run: |
           (cd apps/android && ./gradlew --no-daemon -q :shared:linkReleaseFrameworkIosArm64)
           cd apps/ios
