@@ -87,7 +87,9 @@ fun SharedScreen(shared: SharedViewModel) {
                     DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm").withZone(ZoneId.systemDefault()).format(list.generated.toJavaInstant())),
                 style = MaterialTheme.typography.bodySmall)
             // The detail (in English, from the check) goes to the log; the person reads their own language.
-            if (state.problem != null) Text(stringResource(R.string.shared_problem), style = MaterialTheme.typography.bodySmall,
+            if (state.tooLarge) Text(stringResource(R.string.shared_too_large), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("shared_too_large"))
+            else if (state.problem != null) Text(stringResource(R.string.shared_problem), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("shared_problem"))
         }
         TismaCard(Modifier.testTag("shared_sharing")) {

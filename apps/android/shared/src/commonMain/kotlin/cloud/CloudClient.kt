@@ -1,5 +1,6 @@
 package net.tisma.cloud
 
+import net.tisma.app.p2p.LibraryIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -153,18 +154,27 @@ class CloudClient(
      * are checked over the exact bytes): `key` (the library key and its certificate), `blocklist.json`,
      * `index.json` and their `.sig`.
      */
-    fun libraryFile(name: String, maxBytes: Long = 64L * 1024 * 1024): ByteArray {
+    /**
+     * One of the library's files (rule 3 bis), at most [maxBytes] unpacked. The index may be up to 256 MB unpacked and
+     * 64 MB as sent (rule 3 ter bis): larger, it throws [LibraryIndex.TooLarge]. The size as sent is known only when
+     * the platform keeps the Content-Length of a compressed answer; the unpacked limit is always checked.
+     */
+    fun libraryFile(name: String, maxBytes: Long = if (name == "index.json") LibraryIndex.MAX_JSON else 64L * 1024 * 1024): ByteArray {
         val out = BytesOutput()
         val response = send(HttpRequest("GET", serverUrl + "/v1/library/" + name, headers(false), timeoutMs = 60_000))
         response.use { r ->
             if (!r.ok) throw failure(r)
+            val index = name == "index.json"
+            fun header(k: String) = r.headers.entries.firstOrNull { it.key.equals(k, ignoreCase = true) }?.value
+            val sent = header("Content-Length")?.trim()?.toLongOrNull() ?: 0
+            if (index && sent > LibraryIndex.MAX_COMPRESSED) throw LibraryIndex.TooLarge()
             val b = ByteArray(64 * 1024)
             var total = 0L
             while (true) {
                 val n = r.body.read(b, 0, b.size)
                 if (n < 0) break
                 total += n
-                if (total > maxBytes) throw CloudException(0, "The library's $name is too large")
+                if (total > maxBytes) throw if (index) LibraryIndex.TooLarge() else CloudException(0, "The library's $name is too large")
                 out.write(b, 0, n)
             }
         }

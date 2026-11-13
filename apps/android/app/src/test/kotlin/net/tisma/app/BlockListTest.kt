@@ -150,6 +150,44 @@ class BlockListTest {
         assertFailsWith<LibraryIndex.BadIndex> { LibraryIndex.read(json, sign(library, json), libraryKey, lastSequence = 4) }
     }
 
+    @Test
+    fun `rule 3 ter bis an index too large for this version is refused with its notice and the kept one stays`() {
+        val dir = tmp.newFolder("p2p")
+        val kept = index(1, model("m1", "Gear box", "acct-1", "a".repeat(64)))
+        File(dir, "index.json").writeBytes(kept)
+        File(dir, "index.json.sig").writeBytes(sign(library, kept))
+        val big = index(2, model("m1", "Gear box", "acct-1", "a".repeat(64)), model("m2", "Other", "acct-1", "c".repeat(64)))
+        val json = list(1)
+        val files = mapOf("key" to keyJson(), "blocklist.json" to json, "blocklist.json.sig" to sign(library, json),
+            "index.json" to big, "index.json.sig" to sign(library, big))
+        val store = object : net.tisma.app.p2p.LibraryStore {
+            override fun read(name: String) = File(dir, name).takeIf { it.isFile }?.readBytes()
+            override fun write(name: String, bytes: ByteArray) = File(dir, name).writeBytes(bytes)
+            override fun delete(name: String) { File(dir, name).delete() }
+            override var listSequence = -1L
+            override var indexSequence = 1L
+            override var origin: String? = null
+        }
+        assertFailsWith<LibraryIndex.TooLarge> {
+            net.tisma.app.p2p.LibraryFetch(projectKey, FakeServer(files), store, maxIndex = kept.size.toLong()).refresh()
+        }
+        assertTrue(File(dir, "index.json").readBytes().contentEquals(kept))
+        assertEquals(1L, store.indexSequence)
+        // The real limits, and the server's answer: 64 MB as sent, 256 MB unpacked.
+        assertFailsWith<LibraryIndex.TooLarge> { LibraryIndex.read(big, sign(library, big), libraryKey, maxJson = 10) }
+        val http = object : net.tisma.cloud.Http {
+            override fun send(request: net.tisma.cloud.HttpRequest) = net.tisma.cloud.HttpResponse(200,
+                mapOf("content-length" to (LibraryIndex.MAX_COMPRESSED + 1).toString(), "Content-Encoding" to "gzip"),
+                net.tisma.io.BytesInput(big))
+        }
+        assertFailsWith<LibraryIndex.TooLarge> { net.tisma.cloud.CloudClient("https://cloud.example", http = http).libraryFile("index.json") }
+        // A small answer is read whole.
+        val ok = object : net.tisma.cloud.Http {
+            override fun send(request: net.tisma.cloud.HttpRequest) = net.tisma.cloud.HttpResponse(200, emptyMap(), net.tisma.io.BytesInput(big))
+        }
+        assertTrue(net.tisma.cloud.CloudClient("https://cloud.example", http = ok).libraryFile("index.json").contentEquals(big))
+    }
+
     private class FakeServer(val files: Map<String, ByteArray>, override val origin: String = "") : LibraryServer {
         val reports = mutableListOf<Triple<String?, String?, String>>()
         override fun file(name: String) = files[name] ?: throw java.io.IOException("404 $name")

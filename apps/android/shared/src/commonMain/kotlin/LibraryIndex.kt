@@ -16,7 +16,13 @@ import net.tisma.app.updates.Ed25519
  * library key. A suspended account's models and blocked files are left out (rule 4).
  */
 class LibraryIndex(val sequence: Long, val models: List<Model>) {
-    class BadIndex(message: String) : Exception(message)
+    open class BadIndex(message: String) : Exception(message)
+
+    /**
+     * Rule 3 ter bis: an index of more than [MAX_COMPRESSED] bytes as sent or [MAX_JSON] bytes unpacked is not taken
+     * by this version; the app says «La biblioteca es demasiado grande para esta versión; actualizá la app».
+     */
+    class TooLarge : BadIndex("The library is too large for this version; update the app")
 
     data class FileRef(val path: String, val role: String, val size: Long, val sha256: String)
 
@@ -41,8 +47,11 @@ class LibraryIndex(val sequence: Long, val models: List<Model>) {
 
     companion object {
         val GCODE = setOf("gcode", "bgcode", "gco", "g")
+        const val MAX_COMPRESSED = 64L * 1024 * 1024
+        const val MAX_JSON = 256L * 1024 * 1024
 
-        fun read(json: ByteArray, sig: ByteArray, libraryKey: ByteArray, lastSequence: Long = -1): LibraryIndex {
+        fun read(json: ByteArray, sig: ByteArray, libraryKey: ByteArray, lastSequence: Long = -1, maxJson: Long = MAX_JSON): LibraryIndex {
+            if (json.size > maxJson) throw TooLarge()
             if (libraryKey.size != 32 || sig.size != 64 || !Ed25519.verify(libraryKey, json, sig)) throw BadIndex("The index's signature does not match")
             val o = runCatching { Json.parseToJsonElement(json.decodeToString()) as JsonObject }.getOrNull()
                 ?: throw BadIndex("The index cannot be read")

@@ -383,6 +383,7 @@ struct LibraryView: View {
     @State private var query = ""
     @State private var items: [SharedModel] = []
     @State private var problem: String?
+    @State private var tooLarge = false
 
     var body: some View {
         NavigationStack {
@@ -398,6 +399,13 @@ struct LibraryView: View {
                                            description: problem.map { Text($0) })
                 }
             }
+            .safeAreaInset(edge: .top) {
+                if tooLarge {
+                    Text("The library is too large for this version; update the app.")
+                        .font(.footnote).foregroundStyle(.red).padding(.horizontal)
+                        .accessibilityIdentifier("library_too_large")
+                }
+            }
             .searchable(text: $query)
             .onChange(of: query) { _, q in items = LibraryBridge.shared.search(query: q) }
             .task { await refresh() }
@@ -410,6 +418,7 @@ struct LibraryView: View {
         let server = Prefs.server
         let why = await Task.detached { LibraryBridge.shared.refresh(server: server, projectKeyHex: LibraryView.projectKey) }.value
         problem = why
+        tooLarge = LibraryBridge.shared.tooLarge
         items = LibraryBridge.shared.search(query: query)
     }
 }

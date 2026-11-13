@@ -28,6 +28,10 @@ data class SharedModel(val id: String, val name: String, val author: String, val
 object LibraryBridge {
     private var last: LibraryFetch.Result? = null
 
+    /** Rule 3 ter bis: the last index offered was larger than this version takes (the app asks to be updated). */
+    var tooLarge: Boolean = false
+        private set
+
     /** Swift's Ed25519 check (CryptoKit's Curve25519.Signing.PublicKey.isValidSignature). */
     fun useEd25519(verify: (publicKey: NSData, message: NSData, signature: NSData) -> Boolean) {
         Ed25519.verifier = { k, m, s -> verify(k.toNSData(), m.toNSData(), s.toNSData()) }
@@ -46,6 +50,7 @@ object LibraryBridge {
             override val origin: String get() = client.serverUrl
         }
         return runCatching { LibraryFetch(key, source, FileStore).refresh() }
+            .also { tooLarge = it.exceptionOrNull() is LibraryIndex.TooLarge }
             .onSuccess { r -> last = LibraryFetch.Result(r.list ?: last?.list, r.index ?: last?.index) }
             .exceptionOrNull()?.let { it.message ?: "?" }
     }

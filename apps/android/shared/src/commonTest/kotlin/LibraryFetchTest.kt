@@ -1,4 +1,5 @@
 import net.tisma.app.p2p.LibraryFetch
+import net.tisma.app.p2p.LibraryIndex
 import net.tisma.app.p2p.LibraryServer
 import net.tisma.app.p2p.LibraryStore
 import net.tisma.app.p2p.LibraryKey
@@ -50,5 +51,13 @@ class LibraryFetchTest {
             LibraryFetch(ByteArray(0), server("https://a", mapOf("key" to """{"public_key":"","certificate":""}""".encodeToByteArray())), store).refresh()
         }
         assertNull(store.read("key"))
+    }
+
+    /** Rule 3 ter bis, on both phones: an index over the limit is refused as too large before anything else. */
+    @Test
+    fun anIndexOverTheLimitIsTooLarge() {
+        assertFailsWith<LibraryIndex.TooLarge> { LibraryIndex.read(ByteArray(11), ByteArray(64), ByteArray(32), maxJson = 10) }
+        assertEquals(64L * 1024 * 1024, LibraryIndex.MAX_COMPRESSED)
+        assertEquals(256L * 1024 * 1024, LibraryIndex.MAX_JSON)
     }
 }

@@ -699,6 +699,7 @@
     <string name="report_unsafe">Unsafe file</string>
     <string name="report_other">Another reason</string>
     <string name="shared_reported">Report sent: a person reviews it.</string>
+    <string name="shared_too_large">The library is too large for this version; update the app.</string>
     <string name="shared_problem">The library\'s signed files could not be used; the ones kept on this phone are shown.</string>
     <string name="shared_report_failed">The report could not be sent: %1$s</string>
     <string name="unsafe_file">Unsafe file: not opened (%1$s).</string>

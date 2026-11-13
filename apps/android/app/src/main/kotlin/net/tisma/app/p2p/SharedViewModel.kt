@@ -19,6 +19,8 @@ data class SharedState(
     val index: LibraryIndex? = null,
     /** Why the last key, list or index was not used. */
     val problem: String? = null,
+    /** Rule 3 ter bis: the index is larger than this version takes. */
+    val tooLarge: Boolean = false,
     /** Rule 4: copies deleted because the list withdrew them, to tell the person. */
     val withdrawn: List<String> = emptyList(),
     val copies: List<SharedCopies.Copy> = emptyList(),
@@ -84,6 +86,7 @@ class SharedViewModel(
             _state.update { st ->
                 val (list, index, removed) = r.getOrNull() ?: Triple(null, null, emptyList())
                 st.copy(list = list ?: st.list, index = index ?: st.index, problem = r.exceptionOrNull()?.let { e -> e.message ?: e::class.simpleName ?: "?" },
+                    tooLarge = r.exceptionOrNull() is LibraryIndex.TooLarge,
                     withdrawn = st.withdrawn + removed.map { it.sha256 }, copies = kept)
             }
         }

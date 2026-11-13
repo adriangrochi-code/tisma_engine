@@ -683,6 +683,7 @@
     <string name="report_unsafe">Archivo inseguro</string>
     <string name="report_other">Otro motivo</string>
     <string name="shared_reported">Denuncia enviada: la revisa una persona.</string>
+    <string name="shared_too_large">La biblioteca es demasiado grande para esta versión; actualizá la app.</string>
     <string name="shared_problem">No se pudieron usar los archivos firmados de la biblioteca; se muestran los guardados en el teléfono.</string>
     <string name="shared_report_failed">No se pudo mandar la denuncia: %1$s</string>
     <string name="unsafe_file">Archivo inseguro: no se abrió (%1$s).</string>

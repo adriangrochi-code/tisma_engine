@@ -238,3 +238,5 @@
 "The model on the bed, in 3D" = "El modelo sobre la cama, en 3D";
 "The part in 3D. Touch a face to mark it" = "La pieza en 3D. Toca una cara para marcarla";
 "One finger turns, two move, pinch zooms" = "Un dedo gira, dos mueven, pellizcar acerca";
+
+"The library is too large for this version; update the app." = "La biblioteca es demasiado grande para esta versión; actualizá la app.";

@@ -31,6 +31,7 @@ class LibraryFetch(
     private val projectKey: ByteArray,
     private val server: LibraryServer?,
     private val store: LibraryStore,
+    private val maxIndex: Long = LibraryIndex.MAX_JSON,
     private val log: (String) -> Unit = {},
 ) {
     class Result(val list: BlockList?, val index: LibraryIndex?)
@@ -47,7 +48,7 @@ class LibraryFetch(
             }
         }
         val index = fetchPair("index.json")?.let { (json, sig) ->
-            LibraryIndex.read(json, sig, key, store.indexSequence).also {
+            LibraryIndex.read(json, sig, key, store.indexSequence, maxIndex).also {
                 store.write("index.json", json); store.write("index.json.sig", sig)
                 store.indexSequence = it.sequence
             }
@@ -63,7 +64,9 @@ class LibraryFetch(
     private fun fetchPair(name: String): Pair<ByteArray, ByteArray>? {
         val s = server
         if (s != null) {
-            val fresh = runCatching { s.file(name) to s.file("$name.sig") }.onFailure { log("p2p: $name ${it.message}") }.getOrNull()
+            val fresh = runCatching { s.file(name) to s.file("$name.sig") }.onFailure { log("p2p: $name ${it.message}") }
+                // Rule 3 ter bis: one too large for this version is refused with its notice, not replaced by the kept one.
+                .onFailure { if (it is LibraryIndex.TooLarge) throw it }.getOrNull()
             if (fresh != null) return fresh
         }
         val json = store.read(name) ?: return null
