@@ -11,12 +11,12 @@
 namespace tisma::ui {
 
 // A file chooser drawn with Dear ImGui, the same on every system (no GTK or
-// other toolkit). On Windows, once use_native(true), the system's own Open and
-// Save As dialogs instead (the testers' BH40); scripted and screenshot runs
+// other toolkit). On Windows and macOS, once use_native(true), the system's own
+// Open and Save As dialogs instead (the testers' BH40); scripted and screenshot runs
 // keep the drawn one. Own design; see PROVENANCE.md.
 class FileBrowser {
 public:
-    // Whether open() shows the system's dialog where there is one (Windows).
+    // Whether open() shows the system's dialog where there is one (Windows, macOS).
     static void use_native(bool native) { native_ = native; }
 
     enum class Mode { Open, Save };

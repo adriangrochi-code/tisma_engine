@@ -60,8 +60,9 @@ std::vector<char> same_sections(const IndexedMesh& mesh, std::span<const float> 
 // edges of the first level of its run, to the same bits. Planar slicing passes
 // height_field(mesh) and the layers' slice heights; a curved-layer field can
 // be passed the same way.
-// With max_gap > 0, gaps up to that length are closed in every level (see
-// close_gaps).
+// With max_gap > 0 (the gap closing radius, slicing.gap_closing_radius),
+// cracks up to twice that close in every level, and the open ends left are
+// then joined up to 10 mm apart (slicing.md, rule 7; see close_gaps).
 // With same_section, the levels whose section is the level below's
 // (same_sections) and whose contours all close are left empty and marked 1
 // there, for the caller to take from the level below; the rest are 0.

@@ -192,6 +192,26 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
     return over;
 }
 
+std::vector<int> support_gaps_above(const std::vector<double>& thickness, double z_gap) {
+    std::vector<int> out(thickness.size(), 0);
+    for (std::size_t l = 0; l < thickness.size(); ++l) {
+        double sum = 0.0;
+        for (std::size_t k = l + 1; k < thickness.size() && sum + thickness[k] / 2.0 <= z_gap + 1e-9; ++k)
+            sum += thickness[k], ++out[l];
+    }
+    return out;
+}
+
+std::vector<int> support_gaps_below(const std::vector<double>& thickness, double z_gap) {
+    std::vector<int> out(thickness.size(), 0);
+    for (std::size_t l = 0; l < thickness.size(); ++l) {
+        double sum = 0.0;
+        for (std::size_t k = l; k-- > 0 && sum + thickness[k] / 2.0 <= z_gap + 1e-9;)
+            sum += thickness[k], ++out[l];
+    }
+    return out;
+}
+
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params) {
     const std::size_t n = regions.size();
@@ -221,7 +241,10 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
     const std::int64_t x0 = bounds.left - margin * pixel, y0 = bounds.top - margin * pixel;
     const int width = int((bounds.right - bounds.left) / pixel) + 2 * margin + 1;
     const int height = int((bounds.bottom - bounds.top) / pixel) + 2 * margin + 1;
-    const auto above_of = [&](std::size_t l) { return l + 1 + std::size_t(std::max(params.z_gap_layers, 0)); };
+    const auto above_of = [&](std::size_t l) {
+        const int gap = params.gap_above && l < params.gap_above->size() ? (*params.gap_above)[l] : params.z_gap_layers;
+        return l + 1 + std::size_t(std::max(gap, 0));
+    };
     const auto adds = [&](std::size_t l) { return above_of(l) < n && !over[above_of(l)].empty(); };
     // From the top down, a chunk of layers at a time: their grids filled in
     // parallel; the column, in order, grows with every overhang (gap layers
@@ -270,7 +293,8 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
             // and bottom_gap_layers over the part it stands on (supports_more.md, rule 6).
             out[l] = Clipper2Lib::Difference(simplify(c.outline(), params.bead / 2.0), offset(regions[l], params.xy_gap),
                                              Clipper2Lib::FillRule::NonZero);
-            for (std::size_t g = 1; g <= std::size_t(std::max(params.bottom_gap_layers, 0)) && g <= l && !out[l].empty(); ++g)
+            const int below = params.gap_below && l < params.gap_below->size() ? (*params.gap_below)[l] : params.bottom_gap_layers;
+            for (std::size_t g = 1; g <= std::size_t(std::max(below, 0)) && g <= l && !out[l].empty(); ++g)
                 // Grown by half a bead: no slivers left hanging over its edge.
                 out[l] = Clipper2Lib::Difference(out[l], offset(regions[l - g], params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
         });

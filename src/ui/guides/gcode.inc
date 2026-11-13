@@ -287,6 +287,19 @@
      "together never pass 100 %: asked for more, this one is cut.\n\nIt finishes pulling the filament away from "
      "the mark, without the retraction making the wipe longer.\n\nExample: 0 % to start; with 20 % before and 30 % "
      "after, of 2 mm 0.4 are pulled standing, 1 while wiping and 0.6 standing at the end."},
+    {"retraction.only_crossing_walls",
+     "Retrae solo cuando el viaje cruza una pared de afuera o pasa por el aire. Un viaje que va entero por dentro "
+     "de la pieza, entre rellenos y paredes internas, no retrae aunque sea largo: lo que gotee queda adentro, "
+     "donde no se ve.\n\nAhorra tiempo y desgaste del filamento. En un cubo de 20 mm con relleno, las retracciones "
+     "bajan de unas 350 a 1, y la impresión un poco más de un minuto. Apagado, decide el largo mínimo del viaje "
+     "para retraer.\n\nEjemplo: encendido para piezas grandes con mucho relleno; apagado si el material gotea "
+     "mucho y deja hilos en las paredes de adentro.",
+     "It retracts only when the travel crosses an outer wall or goes through the air. A travel that stays entirely "
+     "inside the part, among infill and inner walls, does not retract however long: what oozes stays inside, where "
+     "it cannot be seen.\n\nIt saves time and filament wear. On a 20 mm cube with infill the retractions drop from "
+     "about 350 to 1, and the print a little over a minute. Off, the minimum travel to retract decides.\n\n"
+     "Example: on for large parts with a lot of infill; off if the material oozes a lot and leaves strings on the "
+     "inner walls."},
     {"retraction.wipe_inward",
      "Solo cuenta con el barrido encendido y más de una pared, impresas de adentro hacia afuera. Después de la pared "
      "de afuera, el barrido no vuelve sobre esa pared sino un poco más adentro, sobre la pared interna de al lado, "

@@ -55,8 +55,9 @@ struct AppOptions {
     std::array<double, 3> object_turn{0.0, 0.0, 0.0};
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
-        std::string channel; // support, seam or fuzzy
+        std::string channel; // support, seam, fuzzy or color
         bool block = false;  // the mark: block, else enforce
+        int color = 0;       // color: the filament or blend number (1 to 16) the faces print with
         float x = 0, y = 0, z = 0, radius = 1;
     };
     std::vector<Stroke> strokes;

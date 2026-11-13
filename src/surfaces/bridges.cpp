@@ -58,6 +58,7 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
     // First every bridge from the unchanged surfaces, then move them out of `bottom`.
     std::vector<Polygons> bridges(surfaces.size());
     std::vector<double> angles(surfaces.size(), 0.0);
+    std::vector<Polygons> supports(surfaces.size());
     tbb::parallel_for(std::size_t(1), surfaces.size(), [&](std::size_t i) {
         if (surfaces[i].bottom.empty())
             return;
@@ -100,7 +101,9 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
         // around the bridge, in the same kind of window.
         Clipper2Lib::Rect64 around = Clipper2Lib::GetBounds(bridges[i]);
         around.left -= margin, around.top -= margin, around.right += margin, around.bottom += margin;
-        angles[i] = best_angle(bridges[i], offset(Clipper2Lib::RectClip(around, printed), width), width);
+        const Polygons held = Clipper2Lib::RectClip(around, printed);
+        angles[i] = best_angle(bridges[i], offset(held, width), width);
+        supports[i] = held;
     });
     for (std::size_t i = 1; i < surfaces.size(); ++i) {
         if (bridges[i].empty())
@@ -108,6 +111,7 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
         surfaces[i].bottom = Clipper2Lib::Difference(surfaces[i].bottom, bridges[i], FillRule::NonZero);
         surfaces[i].bridge = std::move(bridges[i]);
         surfaces[i].bridge_angle = angles[i];
+        surfaces[i].bridge_support = std::move(supports[i]);
     }
 }
 

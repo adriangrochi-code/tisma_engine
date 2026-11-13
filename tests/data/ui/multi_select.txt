@@ -1,0 +1,19 @@
+# Choosing several models (interface.md, «Navegación», rule 1): a rectangle
+# from right to left takes all it touches; Shift with a click on an empty
+# place keeps them; a click on the empty bed lets them go; Delete takes all
+# the chosen ones off the plate.
+wait 3
+add-cylinder
+wait 3
+mouse left 0.95 0.75 -500 -350
+wait 2
+expect-selected 2
+mouse left 0.95 0.75 0 0
+wait 2
+expect-selected 0
+mouse left 0.95 0.75 -500 -350
+wait 2
+expect-selected 2
+key delete
+wait 3
+expect-models 0

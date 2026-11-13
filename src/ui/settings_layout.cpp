@@ -36,13 +36,16 @@ const std::vector<SectionLayout>& print_layout() {
             {"compensation.scale_y", A},
             {"compensation.scale_z", A},
             {"compensation.hole_offset", A}}},
-          {"slopes", T::SubSlopes, {{"zaa.enabled", N}, {"zaa.min_thickness", A}, {"zaa.raise", A}}},
+          {"slopes", T::SubSlopes,
+           {{"zaa.enabled", N}, {"zaa.min_thickness", A}, {"zaa.raise", A}, {"walls.vertical_shell", A}}},
           {"ironing", T::SubIroning,
            {{"ironing.enabled", N},
             {"ironing.surfaces", A},
             {"ironing.flow", A},
             {"ironing.spacing", A},
-            {"ironing.speed", A}}}}},
+            {"ironing.speed", A},
+            {"ironing.angle", A},
+            {"ironing.angle_fixed", A}}}}},
         {"strength", T::SecStrength, "section_strength.svg",
          {{"walls", T::SubWalls,
            {{"walls.count", B},
@@ -217,8 +220,23 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.bed_temperature_from", A},
             {"extruders.ooze_prevention", A},
             {"extruders.standby_delta", A}}},
-          {"multi_nozzle", T::SubMultiNozzle, {{"multi.fine_walls_coarse_infill", N}, {"multi.color_mixing", N}}},
-          {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}}},
+          {"multi_nozzle", T::SubMultiNozzle,
+           {{"multi.fine_walls_coarse_infill", N},
+            {"multi.color_mixing", N}}},
+          {"color_mix", T::SubColorMix,
+           {{"mixing.subdivide", A},
+            {"mixing.sub_min_height", A},
+            {"mixing.sub_first_layer", A},
+            {"mixing.sub_infill", A},
+            {"mixing.cadence_heights", A},
+            {"mixing.height_a", A},
+            {"mixing.height_b", A},
+            {"mixing.step", A}}},
+          {"color_mix_zones", T::SubColorMixZones, {{"mixing.surface_only", A}, {"mixing.surface_depth", A}, {"mixing.extra_walls", A},
+           {"mixing.purge_into_infill", A},
+           {"mixing.purge_infill_max", A},
+           {"mixing.predictor", A}}},
+          {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}, {"resin.first_layer_height", A}}},
           {"resin_supports", T::SubResinSupports,
            {{"resin.supports", N},
             {"resin.support_elevation", N},
@@ -313,7 +331,7 @@ const std::vector<SectionLayout>& material_layout() {
             {"cooling.slowdown_logic", A}, {"cooling.transition_distance", A}}}}},
         {"flow", T::SecFlow, "section_flow.svg",
          {{"flow", T::SubFlow, {{"extrusion.flow", N}, {"extrusion.bridge_flow_ratio", A}, {"extrusion.purge_multiplier", A},
-                    {"extrusion.min_purge_on_tower", A}, {"extrusion.flow_by_speed", A},
+                    {"extrusion.min_purge_on_tower", A}, {"extrusion.transmission_distance", A}, {"extrusion.flow_by_speed", A},
                     {"extrusion.section", A}, {"extrusion.feedstock", A}}},
           {"pressure", T::SubPressure, {{"extrusion.pressure_advance", A}}},
           {"max_flow", T::SubMaxFlow,
@@ -325,6 +343,7 @@ const std::vector<SectionLayout>& material_layout() {
             {"retraction.unretract_speed", A},
             {"retraction.restart_extra", A},
             {"retraction.on_layer_change", N},
+            {"retraction.only_crossing_walls", A},
             {"retraction.firmware", A}}},
           {"wipe", T::SubWipe,
            {{"retraction.wipe", N},
@@ -557,6 +576,8 @@ const char* pattern_title(InfillPattern pattern) {
         return tr(T::ArchimedeanInfill);
     case InfillPattern::Octagram:
         return tr(T::OctagramInfill);
+    case InfillPattern::Honeycomb3d:
+        return tr(T::Honeycomb3d);
     }
     return "";
 }
@@ -734,6 +755,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.fine_walls_coarse_infill ? tr(T::FineWallsCoarseInfill)
                : color_mixing_offered(s)  ? tr(T::ColorMixingRow)
                                           : tr(T::SumOff);
+    if (id == "color_mix_zones")
+        return s.mix_surface_only ? tr(T::SumMixShell) : tr(T::SumOff);
+    if (id == "color_mix")
+        return s.mix_cadence_heights ? tr(T::SumMixCadence) : s.mix_subdivide ? tr(T::SumMixSublayers) : tr(T::SumOff);
     if (id == "extruders")
         return s.extruders > 1 ? format(T::SumExtrudersN, s.extruders) : tr(T::SumOneExtruder);
     if (id == "interlocking")

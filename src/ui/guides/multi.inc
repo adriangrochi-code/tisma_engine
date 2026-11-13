@@ -129,6 +129,103 @@
      "purges at every change.\n\nMixing needs many changes: on an MMU that means a lot of time and wasted plastic, "
      "and turning it on warns you of the cost first.\n\nExample: leave it empty; on an MMU, turn it on only if you "
      "accept using much more filament."},
+    {"mixing.subdivide",
+     "Con una mezcla de colores, cada capa sale de un solo filamento y las capas se alternan. Con esto encendido, en "
+     "las partes con mezcla cada capa se imprime en pasadas más finas, una por filamento, de abajo hacia arriba: una "
+     "capa de 0,2 mm con una mezcla mitad y mitad lleva 0,1 mm de cada uno. El color se mezcla dentro de la capa y "
+     "las franjas se notan menos.\n\nEl resto de la capa, sin mezcla, se imprime una vez. Cada pasada es un cambio de "
+     "filamento más.\n\nEjemplo: encendido para una pieza chica de color mezclado vista de cerca.",
+     "With a colour mix, each layer is one filament and the layers take turns. With this on, in the parts with a mix "
+     "each layer is printed in thinner passes, one per filament, from the bottom up: a 0.2 mm layer of a half and half "
+     "mix gets 0.1 mm of each. The colour mixes within the layer and the stripes show less.\n\nThe rest of the layer, "
+     "with no mix, prints once. Each pass is one more filament change.\n\nExample: on for a small mixed-colour part "
+     "seen up close."},
+    {"mixing.sub_min_height",
+     "La pasada más fina que se permite al dividir una capa con mezcla. Si un filamento lleva tan poca parte de la "
+     "mezcla que su pasada quedaría más fina que esto, esa capa no se divide y sigue alternando capas enteras.\n\n"
+     "Las pasadas muy finas cuestan lo mismo en cambios y casi no se ven.\n\nEjemplo: 0,04 mm.",
+     "The thinnest pass allowed when a layer with a mix is split. If a filament has so small a share of the mix that "
+     "its pass would be thinner than this, that layer is not split and keeps taking whole layers in turn.\n\nVery "
+     "thin passes cost the same changes and hardly show.\n\nExample: 0.04 mm."},
+    {"mixing.sub_first_layer",
+     "Si la primera capa también se divide en pasadas con una mezcla. Apagado, la primera capa sale entera de un "
+     "filamento, que es lo que mejor se pega a la cama.\n\nLa primera capa casi nunca se ve, salvo en la base.\n\n"
+     "Ejemplo: apagado.",
+     "Whether the first layer is also split into passes with a mix. Off, the first layer is one filament, all of it, "
+     "which sticks best to the bed.\n\nThe first layer hardly ever shows, except underneath.\n\nExample: off."},
+    {"mixing.sub_infill",
+     "Si el relleno de adentro de una parte con mezcla también se divide en pasadas. Apagado, el relleno se imprime "
+     "una vez por capa con el filamento de la última pasada: no se ve, y ahorra tiempo.\n\nLas paredes y las "
+     "superficies se dividen igual.\n\nEjemplo: apagado.",
+     "Whether the inside infill of a part with a mix is also split into passes. Off, the infill prints once a layer "
+     "with the last pass's filament: it does not show, and it saves time.\n\nThe walls and the surfaces are split "
+     "all the same.\n\nExample: off."},
+    {"mixing.cadence_heights",
+     "Con una mezcla de dos filamentos que imprime toda la pieza, cada filamento tiene su propio alto de capa y se "
+     "alternan: una capa del primero, una del segundo. La proporción del color sale de los altos.\n\nSi en la cama "
+     "hay otra mezcla, partes sin mezcla o pintura, se usa el ciclo de siempre y se avisa.\n\nEjemplo: 0,3 mm y "
+     "0,15 mm dan dos partes del primero por una del segundo.",
+     "With a two-filament mix that prints the whole part, each filament has its own layer height and they take "
+     "turns: one layer of the first, one of the second. The colour's proportion comes from the heights.\n\nIf the "
+     "plate has another mix, parts without a mix or paint, the usual cycle is used, with a warning.\n\nExample: 0.3 "
+     "mm and 0.15 mm give two parts of the first to one of the second."},
+    {"mixing.height_a",
+     "El alto de las capas del primer filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
+     "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,3 mm.",
+     "The layer height of the mix's first filament, with per-filament heights on. 0 uses the layer height. It is "
+     "kept within the printer's limits.\n\nExample: 0.3 mm."},
+    {"mixing.step",
+     "La altura en la que se cuenta el ciclo de la mezcla. 0, o el alto de capa, cuenta por capa, como siempre. Con "
+     "otro valor, el color sigue la altura: cada capa toma el filamento que le toca a la altura de su centro, así la "
+     "proporción se mantiene aunque la altura de capa cambie. Con subcapas y un paso más fino que la capa, la parte con "
+     "mezcla se imprime en pasadas de ese alto.\n\nEjemplo: 0,2 mm.",
+     "The height the mix's cycle is counted in. 0, or the layer height, counts by layer, as usual. Any other value "
+     "makes the colour follow the height: each layer takes the filament due at the height of its middle, so the "
+     "proportion holds even when the layer height changes. With sublayers and a step finer than the layer, the part "
+     "with the mix prints in passes that high.\n\nExample: 0.2 mm."},
+    {"mixing.surface_only",
+     "La mezcla va solo en la cáscara de la pieza: las paredes de afuera y las superficies. Las paredes de adentro y "
+     "el relleno se imprimen con el filamento que más lleva la mezcla. El color se ve igual y el interior no cambia "
+     "de filamento.\n\nEjemplo: encendido, con 0,8 mm de cáscara.",
+     "The mix goes only in the part's shell: the outer walls and the surfaces. The inner walls and the infill print "
+     "with the filament the mix has most of. The colour looks the same and the inside does not change filament."
+     "\n\nExample: on, with a 0.8 mm shell."},
+    {"mixing.surface_depth",
+     "El grosor de la cáscara que lleva la mezcla, con «solo la superficie» encendido. Una pared que empieza más "
+     "adentro que esto se imprime con un solo filamento.\n\nEjemplo: 0,8 mm, dos paredes de 0,4.",
+     "The thickness of the shell that takes the mix, with surface only on. A wall that starts further in than this "
+     "prints with one filament.\n\nExample: 0.8 mm, two walls of 0.4."},
+    {"mixing.extra_walls",
+     "Paredes de más en las piezas con mezcla y en las partes de otro color que el resto de su objeto (por ejemplo, "
+     "una parte pintada). Así el color de afuera no se ve mezclado con el del relleno de adentro.\n\nEjemplo: 2.",
+     "Extra walls in the parts with a mix and in the parts of another colour than the rest of their object (a "
+     "painted part, say). That way the outside colour does not show mixed with the infill's inside.\n\nExample: 2."},
+    {"mixing.purge_into_infill",
+     "Con mezclas en una impresora de una sola boquilla, después de cada cambio de filamento la purga se imprime como "
+     "relleno de adentro de las piezas, con el filamento nuevo. El relleno queda tapado, así que no se ve, y se tira "
+     "menos filamento en la torre.\n\nEjemplo: encendido.",
+     "With mixes on a single-nozzle printer, after each filament change the purge prints as the parts' inside "
+     "infill, with the new filament. The infill stays hidden, so it does not show, and less filament goes to the "
+     "tower.\n\nExample: on."},
+    {"mixing.predictor",
+     "Cómo se calcula el color de una mezcla al buscar un color. «mixer» promedia los colores por su parte. "
+     "«spectral» tiene en cuenta cuánta luz deja pasar cada filamento (su distancia de transmisión): uno más "
+     "translúcido deja ver el de abajo y pesa más.\n\nEjemplo: spectral si conocés la TD de tus filamentos.",
+     "How a blend's colour is worked out when looking for a colour. \"mixer\" averages the colours by their share. "
+     "\"spectral\" takes into account how much light each filament lets through (its transmission distance): a more "
+     "translucent one shows the one below and weighs more.\n\nExample: spectral if you know your filaments' TD."},
+    {"mixing.purge_infill_max",
+     "Si la purga de un cambio no entra en el relleno de su capa, el relleno de esa capa se hace más denso, hasta este "
+     "porcentaje, para que entre y no se tire. La pieza pesa más, pero se gasta menos en la torre. 0 lo apaga.\n\n"
+     "Ejemplo: 60 %.",
+     "If a change's purge does not fit in its layer's infill, that layer's infill gets denser, up to this percentage, "
+     "so that it fits and is not thrown away. The part weighs more, but less goes to the tower. 0 turns it off."
+     "\n\nExample: 60 %."},
+    {"mixing.height_b",
+     "El alto de las capas del segundo filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
+     "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,15 mm.",
+     "The layer height of the mix's second filament, with per-filament heights on. 0 uses the layer height. It is "
+     "kept within the printer's limits.\n\nExample: 0.15 mm."},
     {"wipe_tower.enabled",
      "Al cambiar de filamento o de boquilla, la que entra todavía tiene restos del color anterior o no sale pareja. "
      "La torre de purga es un bloque que se imprime al costado de la pieza: los cambios de herramienta se hacen "

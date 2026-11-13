@@ -268,6 +268,43 @@ TEST_CASE("models that cannot be printed end with a clear error and no G-code", 
     CHECK_FALSE(std::filesystem::exists(out));
 }
 
+TEST_CASE("analyze <model> --mode lightest-infill: the lowest infill that holds, as for a project", "[cli]") {
+    const auto dir = test_temp_dir();
+    const auto result = dir / "tisma_test_lightest.json", case_file = dir / "tisma_test_lightest_case.json";
+    {
+        std::ofstream c(case_file);
+        c << R"({"material": "bambu-pla-basic", "model": "as_printed", "voxel": 1.0, "rows_per_layer": 1,
+                 "fixtures": [{"name": "bed", "face": "bottom"}],
+                 "loads": [{"name": "push", "face": "top", "force": [0, 0, -100]}]})";
+    }
+    const std::vector<std::string> base{"analyze", kData + "/cube_ascii.stl", "--config", kData + "/settings.json",
+                                        "--case", case_file.string(), "-o", result.string()};
+    std::vector<std::string> args = base;
+    for (const char* more : {"--mode", "lightest-infill", "--no-zones", "--safety", "3"})
+        args.push_back(more);
+    const Run r = run(args);
+    REQUIRE(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("lightest_infill: "));
+    std::ifstream json(result);
+    const nlohmann::json doc = nlohmann::json::parse(json);
+    CHECK(doc["kind"] == "lightest-infill");
+    const nlohmann::json& summary = doc["summary"];
+    CHECK(summary["found"] == true);
+    CHECK(summary["solid"] == false);
+    CHECK(summary["required_safety"] == 3.0);
+    CHECK(summary["min_safety"].get<double>() >= 3.0);
+    CHECK(summary["density"].get<int>() >= 0);
+    CHECK(summary["density"].get<int>() <= 100);
+    CHECK_FALSE(summary.contains("zones"));
+    // A mode that only a project has, and a factor out of range.
+    args = base;
+    args.insert(args.end(), {"--mode", "resin-structure"});
+    CHECK(run(args).code == kExitUsage);
+    args = base;
+    args.insert(args.end(), {"--mode", "lightest-infill", "--safety", "0.5"});
+    CHECK(run(args).code == kExitUsage);
+}
+
 TEST_CASE("analyze writes the report and the map", "[cli]") {
     const auto dir = test_temp_dir();
     const auto report = dir / "tisma_test_analysis.json", map = dir / "tisma_test_analysis.vtk";
@@ -524,6 +561,59 @@ TEST_CASE("slice runs the post-processing scripts once confirmed (rules 16 and 1
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("slice --mixes and --mix: a blend from the command line (color_mixing.md, rule 15)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_mixes";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json", mixes = dir / "mixes.json", gcode = dir / "mix.gcode";
+    std::ofstream(config) << R"({"machine": {"max_feed_x": 200, "max_feed_y": 200, "max_feed_z": 12, "max_feed_e": 120,
+                                             "corner_speed": 10, "extruders": 2, "bed": [[0, 0], [200, 0], [200, 200], [0, 200]]},
+                                 "speed": {"walls": 60, "outer_wall": "50%", "infill": 80, "solid_infill": 80,
+                                           "top_solid_infill": 15, "support": 80, "travel": 130, "first_layer": 30},
+                                 "retraction": {"speed": 40}, "cooling": {"min_speed": 10}})";
+    std::ofstream(mixes) << R"({"version": 1, "virtual_extruders": [{"id": 3, "kind": "fullspectrum", "color": "#808080",
+                               "components": [{"extruder": 1, "ratio": 0.5}, {"extruder": 2, "ratio": 0.5}]}]})";
+    Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--mixes", mixes.string(), "--mix", "3",
+                 "-o", gcode.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    std::string text;
+    {
+        std::ifstream f(gcode); // closed before the folder is removed: Windows keeps an open file
+        text.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
+    CHECK_THAT(text, ContainsSubstring("\nT0\n"));
+    CHECK_THAT(text, ContainsSubstring("\nT1\n"));
+    // A blend the file does not have, or not a number.
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--mixes", mixes.string(), "--mix", "4",
+               "-o", gcode.string()})
+              .code == kExitUsage);
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--mix", "x", "-o", gcode.string()}).code ==
+          kExitUsage);
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice --copies: as many as fit, with the skirt around them on the bed too (BH52)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_copies_fit";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json", gcode = dir / "fit.gcode";
+    REQUIRE(run({"profile", "--printer", "Prusa Research Original Prusa MK4S", "--filament", "Prusament Prusament PLA",
+                 "-o", config.string()})
+                .code == kExitOk);
+    Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", "1000"});
+    REQUIRE(r.code == kExitUsage);
+    const std::size_t at = r.err.find(": ", r.err.find("bed"));
+    REQUIRE(at != std::string::npos);
+    const std::string fit = std::to_string(std::stoul(r.err.substr(at + 2)));
+    INFO(fit << " fit");
+    // The number said to fit makes G-code: the skirt does not go off the bed.
+    r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", fit});
+    INFO(r.err);
+    CHECK(r.code == kExitOk);
+    std::filesystem::remove_all(dir);
+}
+
 TEST_CASE("slice --copies prints copies of the model, one by one with sequential printing (sequential.md, SQ1)",
           "[cli]") {
     const auto dir = test_temp_dir() / "tisma_test_copies";
@@ -691,10 +781,17 @@ TEST_CASE("profile: the settings made from the catalog, ready for slice --config
     r = run({"profile", "--printer", "Creality Ender-3 S1"});
     CHECK(r.code == 0);
     CHECK(parse_settings(r.out).nozzle_diameter == 0.4);
+    // Without a filament the temperatures stay at 0: said at once, not only by the G-code check later.
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("no --filament"));
 
     r = run({"profile", "--printer", "Ender-3"});
     CHECK(r.code == 2);
     CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("names"));
+    // A filament by its name without the maker's, when longer names hold
+    // the same words: "Prusament PLA" is not "Prusament PLA Blend".
+    r = run({"profile", "--printer", "Creality Ender-3 S1", "--filament", "Prusament PLA"});
+    CHECK(r.code == 0);
+    CHECK_THAT(r.err, !Catch::Matchers::ContainsSubstring("names"));
     r = run({"profile", "--printer", "Nobody Nothing 9000"});
     CHECK(r.code == 2);
     CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("no printer"));

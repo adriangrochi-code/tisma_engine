@@ -42,6 +42,23 @@ struct Plan {
     std::vector<std::string> classes; // the queues it includes: slice, slice_large, fea, fea_optimize, aero, orient
 };
 
+// The service's state (GET /v1/status, no session; cloud.md, rule 4a): "ok",
+// "slow" or "down", its label and reason in both languages, the job classes no
+// connected node does now, the oldest job's wait and the nodes online. The
+// interface shows label and message as a warning with "slow" or "down",
+// without blocking: the jobs wait in the queue.
+struct ServiceStatus {
+    std::string status;
+    std::string label_es, label_en, message_es, message_en;
+    std::vector<std::string> unavailable;
+    double longest_wait_s = 0.0;
+    int nodes_online = 0;
+    std::string checked_at;
+    bool warn() const { return status == "slow" || status == "down"; }
+    const std::string& label(bool spanish) const { return spanish ? label_es : label_en; }
+    const std::string& message(bool spanish) const { return spanish ? message_es : message_en; }
+};
+
 // Whether the plan named `plan` includes the job class (cloud.md, rule 10b).
 // A plan not in the list, or one that lists no classes (an older server),
 // counts as including it: the server still has the last word (402).
@@ -108,6 +125,8 @@ public:
     bool account(Account& account, Failure& error);
     // GET /v1/plans, with or without a session.
     bool plans(std::vector<Plan>& plans, Failure& error);
+    // GET /v1/status, without the session (rule 4a).
+    bool status(ServiceStatus& status, Failure& error);
 
     // POST /v1/reports (cloud.md, rule 11): app, kind, title, description,
     // steps, expected, actual, app_version, os, log; with the account's token

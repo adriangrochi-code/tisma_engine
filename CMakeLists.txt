@@ -204,6 +204,7 @@ add_library(tisma_core
   src/config/profiles.cpp
   src/slice/painted.cpp
   src/slice/pipeline.cpp
+  src/slice/job.cpp
   src/geom/medial_axis.cpp
   src/geom/voronoi.cpp
   src/perimeters/beading.cpp
@@ -314,6 +315,8 @@ add_library(tisma_core
   src/device/serial_port.cpp
   src/device/simulator.cpp
   src/device/stream.cpp
+  src/device/camera_frame.cpp
+  src/device/usb_camera.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
   # The plate and the slicing job behind the interface's buttons, without
   # OpenGL: the command line slices a project with them too (cloud.md, rule 18).
@@ -322,6 +325,7 @@ add_library(tisma_core
   src/ui/project_slice.cpp
   src/cli/cli.cpp
   src/cli/c_cli.cpp
+  src/cli/c_api.cpp
   src/cli/node.cpp
   src/cli/pack_cli.cpp
   src/cli/part_cli.cpp

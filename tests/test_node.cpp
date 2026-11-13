@@ -4,6 +4,7 @@
 #include "cli/cli.hpp"
 #include "io/stl.hpp"
 #include "mesh/shapes.hpp"
+#include "io/model.hpp"
 #include "project/project.hpp"
 #include "test_temp.hpp"
 #include "ui/slicing.hpp"
@@ -625,5 +626,59 @@ TEST_CASE("slice of a project: a model that is not printable is left out", "[cli
     r = run({"slice", project.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"});
     CHECK(r.code != kExitOk);
     CHECK_THAT(nlohmann::json::parse(read_text(summary))["error"].get<std::string>(), ContainsSubstring("printable"));
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice of a plain 3MF (no Tisma project): its parts with the default settings (formats.md rules 5, 18)",
+          "[cli][cloud]") {
+    // The cloud's test: a 20 x 20 x 10 mm box at (128, 128), mesh and build item only.
+    const auto dir = fresh_dir("tisma_test_node_plain");
+    const auto model = dir / "project.3mf", gcode = dir / "out.gcode", summary = dir / "summary.json";
+    const TriangleMesh box = make_box(20.0, 20.0, 10.0);
+    {
+        std::ofstream f(model, std::ios::binary);
+        f << write_3mf_objects({{"box", &box, {118.0, 118.0, 0.0}}});
+    }
+    REQUIRE_FALSE(looks_like_project(read_text(model)));
+    const Run r = run({"slice", model.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"});
+    CHECK(r.code == 0);
+    CHECK_THAT(r.err, ContainsSubstring("without Tisma's project"));
+    const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+    CHECK_FALSE(j.contains("error"));
+    CHECK(j.value("layers", 0) == 50);
+    CHECK(read_text(gcode).find("G1") != std::string::npos);
+
+    // Another program's project: its settings translated with the table the
+    // job gives (--translation); the job's --set over them.
+    const std::string orca = write_3mf_objects(
+        {{"box", &box, {118.0, 118.0, 0.0}}},
+        {{"Metadata/project_settings.config", R"({"layer_height": "0.25", "wall_loops": "3"})"},
+         {"Metadata/model_settings.config", "<config/>"}});
+    const auto orca_file = dir / "orca.3mf", table = dir / "orcaslicer.json";
+    std::ofstream(orca_file, std::ios::binary) << orca;
+    std::ofstream(table) << R"({"format": "tisma-pack-translation", "version": 1, "dialect": "orcaslicer", "kinds": {"print": {
+        "layer_height": {"engine": "layers.height", "group": "translated", "conversion": {"how": "number"}}}}})";
+    const auto layers = [&](std::vector<std::string> extra) {
+        std::vector<std::string> args{"slice", orca_file.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"};
+        args.insert(args.end(), extra.begin(), extra.end());
+        const Run done = run(args);
+        INFO(done.err);
+        CHECK(done.code == 0);
+        return nlohmann::json::parse(read_text(summary)).value("layers", 0);
+    };
+    CHECK(layers({}) == 50);                                       // no table: the defaults
+    CHECK(layers({"--translation", table.string()}) == 40);        // 0.25 mm layers
+    CHECK(layers({"--translation", table.string(), "--set", "layers.height=0.2"}) == 50); // the job's change wins
+    // The pack's folder: the engine picks the table of the program that saved the file.
+    const auto folder = dir / "translation";
+    std::filesystem::create_directories(folder);
+    std::filesystem::copy_file(table, folder / "orcaslicer.json");
+    CHECK(layers({"--translation-dir", folder.string()}) == 40);
+    std::filesystem::remove(folder / "orcaslicer.json");
+    CHECK(layers({"--translation-dir", folder.string()}) == 50); // no table for it: the defaults, with a warning
+    std::ofstream(table) << "not a table";
+    CHECK(run({"slice", orca_file.string(), "-o", gcode.string(), "--summary", summary.string(), "--translation",
+               table.string()})
+              .code == kExitInput);
     std::filesystem::remove_all(dir);
 }

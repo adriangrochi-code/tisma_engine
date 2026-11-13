@@ -102,6 +102,21 @@
      "second.\n\nSlower gives the heat time to melt and smooth the surface, which comes out more even, but it takes "
      "longer. Faster saves time and smooths less.\n\nExample: 15 mm/s, the default. Try 10 mm/s if the lines still "
      "show; up to 25 mm/s if the surface already looks good and you want to finish sooner."},
+    {"ironing.angle",
+     "Solo cuenta con el planchado prendido. Es cuántos grados giran las pasadas de planchado respecto de las líneas "
+     "de la tapa de esa capa.\n\nCruzadas con la tapa alisan mejor las crestas entre sus líneas; un número negativo "
+     "vale como el de fábrica.\n\nEjemplo: 45°, el valor de fábrica; 90° para cruzarlas del todo.",
+     "It only matters with ironing on. It is how many degrees the ironing passes turn from the lines of that layer's "
+     "top surface.\n\nAcross the top lines they smooth the ridges between them better; a negative number works as "
+     "the default.\n\nExample: 45°, the default; 90° to cross them fully."},
+    {"ironing.angle_fixed",
+     "Solo cuenta con el planchado prendido. Prendido, el ángulo del planchado ya no se suma al de la tapa: es la "
+     "dirección de las pasadas medida desde el eje X, igual en todas las capas.\n\nSirve para que todas las tapas "
+     "planchadas brillen hacia el mismo lado.\n\nEjemplo: apagado, el valor de fábrica; prendido con 0° para pasadas "
+     "de izquierda a derecha en todas las capas.",
+     "It only matters with ironing on. On, the ironing angle no longer adds to the top surface's: it is the passes' "
+     "direction from the X axis, the same on every layer.\n\nIt makes every ironed top shine the same way.\n\n"
+     "Example: off, the default; on with 0° for left-to-right passes on every layer."},
     {"infill.angle",
      "Es la dirección de las líneas del relleno, en grados, medida desde el eje X de la cama (de izquierda a derecha). "
      "En el dibujo de líneas, cada capa por medio suma 90°.\n\nNo cambia cuánto plástico lleva la pieza; cambia hacia "

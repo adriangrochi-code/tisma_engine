@@ -51,6 +51,24 @@ con lo medido.
 (La interfaz propia estaba en esta lista; salió el 2026-10-24, cuando el dueño decidió que el motor reemplaza a Tisma
 Slicer.)
 
+## Orden hasta la beta de diciembre (dueño, 2026-11-11 01:20)
+
+Entre las horas de búsqueda profunda (hasta el 12-11 03:10 UTC), en este orden:
+
+1. Full Spectrum: `color_mixing_plus.md` hasta terminar (tabla de estado y orden de pasos en PROGRESS.md).
+2. CAD estilo Fusion 360: navegación de `interface.md` (UI17, UI18) y `cad_design.md` 11 bis a 11 decies (CD26 a CD29).
+3. Huecos de P1: cortar, partir y medir; pintar colores; los ajustes en una página por pestaña; el panel de ayuda.
+4. Aplicar los ajustes de un proyecto al abrirlo (3MF de PrusaSlicer, OrcaSlicer, Creality Print, Elegoo y Cura), con
+   la tabla de traducción (`profile_pack_format.md` reglas 1 a 4, `percent_of: "nozzle"`, PF12) y
+   `project_import.md` regla 11 (sesión de spec, 2026-11-11 14:20).
+5. P2: conexiones de red de todas las marcas y los límites de la impresora.
+6. F6: medir el motor solo, con y sin GPU, sobre las piezas del banco. Decisión del dueño (2026-11-11, 20:30 UTC):
+   «Tisma slicer olvidate»: no hay comparación contra Tisma Slicer ni migración de sus proyectos y perfiles (solo lo
+   usó una alpha de menos de 10 personas). Las filas de `COVERAGE.md` quedan como lista de funciones.
+
+Después de la beta: la investigación (F9 cinco ejes, A2/A3, pruebas T/Q largas). Si una ficha falta o no alcanza, se
+pide a la sesión de spec.
+
 ## Cómo se usa
 
 - La interfaz `tisma` (`docs/UI.md`) es el slicer para el usuario; `tisma-engine slice modelo.stl --config
@@ -265,7 +283,8 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [ ] Medir el corte en GPU contra la CPU en una GPU real (acá solo hay lavapipe)
 - [x] Prueba de áreas por capa con piezas de área conocida (pirámide, cubo; esfera: el volumen cortado coincide con el de la malla al 0,0002 %); tiempos medidos
 - [x] Ajustes propios (`docs/CONFIG.md`) y `slice` con el corte completo: modos de relleno, compensación XY y de primera capa
-- [ ] Contrastar el corte con los casos de la ficha `docs/spec/features/slicing.md` cuando esté en `main` (simplificación, alturas variables)
+- [x] Contrastar el corte con los casos de la ficha `docs/spec/features/slicing.md` cuando esté en `main` (simplificación, alturas variables). Hecho
+  (2026-11-13, `tests/test_slicing_spec.cpp`): C1 a C19 cumplen; C6 y C7 después de arreglar el cierre de grietas
 
 ## Estado de F2
 
@@ -320,7 +339,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   franjas de ancho variable con Clipper2, y en piezas comunes con 2–3 perímetros. Sin superposición ni nada afuera; los
   únicos huecos son las esquinas redondeadas de los extremos (0,13–0,43 % en tiras de 30 mm). Cuña de 0,3 a 1,2 mm:
   huecos 0,3 %, superposición 1,3 %, en las transiciones
-- [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
+- [x] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`. Hecho (2026-11-13,
+  `tests/test_perimeters_spec.cpp` con P3 a P7 y P9; P1, P2, P10 y P12 a P14 ya tenían prueba). P4: la regla 4 dentro
+  de cada contorno; entre contornos, intercalado por menor viaje (QA, 2026-11-13); P8: el inicio no salta entre capas
 
 ## Estado de F3
 
@@ -425,7 +446,8 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   0,2 % (maciza y como se imprime)
 - [ ] Representar mejor el contacto entre cordones en «como se imprime» (vóxeles parcialmente llenos en vez de
   todo o nada), para llegar al valor convergido con vóxeles más gruesos: hoy hacen falta 8 vóxeles por ancho de línea
-- [ ] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado
+- [x] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado.
+  Medido 2026-11-13: K = 3,13 contra 3,14 de Kirsch con la corrección de ancho de Heywood (0,3 %; `docs/ANALYSIS.md`)
 - [x] Lo que la interfaz necesita del motor: `--estimate` (vóxeles, memoria y tiempo antes de correr), `--progress`
   y `--mesh` (la superficie de los vóxeles coloreada); lo que debe mostrar está en `docs/ANALYSIS.md`, «Para la
   interfaz»
@@ -626,7 +648,10 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
   `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05), y en la
   página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). También el botón
   principal «Mandar a la impresora» y el diálogo de envío con nombre, con «Subir y simular» en Duet (reglas 19 y 20).
-  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05). Falta la de Moonraker (nombres `.local` y su API)
+  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05); la de Moonraker en el motor (2026-11-11: `_moonraker._tcp`,
+  `route_prefix`, `confirm_moonraker` con `/server/info`); falta llamarla desde la interfaz. AstroBox y Repetier-Server en el
+  motor (2026-11-12: `HostKind::AstroBox`, `HostKind::Repetier`, `HostConfig::printer`); falta ofrecerlos en la interfaz.
+  Faltan Flashforge, FlashAir y MKS
 - [ ] Probado con una impresora real por USB (necesita al dueño)
 - [ ] Leer los límites de la impresora (`printer_connections.md`, reglas 1 a 8): hecho el núcleo (`src/device/printer_limits.*`,
   2026-11-05: Marlin M115 y M503, Klipper `toolhead` y `configfile`, llenar solo lo vacío). Al conectar por USB ya se
@@ -679,12 +704,16 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [x] Piel difusa (ficha `fuzzy_skin.md`, reglas 1, 2 y 4) y su pincel; falta la regla 3 (lo que sale de la capa de
   abajo como voladizo, con los voladizos de `walls_extra.md`) y las paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`
 - [ ] Pintar los colores (con `multi_extruder.md`); volúmenes bloqueadores y forzadores (SM12); relleno inteligente de
-  una cara y deshacer
+  una cara y deshacer. Hecho (2026-11-11): el canal Colores con dos filamentos o mezclas, un color por filamento y por
+  mezcla (hasta el número 16), las marcas con su color; el relleno inteligente con su ángulo (MT30); deshacer la pintura y el corte (MT31)
 - [x] Ayuda (pedido del dueño, 2026-10-26): asistente, consejos de la primera vez y botón (i) en cada ajuste
   (`docs/UI.md`, «Ayuda»)
-- [ ] Ayuda, lo que sigue: el texto de los ajustes en inglés; señalar en la pantalla lo que cada paso del asistente
-  nombra
-- [ ] Cortar, Partir y Medir de la ficha `interface.md`
+- [ ] Ayuda, lo que sigue: el texto de los ajustes en inglés. Hecho (2026-11-11): cada paso del asistente que nombra
+  algo de la pantalla lo marca con un borde (Abrir, la impresora, los ajustes, las herramientas, Laminar, Imprimir)
+- [ ] Cortar, Partir y Medir de la ficha `interface.md` (hoy `model_tools.md`, regla 18). Hecho (2026-11-11): conectores
+  sobre el corte horizontal, espiga fija y pasador, redondos o cuadrados, con tamaño, profundidad, tolerancia, clic en
+  el plano e «Invertir plano» (MT22, MT23); la mitad que apoya sobre la cara no lleva la espiga (MT32). Hecho después: un objeto con dos partes (MT24) y separar en partes (regla 19). Falta: plano libre, encastre a presión, cola de milano, base hexagonal y
+  tronco, el resultado como un objeto con dos partes (MT24), elegir por zona si se separa, y deshacer el corte (MT31)
 - [x] Modelos grandes en la interfaz (pedido del dueño, 2026-10-26): arrastrar no rehace la malla en cada cuadro, y el
   clic y el pincel buscan en un árbol de cajas (`docs/UI.md`, «Modelos grandes»)
 - [ ] Modelos grandes, lo que sigue: armar el árbol de cajas y la malla de la placa en segundo plano; los campos de
@@ -725,13 +754,63 @@ Va antes que lo demás de P1:
   y el apoyo en paralelo, y V6: 159 en vez de 672 ms por cuadro al mover la vista)
 - [ ] Lo de «Modelos grandes, lo que sigue» (P1) y V3 a V6 de la vista Vulkan, en ese orden de peso
 
+### Interfaz al estilo de Fusion 360 (pedido del dueño, 2026-11-10; segunda sesión del motor)
+
+Fichas en `spec/next` (pasan `tools/check_spec.py`): `interface.md` «Navegación de la vista 3D» (UI17, UI18) y
+`cad_design.md` «Diseño visual y forma de uso» (reglas 11 bis a 11 decies, CD26 a CD29). Después, los huecos de P1:
+cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y el panel de ayuda.
+- [x] Navegación por defecto de Fusion 360 (rueda desplaza, Mayús + rueda gira alrededor del punto bajo el mouse,
+  rueda acerca hacia el mouse, doble clic con la rueda encuadra, clic derecho = menú) y preferencia «Navegación»
+  (Fusion 360, Botón derecho gira, Clásica) (2026-11-11)
+- [x] Cubo de vistas arriba a la derecha (caras, aristas y esquinas, arrastre, «Inicio», animación corta) (2026-11-11)
+- [x] Rectángulo de selección con el izquierdo desde un lugar vacío (2026-11-11; la placa elige un solo modelo:
+  el más cercano al punto de partida)
+- [x] Punto del centro de giro mientras se gira (2026-11-11)
+- [x] Costo de las mezclas antes de laminar, purga por colores y lo que la baja (`color_mixing_plus.md`, reglas 12, 37 y
+  38) (2026-11-11)
+- [x] Degradé en el diálogo de mezclas (regla 3): eje X, Y o Z, de 2 a 4 filamentos con su lugar, la tira de su
+  color, el color del medio antes de laminar (regla 17) y su costo con el ancho de la pieza (`extent`) (2026-11-11)
+- [x] Partes de un objeto (cada una con su extrusor, en el proyecto y en el laminado), la pieza de muestras
+  `palette_piece` (CM8) en la placa con sus mezclas y el nombre de cada muestra, y la vista previa de colores antes de
+  laminar: cada parte con el color de su filamento o mezcla y la pintura de color encima (regla 17) (2026-11-11)
+- [x] Ajustes propios de cada parte, en la lista de Objetos y en la ventana de la pieza; cortar en «un objeto con dos
+  partes» (MT24) y «Separar › En partes» (regla 19) (2026-11-11); abrir las partes de un 3MF (FM9)
+- [x] Degradé entre dos puntos (MX31): escritos o con un clic en la pieza, esferas con su color y flecha en la vista,
+  costo con el ancho de la pieza a lo largo de la recta (2026-11-11); falta arrastrar las esferas
+- [ ] Mezclas, cuando el motor lo suba: selector `mixing.predictor` con las TD a `match_color` y a la vista previa
+  (reglas 20 y 21); pestaña «Color buscado» (regla 4); paleta rápida con `quick_palette` y `color_name` (regla 22) y
+  la pieza de muestras `palette_piece` (CM8) cargada en la placa con sus mezclas y la lista de nombres
+- [x] Selección de varios modelos (Ctrl/Mayús suman; el rectángulo elige todos) y el contorno de lo elegido, también a
+  través de otras piezas (2026-11-11; mover varios juntos falta)
+- [x] Barra de vista abajo al centro (girar, desplazar, acercar, encuadrar, perspectiva/ortogonal, estilo) (2026-11-12;
+  el estilo es el modo de imagen de antes: sombreado con aristas y alambre todavía no)
+- [x] Aspecto: degradé gris claro en el tema claro, grilla con líneas cada 10 mm marcadas (ya estaba: degradé en los dos
+  temas, grilla cada 10 mm con una marcada cada 50; revisado 2026-11-12)
+- [x] Diseño: barra de herramientas con pestañas y grupos (11 bis, CD26) (2026-11-11; Extruir con su panel a la
+  derecha llega con los cuadros flotantes, 11 quinquies)
+- [x] Diseño: línea de tiempo abajo con la marca para volver atrás (11 quater, CD27) (2026-11-11)
+- [x] Diseño: navegador (11 ter), buscar herramienta con S (11 octies, CD29), menú radial (11 septies, CD28) y el
+  cuadro de cada paso a la derecha con Aceptar y Cancelar (11 quinquies; faltan las flechas en la vista) (2026-11-11)
+- [x] Diseño: navegador a la izquierda (11 ter) (2026-11-11; el historial con sus campos sigue debajo)
+- [x] Diseño: línea de tiempo abajo con marca arrastrable (11 quater, CD27) (2026-11-11)
+- [x] Diseño: cuadros de operación flotantes con manipuladores (11 quinquies) (2026-11-12: flechas en primitivas,
+  redondeo, chaflán, vaciado, extruir y mover; anillos en giro, revolución y patrón circular; faltan patrones
+  rectangulares y agujero)
+- [x] Diseño: boceto de frente con «Terminar boceto» y paleta (11 sexies) (2026-11-12; la sección, «Próximamente»)
+- [x] Diseño: menú radial (11 septies, CD28) y buscador con la tecla S (11 octies, CD29) (2026-11-11; fijar a la
+  barra falta)
+- [ ] Diseño: herramientas que faltan, en gris «Próximamente» (11 novies) y tema claro (11 decies)
+  (2026-11-13: Sección hecha, en Inspeccionar y en la paleta del boceto; faltan Presionar/Tirar, Medir entre caras y
+  Apariencia)
+
 ### Pedidos del dueño sobre la interfaz (2026-10-28, por el equipo de fichas)
 
 El dueño probó la aplicación en Windows. Los errores que informó están arreglados (ver `PROGRESS.md`); quedan sus
 pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene que el equipo de fichas actualice
 `settings_panel.md` antes de los que la contradicen):
-- [ ] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
-  abrir y cerrar (como OrcaSlicer), y más juntas
+- [x] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
+  abrir y cerrar (como OrcaSlicer), y más juntas (hecho el 2026-10-29, `settings_panel.md` reglas 2 a 4; marcado el
+  2026-11-11)
 - [x] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
   impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
   (2026-10-29: en Impresión, entre Adhesión y Otros, con Capas curvas, su transición y caudal, y Relleno ondulado; en
@@ -822,7 +901,7 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   desviación, RepRapFirmware con tirón. Reglas 10 y 14 (PT7): `machine.heat_rate_nozzle`/`heat_rate_bed` (°C/s),
   `home_time` y `probe_time`; el calentamiento de cada espera, `G28`, `G29` y `G4` suman a la preparación, que el G-code
   dice aparte (`; estimated preparation time`). La interfaz la muestra («1 h 4 min (impresión 58 min, preparación 6 min)» y una
-  fila en la leyenda). Quedan: cambios de herramienta como preparación y las reglas 11 y 15 (aprender de la impresora)
+  fila en la leyenda). Cambios de herramienta y purga en la torre como preparación, hecho (2026-11-13). Quedan las reglas 11 y 15 (aprender de la impresora)
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
@@ -1001,7 +1080,9 @@ Con el PR #23 (2026-10-26):
     con el mismo armado de la placa que la interfaz. Falta: `analyze` (los apoyos, las cargas y el material tienen
     que ir en el proyecto primero), los proyectos de otros laminadores (`formats.md`, regla 18) y un avance más fino
     durante el corte. El proyecto como paquete 3MF (`formats.md`, reglas 6 a 11), hecho el 2026-11-02;
-  - [ ] después: el puente de impresoras (reglas 12 a 17), la biblioteca de modelos y Thingiverse
+  - [ ] después: el puente de impresoras (reglas 12 a 17) y la biblioteca de modelos. **Thingiverse fuera** (decisión
+    del dueño, 2026-11-13): nada de Thingiverse ni de enlaces o descargas de otros sitios de modelos, en ningún programa;
+    solo la biblioteca de Tisma.
 - [ ] `printer_connections.md` (F9), `mobile_app.md` (la API de C) e `INTEGRATION.md`
 - [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;
   `docs/spec/qa/2026-10-28-ajustes.md` en `spec/next` cc8d580, `tools/check_spec.py` limpio): lee 368 de 479 claves
@@ -1016,11 +1097,10 @@ Con el PR #23 (2026-10-26):
   solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2
   queda aun con 100 %); no es un largo mínimo ni una histéresis del tamaño del margen. Las filas medidas son el
   contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
-- [ ] **`walls.vertical_shell` y las superficies de arriba en pendiente** (`walls_extra.md` regla 7, W4): en el techo
-  de 15° de W4, capa 30, Tisma Slicer da 20,95 mm de superficie de arriba con `disabled` y 75,22 más 18,39 de
-  relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno
-  sólido. La diferencia está en cómo se arman las superficies de arriba en las pendientes (`src/surfaces/`), antes
-  que en el ajuste
+- [x] **`walls.vertical_shell`** (`walls_extra.md` regla 7, W4; hecho 2026-11-13): `disabled`, `partial` y `enabled`.
+  W4 dentro del 10 %. Por defecto `partial` (QA: Benchy +0,2 %; con `enabled`, +14 %)
+- [x] **Las superficies de arriba en pendiente** (W4, techo): sin cambios. QA (2026-11-13): la regla 2 de
+  `surfaces_infill.md` (lo que queda bajo el aire) es la que vale; W4 ahora mide solo el sólido de `vertical_shell`
 - [x] **`machine`** (alias `max_speed` y `max_acceleration`, `custom_parameters`), **`print`** (`custom_parameters`,
   `variables`) y **`calibration`** (pruebas por franjas, CA1 a CA7; hechos 2026-10-28). Quedan `machine.feedstock`
   (pellets, P3), `machine.high_flow_nozzle`, `machine.process` (WAAM), la prueba VFA y las pruebas por parches. `fins`,
@@ -1102,8 +1182,8 @@ tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
 
 Con el PR #24 (2026-10-26):
 - [ ] `step_faces.md` (STEP con caras: calidad al abrir, la cara de cada triángulo, pintar y cargas por cara, volver a
-  teselar), `problem_reports.md` (informar un problema) y `thingiverse.md` (el sitio dentro del programa; su API
-  espera rutas confirmadas, regla 20)
+  teselar), `problem_reports.md` (informar un problema). `thingiverse.md` queda fuera (decisión del dueño, 2026-11-13: solo la
+  biblioteca de Tisma)
 
 ### Velocidad del laminado (medición de caja negra del equipo de specs, 2026-10-26)
 
@@ -1117,8 +1197,11 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   RV2 las capas de abajo suman 8 % con tolerancia 0 (antes 200 s contra 7,5 s) y 22 % con 0,005 (meta 25 %); RV3
   suman de 0,17 a 0,25 s con 1 a 6 paredes (meta 0,3 s). RV6: el G-code cambia en una sola capa del Benchy (ver
   `PROGRESS.md`). Faltan RV4 (V10) y RV5 (V11)
-- [ ] V3: `;WIDTH` solo cuando cambia el ancho (hoy, 21 % del archivo)
-- [ ] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hace el doble de movimientos)
+- [x] V3: `;WIDTH` solo cuando cambia el ancho (hecho 2026-11-13: más de 0,005 mm del último escrito, o con un `;TYPE`
+  nuevo; Benchy de 28 374 a 14 829 líneas, referencia 18 976)
+- [x] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hacía el doble de movimientos).
+  Hecho con la resolución del G-code (2026-10-25); medido el 2026-11-13: Benchy con 118 207 `G1`, contra 202 429 en la
+  medición original y 99 480 de la referencia. La diferencia que queda es sobre todo de viajes (13 313).
 - [x] V5: armar el G-code de cada capa en paralelo y unirlo en orden (hecho 2026-10-26). Cada capa se planea (orden y
   costuras, que siguen de la capa de abajo) y se escribe por separado, en un pipeline de oneTBB: mientras se escribe
   una capa se planean las siguientes, y los recorridos se simplifican en paralelo. La verificación lee el texto en
@@ -1318,15 +1401,28 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 
 ### macOS antes de la beta (decisión del dueño, 2026-11-10; reutilizar todo lo posible)
 
-- [ ] CI de macOS en cada envío, arm64 y x86_64 (runners de GitHub): compila y pasan las pruebas.
-- [ ] La vista: MoltenVK o el camino OpenGL que ya existe.
-- [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows).
+- [x] CI de macOS en cada envío, arm64 y x86_64 (runners de GitHub): compila y pasan las pruebas (verde desde
+  3667e62, cuenta desde 550cbff).
+- [ ] La vista: MoltenVK o el camino OpenGL que ya existe. El camino OpenGL (3.3 core) no usa nada por encima de 4.1,
+  así que debería andar. En la CI de GitHub no se puede comprobar: las máquinas de macOS no tienen GPU y la ventana no
+  abre (2026-11-13). Falta probarlo en una Mac real.
+- [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows): escritos (2026-11-12, NSOpenPanel y NSSavePanel en
+  `apps/tisma/file_dialog_macos.mm`); compila la CI de macOS, sin probar a mano en una Mac.
 - [ ] Cámara USB con AVFoundation y el permiso de cámara (`printer_connections.md`, regla 7 de macOS).
+  Hecha la parte sin cámara (2026-11-12: formato y ritmo, `src/device/usb_camera.*`); falta la captura y el permiso.
 - [ ] Paquete `.dmg`; sin firmar hasta que el dueño tenga la cuenta de Apple Developer, después firma y notarización.
+  Hecho sin firmar (754e4c0, b2a2963: Tisma.app en el .zip y el .dmg de la versión); falta la firma.
 - [ ] El motor como biblioteca para iOS (arm64, sin GPU por ahora o Metal vía MoltenVK), para la app de iPhone que
   hace la sesión de Android: un xcframework (iosArm64 + iosSimulatorArm64) con la entrada C `tisma_run_cli`
   (argc/argv de la línea de comandos, salida en buffers, mismos códigos de salida; `include/tisma/tisma_engine.h`,
   hecha el 2026-11-10). Lo mismo para SolidCraft (apps/ios/PLAN.md, android daf5723).
+  Compila (2026-11-12, f1822c4): `tools/build_ios.sh` y el trabajo «iOS library» de la CI hacen
+  `TismaEngine.xcframework` (iPhone y simulador, desde iOS 16.3) con `tisma_run_cli`, y el trabajo cuenta. Falta
+  probarlo en un iPhone real: en el simulador la app ya lamina con `tisma_run_cli` (12-11-2026); sin GPU ni scripts
+  de posprocesado en iOS.
+  La API de trabajos de `tisma_engine.h` (contexto, abrir, ajustes, memoria, laminar con avance y cancelar, resumen y
+  G-code) está implementada desde el 2026-11-12 y va en la misma biblioteca (pedido de la sesión del iPhone,
+  `mobile_app.md`, reglas 12 y 19). Faltan la vista previa por capas y el análisis.
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 

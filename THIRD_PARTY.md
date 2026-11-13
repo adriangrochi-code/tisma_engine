@@ -37,6 +37,13 @@ licencia en `resources/licenses/`, que la interfaz muestra en Más › Créditos
 | Mbed TLS | mbedtls | 3.6.2 (LTS; archivo de la release `mbedtls-3.6.2.tar.bz2`, SHA-256 `8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca`) | Apache-2.0 | `LICENSE` y `README.md` de la release: doble licencia «Apache-2.0 OR GPL-2.0-or-later», a elección de quien la usa; se toma Apache-2.0. `framework/` lleva la misma doble licencia. Trae en `3rdparty/` everest y p256-m (los dos con la misma doble licencia), que quedan apagados en la configuración por defecto y no se compilan. Se compila sin sus programas ni sus pruebas. | https://github.com/Mbed-TLS/mbedtls | TLS de las impresoras Bambu Lab en red local (MQTT, FTPS y cámara; `src/net/tls.cpp`, ficha `printer_connections.md`), igual en Windows y Linux, y el servidor TLS del simulador de las pruebas. |
 | OpenSSL | — (la del sistema: `find_package(OpenSSL 3)`; no se compila) | 3.0 o más nueva, la del sistema (en la sesión y la CI de Linux, 3.0.13 de Ubuntu 24.04) | Apache-2.0 | `LICENSE.txt` de OpenSSL 3.0 (Apache-2.0 desde la 3.0; las 1.x tenían otra licencia y no se aceptan: se pide la 3). | https://www.openssl.org | HTTPS del cliente de la nube en Linux y macOS, enlazada como biblioteca compartida del sistema; el paquete no la lleva. Sin OpenSSL 3 el cliente solo habla `http://`. |
 
+## Anotadas, todavía sin usar
+
+Licencias leídas antes de usarlas. Pasan a la tabla de arriba (con su entrada en `resources/credits.json` y su archivo
+en `resources/licenses/`) cuando el programa las compila.
+
+- **openpnp-capture** 0.0.30 (commit `7ed880177f3a48ddfa50d51971c6e8787191d726`), MIT. Leída en: `LICENSE.txt` del tag `v0.0.30` (Jason von Nieda, Niels Moseley); los archivos de `common/`, `win/` y `mac/` llevan el mismo aviso. Trae `linux/contrib/libjpeg-turbo-dev` (licencias IJG, BSD-3-Clause y Zlib): IJG no está en la lista permitida, así que **no se compila su parte de Linux**; en Linux la captura es propia (V4L2, con MJPEG por stb_image). El único texto con «GPL» es `doc/html/search/search.js` (documentación generada, no se compila ni se distribuye). URL: https://github.com/openpnp/openpnp-capture. Uso: Cámara USB de la computadora en Windows (DirectShow) y macOS (AVFoundation), `printer_connections.md` regla 6. Anotada antes de usarla (2026-11-12); todavía no se compila.
+
 SolidCraft en la app de Android (decisión del dueño, 2026-11-04): el flujo `.github/workflows/solidcraft-android.yml` compila `solidcraft-cli` desde la etiqueta `v0.30.0` (commit `afd81380ab06b0e77e03fdf68185d4b484d0e84e`, el mismo de la fila de SolidCraft de la tabla, MIT OR Apache-2.0) para arm64-v8a y x86_64 con el NDK r29, y lo guarda como artefacto con `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` y `THIRD-PARTY-LICENSES.txt`. Con `-Ptisma.solidcraft=<carpeta>` la app lo lleva como `lib/<abi>/libsolidcraft.so` y sus licencias van a los créditos de la app. Las cajas de Rust que entran en la compilación para Android son las del `Cargo.lock` de esa versión (`--locked`); hay que revisar su `THIRD-PARTY-LICENSES.txt` del artefacto antes de publicar un APK que lo lleve.
 
 ## Herramientas de compilación (no se enlazan ni se distribuyen)
@@ -108,3 +115,9 @@ en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica
 | Kotlin (compilador, Kotlin/Native para iOS y complementos Multiplatform, Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app y el módulo compartido con iPhone (`apps/android/shared`). |
 | Android SDK (plataforma 36, build-tools 36.0.0) | — | Licencia del SDK de Android (aceptada en la máquina que compila) | Compila el APK; no se guarda en el repositorio. |
 | Android NDK | r29 (29.0.14206865) | Licencia del SDK de Android; su `libc++` es Apache-2.0 con la excepción LLVM | Compila `tisma-engine` para el teléfono. La r28 no sirve: su `libc++` no tiene `std::from_chars` con decimales, que el motor usa. |
+
+## Modelos del banco (`bench/`, no se distribuyen con el programa)
+
+| Modelo | Archivo | Licencia | Leída en | Fuente | Uso |
+|---|---|---|---|---|---|
+| 3DBenchy (Creative Tools) | `bench/3DBenchy.stl.xz` (el STL de una pieza, comprimido con xz; SHA-256 del STL `6ab57f1c3f8e86bc3cbd302c6fa6270acf06277c6335454e922419c25d42e97e`) | CC0-1.0 (dominio público; atribución no requerida) | https://www.3dbenchy.com/license/ (leída el 2026-11-11: «licensed under a Creative Commons CC0 1.0 Universal license», se puede redistribuir original o modificado, también en programas) | https://github.com/CreativeTools/3DBenchy (`Single-part/3DBenchy.stl`, la descarga directa que da https://www.3dbenchy.com/download/) | Medir el motor en F6 (`bench/run_benchy.sh`), decisión del dueño (2026-11-11 20:50 UTC). |

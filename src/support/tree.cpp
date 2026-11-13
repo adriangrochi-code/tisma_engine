@@ -212,7 +212,9 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
     const double widen = std::tan(std::clamp(params.widen_angle, 0.0, 85.0) * kDegrees);
     const double lean = std::tan(std::clamp(params.angle_preferred, 0.0, 85.0) * kDegrees);
     const double dodge = std::tan(std::clamp(std::max(params.angle, params.angle_preferred), 0.0, 85.0) * kDegrees);
-    const std::size_t gap = std::size_t(std::max(params.z_gap_layers, 0));
+    const auto gap_at = [&](std::size_t l) {
+        return std::size_t(std::max(params.gap_above && l < params.gap_above->size() ? (*params.gap_above)[l] : params.z_gap_layers, 0));
+    };
     const std::size_t interface = std::size_t(std::max(params.interface_layers, 0));
     // Tips never closer than their own width, nor than two beads: closer, a
     // tip prints nothing of its own (and the count grows past any use).
@@ -233,7 +235,7 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
         // The tips under the interface of the overhang gap + interface + 1
         // layers up, off the part at this layer: one under a hole's rim, say,
         // may move as far as its own width to stand clear of it.
-        if (const std::size_t a = l + 1 + gap + interface; a < n && a < overhangs.size() && !overhangs[a].empty()) {
+        if (const std::size_t a = l + 1 + gap_at(l) + interface; a < n && a < overhangs.size() && !overhangs[a].empty()) {
             const Polygons forbidden = regions[l].empty() ? Polygons{} : offset(regions[l], params.xy_gap);
             add_tips(overhangs[a], forbidden, spacing, tip_r, 2.0 * tip_r, branches);
         }
@@ -247,7 +249,7 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
             if (!b.alive)
                 continue;
             b.recent.push_back({l, out[l].size()});
-            std::erase_if(b.recent, [&](const auto& p) { return p.first > l + gap; });
+            std::erase_if(b.recent, [&](const auto& p) { return p.first > l + gap_at(l); });
             b.node.to = TreeNode::kNoNode;
             out[l].push_back(b.node);
         }
@@ -401,7 +403,7 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
             // part, stay empty, with those of the branches it joined there.
             b.alive = false;
             for (const auto& [layer, index] : b.recent)
-                if (layer < l + gap)
+                if (layer < l + gap_at(l))
                     out[layer][index].r = 0.0;
         }
         std::erase_if(branches, [](const Branch& b) { return !b.alive; });
@@ -432,8 +434,9 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
                                          const std::vector<std::vector<TreeNode>>& nodes,
                                          const std::vector<Polygons>& overhangs, const TreeParams& params) {
     std::vector<Polygons> out(nodes.size());
-    const std::size_t gap = std::size_t(std::max(params.z_gap_layers, 0));
     tbb::parallel_for(std::size_t(0), nodes.size(), [&](std::size_t l) {
+        const std::size_t gap = std::size_t(
+            std::max(params.gap_above && l < params.gap_above->size() ? (*params.gap_above)[l] : params.z_gap_layers, 0));
         Polygons discs;
         for (int k = 1; k <= params.interface_layers; ++k)
             if (const std::size_t a = l + gap + std::size_t(k); a < overhangs.size())

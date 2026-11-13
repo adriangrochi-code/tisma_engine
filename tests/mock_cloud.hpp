@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <mutex>
+#include <cstdlib>
 #include <string>
 #include <thread>
 
@@ -20,6 +21,24 @@ using nlohmann::json;
 class MockCloud {
 public:
     MockCloud() {
+        if (std::getenv("TISMA_MOCK_CLOUD_DOWN")) // a UI test of the notice (CC21)
+            service_ = "down";
+        // cloud.md, rule 4a: no session; with no node, "down".
+        server_.Get("/v1/status", [this](const httplib::Request&, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            const bool down = service_ == "down";
+            res.set_content(json{{"status", service_},
+                                 {"label_es", down ? "Caído" : "Funcionando"},
+                                 {"label_en", down ? "Down" : "Working"},
+                                 {"message_es", down ? "No hay nodos conectados." : ""},
+                                 {"message_en", down ? "No nodes are connected." : ""},
+                                 {"unavailable", down ? json::array({"slice", "fea"}) : json::array()},
+                                 {"longest_wait_s", down ? 742 : 0},
+                                 {"nodes_online", down ? 0 : 3},
+                                 {"checked_at", "2026-11-12T05:00:00Z"}}
+                                .dump(),
+                            "application/json");
+        });
         server_.Get("/v1/health", [](const httplib::Request&, httplib::Response& res) {
             res.set_content(R"({"ok": true, "billing_url": "https://cloud.example/account"})", "application/json");
         });
@@ -80,6 +99,13 @@ public:
             if (!req.form.has_field("kind") || !req.form.has_field("params") || !req.form.has_file("file")) {
                 res.status = 422;
                 res.set_content(R"({"detail": "kind, params and file are needed"})", "application/json");
+                return;
+            }
+            // A plan that does not include the job (cloud.md, CC16): the
+            // server's own words, which the program must not show.
+            if (std::getenv("TISMA_MOCK_CLOUD_402")) {
+                res.status = 402;
+                res.set_content(R"({"detail": "Payment required: upgrade your subscription"})", "application/json");
                 return;
             }
             const httplib::FormData file = req.form.get_file("file");
@@ -187,6 +213,7 @@ public:
     json last_report_;
     std::string report_token_, kind_, params_, filename_, project_, state_;
     int polls_ = 0, cancels_ = 0;
+    std::string service_ = "ok"; // what GET /v1/status says
 
 private:
     // T1 is a good session; "disabled" an account the administrator turned

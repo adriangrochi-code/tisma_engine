@@ -1,0 +1,48 @@
+# The 3D view's navigation by default, as in Fusion 360 (interface.md,
+# «Navegación de la vista 3D», rule 1; the spec team's UI17).
+wait 3
+# Dragging with the wheel pressed moves the view.
+camera-mark
+mouse middle 0.3 0.3 60 30
+expect-camera moved
+# Shift and the wheel pressed turn it, about the point under the mouse.
+camera-mark
+mouse middle 0.5 0.5 50 20 shift
+expect-camera turned
+# Turning the wheel comes nearer, toward the mouse: back toward the person
+# comes nearer, away goes farther.
+camera-mark
+wheel 0.6 0.4 -1
+expect-camera nearer
+camera-mark
+wheel 0.6 0.4 2
+expect-camera farther
+# A double click with the wheel frames everything.
+mouse-double middle 0.5 0.5
+wait 3
+# A left drag from an empty place draws a rectangle and does not turn the view.
+camera-mark
+mouse left 0.15 0.25 40 30
+expect-camera same
+# A click on an empty place chooses nothing; a rectangle from left to right
+# around the model chooses it.
+mouse left 0.15 0.25 0 0
+mouse left 0.3 0.3 400 300
+expect-place scale 99..101
+# A right click on the model opens its menu.
+mouse right 0.5 0.5 0 0
+expect-control add_instance
+key escape
+# «Botón derecho gira»: a right drag turns the view.
+pref navigation right_orbits
+camera-mark
+mouse right 0.5 0.5 60 0
+expect-camera turned
+# The classic one: the left button turns, the right one moves.
+pref navigation classic
+camera-mark
+mouse left 0.15 0.25 40 0
+expect-camera turned
+camera-mark
+mouse right 0.3 0.3 40 20
+expect-camera moved

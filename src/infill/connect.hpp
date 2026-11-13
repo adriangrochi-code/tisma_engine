@@ -11,6 +11,10 @@ namespace tisma {
 // are joined by the stretch of boundary between them. Joins never close a
 // cycle. With row_step > 0 the pieces are horizontal lines that far apart and
 // only pieces on adjacent lines are joined (a zig-zag); with 0, any two.
-Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, double max_arc, double row_step = 0.0);
+// With `allowed`, a join is made only when its whole stretch (its ends, the
+// boundary vertices between and the midpoints) lies inside or on it: a
+// bridge's lines are joined only over what holds them (toolpath_time.md, rule 1).
+Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, double max_arc, double row_step = 0.0,
+                             const Polygons* allowed = nullptr);
 
 } // namespace tisma

@@ -31,10 +31,13 @@ struct DepthField;
 // the grid across the lines (the cubic infill's planes with the height).
 // `max_join` (mm), when given, is how far apart along the boundary joined
 // ends may be instead (infill.max_link, surfaces_infill.md rule 7).
+// `join_inside`, when given, holds the joins: one is made only when its whole
+// stretch lies inside it (a bridge's, over what holds it; toolpath_time.md, rule 1).
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect = false, bool fit = false, bool monotonic = false,
-                                       double overlap = 0.0, double shift = 0.0, double max_join = 0.0);
+                                       double overlap = 0.0, double shift = 0.0, double max_join = 0.0,
+                                       const Polygons* join_inside = nullptr);
 
 // The infill toolpaths of one layer.
 struct LayerFill {

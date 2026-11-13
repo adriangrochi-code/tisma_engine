@@ -4,7 +4,10 @@
 // Own design from the public 3MF specification and black-box samples; see
 // PROVENANCE.md.
 
+#include "config/settings.hpp"
+
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -41,10 +44,41 @@ enum class SettingGroup { Translated, Similar, None };
 struct TranslationRow {
     std::string engine; // "" when the row has none
     SettingGroup group = SettingGroup::None;
+    // How the value becomes the engine's (profile_pack_format.md, «Tabla de
+    // traducción», rules 2 and 3): `how` (number, flag, factor, map,
+    // percent_of, absolute_only, number_strip_percent, first_item; another
+    // is not converted yet), its factor, its map, its base key; in the
+    // dialects other than prusaslicer, the values renamed first and what an
+    // "N%" is of ("nozzle" or an engine key, PF12 and PF13).
+    std::string how;
+    double factor = 1.0;
+    std::map<std::string, std::string> values, renamed;
+    std::string base, percent_of;
+    // number's and its kin's limits (a value outside them is not written),
+    // number_or_percent's, and the named rule with its plate (PF14).
+    std::optional<double> min, max, bare_percent_over;
+    bool nonnegative = false, nonzero = false;
+    std::string rule, plate;
+    // The other source keys the row's rule reads ("with"); a key that is only
+    // there names `with_of`, the row it helps, and is not written by itself.
+    std::vector<std::string> with;
+    std::string with_of;
+    // The key's PrusaSlicer name ("prusaslicer"), which the named rules and
+    // "with" use; empty when it is the key itself.
+    std::string prusaslicer;
+};
+// The OrcaSlicer family's bed temperatures by plate (PF14): each plate's
+// pair of source keys (bed, first layer), the project keys that name the
+// plate (in order), the plates' names by number, and the order to try when
+// none is named.
+struct PlateTemperature {
+    std::map<std::string, std::pair<std::string, std::string>> plates;
+    std::vector<std::string> select, index, order;
 };
 struct TranslationTable {
     std::string dialect;
     std::map<std::string, std::map<std::string, TranslationRow>> kinds;
+    std::optional<PlateTemperature> plate_temperature;
 };
 struct TranslationError : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -64,11 +98,25 @@ struct SettingSort {
     std::vector<std::pair<std::string, SettingGroup>> detail;
 };
 // The project's own settings, as saved (rule 6): for the PrusaSlicer family
-// the "; key = value" lines of Metadata/Slic3r_PE.config, in order. Empty for
-// the other families until their samples are measured, or with no settings.
+// the "; key = value" lines of Metadata/Slic3r_PE.config, in order; for the
+// OrcaSlicer family the keys of the JSON object in
+// Metadata/project_settings.config, a list's items joined by commas. Empty
+// for Cura until its samples are measured, or with no settings.
 // Throws ZipError when the package is not a readable ZIP.
 std::vector<std::pair<std::string, std::string>> project_settings(std::string_view package);
 
 SettingSort sort_settings(const TranslationTable& table, const std::vector<std::pair<std::string, std::string>>& settings);
+
+// A project's settings over `base` (rules 6 and 8: the translated and similar
+// ones, converted by their row, as changes by hand). A value that does not
+// convert, or that the engine refuses, is left out and named in `skipped`
+// ("key = value"). An "N%" of another setting or of the nozzle takes the
+// project's value of it, else `base`'s.
+struct ProjectSettings {
+    Settings settings;
+    std::vector<std::string> skipped;
+};
+ProjectSettings translate_settings(const TranslationTable& table,
+                                   const std::vector<std::pair<std::string, std::string>>& settings, const Settings& base);
 
 } // namespace tisma

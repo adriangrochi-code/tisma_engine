@@ -22,7 +22,7 @@ enum class GpuMode { Auto, Off };
 // The pattern of the top surface and of the bottom one (surfaces.top_pattern,
 // surfaces.bottom_pattern; infill_patterns.md, rules 14 to 17).
 enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram };
-enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
+enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram, Honeycomb3d };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
 // how the others differ in src/gcode/dialect.hpp.
@@ -72,6 +72,8 @@ enum class ObjectLabels { None, OctoPrint, Firmware };
 enum class StrictParser { None, Anycubic };
 // Where a top surface keeps only its outer wall (walls_extra.md, rule 10).
 enum class TopOneWall { None, Top, Topmost };
+// Solid infill to keep the shell thick on slopes (walls_extra.md, rule 7).
+enum class VerticalShell { Disabled, Partial, Enabled };
 
 // Which surfaces are ironed (ironing.md): every top surface, only the highest
 // of each part, or every solid layer.
@@ -249,6 +251,7 @@ struct Settings {
     // The odd inner loops half a layer up (walls.staggered, staggered_perimeters.md).
     bool walls_staggered = false;
     TopOneWall top_one_wall = TopOneWall::None;
+    VerticalShell vertical_shell = VerticalShell::Partial; // QA, 2026-11-13: PROGRESS.md
     bool first_layer_one_wall = false;
     bool extra_if_needed = true;
     bool extra_on_overhangs = false; // loops fill an overhang held from one side (rule 5)
@@ -286,6 +289,10 @@ struct Settings {
     double ironing_flow = 15.0;   // %
     double ironing_spacing = 0.1; // mm
     double ironing_speed = 15.0;  // mm/s
+    // The lines' angle (IR8): ironing_angle degrees over the top fill's,
+    // below 0 as the default 45; with ironing_angle_fixed, from X, every layer.
+    double ironing_angle = 45.0;
+    bool ironing_angle_fixed = false;
     // The stability review (docs/spec/features/stability.md): measured with
     // its calibration piece; 0 is not measured yet.
     double review_nozzle_force = 0.0;   // N, the nozzle's push on the layer it prints
@@ -317,8 +324,9 @@ struct Settings {
     int interlock_layers = 2;
     double interlock_orientation = 22.5;
     int interlock_depth = 2, interlock_avoidance = 2;
-    // Painted regions of a colour (rule 18): their widest and how deep they
-    // interlock, mm (read; the colour channel is not sliced yet).
+    // Painted regions of a colour (rule 18): how far in from a painted face a
+    // colour reaches (0: no limit; paint_colors) and how deep they interlock,
+    // mm (the interlocking is read, not applied yet).
     double paint_max_region_width = 0.0, paint_interlocking_depth = 0.0;
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
@@ -367,6 +375,10 @@ struct Settings {
     double filament_diameter = 1.75; // mm
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;
+    // The firmwares the printer may run when its source does not tell them
+    // apart (profile_pack_format.md, PF15: ["marlin_legacy", "marlin"]): the
+    // interface offers them; `flavor` is the one used if nobody chooses.
+    std::vector<GcodeFlavor> flavor_choices;
     std::string start_gcode, end_gcode;
     MachineMacros machine_macros; // machine.macros
     // Not a setting: the input file's name without its folder and extension,
@@ -486,6 +498,38 @@ struct Settings {
     // unset: not with a single-extruder MMU, which purges at each change).
     bool fine_walls_coarse_infill = false;
     std::optional<bool> color_mixing;
+    // Sublayers in the zones with a blend (color_mixing_plus.md, rules 10 and
+    // 11, group "mixing"): each layer there printed once per filament of the
+    // blend, each with its share of the height, the thinnest at least
+    // mix_sub_min_height; the first layer only with mix_sub_first_layer, the
+    // sparse infill only with mix_sub_infill.
+    bool mix_subdivide = false;
+    double mix_sub_min_height = 0.04; // mm
+    bool mix_sub_first_layer = false, mix_sub_infill = false;
+    // Each filament of a two-filament blend with its own layer height
+    // (color_mixing_plus.md, rule 8): the first filament's layers
+    // mix_height_a thick, the second's mix_height_b, alternating; 0: the
+    // layer height. Only when one blend prints the whole plate.
+    bool mix_cadence_heights = false;
+    double mix_height_a = 0.0, mix_height_b = 0.0; // mm
+    // The height the blends' cycle is counted in (rule 9); 0 or the layer
+    // height: by layer, as rules 7 and 10 say.
+    double mix_step = 0.0; // mm
+    // The blend only in the part's shell (rule 13): the walls that start
+    // less than mix_surface_depth in and the surfaces; the inner walls and
+    // the sparse infill with the blend's largest filament.
+    bool mix_surface_only = false;
+    double mix_surface_depth = 0.8; // mm
+    // More walls where a blend prints, or a part of an object printed with
+    // another filament than the rest (rule 14).
+    int mix_extra_walls = 0;
+    // On one nozzle with blends, every part lets the changes purge into its
+    // sparse infill (color_mixing_plus.md, rule 33; object.wipe_into_infill).
+    bool mix_purge_into_infill = true;
+    // When a change's purge does not fit in its layer's sparse infill, that
+    // infill grows denser, up to this % (rule 35); 0: off.
+    double mix_purge_infill_max = 0.0;
+    std::string mix_predictor = "mixer"; // "mixer" | "spectral" (color_mixing_plus.md, rules 20, 21)
     // Curved layers (docs/spec/features/nonplanar.md): each layer the
     // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
     // curved_flat_below over curved_ramp_height (and out at the top with
@@ -539,6 +583,7 @@ struct Settings {
     // edges (0: black and white). The defaults are a generic standard resin's
     // on a Mars 5.
     double resin_layer_height = 0.05;
+    double resin_first_layer_height = 0.0; // the first layer's (resin.md, rule 1); 0: resin_layer_height
     double resin_exposure = 2.5, resin_bottom_exposure = 30.0;
     int resin_bottom_layers = 5;
     double resin_elephant_foot = 0.2;
@@ -667,6 +712,8 @@ struct Settings {
     // The wipe after an outer wall moved inward, toward the inner wall next
     // to it (orca_2_5.md, rule 1): by mm, or % of the outer wall's width.
     bool wipe_inward = false;
+    // Retract only on travels that cross an outer wall or air (toolpath_time.md, rule 5).
+    bool retract_only_crossing_walls = false;
     Speed wipe_inward_distance{50.0, true};
     double coast = 0.0;              // mm of each wall's and infill's end run without E (coasting.md); 0: off
     double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit
@@ -837,6 +884,10 @@ struct Settings {
     // What a change purges on the wipe tower at least before it purges into
     // objects (rule 13), mm3, by extruder.
     std::vector<double> min_purge_on_tower{0.0};
+    // How far light goes through the filament, mm (HueForge's TD); above 10
+    // it shows what is inside, so no purge into its parts' infill
+    // (color_mixing_plus.md, rule 33). One value, or one per extruder.
+    std::vector<double> transmission_distance{0.0};
     // The filament in an MMU's change (rule 15): its loading and unloading
     // speeds (the start's and the rest's, mm/s), the cooling moves in the
     // tube (how many, the filament's speed at the first and the last, mm/s),
@@ -972,6 +1023,7 @@ const char* limits_usage_name(LimitsUsage usage);
 // The names of a draft shield and a brim type in the settings.
 const char* draft_shield_name(DraftShield shield);
 const char* top_one_wall_name(TopOneWall where);
+const char* vertical_shell_name(VerticalShell mode);
 const char* object_labels_name(ObjectLabels labels);
 const char* strict_parser_name(StrictParser parser);
 // Whether the G-code goes out binary: gcode.binary, unless the printer's

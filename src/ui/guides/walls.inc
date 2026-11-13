@@ -419,6 +419,19 @@
      "what keeps rising, and the top surface takes their place.\n\nOptions: off (the default), on every layer that has "
      "a top surface, or only on the part's last layer.\n\nExample: every layer for a part with flat steps, like a "
      "staircase; only the last one for a box with a flat lid."},
+    {"walls.vertical_shell",
+     "En una pendiente suave, las capas macizas de arriba quedan escalonadas y el relleno ralo puede asomar cerca de "
+     "la superficie, que sale fina o con marcas. Esto agrega relleno macizo donde el relleno quedaría más cerca de afuera "
+     "que el grosor de las capas macizas.\n\nOpciones: apagado (solo las capas macizas de arriba y abajo); parcial (de fábrica: "
+     "solo bajo las pendientes de arriba, contando las paredes); encendido (también sobre los voladizos y "
+     "sin contar las paredes, más firme pero algo más lento).\n\nEjemplo: encendido para un techo inclinado o un "
+     "hongo; apagado para imprimir más rápido una pieza de prueba.",
+     "On a gentle slope the solid top layers end up stepped and the sparse infill can show close to the surface, which "
+     "comes out thin or marked. This adds solid infill where the infill would be closer to the outside than the "
+     "thickness of the solid layers.\n\nOptions: off (only the solid layers at the top and bottom); partial (the default: only "
+     "under top slopes, counting the walls); on (also over overhangs and without counting the walls, "
+     "firmer but somewhat slower).\n\nExample: on for a sloped roof or a mushroom; off to print a test part "
+     "faster."},
     {"walls.first_layer_one_wall",
      "Encendido, la primera capa lleva solo la pared de afuera, en vez de todas las paredes, y el resto de esa capa se "
      "llena con el relleno macizo del piso.\n\nLa base queda con menos vueltas de contorno y un dibujo más parejo de "

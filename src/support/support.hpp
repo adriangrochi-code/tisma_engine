@@ -15,7 +15,15 @@ class Context;
 struct SupportParams {
     double threshold_angle = 0.0; // degrees from the horizontal; 0: automatic (half a bead per layer)
     int z_gap_layers = 1;         // empty layers between the support and the part above it
+    // The same, layer by layer, when the layers are not all as thick
+    // (support.z_gap is in mm): the empty layers over support layer l. Null:
+    // z_gap_layers everywhere.
+    const std::vector<int>* gap_above = nullptr;
     int bottom_gap_layers = 0;    // empty layers between the part and the support standing on it
+    // The same, layer by layer (support.bottom_z_gap in mm over the layers'
+    // own thicknesses): the empty layers under support layer l. Null:
+    // bottom_gap_layers everywhere.
+    const std::vector<int>* gap_below = nullptr;
     // Only support that stands on the bed (supports_more.md, rule 2): a zone
     // that rests on the part anywhere goes whole.
     bool buildplate_only = false;
@@ -67,6 +75,13 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
 
 // The support area of every layer: the overhangs above it (those the
 // automatic support finds, plus the enforced ones, less the blocked ones)
+// The empty layers between support layer l and the part it holds: z_gap
+// over the layers' own thicknesses, to the nearest layer (support.z_gap is in
+// mm; with variable layer heights a fixed count of layers is not).
+std::vector<int> support_gaps_above(const std::vector<double>& thickness, double z_gap);
+// The empty layers between part layer l and the support under it.
+std::vector<int> support_gaps_below(const std::vector<double>& thickness, double z_gap);
+
 // projected straight down, starting z_gap_layers below the overhang and ending at the bed or where
 // the part is below (the support then stands on the part), kept xy_gap away
 // from the part; gaps narrower than two beads in it are closed. Own design.

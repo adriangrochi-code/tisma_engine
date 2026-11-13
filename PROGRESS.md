@@ -12578,3 +12578,1728 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   perímetro de 20 con 30 → 30; 50 % → la mitad de cada tipo; ida y vuelta del texto.
 - Pendiente: el campo de la interfaz de `speed.first_layer` sigue en mm/s; un valor en % de un perfil se ve como
   número sin unidad (el resumen sí dice «%»).
+- `profile_pack_format.md` (spec/next 6fe8045, entradas, regla 4): un filamento puede llevar `compatible_prints`
+  (rutas de perfiles de impresión del paquete). `PackEntry::compatible_prints`; `pack_filaments_for(..., print)` solo
+  ofrece los que sirven con la impresión elegida (la interfaz pasa la ruta de la impresión del paquete elegida);
+  `pack_profiles` rechaza la pareja que no sirve, salvo que las dos sean las de la variante. Sin el campo, cualquier
+  impresión. Prueba `[pack]` (con y sin el campo, rutas con o sin `vendors/`). Sin probar con el paquete real
+  (profiles/next 8cf1546).
+- Spec/next b705fe7: al cambiar la impresión en la interfaz, si el filamento elegido ya no sirve (`compatible_prints`),
+  se pasa al filamento por defecto de la variante si sirve, si no al primero que sirva del mismo material, con el aviso
+  «El filamento no servía con esta impresión: se cambió a <nombre>»; si ninguno sirve, queda el que estaba. La
+  decisión es `pack_refit_filament` (motor), probada en `[pack]`; la interfaz la llama al elegir una impresión del
+  paquete. Sin guion de interfaz: el paquete de prueba tiene un solo filamento de Acme.
+
+## Búsqueda profunda: tabla de cobertura (dueño, 2026-11-10 21:00; hasta 2026-11-12 03:10 UTC)
+
+Áreas de `docs/spec/COVERAGE.md` más los flujos de interfaz pedidos. «Revisado» = probado contra la ficha buscando
+salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las pendientes en este orden.
+
+| Área | Estado | Fecha | Qué se probó | Hallazgos |
+|---|---|---|---|---|
+| Capas y corte | revisado | 10-11 | reglas 1, 3 (última capa: 10,05→10,0; 10,1→10,2), 5 (`union`/`even_odd`), 6, 11 (errores con salida 2) | — |
+| Paredes | revisado (parcial) | 10-11 | anchos de cordón (P15), paredes de 0,3/0,6 mm, cubo de 0,8 mm, medidas externas = modelo | regla 8 (anchos) |
+| Superficies y relleno | revisado (parcial) | 10-11 | 3 capas sólidas abajo y 4 arriba (cubo 20 mm), relleno rectilíneo al 20 %: separación 2,035 mm (I1); `honeycomb_3d` | patrón que faltaba |
+| Falda, borde y balsa | revisado (parcial) | 10-11 | falda en secuencial (SQ6) | una falda por objeto → una sola |
+| Soportes | revisado (parcial) | 10-11 | bloqueador pintado (rejilla, ajustado, orgánico), borrar, guardar y reabrir; `xy_gap` % | BH47; `xy_gap` del perímetro externo |
+| Velocidades y aceleraciones | revisado (parcial) | 10-11 | `speed.first_layer` en mm/s y % | era un tope, ahora fija la velocidad |
+| Enfriamiento | revisado (parcial) | 10-11 | ventilador apagado en las capas 1 a 3, `M106` antes de la capa 4 | — |
+| Retracción y viajes | revisado (parcial) | 10-11 | balance de retracciones en tres G-codes (cubo, secuencial, altura variable): ninguna extrusión retraída | — |
+| Anchos y flujo | revisado | 10-11 | E/mm de cada tipo = sección redondeada / sección del filamento (exacto); `extrusion.flow` 95 % → 0,95 exacto en cada tipo | — (y P15) |
+| Filamento | revisado (parcial) | 10-11 | temperaturas de primera capa (boquilla y cama) y paso a las normales en la capa 2; `compatible_prints` | — |
+| Impresora y G-code (incl. secuencial) | revisado (parcial) | 10-11 | secuencial: orden, paso al siguiente objeto, falda; macros: `ceil`, bloques de sentencias (GM16 a GM18) | falda única; bloques `if … then`; BH50 (lista o texto numérico en comparaciones) |
+| Multimaterial | revisado (parcial) | 11-11 | temperatura de cada boquilla (ME13), cambio inicial (BH49), extrusor inexistente (ME14), temperatura de espera (ME15), mezclas con jarrón, planchado, balsa, soportes | ME13, BH49, ME14, ME15 |
+| Resina | revisado (parcial) | 10-11 | primera capa propia (RE11) | ajuste nuevo de la ficha |
+| Herramientas sobre los modelos (corte, acomodo, pintura) | revisado (parcial) | 11-11 | copias que entran en la cama con falda | BH52 (la falda se salía con el número que «entraba») |
+| Vista previa / visor de G-code | revisado (parcial) | 10-11 | leyenda frente al G-code, OBJ de trayectorias | — |
+| Archivos (STL/OBJ/3MF, G-code binario, unidades) | revisado (parcial) | 10-11 | idas y vueltas STL/OBJ/3MF, binario↔ASCII, normales invertidas | 3MF a `%.9g` |
+| Perfiles y configuración (paquete) | revisado (parcial) | 10-11 | `compatible_prints`, cambio de filamento | regla nueva |
+| Conexión con impresoras / página de la impresora | revisado (parcial) | 11-11 | nombres de archivo al subir (PrusaLink, OctoPrint, Moonraker) | BH53 |
+| Lo propio de Tisma (curvas, altura variable, cúspide) | revisado (parcial) | 10-11 | altura variable con soporte | `support.z_gap` contado en capas nominales: con capas de 0,1 quedaba a 0,1 mm |
+| Servicios (nube, nodos, biblioteca) | revisado (parcial) | 11-11 | biblioteca: identificadores raros, nombres con símbolos, fechas, exportar e importar | BH57 |
+| Interfaz: menús, diálogos, preferencias | revisado (parcial) | 10-11 | auditoría de interface.md (tabla de arriba), Imprimible, vaso | vaso con modelos no imprimibles |
+| Interfaz: calibraciones | revisado (parcial) | 11-11 | valores de las torres por la línea de comandos (subida, bajada, paso 0, negativo, fuera de rango) | BH55 |
+| Línea de comandos | revisado (parcial) | 11-11 | `profile` por nombre de impresora y filamento, `--copies` | BH51 (nombre sin marca ambiguo) |
+| Análisis (FEA, CFD) | pendiente | | | |
+| Migración | pendiente | | | |
+| Modelos extremos (diminutos, enormes, no cerrados, fuera de la cama) | revisado (parcial) | 10-11 | normales invertidas, paredes finas, cubo diminuto | — |
+
+- Altura variable con soporte: `support.z_gap` (mm) se pasaba a capas con la altura nominal; con capas de 0,1 mm cerca
+  del voladizo el soporte quedaba a 0,1 mm de la pieza en vez de 0,2. Ahora la separación se cuenta capa a capa con
+  los grosores reales (`support_gaps_above/below`), en la columna de rejilla, los árboles, la interfaz y lo que se
+  apoya en el soporte. Prueba `[variable_layers]` (T con capas de 0,1 desde 4 mm: separación 0,2; falla sin el
+  arreglo con 0,1). La separación de abajo (`support.bottom_z_gap`) también, desde el 2026-11-11
+  (`SupportParams::gap_below`, `support_gaps_below`): con capas de 0,1 mm sobre una placa el soporte que se apoya en
+  ella empezaba a 0,1 mm en vez de 0,2; prueba `[variable_layers]` (placa, tallo y tapa: 0,2 con capas de 0,2 y de
+  0,1; falla sin el arreglo).
+- `resin.md` regla 1, RE11 (spec/next 5d95bc0): `resin.first_layer_height` (0: `resin.layer_height`); la capa `n`
+  tiene su tope en `h0 + n·h`. Ajuste, guía, campo en la tarjeta de capas de resina, CONFIG.md. Prueba `[resin]` RE11
+  (0,1 y 0,05: topes 0,1 y 0,15, una capa menos).
+- Cola (spec/next cada191, cloud.md 5b, decisión del dueño 21:25): los planes se compran en las tiendas oficiales. En
+  el escritorio: macOS (versión App Store) con suscripciones de StoreKit; Windows y Linux muestran el plan de la cuenta
+  y, para comprar, mandan al teléfono o a la tienda; ningún dato de tarjeta en la aplicación. Pendiente tras la
+  búsqueda profunda (StoreKit va con la fase de macOS).
+- Spec/next d9eadff (revisión multiextrusor del paquete):
+  - `gcode_macros.md` regla 4, GM16: `ceil`. Prueba `[macros]`.
+  - GM17: la condición en una línea con índice de extrusor ya funcionaba (`M104 T1 S215`); prueba añadida. El error
+    «unknown variable 'if'» de las Prusa XL y la Snapmaker U1 no se reproduce con ninguna variante; pedido el texto
+    exacto a la sesión de especificaciones.
+  - `multi_extruder.md` 8 bis, ME13: con el G-code de inicio de la máquina (que calienta solo la primera boquilla),
+    el motor no calentaba las demás: imprimía con la boquilla en 0. Ahora mira qué boquillas calentaron el inicio y
+    el cambio de herramienta, y calienta, esperando, la que no lo esté antes de su primera extrusión (temperatura de
+    primera capa en la primera capa; sin valor propio, la del primero). Prueba `[extruders]` ME13, que falla sin el
+    arreglo.
+- `gcode_macros.md` regla 1, «bloque de sentencias», GM18 (spec/next b1aace9; era el GM17 de las Prusa XL y la
+  Snapmaker U1): `{ … }` en varias líneas con `if … then … elsif … then … else … endif` como sentencias (anidables,
+  sin `;` después de `endif`), además de `local`, `global`, asignaciones y textos o expresiones que se escriben.
+  Antes: «unknown variable 'if'». Un bloque con `then` es de sentencias; sin `then`, la forma `{if …}` de siempre.
+  Variable `wait_for_extruder_temp` (sí, salvo con prevención de goteo). Pruebas `[macros]` GM18 y lo que usa el
+  cambio de herramienta de dos cabezales (espera, capa, herramientas, texto + número, temperatura indexada, posición);
+  fallan sin el arreglo.
+- `infill_patterns.md` regla 11, P8 (pedido de la sesión de especificaciones: 34 impresiones del paquete lo usan):
+  patrón `honeycomb_3d`, antes rechazado. Diseño propio (PROVENANCE.md). Prueba `[combine]`: dirección principal 0° y
+  90° en capas alternas, tramos a 45° y 135° parejos, la parte inclinada cambia con la altura, largo cercano al
+  rectilíneo; el nombre se lee. Los porcentajes exactos de P8 (55 %, 43 %, 78 %) dependen de la fase en Z y no se
+  igualan: es la forma, no el mismo dibujo.
+- BH49 (perfiles, parche multiextrusor; UltiMaker S5, Sermoon D3 Pro): el cambio de herramienta de la máquina, que el
+  motor corre también al primer extrusor «desde ninguno» con `previous_extruder` −1, dejaba `M104 T-1 S-5` y
+  apagaba la boquilla activa (`M104 T0 S0`) antes de imprimir. Ahora se quitan los comandos de temperatura a una
+  herramienta negativa, y si el cambio deja en 0 la boquilla que va a imprimir, se calienta de nuevo y se espera.
+  El resto del G-code de la máquina sale igual. Prueba `[extruders]` BH49, que falla sin el arreglo.
+- BH51 (búsqueda profunda, CLI): `profile --filament "Prusament PLA"` decía «names 3 filaments» porque solo aceptaba el
+  nombre completo con la marca («Prusament Prusament PLA») y las otras coincidencias eran nombres más largos con las
+  mismas palabras (PLA Blend, rPLA). Ahora el nombre sin la marca, si es de uno solo, lo elige. Prueba `[cli]`, que
+  falla sin el arreglo.
+- **color_mixing_plus.md (Full Spectrum), tabla de estado** (pedido del dueño 23:25, por la sesión de spec). Base:
+  `color_mixing.md` hecha (ciclo por proporción, orden, gradiente en Z por bandas, JSON del proyecto, color previsto).
+
+  | Reglas | Qué | Estado |
+  |---|---|---|
+  | 1 | Cuatro tipos (ratio, pattern, match, gradient) | parcial: ratio, pattern y gradient; falta match |
+  | 2 | Secuencia escrita | hecho en el motor (MX3, MX4); falta el campo en rojo de la interfaz |
+  | 3 | Degradé de 2 a 4 filamentos en Z / X / Y / entre puntos | parcial: solo en Z |
+  | 4 | Color buscado (CIEDE2000, recomendaciones) | hecho en el motor (MX5, MX6; `match_color`, `ciede2000`); falta la pestaña de la interfaz |
+  | 5 | Pares automáticos | parcial: `auto_pair_mixes` (MX1); falta `mixing.auto_pairs` y crearlos en la interfaz |
+  | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
+  | 8–9 | Alto por filamento, paso | 8 hecho (MX7; `mixing.cadence_heights`, `height_a`, `height_b`); 9 hecho (`mixing.step`, MX28; MX29 con dos pasadas distintas por capa; A, B, A en una capa pendiente: el G-code imprime cada filamento una vez por capa) |
+  | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: el motor estima los cambios antes de laminar (`mix_changes_estimate`); falta que la interfaz los muestre en el aviso |
+  | 13–14 | Solo la superficie, paredes de más | 13 hecho (MX11, MX12; `mixing.surface_only`, `surface_depth`); 14 hecho (`mixing.extra_walls`, MX14) |
+  | 15 | Sesgo | hecho en el motor (MX13; `bias` de la mezcla); falta mostrarlo en la vista previa del color |
+  | 16 | Pintado con mezcla | hecho: las zonas pintadas son caminos con el número de la mezcla, y las reglas 10, 13 y 15 trabajan por ese número; 14 con MX14 (2026-11-11) |
+  | 17 | Vista previa del color antes de laminar | parcial: color previsto de la mezcla |
+  | 18–19 | Soportes y torre sin mezcla; sin mezcla, G-code igual | parcial: a probar con las opciones nuevas (MX16) |
+  | 20–21 | Mezclador Oklab; espectral con TD | pendiente (hoy Yule-Nielsen n = 2) |
+  | 22–24 | Paleta de calibración, recomendaciones, nombres de colores | pendiente |
+  | 25–29 | Colores desde imagen | pendiente (fase posterior, por la ficha) |
+  | 30–31 | Proyecto con los datos nuevos; 3MF de Full Spectrum | 30 hecho (MX19: sin datos nuevos se escribe igual); 31 bloqueada: el formato no está documentado, falta un archivo real (MX20) |
+  | 32 | Aviso de costo con estimación | parcial: aviso de `multimaterial.md` regla 9 |
+  | 33 | Purgar en el relleno, por defecto con mezclas | parcial: `object.wipe_into_infill` existe, no prendido por mezcla ni limitado por `surface_depth` / TD |
+  | 34 | Primero el relleno en capas con cambio | parcial: `infill.before_walls` existe; falta por capa con cambio |
+  | 35 | `purge_infill_max` | pendiente |
+  | 36 | Lo que no entra: torre o descarte, `min_purge_on_tower` antes | parcial: `min_purge_on_tower` existe |
+  | 37 | Volumen de purga según colores | pendiente |
+  | 38–40 | Sugerencias, ciclos alineados en la placa, informe | pendiente (regla 11 de `color_mixing.md` hecha) |
+
+  Orden elegido: (1) secuencia escrita, pares automáticos y tipos en el proyecto (reglas 1, 2, 5, 30; MX1–MX3,
+  MX19); (2) subcapas (10–12; MX8–MX10); (3) alto por filamento (8–9; MX7); (4) solo la superficie y paredes de más
+  (13–14; MX11, MX12, MX14); (5) sesgo (15; MX13); (6) degradé en X/Y y 2 a 4 filamentos (3; MX15); (7) purga en una
+  boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
+  interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
+  (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- BH57 (búsqueda profunda, servicios): `library export --entry e1 -o e1.tismalib`, con el archivo en la carpeta
+  actual, fallaba con «cannot create directories: Invalid argument []» (la carpeta madre vacía). Ahora un nombre suelto
+  va a la carpeta actual. Prueba `[library]`, que falla sin el arreglo. Visto sin cambio: los identificadores con `..`
+  o `/` se rechazan; un nombre con comillas, barra y ñ se guarda tal cual. - BH58 (spec/next 058df3b, `local_library.md` regla 1): `library printed --date` aceptaba cualquier texto («ayer»,
+  «2026-13-45», «2026-02-30»). Ahora solo un día real AAAA-MM-DD (el 29-02 en años bisiestos); otra cosa es un error de
+  uso que nombra el formato, sin guardar nada; sin `--date`, hoy (antes la fecha y la hora). Prueba `[library]`, que
+  falla sin el arreglo.
+- `slice --mixes <mezclas.json> --mix <n>` (pedido de la sesión de spec para la caja negra de MX8): las mezclas en el
+  JSON del proyecto (`color_mixing.md`, regla 15) y la que imprime el modelo, desde la línea de comandos. Antes solo
+  entraban con un proyecto. Prueba `[cli]`.
+- BH56, PF10 y PF11 (perfiles, `validate.py --reader`, 19000 corridas; spec/next 653d6cd): `extrusion.travel` de un
+  filamento (4831 veces) se dejaba afuera como «unknown setting»; ahora se lee como `extrusion.retraction`.
+  `resin.bottom_layers` de una impresión de resina (35 impresiones) se dejaba afuera como «filament setting»; ahora va
+  sobre el de la resina. Prueba `[pack]` BH56, que falla sin el arreglo.
+- Cola, después del orden de la beta (servidor 9a62834 y c95da34, cloud.md 5b y 5c): cobro por Microsoft Store en la
+  app de Windows: `GET /v1/billing/microsoft/ticket`, `StoreContext.GetCustomerPurchaseIdAsync`, `POST
+  /v1/billing/microsoft/purchase` al comprar y al arrancar, y `POST /v1/me/purchases`; errores 402/404/409/422/503.
+- Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
+  CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
+  `origin/dev` con un merge antes de cada push.
+- **Búsqueda profunda (07:15): la estimación antes de laminar no conocía el alto por filamento.** Con
+  `cadence_heights` (0,3 y 0,15), `mix_changes_estimate` contaba capas de 0,2 (49 cambios) y el laminado da unos 44.
+  El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
+  `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
+  igual al G-code laminado; falla sin el arreglo.
+- **Pendiente, PF12 (`profile_pack_format.md` regla 3, `percent_of: "nozzle"`):** el motor todavía no convierte los
+  valores de un proyecto al abrirlo (`sort_settings` solo los clasifica, y `project_settings` lee solo la familia
+  PrusaSlicer). PF12 va con esa conversión: un `"N%"` de una fila con `percent_of: "nozzle"` pasa a mm con la boquilla
+  del proyecto antes de la conversión de `prusaslicer` (OrcaSlicer 0,6 y "105%" → 0,63 mm).
+  PF13: `percent_of` también puede nombrar una clave del motor; el porcentaje es de su valor por defecto
+  (`bridge_acceleration` "50%" con 5000 por defecto → 2500).
+  PF14: `plate_temperature` en las tablas de la familia OrcaSlicer: la temperatura de cama de la placa de
+  `curr_bed_type`, si no la de `default_bed_type`, si no la primera presente en el orden High Temp, Textured PEI,
+  Engineering, Cool, Textured Cool, Supertack.
+- **Cola de baja prioridad (después del orden de la beta; spec/next, 2026-11-11):** `ironing.md`, `ironing.angle`
+  (desplazamiento sobre el relleno de arriba, 45 por defecto, negativo = por defecto) e `ironing.angle_fixed` (ángulo
+  absoluto), prueba IR8. Ningún perfil del paquete plancha con ángulo hoy.
+- **Para P2 (sesión de especificaciones, 2026-11-11):** el puente de impresoras (`cloud.md` reglas 12 a 17) manda dos
+  veces la misma impresora si la ve por red y por USB; tiene que mandar una por id, la de red si están las dos.
+  Y `p2p_library.md` regla 8 quinquies (spec/next): una IPv6 bloqueada es la huella de su /64 (SHA-256 de sal + /64);
+  IPv4 y `::ffff:a.b.c.d`, por dirección como antes. Huella = SHA-256(sal del día + texto); texto IPv6 = la red en
+  RFC 5952 (comprimida, minúsculas) + «/64» (`2800:A4:1234:5600:abcd::9` → «2800:a4:1234:5600::/64»); IPv4 =
+  «200.40.10.7». Exacto, para coincidir con el servidor.
+- **Los colores pintados se laminan** (2026-11-11; `multi_extruder.md` regla 1, `color_mixing_plus.md` regla 16).
+  Hasta hoy el canal Colores de la pintura se veía en la interfaz pero el motor no lo usaba: las caras pintadas salían
+  con el filamento de la pieza. `color_zones` (en `src/slice/painted.*`): en cada capa, cada punto de la región toma la
+  marca de la cara más cercana, pintada o no (una cara sin pintar deja el filamento de la pieza), creciendo la banda de
+  cada marca un ancho de pared por vez, hasta `painting.max_region_width` (0: sin límite); `split_by_zones` corta los
+  caminos en los bordes (a medio paso) y `paint_colors` les pone la marca antes de `apply_mixes` (una mezcla pintada se
+  lamina como mezcla; una marca que no es filamento ni mezcla deja el de la pieza). En la placa, en secuencial y sin
+  objetos. Prueba `[paint]`: cubo con la cara +X pintada con 2: las paredes de ese lado con 2, las del otro con 1;
+  pintada con una mezcla 1:1, ese lado con los dos; marca 9 sin filamento: el de la pieza; G-code verificado. Aceptado
+  por la sesión de spec (`multi_extruder.md` regla 18, ME16, ME17), con dos agregados ya hechos: una pared de dos
+  anchos o menos lleva el color de su lado pintado en todo el espesor (pintada de dos colores, mitad y mitad), y los
+  techos y pisos pintados colorean las capas de abajo y de arriba hasta `max_region_width` (con 0, las capas sólidas de
+  arriba o de abajo). Pruebas ME16 (0: la cuña más cerca de +X; 3 mm: una franja), ME17 (0,8 mm de un lado y de dos) y
+  techo. Falta: paredes propias en el borde entre colores (hoy
+  los caminos se cortan; MX14 `extra_walls` en zonas pintadas), `painting.interlocking_depth`, la tabla casilla→número
+  de MX33 en el proyecto.
+- **Formatos FM9, partes de un 3MF para la interfaz** (2026-11-11, pedido de la sesión de interfaz).
+  `ModelFile::pieces`: cada parte con su tramo de triángulos en `mesh`, el objeto (ítem de la placa) al que pertenece,
+  su nombre (el del volumen en un proyecto de slicer, si no el del objeto) y su extrusor (metadato `extruder`, 0 si no
+  hay). Prueba `[formats]`: una pieza por parte, seguidas y sin huecos, la suma igual a la malla; caja, caja de dos
+  partes (un objeto), proyecto con partes, modificador que no es parte.
+- **Full Spectrum, regla 3: cada degradé se mide sobre cada objeto (MX32, spec/next)** (2026-11-11). Con varios
+  objetos o copias en la placa, `gradients_by_object` da a los caminos de cada degradé un número propio por objeto
+  (desde 200, por el contorno del objeto: la envolvente de sus partes juntas, por objeto y copia) y el degradé se aplica
+  a cada uno aparte; las partes de un objeto lo comparten. En secuencial ya iba por objeto. Prueba `[mixing]`: dos
+  cubos de 20 mm con un degradé en X: cada uno va de 1 a la izquierda a 2 a la derecha (sin el arreglo, 84 contra 648
+  en el borde derecho del primero); ningún número temporal queda; G-code verificado. Búsqueda profunda: un objeto dentro del contorno de otro (un cubo en el
+  medio de un marco) tomaba el degradé del marco; ahora cada punto va al contorno más chico que lo contiene (prueba:
+  el cubo con sus dos franjas, 3 : 7 y 7 : 3, en vez de casi mitad y mitad).
+- **Full Spectrum, regla 3: degradé entre dos puntos (MX31)** (2026-11-11). `ColorMix::from`/`to` (`"from"`, `"to"` en
+  el JSON, en mm de la pieza: X e Y desde el centro de lo que imprime con la mezcla, con el medio ancho de los cordones;
+  Z desde su primera capa). `gradient_between` en `apply_mixes`: la proporción es la proyección sobre la recta, recortada
+  a 0..1; en cada capa, franjas de unos 5 mm (2 a 11) perpendiculares a la recta en XY con `split_along` (el corte de
+  `split_by_bands` en cualquier dirección), más una franja en cada extremo para lo de fuera del tramo; casi vertical
+  (< 1 mm en XY por 10 mm en Z) pasa a degradé en Z entre las dos alturas. Prueba `[mixing]` MX31: cubo de 20 mm de
+  (−10, −10, 0) a (10, 10, 20): esquina de abajo con más del triple de 1, de arriba con más del triple de 2, la capa del
+  medio con los dos; (0, 0, 0) a (0, 0, 20) igual que el degradé en Z; JSON de ida y vuelta; G-code verificado. El
+  estimado de cambios cuenta las franjas de cada capa como el laminado (`extent`: el tamaño de la pieza a lo largo de
+  la recta en XY; casi vertical, como en Z); prueba contra el G-code del cubo. Falta: los puntos en la interfaz.
+- **Full Spectrum, regla 3: degradé en X o Y** (2026-11-11, bloque nocturno). `ColorMix::axis` ('z', 'x', 'y';
+  `"axis"` en el JSON, escrito solo si no es Z). En `apply_mixes`, `gradient_in_plane`: franjas de unos 5 mm (de 2 a
+  11) a lo largo del eje sobre los caminos de la mezcla; `split_by_bands` corta cada camino en los bordes (interpola
+  ancho, `dz` y `below`; un lazo cortado vuelve en piezas abiertas, la última unida a la primera si caen en la misma
+  franja) y cada franja toma su ciclo (`gradient_cycle`, la misma cuenta que el degradé en Z, al 10 %) capa por capa,
+  así que sin subcapas cambia en escalones de una capa. Pruebas `[mixing]`: el corte y el ciclo; un cubo de 20 mm con
+  degradé 1→2 en X: la capa del medio con los dos filamentos, el 1 a la izquierda; las franjas de los bordes casi
+  todas de un filamento (1 : 9); el eje en el JSON de ida y vuelta; G-code verificado. Búsqueda profunda: el estimado de cambios lo
+  contaba como un degradé en Z (25 contra 50 en el cubo); ahora cuenta las franjas de cada capa
+  (`MixChangeOptions::extent`, el tamaño de la pieza a lo largo del eje) con el orden del escritor; prueba contra el
+  G-code. Falta: el degradé en X/Y con `subdivide` (cada franja en subcapas), entre dos puntos de la pieza, y en la
+  interfaz el eje en el diálogo y `extent` en el estimado.
+- **Paleta de mezclas (pieza, CM8)** (2026-11-11, bloque nocturno; `calibration_models.md` de spec/next, «Piezas
+  para medir»; `color_mixing_plus.md` regla 22). `palette_piece(n)` en `src/calibration/calibration.*`: base de 1 mm
+  (filamento 1) con los números 1 a n en relieve de 4 mm (regla 6, 0,6 mm de relieve) y una muestra de 15 × 15 × 2 mm
+  por mezcla, en filas de 5 desde adelante a la izquierda, 3 mm entre muestras y de borde; centrada en el origen.
+  Prueba `[calibration]` CM8: 93 × 49 mm con 10, posiciones de la primera, la segunda y la sexta, 6 filas con 26.
+  Falta (interfaz): cargarla en la placa con `quick_palette` (cada muestra una parte con su mezcla) y la lista de
+  nombres junto a los números; laminarla entera no se probó.
+- **Búsqueda profunda: el estimado de cambios ignoraba `mixing.step`** (2026-11-11, reglas 9 y 12). Con capas de
+  0,2 mm y paso 0,4 el estimado decía 49 cambios en un cubo de 10 mm y el laminado hace 24 (16 con paso 0,6).
+  `MixChangeOptions::step` y el estimado toma el paso como el laminado: apagado a la altura de capa, por capa si es más
+  fino que las capas sin subcapas. Prueba `[mixing]` con pasos 0,4, 0,6 y 0,1 contra el G-code. Con `subdivide` el
+  estimado también arma las pasadas de `step` (la última lo que queda, el ciclo sigue entre capas, una capa con un
+  filamento dos veces va entera): antes daba 49 contra 98 (paso 0,1), 24 (0,08) y 35 (0,4) del laminado; prueba con
+  1:1 y 2:1. La interfaz llena `step` (1f26c24).
+- **Full Spectrum, reglas 22 y 24: nombres de colores y paleta rápida** (2026-11-11, bloque nocturno; MX18).
+  `color_name(hex)` en `src/slice/color_mix.*`: lista propia en inglés y español sobre CIELAB (croma < 10: blanco,
+  gris claro, gris, gris oscuro, negro por L*; si no, una banda del tono h_ab: rojo, naranja, amarillo, verde, cian,
+  azul, violeta, rosa; marrón para rojo, naranja o amarillo oscuros; «claro» u «oscuro» por L*).
+  `quick_palette(colores, ciclo_max, primer_id, TD)`: una muestra por filamento y cada mezcla de 2 y 3 con ciclo de
+  hasta `ciclo_max` capas (sin repetir un ciclo más corto), con su color (mezclador o espectral) y su nombre. Con 4
+  filamentos: 10 con ciclos de 2 (MX18) y 26 con ciclos de 3. Prueba `[mixing]`. Falta: la pieza de prueba impresa
+  (una muestra por mezcla con su nombre, en `calibration_models.md`) y la corrección del color a mano (interfaz).
+- **Full Spectrum, reglas 20 y 21: ajuste `mixing.predictor`** (2026-11-11, bloque nocturno). `"mixer"` (por
+  defecto) o `"spectral"`; otro valor se rechaza. `match_color(..., transmission)`: con las TD de los filamentos, el
+  color de cada mezcla candidata sale de `mix_color_spectral`; sin ellas, de `mix_color`. Prueba `[mixing]`: el
+  ajuste se lee y se rechaza un valor inválido; con TD 0 los colores son los del mezclador; con TD, cada
+  candidata lleva su color espectral y el verde claro buscado sale de otra mezcla (Kubelka y Munk oscurece). Falta (interfaz): la lista en la ficha y pasar las TD a
+  `match_color` y a la vista previa cuando el ajuste es `spectral`.
+- **Full Spectrum, regla 21: predicción espectral** (2026-11-11, bloque nocturno; MX17). `mix_color_spectral(colores,
+  partes, TD)` en `src/slice/color_mix.*`: Kubelka y Munk por canal (reflectancia lineal a K/S y de vuelta), cada
+  filamento pesado por su parte × (1 + TD / 10). El factor es diseño propio: un filamento más translúcido pesa más.
+  Con todas las TD en 0, el mezclador simple (MX17). Prueba `[mixing]`: MX17, color entre los dos con la misma TD,
+  más cerca del más translúcido, un filamento solo conserva su color. Falta: elegir `mixer` o `spectral` como ajuste
+  y usarlo en `match_color` y en la vista previa (interfaz). El degradé en X/Y (regla 3) queda pendiente: hay que
+  partir las zonas de la capa.
+- **Full Spectrum, regla 4: color buscado** (2026-11-11, bloque nocturno; MX5 y MX6). `ciede2000` y
+  `ciede2000_lab` (fórmula publicada de Sharma, Wu y Dalal 2005; verificada con tres pares de su tabla a 1e-4) y
+  `match_color(objetivo, colores, id, max_cycle, min_part)` en `src/slice/color_mix.*`. Prueba todas las mezclas de 2
+  y de 3 filamentos con ciclos de hasta `max_cycle` capas (sin repetir proporciones), predice el color con
+  `mix_color` y da la mejor y las 3 siguientes por distancia. `color_reached` dice si la mejor está a 10 o menos.
+  Prueba `[mixing]`: gris con blanco y negro (MX5), verde inalcanzable (MX6), un 1 : 1 : 1 de RGB encontrado.
+  Falta: la predicción espectral (regla 21) y la pestaña «Color buscado» (interfaz).
+- **Full Spectrum, regla 38: sugerencias del aviso** (2026-11-11, bloque nocturno). `mix_purge_suggestions(mezcla,
+  alto, opciones, purga por cambio, volumen de la pieza, alto máximo)` en `src/slice/color_mix.*`: si la purga pasa
+  del 50 % del filamento, da cada medida con sus cambios y su parte de purga. Las medidas son: subcapas apagadas;
+  alto por filamento (en una mezcla de dos, las capas del de mayor parte al doble, hasta el máximo); solo la
+  superficie (los mismos cambios, la purga al relleno escondido). Diseño propio: la estimación sin laminar. La
+  interfaz la muestra en el aviso de costo (aviso a esa sesión). Prueba `[mixing]`, regla 38. Falta: «un ciclo más
+  corto»; con las proporciones dadas no baja los cambios por capa sin cambiar el color.
+- **Full Spectrum, regla 40: informe de purga** (2026-11-11, bloque nocturno). El aviso «purge» después de laminar ya
+  daba torre y objetos. Ahora separa los objetos entre relleno y resto: «… g into the objects (… g into their
+  infill, … g into the rest)», en proporción al volumen de los sumideros de cada tipo. El texto de antes sigue
+  igual. Prueba `[extruders]` MM5 ampliada: con purga solo al relleno, todo va al relleno. Regla 36, el descarte
+  (MX24, mismo día): con una boquilla y sin torre (la impresora purga afuera de la pieza), lo que no toman los
+  objetos se informa como «… g to the discard». No hace falta un ajuste nuevo: la ficha no define ninguno, y sin
+  torre en una boquilla es la máquina la que descarta. Antes, sin torre no se informaba nada; ahora se informa
+  también sin mezclas. Prueba `[mixing]` MX24.
+- **Full Spectrum, regla 39: ciclos alineados** (2026-11-11, bloque nocturno; MX26). En `apply_mixes`, con varias
+  mezclas en la placa, cada mezcla después de la primera prueba las rotaciones de su ciclo y se queda con la que más
+  capas comparte filamento con lo ya puesto (en un empate, sin rotar). Solo con el ciclo por capa, no con `step`.
+  Prueba `[mixing]` MX26: (1, 2) y (3, 1) 1 : 1 en dos cajas tienen el filamento 1 juntas en las 25 capas que lo
+  tienen (sin alinear, 0); una mezcla sola sigue con su ciclo. Con periodos distintos (3 y 2) lo más que se puede es
+  una capa cada 6, y lo da. Siguiente: reglas 36 (descarte), 38 (sugerencias del aviso) y 40 (informe).
+- **Búsqueda profunda (06:20): reglas 13 y 35 juntas.** Con `surface_only`, el relleno disperso pasa al filamento
+  dominante antes de `denser_for_purge`, que solo aceptaba caminos de la mezcla, así que `purge_infill_max` no hacía
+  nada. Ahora `mix_shell` dice cuántos caminos pasó en cada capa y con qué filamento, y el relleno más denso queda
+  con ese filamento. Prueba `[mixing]` («rules 13 and 35»), que falla sin el arreglo.
+- **Full Spectrum, regla 35: relleno que absorbe más** (2026-11-11, bloque nocturno; MX23). `mixing.purge_infill_max`
+  (%, 0 apagado). `denser_for_purge` en `apply_mixes`: en una boquilla, una capa con cambio cuyo relleno disperso
+  tiene menos volumen que la purga (el par menos `min_purge_on_tower`) se vuelve a llenar con `fill_layer` a la
+  densidad × purga / volumen, hasta el máximo. Solo donde todo el relleno disperso de la capa es de la mezcla
+  (decisión propia). Prueba `[mixing]` MX23: 20 % a 60 % da ×2,4 de volumen (líneas enteras en una región acotada)
+  y menos purga a la torre; con varias boquillas no cambia. Error propio corregido: en MX11, MX22 y la prueba de la
+  regla 34 había puesto `infill_density = 0.2` (es %, o sea 0,2 %). Ahora es 20 y las pruebas pasan igual.
+  Siguiente: reglas 36 (lo que no entra va al descarte), 38 (sugerencias del aviso), 39 (ciclos alineados), 40
+  (informe).
+- **Full Spectrum, regla 33: purgar en el relleno por defecto** (2026-11-11, bloque nocturno; MX22). Con mezclas en
+  una boquilla (`multi.single_extruder_mmu`), todas las piezas de la placa dejan purgar en su relleno disperso
+  (`wipe_into_infill`, multi_extruder.md regla 13). Las purgas se imprimen justo después del cambio con el filamento
+  nuevo, que es lo que ya hacía `plan_sinks`, y antes van `material.min_purge_on_tower` a la torre. Clave propia
+  `mixing.purge_into_infill` (sí por defecto) para apagarlo. Prueba `[mixing]` MX22: la caja 1 : 1 con relleno al 20 %
+  manda menos a la torre que con la opción apagada; sin mezclas no cambia nada. Pasan también las pruebas de
+  multiextrusor. Filamento transparente (MX27, mismo día): nuevo `extrusion.transmission_distance` (TD, mm, uno o
+  uno por extrusor; también del material). Una pieza cuyo filamento, o algún filamento de su mezcla, pasa de 10 no
+  recibe la purga. Prueba `[mixing]` MX27: la mezcla que lleva el filamento claro no la recibe, ni la pieza clara;
+  la opaca sí. Regla 34 (mismo día): en una boquilla, con mezclas en la placa, el grupo que llega por un cambio
+  imprime cada pieza empezando por el relleno disperso y después las paredes (`infill_first` en el escritor, la misma
+  vía que `infill.before_walls`; `SlicedModel::blended`). Sin mezclas, el G-code no cambia (regla 19). Prueba
+  `[mixing]`, regla 34: toda capa con cambio que tiene relleno disperso empieza por él, con la purga en el relleno
+  apagada para ver solo el orden. Una placa de dos filamentos sin mezclas sigue con las paredes primero. Pasan las
+  pruebas del escritor, del orden y de multiextrusor. Siguiente: regla 35 (`purge_infill_max`, MX23).
+- **Búsqueda profunda (05:15): mezclas nuevas combinadas.** Probé sesgo con solo la superficie, paredes de más con
+  alto por filamento, solo la superficie con subcapas, un degradé con paso y subcapas, sesgo con paso y subcapas, y
+  sesgo con jarrón. El G-code pasa el control en todos. Hallazgo: `mixing.step` más fino que las capas y sin
+  subcapas (paso 0,05 con capas de 0,2) imprime la mezcla 1 : 1 toda con el filamento 1, sin ningún cambio, porque
+  cada centro cae en un elemento par del ciclo. Ahora esas capas siguen el ciclo capa por capa, con aviso: la ficha
+  se corrigió el mismo día. Decisión propia: solo cuando el paso es más fino que todas las capas con mezcla, para que
+  MX28 (capas de 0,3 con paso 0,2, por su centro) siga como está escrito.
+  Prueba `[mixing]`, que falla sin el aviso. Consultado a la sesión de especificaciones. CI local con ASan en
+  ba84a92: EXIT 0.
+- **Full Spectrum, regla 37: purga según los colores** (2026-11-11, bloque nocturno; MX25). `purge_from_colors` y
+  `purge_table` en `src/slice/color_mix.*`: CIELAB (D65) de cada color, 60 mm³ + 1,6 por punto de L* que se gana +
+  0,6 por punto de a*b*, hasta 300 (diseño propio). Negro a blanco 220, blanco a negro 60, el mismo color 0. El motor
+  no conoce los colores de los filamentos (solo los del JSON de mezclas). Por eso la tabla la arma la interfaz con
+  los colores y la pasa como `wipe_tower.purge_volumes` (aviso a la sesión de la interfaz). Prueba `[mixing]` MX25.
+  Siguiente del paso 7: purgar en el relleno prendido por defecto con mezclas y el orden relleno-primero (reglas 33 y
+  34, MX22).
+- **Full Spectrum, regla 15: sesgo** (2026-11-11, bloque nocturno; MX13). `bias_walls` en `apply_mixes`: en una mezcla
+  de dos, con `bias` > 0 las paredes de afuera de las capas del segundo filamento se corren hacia adentro
+  |bias| × la mitad de su ancho (con < 0, las del primero). Se mueven en inglete: cada lado se corre lo mismo, y en
+  una esquina como mucho el doble. El lado de adentro de cada tramo es el que da un paso de 0,01 mm dentro de la
+  región de la capa. No se corren las pasadas de subcapas. Prueba `[mixing]` MX13: con 0,5 el borde del filamento 2
+  queda 0,25 × el ancho más adentro que el del 1, y con −0,5 al revés. Falta: la vista previa del color estimado
+  (es de la interfaz). Siguiente: paso 7, purga con una sola boquilla (reglas 32 a 40).
+- **Full Spectrum, regla 14: paredes de más** (2026-11-11, bloque nocturno; MX14). `mixing.extra_walls` (0 a 8) suma
+  paredes en las piezas con mezcla y en las partes de un objeto impresas con otro filamento que su primera parte (una
+  zona pintada llega al motor como una parte con su extrusor). En `slice_plate` es un grupo propio («zona», además de
+  extrusor y ajustes), así otra pieza con el mismo filamento no las recibe. Prueba `[mixing]` MX14: el objeto con 2
+  paredes, la parte pintada con 4, otra pieza del filamento 2 con 2, una pieza con mezcla con 4. Pasan también las
+  pruebas de multiextrusor, placa, transformaciones y secuencial. Siguiente: el sesgo (regla 15, MX13).
+- **Full Spectrum, regla 13: solo la superficie** (2026-11-11, bloque nocturno; MX11 y MX12). `mixing.surface_only`
+  y `surface_depth` (0,8 mm), en una tarjeta nueva «Mezcla de colores: dónde va». `mix_shell` en `apply_mixes`,
+  antes del ciclo, pasa al filamento de mayor parte de la mezcla las paredes que empiezan a `surface_depth` o más de
+  afuera (sumando el ancho de los cordones) y el relleno disperso. Las paredes de afuera, los huecos y las superficies
+  sólidas quedan con la mezcla. Decisiones propias: el relleno sólido interno también queda con la mezcla (no se
+  separa de las superficies); un degradé va entero; en un empate de partes, el primero. Prueba `[mixing]` MX11 (caja
+  de 3 paredes al 20 %: las dos de afuera con el ciclo, la tercera y el relleno con el filamento 2; afuera sigue
+  alternando), MX12 (cambios ≤ que sin la opción) y regla 19 (sin mezclas, los mismos movimientos). En una caja,
+  todas las capas tienen paredes de afuera, así que los cambios son iguales, no menos: MX12 da menos solo donde hay
+  capas sin superficie visible. Siguiente: `extra_walls` (regla 14, MX14), después el sesgo (regla 15).
+- **Full Spectrum, regla 9: paso** (2026-11-11; spec/next, MX28 y MX29). `mixing.step`: 0, o el alto de capa con
+  capas parejas, cuenta por capa como antes. Con otro valor, la capa con centro a la altura `z` toma el elemento
+  `floor(z / step)` del ciclo (`mix_layers` con `step`; `mix_sequence` da el ciclo como lista de filamentos). Con
+  subcapas y un paso menor que la capa, pasadas de `step` con el elemento siguiente, que sigue de una capa a la otra.
+  Pendiente: una capa con un filamento dos veces (MX29 tal como está escrito, capa 0,3 y paso 0,1: A, B, A). El
+  escritor imprime cada filamento en un solo grupo por capa, así que A, A, B pondría la pasada de arriba antes que la
+  del medio. Esa capa va entera por altura, con aviso. Hace falta que el plan de herramientas acepte un filamento dos
+  veces por capa (torre, purgas, grupos). Pruebas `[mixing]` MX28 (capas de 0,1 y 0,3: el filamento por el centro;
+  dos de 0,1 seguidas iguales), paso igual a la capa sin cambios, dos pasadas de 0,1 por capa de 0,2, y el aviso con
+  A, B, A.
+- **Full Spectrum, paso 3: alto por filamento** (2026-11-11; `color_mixing_plus.md` regla 8, MX7). Ajustes
+  `mixing.cadence_heights`, `height_a` y `height_b`, en una tarjeta nueva «Mezcla de colores: capas» que también
+  lleva las subcapas (la de boquillas pasaba de 8 ajustes). Con una sola mezcla de dos filamentos en toda la cama, las
+  capas se alternan: `height_b` con el segundo filamento y `height_a` con el primero, después de la primera capa
+  (primer filamento, con su propio alto). Los altos se ajustan a los límites de la máquina y la boquilla, con aviso.
+  Decisiones propias: con otra mezcla, partes sin mezcla, pintura de color, modificadores, `layers.heights` o
+  `layers.cusp_height`, se usa el ciclo de la mezcla y se avisa; sin subcapas (cada capa ya es de un filamento). La
+  regla 9 (`step`) queda pendiente porque la ficha dice «a confirmar». Prueba `[mixing]` MX7: capas de 0,15 y 0,3 mm
+  alternadas con su filamento, tope de 0,25 mm con aviso, degradé con el ciclo y aviso, G-code verificado con un
+  cambio por capa.
+- **Full Spectrum, regla 12: cambios antes de laminar** (2026-11-11). `mix_changes_estimate(mezcla, alto, opciones)` en
+  `src/slice/color_mix.*` cuenta los cambios de filamento sin laminar: capas uniformes del alto, el ciclo de la mezcla
+  y, con `mixing.subdivide`, una pasada por filamento en el mismo orden que el laminado. La prueba compara con los
+  cambios del G-code en 8 casos (con y sin subcapas, primera capa, 50/50 y 1:2): iguales. Falta: que la interfaz lo
+  use en el aviso de costo (sesión de la interfaz, avisada).
+- **Full Spectrum, paso 2: subcapas** (`color_mixing_plus.md` reglas 10 y 11; MX8 a MX10). Grupo nuevo `mixing`:
+  `subdivide`, `sub_min_height` (0,04), `sub_first_layer`, `sub_infill`. En las capas con una mezcla por proporción o
+  secuencia, cada trayectoria de la mezcla se imprime una vez por filamento, de abajo hacia arriba, con su parte del
+  alto: la boquilla en lo alto de la pasada y el cordón sobre la de abajo (como un cordón elevado del relleno
+  ondulado, así el escritor da la Z y el flujo de cada pasada). Las pasadas empiezan con el filamento con que terminó
+  la capa de abajo (un solo cambio por capa en una mezcla de dos); el modelo guarda ese orden por capa
+  (`SlicedModel::tool_order`) y el plan de herramientas lo respeta. El resto de la capa, sin mezcla, una vez (MX9).
+  Medido en la caja de 20 mm, 1 : 1 a 0,2 mm: capa 11 con T1 a 2,1 y T0 a 2,2; filamento total dentro del 5 % de
+  la caja sin subcapas. Decisiones propias: una pasada por filamento (no por paso del ciclo), un degradé sigue con su
+  ciclo, una parte más fina que `sub_min_height` deja esa capa sin dividir, el relleno disperso va una vez con el
+  último filamento salvo `sub_infill`. Falta: el aviso de costo antes de laminar (regla 12) y las subcapas en las
+  caras pintadas con mezcla (regla 16, ya pasan por el mismo camino pero sin prueba). No probado en una impresora.
+- BH55 (búsqueda profunda, calibraciones): una torre que baja (`calibration retraction --start 1 --end 0.2 --step 0.4`)
+  daba el valor `0.19999999999999996`, que iba así a la lista, a los ajustes de la torre y al aplicar el mejor. Ahora
+  cada valor se redondea a la milmillonésima: 1, 0,6 y 0,2. Prueba `[calibration]`, que falla sin el arreglo. Visto
+  sin cambio: paso 0 o negativo dan error de uso; un inicio fuera del rango se recorta al rango.
+- BH54, PF7 a PF9 (spec/next 3f1decf, `profile_pack_format.md`, perfiles de impresión, regla 6; perfiles de Anycubic Predator):
+  `extrusion.bridge_flow_ratio` de una impresión del paquete se dejaba afuera con aviso («is a filament setting»);
+  ahora se pone sobre el del filamento. `wipe_tower.purge_volumes` de una impresora se dejaba afuera; ahora es el
+  valor por defecto de la impresión, y el de la impresión manda si lo trae. `extrusion.type` del filamento avisaba
+  «unknown setting» y se perdía; ahora se lee. Prueba `[pack]` PF7 a PF9, que falla sin el arreglo.
+- BH53 (búsqueda profunda, conexión con impresoras): el nombre del archivo que la persona escribe al mandar a la
+  impresora iba tal cual en la ruta de PrusaLink (`PUT /api/v1/files/usb/Mi pieza #2.gcode`: una línea de pedido
+  inválida, y el `#` cortaba el nombre), y una comilla en el nombre cortaba el encabezado del formulario de OctoPrint
+  y Moonraker. Ahora la ruta va codificada (`%20`, `%23`, UTF-8) y en el formulario las comillas y los saltos de
+  línea pasan a `_`. Pruebas `[device]` BH53, que fallan sin el arreglo.
+- ME15 (spec/next, `multi_extruder.md` regla 8 quater; filamentos de la Prusa XL a 170 °C): `filament.idle_temperature`
+  (o `material.idle_temperature`) va a `machine.variables.idle_temperature`. Sin prevención de goteo, la herramienta
+  que deja de imprimir baja a esa temperatura (`M104 S170 T0 ;idle`) y antes de volver a imprimir se calienta y se
+  espera (`M109 S215 T0 ;back from idle`). Con prevención de goteo manda su regla. Prueba `[extruders]` ME15, que
+  falla sin el arreglo.
+- ME14 (spec/next, `multi_extruder.md` regla 8 ter; perfiles Prusa CORE One «SOLUBLE»): `extruders.support` 5 en una
+  boquilla daba «extruder 5, but the machine has 1». Ahora un extrusor que la máquina no tiene (perímetros, relleno,
+  sólido, soporte, interfaz, torre) es el 1, con el aviso `missing_extruder`; `bed_temperature_from` sigue
+  rechazándose. Prueba `[extruders]` ME14, que falla sin el arreglo.
+- Caja negra del camino de `color_mixing.md` combinado (sin hallazgos): mezcla 1 : 1 en una boquilla con jarrón,
+  planchado, balsa, soportes y un degradé de un componente: G-code que pasa la comprobación, 50 cambios donde
+  corresponde y nunca la herramienta de la mezcla (`T2` con dos filamentos); los soportes no toman la mezcla.
+- BH52 (búsqueda profunda, copias + falda): `--copies 1000` en una MK4S decía «182 fit», pero con 182 la falda se salía
+  de la cama y no había G-code («the skirt goes off the bed»). La cuenta de las que caben ahora resta de la cama lo
+  que el borde y la falda llegan más allá de las copias de afuera. Prueba `[cli]` BH52, que falla sin el arreglo.
+- Pedido del dueño (2026-11-10): la clave de firma se crea sola al enchufar el pendrive, la primera vez, y después
+  queda bloqueada. `python tools/sign_release.py create-key`, o doble clic en `tools/crear_clave_pendrive.bat`:
+  espera un pendrive nuevo, crea `tisma/clave.pem` (nunca pisa una que ya esté), espera 2 min un segundo pendrive
+  para la copia, pone `TISMA_UPDATES_KEY` en GitHub con `gh` y firma los borradores pendientes, sin preguntar. El
+  bloqueo: la clave pública queda en `%APPDATA%\tisma\clave_bloqueada.txt` y en GitHub; con cualquiera de las dos,
+  no crea otra y solo acepta un pendrive con esa clave. Guía en `docs/FIRMAR_VERSIONES.md`. Pruebas en
+  `tools/test_sign_release.py` (9, con pendrives simulados y un `gh` simulado). No probado en Windows: la detección
+  de unidades (`GetLogicalDrives`) y la búsqueda de openssl en la carpeta de Git solo se probaron en Linux.
+- BH50 (perfiles; 12 G-code de inicio de Bambu X1): una lista de dos o más valores sin índice en una cuenta o una
+  comparación (`{if outer_wall_acceleration > 0}`) fallaba, y la máquina caía en la versión simple. Ahora vale su único
+  valor o el del extrusor en uso (gcode_macros.md regla 10 bis bis, GM15), también en la forma antigua `[a]`; y un texto
+  escrito como número («5000», «0.4», «50%») cuenta como número en cuentas y comparaciones. Dos textos se siguen
+  uniendo con `+`. Prueba `[macros]` BH50, que falla sin el arreglo (8 de 12).
+- Cola (spec/next 77e6a3f, cloud.md 5b, decisión del dueño 21:50): ventas de escritorio por las tiendas. Windows:
+  Microsoft Store (MSIX) con el plan como suscripción en la app (Windows.Services.Store), recibo verificado por el
+  servidor. Linux: Flathub y Snap Store, el plan desde la cuenta. Hoja de ruta después de la beta: empaquetado MSIX y
+  compra en la tienda, manifiesto Flatpak, snapcraft.yaml; licencias compatibles con las tiendas.
+- Cola, después de la búsqueda profunda (pedido del dueño 22:30, spec/next a2e51e4, interface.md «Navegación de la
+  vista 3D (estilo de programa de CAD)», UI17/UI18): navegación CAD por defecto (clic selecciona, arrastre en vacío
+  selecciona por caja, botón central desplaza, rueda acerca al cursor, doble clic central encuadra, arrastre derecho
+  orbita alrededor del punto bajo el cursor, Mayús+central orbita, clic derecho sin mover abre el menú), preferencia
+  «Navegación» CAD/Clásica, cubo de vista arriba a la derecha, barra de vista abajo al centro, fondo degradado gris
+  claro, rejilla de 10 mm marcada y punto del centro de órbita; en Impresión 3D, vista previa e Ingeniería; diseño
+  propio, con guiones `--ui-script`.
+- Cambio a lo anterior (spec/next 9ec20ff): los controles por defecto son los de Fusion 360 (clic izquierdo
+  selecciona y por caja, central desplaza, Mayús+central orbita alrededor del punto bajo el cursor, rueda acerca al
+  cursor en el sentido de Fusion, doble clic central encuadra, clic derecho = menú). Preferencia «Navegación»:
+  «Fusion 360» (por defecto), «Botón derecho gira», «Clásica». Cubo y barra de vista sin cambios. UI17 actualizada.
+- Cola, con la navegación de Fusion 360 y como siguiente bloque grande de interfaz (pedido del dueño 22:40, spec/next
+  4483c04, cad_design.md «Diseño visual y forma de uso (estilo Fusion 360)», reglas 11 bis a 11 decies, CD26 a CD29):
+  barra de herramientas a todo el ancho con pestañas (Sólido, Boceto, Inspeccionar, Utilidades) y grupos con nombre;
+  árbol del navegador a la izquierda con ojos; línea de tiempo abajo con marcador arrastrable; diálogos como panel
+  flotante a la derecha con vista previa y manipuladores; boceto normal al plano con «Terminar boceto», paleta y
+  restricciones; menú radial; S busca herramientas; Presionar/Tirar, Mover/Copiar, Medir, Sección, Apariencia; lo
+  que falte en gris «Próximamente»; tema claro por defecto en Diseño. Diseño propio; capturas de la primera versión.
+
+## 2026-11-11 00:41 UTC — mantenimiento (cada 8 h)
+
+- **Integrado:** `origin/main` y `origin/dev` sin nada nuevo.
+- **CI local a4439e9:** gcc, clang y ASan, 1195/1195; EXIT 0. El de 618d815 corre en segundo plano.
+- **Fuzz:** `tisma_fuzz_gcode 2000 20261111`: 2000 casos, 19 rechazados por no imprimibles, 0 fallos.
+- **Medido:** esfera de banco de 100 mm (`bench/gen_sphere.py --segments 400`): 1,8 a 2,6 s el laminado con la
+  escritura, con la máquina cargada por el CI local (carga 13,9 en 4 núcleos); no se compara con los 0,97 a 1,12 s
+  del bloque anterior, sin carga. Sin cambio de rendimiento que medir.
+- **Arreglado en este turno (búsqueda profunda y pedidos de spec):** BH50 a BH54, ME14, ME15; entradas de arriba.
+
+## 2026-11-11 08:43 UTC — mantenimiento (cada 8 h)
+
+- **Revisado:** `tools/ci_linux.sh` (ASan) sobre b300395 y 4d82ade; `tisma_fuzz_gcode 2000 20261111`: 2000 casos,
+  19 descartados por no imprimibles, 0 fallas; cambios recientes de mezclas.
+- **Encontrado y arreglado:** el ajuste nuevo `mixing.predictor` no tenía tarjeta (prueba SP1 del panel; ahora en
+  «zonas con mezcla», con su guía, 4d82ade); el estimado de cambios ignoraba `mixing.step` (49 contra 24, 059ec05;
+  la interfaz lo pasa en 1f26c24).
+- **No medido:** el banco de la esfera, con la máquina cargada por el CI local y el fuzz.
+
+## 2026-11-11 — interfaz: navegación de Fusion 360 y cubo de vistas (segunda sesión del motor)
+
+- **Fichas:** `interface.md` y `cad_design.md` de `spec/next` (todavía no en `main`); `tools/check_spec.py` limpio.
+- **Hecho:** navegación por defecto como Fusion 360 (rueda apretada desplaza; Mayús + rueda gira alrededor del punto
+  de la pieza bajo el mouse, o del centro de lo elegido o de la cama; la rueda acerca hacia el mouse, hacia atrás
+  acerca como Fusion por defecto; doble clic con la rueda encuadra; izquierdo desde un lugar vacío dibuja un
+  rectángulo de selección; clic derecho abre el menú). Preferencia «Navegación» (Configuración › Interfaz, clave
+  `ui.navigation`: `fusion`, `right_orbits`, `classic`). Punto del centro de giro mientras se gira. Cubo de vistas
+  arriba a la derecha (caras, aristas, esquinas, arrastre, «Inicio», animación de 0,25 s), menos en Calibración y
+  Dispositivo. Órdenes nuevas de guion: `mouse`, `mouse-double`, `wheel`, `cube`, `camera-mark`, `expect-camera`,
+  `pref navigation`.
+- **Arreglado (encontrado al probar):** cuando la calidad automática bajaba la oclusión al mover la vista
+  (`update_view_hold`), pedía un encuadre nuevo en vez de solo despertar la ventana: en una máquina lenta la cámara
+  volvía al encuadre mientras se la giraba o desplazaba. Ahora despierta la ventana (`glfwPostEmptyEvent`).
+- **Pruebas:** `ui: CAD navigation keeps the pivot and the point under the mouse still` (perspectiva y ortogonal);
+  guiones `navigation.txt` (UI17, los tres modos y el rectángulo) y `view_cube.txt` (UI18). Las 227 pruebas de
+  interfaz y las `[ui]` pasan en Release con gcc. No probado en Windows ni con un mouse real.
+- **Decisión:** la placa elige un solo modelo; el rectángulo elige el más cercano a donde empezó, hasta que haya
+  selección múltiple (siguiente).
+- **Sigue:** selección múltiple, barra de vista abajo al centro, aspecto (degradé y grilla), y después Diseño:
+  barra de herramientas con pestañas (11 bis, CD26).
+- **Después (mismo día):** el rectángulo de derecha a izquierda se dibuja punteado (respuesta de fichas, spec/next
+  c7e828f). Costo de las mezclas antes de laminar (`color_mixing_plus.md`, regla 12, con `mix_changes_estimate` de la
+  otra sesión): el aviso al prender la mezcla con una sola boquilla y la tarjeta «Boquillas distintas y colores»
+  dicen «unos N cambios de filamento» para los modelos de la placa (49 para el cubo de 10 mm en 1 : 1); todavía sin
+  zonas pintadas ni partes con mezcla propia. Guion `mix_changes.txt`. Orden de guion nueva: `add-mix A B`.
+- **CI local (a4bc6aa sobre d420339):** gcc y clang 1209/1209. ASan: un uso después de liberar en
+  `tests/test_color_mix.cpp:473` (de la otra sesión, avisada; ya arreglado en ba84a92) y
+  `ui_project_import_settings` sin el aviso a tiempo con la máquina cargada; sola, en ASan, pasa (lentitud, no error).
+
+## 2026-11-11 — interfaz: purga por colores y cómo bajarla (color_mixing_plus.md, reglas 37 y 38)
+
+- **Hecho:** sin `wipe_tower.purge_volumes` escrita, el laminado usa la purga de cada par por los colores de los
+  filamentos (`purge_table` de la otra sesión). En «Más de la torre de purga», la fila «Volúmenes de purga» dice «por
+  colores»; un número escrito ahí vale para todos los pares, como antes; «Pares…» abre la tabla de pares (fila: de,
+  columna: a), que muestra los valores por colores hasta que la persona cambia uno (entonces la tabla es suya) y
+  «Volver a los colores» la vacía. El aviso de costo de la mezcla y su tarjeta, si la purga pasa del 50 % del
+  filamento, dicen el porcentaje y lo que la baja con sus cambios y su purga (`mix_purge_suggestions`): apagar las
+  subcapas, capas más altas para el filamento que más hay, solo la superficie. Orden de guion nueva: `pref level`.
+- **Pruebas:** `mix_changes.txt` (49 cambios, 90 % de purga para el cubo de 10 mm amarillo y azul 1 : 1; la
+  sugerencia de solo la superficie; «Pares…»); `unit_fields.txt` sigue escribiendo un valor para todos. 184/186
+  pruebas de interfaz en paralelo; las 2 que fallaron por la carga pasan solas. Captura de la tabla revisada:
+  amarillo→azul 128 mm³, azul→amarillo 224 mm³.
+- **Después:** la estimación antes de laminar lee la altura de cada filamento (`mixing.cadence_heights`,
+  `height_a`, `height_b`; 3aff0cf de la otra sesión): con 0,3 y 0,15 mm el cubo da 44 cambios, no 49 (guion).
+- **Sigue:** selector `mixing.predictor` y la pestaña «Color buscado» cuando el motor los suba; selección múltiple y
+  barra de vista abajo al centro.
+
+## 2026-11-11 — interfaz: las tarjetas de la mezcla de colores y la predicción espectral
+
+- **Encontrado:** las tarjetas «Mezcla de colores: capas» y «…: dónde va» (de la otra sesión) no tenían filas en la
+  app: ningún ajuste `mixing.*` se podía cambiar desde el panel, ni `extrusion.transmission_distance`.
+- **Hecho:** sus filas (subcapas, alto por filamento, altura del ciclo, solo la superficie, paredes de más, purga en
+  el relleno, predicción del color) y la TD en «Flujo». El color de cada mezcla sale de un solo lugar
+  (`App::blend_color`): el mezclador simple o, con `mixing.predictor = "spectral"`, `mix_color_spectral` con la TD
+  de cada filamento; se recalcula con cada cambio de ajustes. Guion `mix_settings.txt` (campos con coma decimal, y
+  el color de la mezcla cambia al pasar a la predicción espectral con TD 3 mm).
+- **Después:** en el diálogo de mezclas, «Color buscado» (regla 4: la elegida y 3 recomendaciones con su distancia
+  CIEDE2000, aviso si no se alcanza; `match_color` con las TD de la predicción) y «Paleta rápida» (regla 22: ciclos
+  de hasta 2 o 3 capas; agrega a la lista las mezclas que faltan, con el nombre de su color). La lista muestra el
+  nombre de cada mezcla. Guion `mix_match.txt` (MX5, MX6, MX18).
+- **Visto y no arreglado:** al subir el número de filamentos, una mezcla ya creada puede quedar con el número de un
+  filamento nuevo (#3 con 4 filamentos); los nombres de color del motor mezclan mayúscula y minúscula inicial.
+- **Sigue:** la pieza de muestras (`palette_piece`, CM8) en la placa, el eje del degradé y
+  `MixChangeOptions::extent` cuando llegue a209135; después selección múltiple y barra de vista.
+
+## 2026-11-11 — interfaz: conectores del corte (model_tools.md, regla 18)
+
+- **Hecho:** la herramienta Cortar tiene «Conectores»: espiga fija o pasador, redondo o cuadrado, tamaño,
+  profundidad y tolerancia; un clic sobre el plano del corte pone uno, el clic derecho saca el más cercano; sin
+  ninguno, uno en el medio de la sección. La espiga se suma a la mitad de abajo (o a la de arriba con «Invertir
+  plano», que se da vuelta para que apunte hacia arriba) y el hueco del otro lado es un volumen negativo, más ancho y
+  más hondo por la tolerancia; el pasador hace el hueco en las dos y sale como un modelo aparte de doble largo. La
+  mitad que lleva la espiga no se da vuelta aunque se pida. Órdenes de guion: `cut`, `expect-model`.
+- **Pruebas:** `cut_connectors.txt` (MT22: mitad de 8 mm con la espiga, hueco de 4,2 × 3,1 mm) y `cut_pin.txt`
+  (MT23 y la espiga invertida). No laminado con los conectores ni impreso: «not tested on hardware».
+- **Sigue:** plano libre, encastre a presión, cola de milano, base hexagonal, el resultado en dos partes (MT24).
+
+## 2026-11-11 — interfaz: el número de una mezcla sigue a los filamentos (MX30)
+
+- **Hecho** (respuesta de fichas, spec/next, `color_mixing_plus.md` «Número de una mezcla»): al cambiar la cantidad
+  de filamentos, las mezclas se renumeran después de ellos (de 2 a 4, la #3 pasa a #5) y los modelos y su pintura de
+  color las siguen; una mezcla que usa un filamento que ya no está queda apagada, sus modelos van con el filamento 1 y
+  un aviso lo dice. Los ajustes propios de una parte que nombren una mezcla todavía no se renumeran.
+- **Pruebas:** `mix_numbers.txt`. Orden de guion nueva: `expect-extruder`.
+- **Decisión:** un proyecto viejo cuyas mezclas tienen números que chocan con filamentos no se renumera al abrirlo:
+  se descarta la mezcla (como ya hace `mix_usable` en el motor), porque el número viejo es ambiguo.
+- **CI local:** `tools/ci_linux.sh` EXIT 0 (gcc 1241/1241, clang 1242/1242, ASan 1241/1241); el tramo de gcc quedó
+  mezclado con una compilación mía, clang y ASan cubren el commit.
+
+## 2026-11-11 — interfaz: la mitad que apoya sobre el corte no lleva la espiga (MT32)
+
+- **Hecho:** la mitad de arriba siempre apoya plana, así que una espiga con «Invertir» pasa a la de abajo; con «Dar
+  vuelta la de abajo» la espiga pasa a pasador. Un aviso lo dice. Ninguna mitad se gira con la espiga.
+- **Pruebas:** `ctest -R "ui_script_cut_(connectors|pin)"` pasa (6/6 de corte y mezcla).
+
+## 2026-11-11 — interfaz: el degradé en el diálogo de mezclas (color_mixing_plus.md, reglas 3 y 17)
+
+- **Hecho:** la mezcla que se edita tiene «Degradé»: eje Z, X o Y, cada filamento con su lugar (0 a 100 %), hasta 4,
+  y en lugar de la secuencia de capas la tira de su color de punta a punta. Antes de laminar se ve con el color del
+  medio (regla 17). El costo antes de laminar le pasa al motor el ancho de la pieza en su eje (`extent`). En X o Y
+  sin subcapas avisa que cambia en escalones de una capa. En la lista: «Degradé X: 1 - 2».
+- **Medido:** el cubo de 10 mm con 1 : 1 son unos 49 cambios; en degradé Z, 25; en X, 41 (con dos filamentos el
+  ancho no cambia la cuenta: cada capa tiene los dos en alguna franja).
+- **Pruebas:** `mix_gradient.txt` (órdenes nuevas `mix-gradient`, `expect-mix-changes`). No laminado ni impreso.
+- **Sigue:** la pieza de muestras `palette_piece` (CM8) en la placa.
+
+## 2026-11-11 — interfaz: partes de un objeto, pieza de muestras (CM8) y vista previa de colores (regla 17)
+
+- **Hecho:**
+  - un objeto de la placa puede tener partes: tramos seguidos de sus triángulos, cada uno con su extrusor (0: el del
+    objeto). El laminado recibe cada parte como un objeto aparte con su extrusor (el motor ya las une); el proyecto
+    las guarda en `models[i].parts` (`docs/PROJECT.md`) y rechaza partes que no cubren la malla. «Recargar desde el
+    disco» las borra si cambian los triángulos;
+  - en el diálogo de mezclas, después de la paleta rápida, «Poner la pieza de muestras en la placa» carga
+    `palette_piece(n)`: un modelo «Paleta de colores» con la base (filamento 1) y una parte por muestra, con su
+    filamento o su mezcla, y la lista con el nombre de cada número;
+  - en Preparar, con más de un filamento o con mezclas, cada parte se ve con el color de su filamento o mezcla, y la
+    pintura de color encima (hasta 2 millones de triángulos; se dibuja con las piezas de la pintura).
+- **Pruebas:** `[project]` (partes de ida y vuelta, nativo y 3MF; el reparto al laminar), `palette_piece.txt`
+  (orden nueva `expect-parts`). No laminado entero ni impreso: «not tested on hardware».
+- **Decisión:** compilo en `build-ui` para no pisar el `build` del CI local.
+- **Sigue:** la lista de partes en el panel de objetos (cambiar el extrusor de una parte), abrir las partes de un 3MF
+  (FM9) y el corte en dos partes (MT24).
+- **Después:** en la herramienta Material, cada parte con su extrusor («El del objeto» o uno propio); las partes
+  siguen a sus mezclas cuando se renumeran (MX30). Pruebas: `palette_piece.txt` (`part-extruder`, `open-mixing off`).
+- **CI local** de 9793f19: gcc 1245/1245; clang falló solo en `ui_script_palette_piece` porque leyó el guion mientras
+  lo editaba (no del código); se vuelve a correr entero.
+
+## 2026-11-11 — interfaz: ajustes por parte, corte en dos partes (MT24) y separar en partes (regla 19)
+
+- **Hecho:** cada parte tiene sus ajustes propios sobre los del objeto (el laminado recibe los dos unidos y los de la
+  parte aparte, `part_settings`); se editan en la lista de Objetos («Parte: …») y en la ventana de la pieza; el
+  proyecto los guarda en `parts[k].settings`. La herramienta Cortar ofrece «Dos objetos» o «Un objeto con dos
+  partes»: las mitades quedan juntas donde estaban, sin conectores ni dar vuelta. «Separar › En partes» deja los
+  pedazos como partes del mismo objeto, en su lugar; la pintura y los datos de Ingeniería quedan si los triángulos
+  no cambian de orden.
+- **Pruebas:** `[project]` (los ajustes de una parte de ida y vuelta y unidos al laminar, MT24), `cut_parts.txt`
+  (`cut 4 parts`). «Separar en partes» no tiene prueba propia todavía: falta un modelo de prueba con dos pedazos.
+- **Sigue:** abrir las partes de un 3MF (FM9, hace falta que la lectura dé los tramos: lo pido a la otra sesión),
+  el degradé entre dos puntos (MX31) cuando el motor suba `from`/`to`.
+
+## 2026-11-11 — interfaz: degradé entre dos puntos (color_mixing_plus.md, regla 3: MX31)
+
+- **Hecho:** el eje del degradé ofrece «Entre dos puntos»: inicio y fin en mm de la pieza (X e Y desde su medio, Z
+  desde su base), escritos o con «En la pieza» y un clic sobre ella; en la vista, una esfera con el color de cada
+  punta y una flecha entre ellas sobre cada pieza que usa la mezcla. El costo le pasa al motor el ancho de la pieza a
+  lo largo de la recta en XY. Con dos puntos el eje queda en Z, que es lo que vale para una recta casi vertical.
+- **Medido** (cubo de 10 mm, estimación del motor): de (−5, 0, 5) a (5, 0, 5), 43 cambios; de (0, 0, 0) a
+  (0,5, 0, 10), 25 (como el degradé en Z).
+- **Pruebas:** `mix_gradient.txt` (orden nueva `gradient-points`).
+- **Falta:** arrastrar las esferas.
+
+## 2026-11-11 — interfaz: pintar colores (multi_extruder.md, regla 1; model_tools.md, regla 27)
+
+- **Hecho:** el canal «Colores» de la herramienta Pintar se abre con más de un filamento o con mezclas (antes estaba
+  apagado); muestra un cuadro por filamento y por mezcla con número hasta 16 (lo que guarda la pintura), y las marcas
+  se ven con el color de su filamento o mezcla. Fuera de la herramienta, la vista de colores ya las mostraba.
+- **Pruebas:** `paint_colors.txt` (orden nueva `paint-color`), los `[ui]`. No laminado ni impreso.
+- **CI local:** la corrida de f2150b7 se cortó en gcc por un Xvfb que no arrancó (pruebas mías corriendo a la vez,
+  1252/1253); se repite sin correr pruebas con Xvfb mientras tanto.
+- **Sigue:** relleno inteligente (MT30), deshacer de la pintura y del corte (MT31).
+
+## 2026-11-11 — interfaz: relleno inteligente de la pintura (model_tools.md, regla 27: MT30)
+
+- **Hecho:** la herramienta Pintar elige «Pincel» o «Relleno inteligente» con su ángulo (30° por defecto): un clic
+  pinta las caras vecinas mientras el doblez entre ellas no pase el ángulo (con `face_region`); Shift borra. Vale para
+  todos los canales.
+- **Pruebas:** `smart_fill.txt` (MT30: en un cilindro de 10 × 20 mm, el costado, unos 1257 mm², sin las tapas; la
+  tapa sola, unos 314). Órdenes nuevas `add-cylinder` y `smart-fill`; `expect-paint-area` acepta un máximo.
+- **CI local** de f84cc40: gcc 1252/1254, las dos que fallaron por «Xvfb failed to start» (carrera de pantallas entre
+  pruebas paralelas) pasan solas; clang y ASan se corren aparte.
+
+## 2026-11-11 — interfaz: deshacer el corte, la pintura y los cambios de la placa (model_tools.md, regla 29: MT31)
+
+- **Hecho:** Ctrl+Z y Ctrl+Y ahora también deshacen y rehacen cortar, separar (en piezas o en partes), espejar,
+  borrar un modelo, cada trazo o relleno de pintura y «Borrar todo» de la pintura, además de mover (UI45). Cada paso
+  guarda una copia de la placa antes del cambio; un trazo que no pinta nada no deja paso. Las copias se limitan a 5
+  millones de triángulos entre todas (las más viejas se sueltan).
+- **Pruebas:** `undo_plate.txt` (MT31: pintar, cortar y mover; tres Ctrl+Z vuelven a la pieza entera, sin pintura,
+  en su lugar; Ctrl+Y rehace). `place_undo` y `more_cards` siguen pasando. Orden nueva `expect-models`.
+- **Falta** de la regla 29: la lista de pasos al lado de los botones.
+
+## 2026-11-11 — interfaz: el asistente señala lo que nombra (PLAN, «Ayuda, lo que sigue»)
+
+- **Hecho:** cada paso del asistente que nombra una parte de la pantalla la marca con un borde violeta encima de
+  todo: Abrir, la impresora, el panel de ajustes, las herramientas de la placa, Laminar y, cuando está, Imprimir.
+  «Ajustes en una sola página por pestaña» ya estaba hecho desde el 2026-10-29: queda marcado en PLAN.
+- **Pruebas:** `tour_points.txt` (órdenes nuevas `tour` y `expect-tour-points`). Captura del paso de Laminar
+  revisada.
+- **Falta:** el texto de los ajustes en inglés (la ayuda (i) lee `docs/CONFIG.md`, que está en español).
+
+## 2026-11-11 — interfaz: elegir varios modelos y el contorno de lo elegido (interface.md, «Navegación», regla 1)
+
+- **Hecho** (ficha en `spec/next`, pasa `check_spec.py`): el rectángulo elige todos los modelos que toma (de izquierda
+  a derecha los de adentro, de derecha a izquierda los que toca), y las herramientas actúan sobre el más cercano al
+  punto de partida; Ctrl o Mayús con un clic suman un modelo o sacan uno elegido, y con el rectángulo suman; un clic
+  en la cama vacía suelta todos; Supr borra todos los elegidos. Lo elegido ya no cambia de color: lleva un contorno
+  de 2 px del color de acento por su silueta (las aristas entre una cara que mira al ojo y otra que no, y las
+  abiertas), más tenue donde otra pieza lo tapa (un rayo al medio de la arista; hasta 3000 aristas). Con más de
+  400 000 triángulos, el contorno es su caja. Así también se ve con la vista de colores.
+- **Pruebas:** `multi_select.txt` (órdenes nuevas `expect-selected`); pasan los 155 `ui_` sin las de Vulkan, OpenGL,
+  Estructural y Aerodinámica. Capturas revisadas.
+- **Falta:** mover, girar y escalar varios juntos (hoy actúan sobre uno).
+- **CI local** (clang de 9a1a7c4): 1253/1255; las dos fallaron por pantallas (una «Xvfb failed to start», la otra pasa
+  sola); ASan en curso.
+- **MX33, casillas de la pintura en el proyecto** (2026-11-11, acordado con la sesión de interfaz). `Project::paint_slots`
+  (`"paint_slots"` en el JSON, hasta 16 números de 0 a 254; otro valor rechaza el archivo) y `with_color_slots`: la marca
+  k del canal de color pasa a `paint_slots[k-1]`, 0 o fuera de la tabla es la pieza propia (sin pintar); tabla vacía,
+  sin cambios. `tisma node` la aplica al cortar un proyecto; la interfaz la aplica en su corte. Prueba `[project][paint]`.
+  Además (búsqueda profunda): el color pintado terminaba un ancho de línea pasado el borde pintado (69005b6).
+- **Después** (MT33, respuesta de fichas): en «Un objeto con dos partes», los conectores quedan deshabilitados con la
+  nota «Los conectores son para piezas separadas» y vuelven a valer con «Dos objetos». Prueba: `cut_parts.txt`.
+- **Después** (pedido de fichas, para ME16 y ME17 por caja negra): `--paint color,N,X,Y,Z,RADIO` pinta con el
+  filamento o la mezcla N (de 1 a 16, la marca que el motor lee hoy). Prueba: `ui_paint_color_cli`.
+
+## 2026-11-11 — interfaz: las partes de un 3MF al abrirlo (formats.md, regla 5: FM9) y el contorno con Vulkan
+
+- **Hecho:** con `ModelFile::pieces` del motor (ee7e6b2), un 3MF se abre con un modelo por objeto de su placa, cada
+  uno en su lugar y con sus partes (nombre y extrusor del archivo); uno solo sin partes queda como antes. El contorno
+  de lo elegido se dibuja en una ventana propia detrás de las demás: en la lista de fondo, la vista Vulkan lo tapaba
+  (lo encontró `ui_view_sphere_prepare_vulkan_same_as_opengl` en ASan; ahora coinciden y los dos lo muestran).
+- **Pruebas:** `ui_open_3mf_parts` (`box_parts.3mf`: un modelo, dos partes); pasan las 98 de 3MF, importar,
+  proyecto, recargar y vistas.
+- **CI local** (ASan de abaaed6): 1254/1256; `ui_script_cut_parts` falló porque cambié su guion durante la corrida,
+  y la de Vulkan es la arreglada acá.
+
+## 2026-11-11 — interfaz: pedidos del dueño (16:16): abrir desde la placa vacía, selección más visible, Supr
+
+- **Hecho:**
+  - en la placa vacía, «Abrir un archivo, o arrastrar un STL o un G-code acá» es un botón: un clic abre el diálogo de
+    archivo (se ilumina al pasar el mouse, con la mano);
+  - la selección se ve mucho más: el modelo elegido se aclara (vuelve el tinte) y cada elegido lleva un contorno de
+    3 px del acento con un brillo de 8 px debajo (más tenue donde está tapado). El tinte es para el elegido principal:
+    la vista pinta un solo tramo con otro color; los demás elegidos llevan el contorno;
+  - Supr borra lo elegido desde un atajo global (antes vivía en la columna de herramientas, que no corre con una
+    calibración o el visor), mientras no se escriba en un campo.
+- **Pruebas:** `open_hint.txt` (orden nueva `expect-file-dialog`), `delete_one.txt`; pasan los 203 `ui_`, incluidas
+  las comparaciones de OpenGL con Vulkan. Captura con un modelo elegido revisada.
+- **Decisión:** esto cambia lo de la ficha en `spec/next` («el color de la pieza no cambia»): lo pidió el dueño.
+
+## 2026-11-11 — interfaz: el componente de diseño en una compilación propia (pedido del dueño)
+
+- **Hecho:** «Falta el componente de diseño» salía en toda compilación propia: solo los paquetes (release y nightly)
+  traen `solidcraft-cli`. Ahora el aviso dice qué falta y dónde lo buscó («solidcraft-cli 0.30.0 en
+  <carpeta>/solidcraft») y cómo tenerlo; y la opción de CMake `TISMA_SOLIDCRAFT=ON` baja la versión fija, comprueba su
+  SHA-256 (los de `THIRD_PARTY.md`) y la copia con sus licencias junto a `tisma`. Queda apagada por defecto: las
+  pruebas usan su sustituto y no conviene bajar 43 a 96 MB en cada CI.
+- **Probado:** en Linux, configurar con la opción baja y copia `solidcraft-cli` y sus cuatro archivos de licencia; la
+  pestaña Diseño ya no muestra el aviso. En Windows no se probó (el mismo zip que usa el paquete).
+- **Después** (pedido de fichas, 16:16): «Abrir un archivo» es un botón grande del acento en el medio de la placa
+  vacía, con «o arrastrá un STL, un 3MF o un G-code acá» debajo; con algo elegido y más de un modelo, los no elegidos
+  se ven un poco atenuados (al 80 %). Pasan los 203 `ui_`.
+- **Mantenimiento 2026-11-11 16:40** (con la sesión de interfaz trabajando en paralelo sobre `dev`, como acordó el dueño).
+  Revisado: `origin/main` sin nada nuevo; fuzz de G-code 2000 casos, semilla 1111202616: 0 fallas (23 no imprimibles);
+  `tools/ci_linux.sh` en b49decc: 1266/1267, la falla era de la vista (contorno de abaaed6) y la arregló la interfaz en
+  037c44e. Medido y mejorado: los colores pintados en un cubo de 200 × 200 × 20 mm (100 capas, una cara pintada) tardaban
+  2405 ms contra 7 ms sin pintar; las zonas crecían de a un ancho de línea hasta el centro. Ahora los primeros 8 pasos son
+  de un ancho y después 1,5 veces más largos cada uno, hasta 5 mm (adentro solo hay relleno), y el crecimiento para cuando
+  ya no crece ninguna zona pintada (la sin pintar no se usa): 300 ms (×8). Con `max_region_width` > 0, pasos de un ancho
+  como antes. Arreglado en la búsqueda de la tarde: bordes pintados (69005b6, b0bc7e4, 3f6744b). `CONFIG.md`
+  `max_region_width` ya no dice que el motor no lamina los colores pintados.
+
+## 2026-11-11 — interfaz: Diseño al estilo de Fusion 360, primer paso: la barra de herramientas (cad_design.md, regla 11 bis)
+
+- **Hecho** (prioridad del dueño, 16:30; ficha en `spec/next`, pasa `check_spec.py`):
+  - arriba de la vista, a todo su ancho, la barra con pestañas **Sólido**, **Boceto** (solo con un boceto abierto, se
+    abre sola al empezar uno), **Inspeccionar** y **Utilidades**; cada pestaña con grupos con nombre (Crear, Modificar,
+    Construir, Insertar, Inspeccionar…), sus 2 o 3 herramientas principales como íconos grandes y una flecha que abre
+    todas con ícono y nombre; al pasar el mouse, una tarjeta con el nombre, qué hace y su tecla. Lo que todavía no
+    está (Presionar/Tirar, Apariencia, Plano desplazado, Eje, Abrir STEP, Medir, Sección, Buscar herramienta) se ve
+    apagado con «Próximamente» (regla 11 novies). Los íconos son dibujos propios hechos con líneas;
+  - en Boceto: Línea, Rectángulo, Círculo, Arco y «Terminar boceto» en verde;
+  - el panel de la izquierda ya no repite Nuevo ni Operaciones; los botones de la vista y el cubo bajan lo que ocupa
+    la barra; tema oscuro de Tisma, como pidió el dueño (la regla 11 decies dice claro: a confirmar con fichas).
+- **Arreglado:** con el `solidcraft-cli` 0.30.0 real, cada construcción fallaba («outside the folders this agent may
+  use»): la sesión `mcp` ahora arranca `--headless` y con `--allow-path` a una carpeta propia de esta ejecución, donde
+  van las carpetas de cada construcción. El sustituto de las pruebas ahora rechaza escribir fuera de esas carpetas,
+  como el real. Probado con el real en Linux: la caja de 20 mm se construye (8000 mm³).
+- **Visto y no arreglado:** al abrir con `--view design` sin modelo, el cuerpo construido no se ve en la vista (pasaba
+  antes de este cambio también); entrando a Diseño desde Ingeniería sí se ve.
+- **Pruebas:** `design_tab`, `design_operations`, `fasteners` y `gears` abren el menú del grupo; pasan los 227 de
+  interfaz y de diseño.
+- **Sigue:** navegador a la izquierda (11 ter), línea de tiempo abajo (11 quater, CD27), cuadros flotantes (11
+  quinquies), menú radial (CD28) y buscar herramienta con S (CD29).
+- **Full Spectrum, regla 14 en piezas pintadas (MX14)** (2026-11-11, hoja de ruta; el dueño cortó la búsqueda de
+  errores a las 17:16). Una pieza con colores pintados lleva `mixing.extra_walls` paredes más, como una pieza con
+  mezcla, en la placa con objetos, con un solo objeto, sin objetos y en secuencial (en secuencial tampoco las llevaba
+  una pieza con mezcla; ahora sí). Decisión: en toda la pieza y no solo en la zona pintada, porque paredes solo en la
+  zona cambiarían el relleno de abajo capa por capa; las paredes de más que caen en la zona pintada toman su color.
+  Prueba `[mixing][paint]` MX14: 2 paredes y `extra_walls` 2 dan 4, las del lado pintado con 2; sin pintura, 2.
+  Regla 16 cerrada (subcapas, solo la superficie y sesgo trabajan por el número de la mezcla, también en lo pintado).
+  Regla 31 bloqueada hasta tener un 3MF real de Full Spectrum (MX20). Decisión: la regla 9 con A, B, A en una capa
+  (un filamento dos veces por capa) queda para después: pide pasadas con número propio en el plan de herramientas,
+  la torre, el escritor y el verificador, y la ficha marca el paso «a confirmar»; hoy esa capa va por altura con un
+  aviso. Full Spectrum queda así en el motor; sigue el ítem 4 de la beta (PF12 a PF14, IR8).
+- **Beta, ítem 4: los ajustes de un proyecto de otro programa se traducen** (2026-11-11; `project_import.md` reglas 6,
+  8 y 11; `profile_pack_format.md` «Tabla de traducción», spec/next). `TranslationRow` lleva la conversión de la fila
+  (`how`, `factor`, `values`, `base`), `prusaslicer_values` y `percent_of`; `translate_settings(tabla, ajustes, base)`
+  pone los traducidos y parecidos sobre los ajustes elegidos y nombra en `skipped` los que no convierten o el motor
+  rechaza. Conversiones: number, flag, factor, map, percent_of con `base`, absolute_only, number_strip_percent y
+  first_item; `"N%"` de la boquilla (PF12: OrcaSlicer 0,6 y "105%" → 0,63 mm) o de otra clave del motor (PF13: 50 % de
+  `acceleration.default` 5000 → 2500, la base leída del proyecto aunque venga después). `project_settings` lee
+  también la familia OrcaSlicer (`Metadata/project_settings.config`, JSON; las listas unidas con comas). Prueba
+  `[project_import]`. Falta: PF14 (`plate_temperature`; pedí su forma JSON), `at_least`, `points`, `number_or_percent`
+  y las `rule` con nombre (pedí su semántica), y que la interfaz aplique `translate_settings` al abrir (aviso a esa
+  sesión). La forma de `percent_of` a nivel de fila es la que entiendo de la ficha; se confirma con la respuesta.
+- **IR8, `ironing.angle` e `ironing.angle_fixed`** (2026-11-11; `ironing.md` de spec/next). El planchado gira `angle`
+  grados sobre la tapa de la capa (45 por defecto; negativo, como 45: los perfiles de OrcaSlicer traen −1); con
+  `angle_fixed`, `angle` es el ángulo desde X en todas las capas. Leídos, guardados, en la tarjeta de planchado y con su
+  guía. Prueba `[ironing]` IR8: tapa a 45°; 90 → 135°, 90 fijo → 90°, −1 → 90°.
+- **Ítem 4, segunda parte: PF14 y las demás conversiones** (2026-11-11, con la semántica que mandó QA). La tabla puede
+  traer `plate_temperature` (placas con su par de claves, `select`, `index`, `order`): la cama sale de la placa de
+  `curr_bed_type`, si no de `default_bed_type` (por nombre o por número), si no de la primera del orden con valor; solo
+  cuenta la fila de esa placa. Conversiones nuevas: `at_least` (`min`), `points` ("XxY,..." con 3 puntos o más),
+  `number_or_percent` (`nonzero`, `bare_percent_over`) y los límites `nonnegative`, `min`, `max` de `number`. Una
+  clave que el JSON de los ajustes no escribe (en su valor por defecto, o una variable nueva de la máquina) se crea en
+  su grupo y `parse_settings` la valida. Prueba `[project_import]` PF14 (65 °C con Textured PEI; por número; 55 °C sin
+  placa nombrada). Falta: las 12 `rule` con nombre (sus pasos están en el `note` de cada fila de la tabla publicada;
+  hoy van a `skipped`) y que la interfaz aplique `translate_settings` al abrir.
+
+## 2026-11-11 — interfaz: la línea de tiempo de Diseño (cad_design.md, regla 11 quater; CD27)
+
+- **Hecho:** abajo de la vista, a todo el ancho, un ícono por paso del diseño en orden (los mismos dibujos de la
+  barra): rojo con el motivo al pasar el mouse si falla, gris si espera o está suprimido; un clic lleva el historial
+  a él, doble clic lo renombra, clic derecho suprime/vuelve a usar, renombra o borra. La marca al final se arrastra
+  para volver atrás: lo de después espera (se construye sin eso) hasta que vuelve al final (CD27). La línea de
+  comandos queda arriba de la línea de tiempo.
+- **Pruebas:** `design_timeline_marker.txt` (caja y vaciado: 3904 mm³; la marca antes del vaciado, 8000; al final,
+  3904 de nuevo); pasan las 31 de Diseño.
+- **Sigue:** el navegador a la izquierda (11 ter) con el editor de lo elegido, los cuadros flotantes (11 quinquies).
+
+## 2026-11-11 — interfaz: pintar con más de 16 mezclas (color_mixing_plus.md, «Pintar con mezclas»: MX33)
+
+- **Hecho** (con `Project::paint_slots` y `with_color_slots` del motor, cf42945): cada mezcla tiene «Para pintar» en el
+  diálogo; por defecto valen las primeras 16 por número (la tabla vacía: cada marca es su número, como antes).
+  Destildar una deja su marca libre; tildar otra la toma; con las 16 en uso avisa «La pintura admite 16 colores:
+  destildá otra mezcla para usar esta» y no la marca. Los colores de Pintar, la vista y el laminado leen la tabla; el
+  proyecto la guarda; al renumerar mezclas (MX30) la tabla las sigue y la pintura no se toca.
+- **Pruebas:** `mix_paint_slots.txt` (órdenes nuevas `mix-paint`, `expect-paint-slot`); pasan las 66 de pintura,
+  mezclas, paleta, deshacer y proyecto. No laminado entero ni impreso.
+
+## 2026-11-11 — interfaz: el navegador de Diseño (cad_design.md, regla 11 ter)
+
+- **Hecho:** arriba del panel de Diseño, un árbol: **Origen** (planos XY, XZ e YZ, que con un clic empiezan un boceto
+  en ese plano, y los ejes), **Bocetos**, **Cuerpos** (cada uno con su ojo para mostrar u ocultar, un clic lleva el
+  historial a él, doble clic edita un boceto, clic derecho: suprimir, renombrar, editar boceto, borrar),
+  **Construcción** («Próximamente») y **Parámetros** con su valor. El historial con los campos de cada paso sigue
+  debajo hasta que los cuadros flotantes (11 quinquies) lo reemplacen.
+- **Pruebas:** pasan las 31 de Diseño; captura revisada.
+
+## 2026-11-11 — interfaz: buscar herramienta en Diseño (cad_design.md, regla 11 octies; CD29)
+
+- **Hecho:** la tecla S (o Utilidades › Buscar herramienta) abre un buscador arriba de la vista: filtra todas las
+  herramientas de la barra al escribir (sin distinguir mayúsculas ni tildes), con su ícono; Enter empieza la primera
+  que se puede usar. Falta fijar las más usadas a la barra.
+- **Pruebas:** `design_tool_search.txt` (CD29: «redo» muestra Redondeo y no Chaflán; Enter la empieza y pide las
+  aristas); pasan las 32 de Diseño.
+
+## 2026-11-11 — interfaz: el menú radial de Diseño (cad_design.md, regla 11 septies; CD28) y un arreglo del componente
+
+- **Hecho:** clic derecho en la vista de Diseño abre un menú en anillo alrededor del clic: Repetir (la última
+  herramienta usada, con su nombre), Boceto, Extruir («Próximamente» hasta los cuadros flotantes), Redondeo,
+  Mover/Copiar, Medir («Próximamente») y Borrar (el último paso: todavía no hay selección de cuerpos en Diseño); debajo,
+  el último paso con Suprimir y Renombrar.
+- **Arreglado:** la carpeta donde la sesión de SolidCraft puede escribir se nombraba con `std::rand()` sin semilla:
+  todas las ejecuciones probaban los mismos nombres, y después de 100 carpetas sobrantes en el temporal la sesión
+  arrancaba sin carpeta permitida y toda construcción fallaba (lo encontraron las pruebas). Ahora va con el número
+  del proceso y la hora, y se borra al salir. Quedaron 100 carpetas viejas vacías en el `/tmp` de esta sesión (no se
+  pudieron borrar desde acá).
+- **Pruebas:** `design_radial.txt` (CD28: los siete del anillo y lo del último paso; Repetir hace otra caja, Borrar
+  la saca); pasan las 39 de Diseño.
+- **P2: Moonraker encontrado en la red** (2026-11-11; `printer_connections.md` «Búsqueda en la red», con lo que QA leyó
+  de su documentación: un solo tipo DNS-SD, `_moonraker._tcp`; TXT `uuid`, `https_port`, `version`, `route_prefix`; solo
+  con `[zeroconf]` encendido). `MdnsService::url()` suma `route_prefix`; `confirm_moonraker(candidatos)` deja los que
+  contestan `GET /server/info`, cada dirección una vez, con lo que dice el servidor. Prueba `[device]` contra el
+  Moonraker simulado. Falta: que la interfaz busque `_moonraker._tcp.local` junto a `_octoprint._tcp.local` y pase los
+  resultados por `confirm_moonraker` (aviso a esa sesión). No probado con una impresora real.
+- **P2 en el motor, cerrado salvo la interfaz** (2026-11-11). Decisión: el «servicio local de `tisma`» para la app
+  (docs/MOBILE.md, diseño propio del 24-10) no lo pide la ficha `mobile_app.md`, que es posterior: la app habla con
+  las impresoras de la red con la capa compartida y usa la API en C del motor (`include/tisma/tisma_engine.h`). Queda
+  para después de la beta, si el dueño lo quiere para las impresoras USB de la PC. Las marcas sin fuente oficial
+  (Prusa por red fuera de PrusaLink, Elegoo, Creality con firmware propio, Flashforge) se agregan a mano, como dice
+  `printer_connections.md`. De la interfaz: la lista «En el perfil / En la impresora» y «Leer de la impresora» en
+  Límites, y llamar a la búsqueda de Moonraker. Sigue F6 (pedí a la sesión de spec los resultados de caja negra).
+- **F6, línea de base del motor** (2026-11-11 18:50, contenedor de 4 núcleos, sin GPU real: Vulkan es llvmpipe por
+  software). `tisma-engine slice` con los ajustes de fábrica, mediana de 3: Benchy 0,53 s (1 h 33 min estimados,
+  8,19 m de filamento), esfera de 50 mm 0,36 s, cilindro de 128 lados 0,04 s, islas 0,06 s. Con `compute.gpu` `auto`
+  y `off` el G-code es el mismo salvo la línea del ajuste, y el tiempo igual (no hay GPU que ayude). Falta: los
+  números de Tisma Slicer con las mismas piezas y ajustes (pedidos a la sesión de spec) y medir con una GPU real
+  (la PC del dueño).
+- **Después** (fichas, viendo las capturas): al construir, la vista de Diseño encuadra la pieza entera entre la barra
+  de arriba y la línea de comandos y la de tiempo de abajo (antes quedaba medio tapada). Fichas confirmó el tema
+  oscuro por defecto en Diseño (el claro, como opción en Preferencias: pendiente).
+
+## 2026-11-11 — interfaz: el cuadro de cada paso en Diseño (cad_design.md, regla 11 quinquies) y nombres en el menú radial
+
+- **Hecho:** al agregar una primitiva o una operación, o al terminar un boceto (su extrusión, CD26), sus campos se
+  abren en un cuadro propio abajo a la derecha de la vista (sobre la línea de comandos, el cubo queda libre), con el
+  nombre arriba y «Aceptar» / «Cancelar» (Enter y Esc cuando no se escribe en un campo). Cancelar saca el paso nuevo
+  o vuelve el paso editado a como estaba. En el historial, ese paso dice «Se edita en el cuadro de la derecha». La
+  vista ya construye mientras se cambian los campos (vista previa en vivo). Con el cuadro abierto, el clic derecho no
+  abre el menú radial (se acepta o cancela primero).
+- **Menú radial** (QA de fichas): cada ícono lleva su nombre debajo.
+- **Pruebas:** `design_dialog.txt` (Cancelar saca la caja; Aceptar la deja); `design_radial.txt` acepta el cuadro
+  antes del clic derecho; pasan los 220 de interfaz y diseño.
+- **Falta** de la regla: flechas y anillos en la vista para arrastrar distancias y ángulos.
+- **Después** (QA de fichas): las teclas del guion no distinguen mayúsculas («key Escape» = «key escape»; Esc ya
+  cerraba el cuadro); en Diseño el encuadre deja la pieza llenando unos dos tercios de la vista, centrada (antes,
+  un tercio).
+
+## 2026-11-11 — interfaz: flechas para arrastrar las medidas en Diseño (cad_design.md, regla 11 quinquies)
+
+- **Hecho:** con el cuadro de una primitiva abierto, una flecha por medida sale de la cara que mueve (roja en X,
+  verde en Y, azul en Z, como el gizmo de la placa); se arrastra con el mouse, el valor va al lado del puntero y la
+  pieza se construye de nuevo al soltar. Por ahora solo cuando ese paso es el único cuerpo del diseño (la
+  construcción da una sola caja para todos); los diámetros internos y las operaciones no tienen flecha todavía.
+- **Pruebas:** `design_handles.txt` (tres flechas en la caja; subir la del alto la hace más alta; Aceptar las saca);
+  orden nueva `expect-design-above`.
+
+## 2026-11-11 — interfaz: los ajustes de un proyecto de otro programa se aplican (beta, ítem 4) y Moonraker en la red (P2)
+
+- **Hecho:**
+  - al abrir un proyecto de otro programa con tabla de traducción, los ajustes traducidos y parecidos van como
+    cambios a mano sobre la impresora y los perfiles elegidos (`translate_settings` del motor, b23763a;
+    `project_import.md`, regla 8, en `spec/next`); el aviso ya no dice «todavía no se aplican», y otro aviso nombra
+    los que no tienen equivalente (los tres primeros y cuántos son). Falta «Ver detalle» con la lista buscable y
+    «Usar la impresora del proyecto» (regla 9);
+  - en Impresora › conexión, con Moonraker elegido, «Buscar» encuentra los `_moonraker._tcp` de la red que contestan
+    (`confirm_moonraker`, 12cfb7e) y los muestra como «Klipper (Moonraker)»; un clic pone su dirección. No probado
+    con una impresora real en la red: «not tested on hardware».
+- **Pruebas:** `project_import_settings.txt` (orden nueva `expect-setting`: el ancho de pared externa del proyecto,
+  0,45 mm, queda puesto; antes 0); pasan las 131 de importar, proyecto e impresora.
+- **Ítem 4: las filas del paquete** (2026-11-11, filas de profiles/next que mandó la sesión de perfiles, como datos).
+  La regla `role_width` (ancho de un rol: `"N%"` de la boquilla con `percent_of`, un número en mm; 0 toma el de
+  `with`, igual; los dos 0, el automático del motor). Una clave que solo está en `with` de otra fila no se escribe sola
+  (antes copiaba la fila y `extrusion_width` habría pisado la pared externa). La placa: el primer campo de `select` con
+  valor la nombra; «Default Plate» (0) o ninguna, el orden. Prueba `[project_import]` con las filas tal cual
+  (outer_wall_line_width, initial_layer_acceleration de Creality Print, hot_plate_temp y el bloque de placas).
+- **F6 cambia (dueño, 2026-11-11 20:30 UTC: «Tisma slicer olvidate»).** Sin comparación contra Tisma Slicer ni
+  migración de sus proyectos y perfiles; queda medir el motor solo, con y sin GPU. Números de la CPU que midió QA en dev
+  3e535f1 (Linux, 4 núcleos; capa 0,2, 2 paredes, 15 % de giroide, 3 sólidas arriba y abajo): cubo de 20 mm 0,05 s,
+  100 capas, 15 min 27 s, 1091 mm; esfera de 100 mm con 19 800 triángulos 1,11 s, 500 capas, 7 h 12 min, 38 497 mm; la
+  de 1 001 112 triángulos 1,78 s, 7 h 13 min, 38 535 mm; tubo de 20 mm 0,08 s, 50 capas, 8 min 49 s, 500 mm; big.stl
+  (60 mm, 319 200 triángulos) 0,56 s, 300 capas, 1 h 59 min, 9421 mm; T de 18 mm con apoyos 0,04 s, 90 capas, 19 min,
+  1215 mm; sin apoyos 0,04 s, 10 min, 382 mm. Con GPU: en este contenedor solo hay llvmpipe (Vulkan por software), sin
+  diferencia y con el mismo G-code; falta medir en la PC del dueño con una GPU real (no medido).
+- **F6: 3DBenchy en el banco** (dueño, 2026-11-11 20:50 UTC: «usemos el Benchy para medir el motor»). Licencia actual,
+  leída en https://www.3dbenchy.com/license/: CC0 1.0 (dominio público), que permite guardarlo y redistribuirlo; va en
+  `bench/3DBenchy.stl.xz` (2,9 MB; el STL de una pieza de github.com/CreativeTools/3DBenchy, SHA-256 comprobado), anotado
+  en `THIRD_PARTY.md`. `bench/run_benchy.sh` lo descomprime, comprueba el SHA-256 y lamina con y sin GPU. Con
+  `tests/data/settings.json` (los ajustes de los números de QA), 4 núcleos: 0,51 a 0,59 s, 240 capas, 1 h 11 min 30 s,
+  3943 mm de filamento; con `gpu` `auto` igual (solo llvmpipe, que el motor no usa). Firmware: Marlin 2 (`marlin`) y
+  Marlin 1 (`marlin_legacy`) ya son dos opciones en el motor y en la interfaz («Marlin 2», «Marlin 1»).
+- **PF15, `machine.flavor_choices`** (spec/next e80c11f; dueño: «de Marlin marquemos los dos»). Lista de firmwares
+  (nombres de `flavor`) que la impresora puede tener cuando la fuente no los distingue: el paquete trae
+  `["marlin_legacy", "marlin"]` en las impresoras de Cura. Se lee, se valida y se guarda (solo si no está vacía);
+  `flavor` sigue siendo el que se usa. Prueba `[settings]` PF15. La interfaz ya separa «Marlin 1» y «Marlin 2»; le
+  toca ofrecer solo los de la lista cuando la hay (aviso a esa sesión).
+- **La nube lamina un 3MF sin proyecto de Tisma** (2026-11-11, pedido de la sesión de la nube: desde que el dueño dejó
+  Tisma Slicer, los nodos laminan solo con el motor y fallaban los modelos de la biblioteca y los proyectos de otros
+  programas). `slice <archivo.3mf>` (forma de los nodos): si no es un proyecto de Tisma pero es un 3MF con modelo, sus
+  piezas por sus ítems de la placa con los ajustes por defecto y los cambios de la línea de comandos (`formats.md`,
+  reglas 5 y 18: los ajustes del archivo no se usan), con un aviso; si no tiene modelo, `not_a_project` como antes.
+  Prueba `[cloud]`: la caja de 20 × 20 × 10 en (128, 128) de su prueba da 50 capas.
+  Segunda parte (pedido de QA, prioridad antes de Full Spectrum): con `--config` el 3MF ajeno toma los ajustes del
+  trabajo; con `--translation <tabla>` los ajustes propios del archivo (familias PrusaSlicer y OrcaSlicer) se traducen
+  encima, como en la interfaz (`project_import.md` reglas 6, 8 y 11); `--config-over` y `--set` van al final. Prueba
+  `[cloud]`: un 3MF de la familia OrcaSlicer con capa 0,25 da 50 capas sin tabla, 40 con ella y 50 con `--set
+  layers.height=0.2`; una tabla rota es un error de entrada.
+  Tercera parte (pedido de la nube): `--translation-dir <carpeta translation/ del paquete>` elige la tabla del programa
+  que guardó el archivo (`project_source` + `translation_dialect`); sin tabla para ese programa, los ajustes del trabajo
+  con un aviso. Decisión: las tablas siguen en el paquete y no en el motor (`project_import.md` regla 11: «el motor no
+  lleva tabla propia»); el nodo suma la carpeta `translation/` del paquete. Prueba `[cloud]`: 40 capas con la tabla de
+  OrcaSlicer en la carpeta, 50 sin ella.
+- **PF15 en el lector del paquete** (aviso de la sesión de perfiles: `profile --pack ... --printer` dejaba afuera
+  `machine.flavor_choices` como «unknown setting» en las 617 corridas de impresoras de Cura). La lista de claves del
+  paquete sale de `describe`, que no escribe la lista vacía; ahora la conoce. Prueba `[pack]` PF15.
+
+- **Beta, ítem 4: las reglas con nombre de la tabla de traducción** (2026-11-11; `profile_pack_format.md`, «Tabla de
+  traducción», con la nota de cada fila de las tablas publicadas en `pack-2026.11.11-e304f80`, leídas como datos).
+  Cada regla lee las claves del proyecto por su nombre de PrusaSlicer (campo `prusaslicer` de la fila, que ahora se
+  lee; así nombra `with` las claves que ayudan) y escribe una o más claves del motor, validadas con `parse_settings`.
+  Hechas: `acceleration` (extruyendo si no es 0; el viaje en 0 toma el de extruir), `junction_deviation` (solo con
+  marlin2), `fans` (enfriamiento apagado y ventilador no siempre prendido: 0 y 0), `gap_fill` (velocidad 0 o apagado:
+  sin relleno de huecos), `wall_width` (el primero dado; si no, 1,125 boquillas), `xy_gap` (mm, o «N%» que el motor ya
+  toma del ancho del perímetro externo), `extruders` (cantidad por las boquillas, la lista si difieren, los desfases si
+  alguno no es 0), `filament_overrides` («nil»: el de la impresora) y `thumbnails`. También `role_width` en
+  PrusaSlicer: «N%» del alto de capa. Quedan para después y siguen nombradas en `skipped`: `gcode_template` (pide
+  traducir las variables del G-code), `ramming`, `correction` y `resin_notes`. Prueba `[project_import]`: las nueve
+  reglas en filas como las de OrcaSlicer y PrusaSlicer.
+
+## 2026-11-11 — interfaz: el 402 de la nube con palabras propias (cloud.md, CC16)
+
+- **Hecho** (QA de la sesión del motor; ficha en `spec/next` c565dfb): si el servidor contesta 402 al laminar o al
+  analizar en la nube, el aviso dice «Incluido en el plan …» con los planes que incluyen ese trabajo (laminar, FEA o
+  aerodinámica), y no el texto del servidor.
+- **Pruebas:** `cloud_slice_402.txt` contra el servidor de prueba (variable nueva `TISMA_MOCK_CLOUD_402`: contesta 402
+  con su propio texto en inglés, que no debe verse); pasan las de la nube.
+
+## 2026-11-11 — interfaz: los firmwares que ofrece cada impresora (PF15)
+
+- **Hecho:** con `machine.flavor_choices` del motor (fed27b1), la fila de firmware ofrece solo esos (más el que la
+  impresora tiene puesto), p. ej. Marlin 2 y Marlin 1 en las impresoras de Cura del paquete; sin la lista, todos como
+  antes. Lo elegido va a `machine.flavor` del perfil propio, como cualquier cambio.
+- **Pruebas:** `flavor_choices.txt` (Klipper no está entre las opciones; la captura muestra solo Marlin 2 y Marlin 1:
+  los textos de un menú abierto no los ve `expect-text`); pasan las 66 de ajustes e impresora.
+
+## 2026-11-12 — P2: AstroBox y Repetier-Server en el motor (devices.md)
+
+- **Hecho:** `src/device/print_host.*` suma dos tipos. Repetier-Server, por su Web API pública: probar
+  (`/printer/info` y `listPrinter` con la clave), subir a los modelos o, para imprimir, a los trabajos (campo
+  `filename`), el estado (`listPrinter`: trabajo y avance; `stateList`: boquilla y cama), seguir (`continueJob`) y
+  cancelar (`stopJob`); `HostConfig::printer` elige la impresora del servidor (vacío: la primera). Pausar no está en
+  la API publicada: «unsupported». AstroBox, sin API publicada: solo probar y subir, como OctoPrint (lo que midió la
+  ficha); estado, pausa y cancelar dan «unsupported».
+- **Pruebas:** dos casos nuevos contra simuladores propios; pasan las 22 de `[device]`. Sin probar con un servidor
+  real.
+- **Sigue:** la interfaz tiene que ofrecer los dos tipos (sesión de la interfaz). En el motor: Flashforge (la API
+  local no tiene documentación oficial: la ficha mide pedidos; el protocolo necesita decisión o ficha), FlashAir y MKS.
+
+## 2026-11-12 — gcode_macros: las variables de la Bambu Lab H3C (spec/next d497b7c)
+
+- **Hecho:** `nozzle_diameter_at_nozzle_id` es la lista por boquilla física (`machine.nozzle_diameter` en lista si la
+  hay; si no, la de una boquilla), `initial_no_support_nozzle_id` vale 0 (el motor empieza siempre por el primer
+  filamento) y `fins_extrude_safe_temp` es `[0]` salvo que el paquete la traiga en `machine.variables`. La expresión de
+  la línea 134 de la H3C (`nozzle_diameter_at_nozzle_id[initial_no_support_nozzle_id] == 0.2`) ya se lee.
+- **Pruebas:** un caso nuevo en `[macros]`; pasan las 133 de `[gcode]`. No probado con la H3C del paquete: lo mide la
+  sesión de perfiles.
+- **Decisión (P2):** Flashforge, FlashAir y MKS quedan sin hacer: no hay documentación oficial accesible (la de
+  FlashAir ya no contesta y el archivo web no se alcanza desde aquí) y `PLAN.md` dice que ahí decide el dueño. Se
+  pregunta en el resumen de la mañana.
+
+## 2026-11-12 — macOS antes de la beta: diálogos nativos de abrir y guardar
+
+- **Hecho:** en macOS, `FileBrowser` usa NSOpenPanel y NSSavePanel (AppKit, documentación pública de Apple), como
+  BH40 en Windows: el título, la carpeta, las extensiones como tipos permitidos y, al guardar, el nombre propuesto, la
+  extensión agregada y la pregunta antes de reemplazar (del sistema). Las corridas con guion y capturas siguen con el
+  diálogo propio. `PLAN.md` marcaba sin hacer la CI de macOS y el .dmg, hechos el 10-11; quedan marcados.
+- **Pruebas:** en Linux compila sin cambios; el archivo `.mm` solo lo compila la CI de macOS. No probado a mano en una
+  Mac.
+- **Sigue (macOS):** la vista (MoltenVK o OpenGL), la cámara USB con AVFoundation, la biblioteca para iOS.
+
+## 2026-11-12 — nube: el estado del servicio (cloud.md regla 4a, spec/next dd61f25)
+
+- **Hecho:** `cloud::Client::status` lee `GET /v1/status` sin sesión: `status` (`ok`, `slow`, `down`), las etiquetas
+  y el motivo en los dos idiomas, los tipos de cálculo que nadie hace, la espera más larga, los nodos y la hora.
+  `ServiceStatus::warn()` dice si hay que avisar; `label(es)` y `message(es)` dan el texto en el idioma de la
+  interfaz. El servidor simulado de las pruebas lo contesta.
+- **Pruebas:** un caso nuevo en `[cloud]` (CC21 del lado del motor); pasan las 32.
+- **Sigue:** la interfaz lo pide al abrir el panel de la nube y antes de mandar, y muestra el aviso sin bloquear
+  (sesión de la interfaz).
+
+## 2026-11-12 — macOS antes de la beta: el motor para iOS (empezado)
+
+- **Hecho:** `tools/build_ios.sh` arma `tisma_core` para iPhone (arm64) y para el simulador (arm64), sin interfaz,
+  pruebas ni GPU; junta en cada uno el motor con oneTBB y Clipper2 en `libtisma_engine.a` y hace
+  `TismaEngine.xcframework` con `include/`. El trabajo «iOS library» de la CI lo corre en macOS 15, mira que
+  `tisma_run_cli` esté en las dos y sube el xcframework; no hace fallar la corrida mientras se pone en marcha.
+- **Pruebas:** ninguna aquí (necesita Xcode); el primer resultado sale de la CI de GitHub.
+- **Sigue:** lo que diga esa corrida.
+
+## 2026-11-12 — interfaz: el diálogo al abrir un proyecto de otro programa (project_import.md, regla 9; beta, ítem 4)
+
+- **Hecho:** al abrir un proyecto con tabla de traducción, un diálogo «Proyecto de <programa>»: «N piezas, 1 placa.
+  Ajustes: A traducidos, B parecidos, C sin equivalente», la impresora que nombra el proyecto, «Ver detalle» (los
+  tres grupos con cada clave y su valor, con buscador) y «Usar la impresora del proyecto» (si el paquete la tiene por
+  ese nombre: la elige y vuelve a poner encima los ajustes del proyecto) o «Usar la mía». El aviso de los sin
+  equivalente nombra solo las claves, cortas (antes copiaba G-codes enteros); el primer aviso ya no dice que los
+  ajustes no se traen, y otro lo dice solo cuando de verdad no se traen (no hay tabla para ese programa). Las
+  placas se cuentan como una hasta que la lectura las dé.
+- **Pruebas:** `project_import_settings.txt` (el diálogo, la impresora del proyecto, el detalle, «Usar la mía»);
+  pasan las 60 de importar, proyecto y 3MF. Captura revisada.
+
+## 2026-11-12 — interfaz: flechas también en las operaciones de Diseño (regla 11 quinquies)
+
+- **Hecho:** Redondeo, Chaflán y Vaciado, con su cuadro abierto, tienen una flecha desde la arista de arriba que
+  cambia su medida (radio, distancia o espesor) al arrastrarla, con el valor junto al puntero. Las demás operaciones
+  (agujero, patrones, rosca…) todavía no tienen flecha.
+- **Pruebas:** `design_handles_op.txt` (el vaciado de la caja de 20 mm, ahora abierta arriba, 3392 mm³; arrastrado, pasa de 4200);
+  pasan las de Diseño.
+
+
+## 2026-11-12 — interfaz: Vaciado sin caras (regla 7)
+
+- **Hecho:** la herramienta real (0.30.0) exige de 1 a 1000 caras para vaciar. Mientras no hay caras elegidas, el
+  cuadro de Vaciado deja Aceptar en gris y dice «Elegí al menos una cara para vaciar» (Redondeo y Chaflán: «Elegí al
+  menos una arista»). Si el paso termina igual sin caras, el historial dice esa línea en vez del JSON crudo de la
+  herramienta (para otros fallos muestra solo el error del comando que falló) y el paso queda rojo en la línea de
+  tiempo. El simulador de pruebas ahora rechaza el vaciado sin caras, como la real.
+- **Pruebas:** `design_shell_no_face.txt` (nueva); `design_operations`, `design_timeline_marker` y
+  `design_handles_op` vacían ahora la caja abierta arriba (3392 mm³). Pasan las 6 de Diseño que lo tocan.
+
+## 2026-11-12 — interfaz: estado de Tisma Cloud, AstroBox y Repetier-Server
+
+- **Hecho:** al abrir el diálogo de la nube se pide `GET /v1/status` (cloud.md, regla 4a; CC21). Si el servicio
+  está lento o caído, el diálogo lo dice con las palabras del servidor («Tisma Cloud: Caído — …»), y lo vuelve a
+  avisar al mandar un laminado, sin bloquear el envío. En Dispositivo, el tipo de programa en red suma AstroBox y
+  Repetier-Server; Repetier pide además la impresora del servidor (vacío: la primera), que se guarda con la
+  conexión. Sin pausar en Repetier, y en AstroBox sin pausar ni cancelar (solo probar y mandar).
+- **Pruebas:** `cloud_down.txt` (el simulador de la nube sin nodos) y `print_host_kinds.txt` (los dos tipos nuevos,
+  «Probar» sin respuesta). Pasan con `cloud`, `cloud_slice_402` y `print_host_offline`. No probado con un AstroBox
+  ni con un Repetier-Server de verdad.
+
+## 2026-11-12 — gcode_macros: has_tpu_in_first_layer, long_retraction_when_ec y curr_bed_type (spec/next)
+
+- **Hecho:** `curr_bed_type` es la placa elegida o, sin placa, «Cool Plate»; `has_tpu_in_first_layer` es verdadero si
+  el filamento es TPU; `long_retraction_when_ec` es falso salvo que el paquete la traiga. Con un solo filamento por
+  ahora: con varios, el de la primera capa y el actual (`multi_extruder.md`) quedan para cuando el G-code los cambie.
+- **Pruebas:** pasan las 133 de `[gcode]` (la prueba de variables sin llenar usa ahora otra variable).
+
+## 2026-11-12 — macOS antes de la beta: el motor para iOS compila
+
+- **Hecho:** el trabajo «iOS library» de la CI pasó en f1822c4: `TismaEngine.xcframework` para iPhone y simulador
+  (arm64, desde iOS 16.3: ahí empieza `to_chars` de punto flotante en la biblioteca de C++), con `tisma_run_cli` en las
+  dos partes; queda como artefacto de cada corrida. En iOS no hay otros programas: los scripts de posprocesado avisan
+  que no pueden correr (`std::system` no existe allí). Desde ahora el trabajo cuenta en la corrida.
+- **Antes:** 517a604 rompió la compilación de macOS (prender OBJCXX hizo compilar los `.m` de GLFW como Objective-C++);
+  66cb7e6 lo arregla compilando solo `file_dialog_macos.mm` como Objective-C++; macOS volvió a verde (corrida 927).
+- **No probado:** el xcframework desde una app de iPhone; los diálogos de macOS a mano.
+- **Sigue (macOS):** la cámara USB con AVFoundation, la vista (MoltenVK u OpenGL), la firma del .dmg (cuenta del dueño).
+
+## 2026-11-12 — cámara USB de la computadora: la parte sin cámara (printer_connections.md, reglas 2 y 3)
+
+- **Hecho:** `src/device/usb_camera.*`, igual en todos los sistemas: `choose_camera_format` (el mayor hasta
+  1280 × 720 con 10 imágenes por segundo o más, MJPEG antes que sin comprimir; si ninguno llega, el más rápido y después
+  el más chico), `camera_format_text` para la línea de al lado de la elección, y `FramePacer` (hasta 15 por segundo en
+  pantalla, siempre la más nueva, las tardías salteadas y no acumuladas, aviso tras 10 s sin imágenes o al
+  desconectarse). `Info.plist` ya declara el uso de la cámara (regla 7).
+- **Pruebas:** dos casos en `[camera]`; pasan las de `[device]`.
+- **Sigue:** la captura (regla 6: openpnp-capture, MIT; antes, leer su licencia en la versión exacta y anotarla en
+  `THIRD_PARTY.md`), el pedido de permiso en macOS, y en la interfaz la elección por impresora (regla 1).
+- **Decisión (cámara USB, regla 6):** openpnp-capture 0.0.30 (MIT) anotada en `THIRD_PARTY.md`, solo para Windows y
+  macOS. Su parte de Linux trae libjpeg-turbo con la licencia IJG, que no está en la lista permitida; en Linux la
+  captura va a ser propia (V4L2, documentación pública del kernel) y el MJPEG se decodifica con stb_image (MIT, ya
+  anotada). Si el dueño acepta IJG, se puede usar la biblioteca entera.
+- **Cámara USB en Linux, la lista (regla 1):** `list_usb_cameras()` recorre `/dev/video*` por V4L2 (documentación
+  pública de la API del kernel) y da nombre y formatos MJPEG y YUYV con sus tamaños e imágenes por segundo; los nodos
+  sin formatos (metadatos) no cuentan. En Windows y macOS da vacío hasta compilar openpnp-capture. Sin cámara en esta
+  máquina: la prueba solo comprueba que no falla. **No probado con una cámara real.** Sigue: abrir y leer imágenes
+  (V4L2 `VIDIOC_REQBUFS`/`mmap`/`VIDIOC_DQBUF`, MJPEG con stb_image).
+- **Cámara USB, las imágenes:** `src/device/camera_frame.*`: YUYV a RGBA (BT.601) y los MJPEG sin tablas de Huffman
+  completados con las típicas de T.81 (Anexo K.3), que muchas cámaras UVC no mandan. Prueba: un JPEG escrito con
+  stb_image_write, sin sus tablas, sale mal; con las de K.3 sale idéntico. Sigue: la captura V4L2 (`VIDIOC_REQBUFS`,
+  `mmap`, `VIDIOC_DQBUF`) y su uso en la interfaz (la decodifica `ui::decode_image`).
+- **Cámara USB en Linux, la captura:** `UsbCapture` abre la cámara en el formato elegido (`VIDIOC_S_FMT`, el ritmo con
+  `VIDIOC_S_PARM`), comparte 4 búferes (`VIDIOC_REQBUFS`, `mmap`), arranca (`VIDIOC_STREAMON`) y `read` espera hasta
+  el tiempo dado y devuelve la imagen más nueva, devolviendo las demás a la cámara (regla 3); si la cámara se va,
+  `disconnected()` lo dice. En Windows, macOS e iOS `open` dice que todavía no hay cámaras USB. Prueba: abrir una que
+  no existe falla con el motivo. **No probado con una cámara real.** Sigue: la elección por impresora en la
+  interfaz (regla 1, sesión de la interfaz) y openpnp-capture en Windows y macOS.
+- **iOS, primer laminado (sesión de la app de iPhone, 12-11-2026):** con el xcframework de f1822c4, en el simulador
+  iPhone 16 Pro con iOS 18.5, `tisma_run_cli` lamina `cube20.stl` con un `--config` mínimo: código 0 y un G-code de
+  más de 1 KB (su corrida 43180443557). `--version` también da 0. El mensaje que confundía (un STL sin `--config` por
+  el camino de los nodos) se arregló en b276520. Sin probar en un iPhone real.
+- **Cámara USB en Windows y macOS, plan (para un bloque de día, con la CI a la vista):** compilar las fuentes de
+  openpnp-capture 0.0.30 en un objetivo propio (`common/` + `win/` o `mac/`, con un `version.h` propio) y no su
+  `CMakeLists.txt`, que fija `/MT` en MSVC (choca con el `/MD` del motor) y suma sus pruebas; primero en un trabajo de
+  la CI que no haga fallar la corrida, como se hizo con iOS. Su API da las imágenes en RGB24 (`Cap_captureFrame`):
+  `UsbCapture` tiene que decir el tipo de imagen (MJPEG, YUYV o RGB). En macOS, pedir el permiso de cámara
+  (`AVCaptureDevice requestAccessForMediaType:`) antes de abrirla (regla 7). Al compilarla pasa a la tabla de
+  `THIRD_PARTY.md` con su entrada en `resources/credits.json` y su licencia en `resources/licenses/`.
+
+## 2026-11-12 — interfaz: cámara USB de la computadora por impresora
+
+- **Hecho:** en Dispositivo, cada impresora (USB, de red o Bambu Lab) elige su cámara: «La cámara de la impresora»
+  (solo las Bambu Lab), «Sin cámara» o una cámara USB conectada. La elección se guarda por impresora en las
+  preferencias, y la cámara se busca otra vez por su nombre si cambió de dispositivo. Al lado se ve lo que da la
+  cámara (tamaño, formato y las imágenes por segundo reales). La vista va en el panel de la impresora USB, debajo
+  de los datos en una de red, y en lugar de su cámara en las Bambu Lab. Usa el formato de la regla 2, muestra hasta
+  15 imágenes por segundo sin acumular, y avisa si la cámara se desconecta o pasa 10 s sin mandar imágenes. Las
+  imágenes quedan en memoria y la cámara se suelta al dejar la página.
+- **Pruebas:** `usb_camera_choice.txt` (sin cámaras en esta máquina: la lista lo dice, en USB y en red). Pasan con
+  `print_host_*`, `bambu_print` y `device_*`. **No probado con una cámara real:** en Windows y macOS la lista sale
+  vacía hasta que el motor tenga su captura.
+
+## 2026-11-12 — interfaz: flechas en extruir y mover (regla 11 quinquies)
+
+- **Hecho:** con su cuadro abierto, un boceto extruido tiene una flecha a lo largo de la normal de su plano que cambia
+  la distancia, y Mover tiene una flecha por eje (X, Y, Z) que cambia el desplazamiento, en los dos sentidos. Se suma
+  `expect-feature-above` a los guiones de prueba. Faltan los anillos de ángulo (revolución, giro, patrón circular) y
+  las flechas de los patrones y el agujero.
+- **Pruebas:** `design_handles_move.txt` y `design_handles_extrude.txt`; pasan las 7 de flechas, operaciones,
+  cuadro y línea de tiempo.
+
+## 2026-11-12 — interfaz: el cuadro de Mover y las flechas tapadas (QA)
+
+- **Hecho:** en Mover cuerpo, «Desplazar (mm)» va arriba y sus tres campos llevan X, Y y Z al lado: ya no se corta. Si
+  una flecha cae debajo del cuadro del paso, el cuadro pasa al otro lado de la vista (una vez por paso, sin
+  parpadeo), y las manijas quedan siempre encima.
+- **Pruebas:** `design_handles_move.txt` arrastra ahora la flecha de X (antes tapada) y la de Z; pasan las de flechas,
+  operaciones, cuadro, radial y línea de tiempo.
+
+## 2026-11-12 — interfaz: anillos de ángulo en Diseño (regla 11 quinquies)
+
+- **Hecho:** con su cuadro abierto, el giro de Mover, la revolución de un boceto y el patrón circular tienen un
+  anillo alrededor del cuerpo, perpendicular a su eje, con el tramo barrido más fuerte y una manija en el ángulo.
+  Arrastrarla alrededor cambia el ángulo, con el valor junto al puntero. El cero del anillo queda a 45° de los ejes
+  para no tapar las flechas.
+- **Pruebas:** `design_ring_move.txt` (gira la caja con el anillo); pasan las de flechas, operaciones y cuadro. La
+  revolución y el patrón circular usan el mismo anillo, pero no tienen prueba propia.
+
+## 2026-11-12 — interfaz: el boceto al estilo de la regla 11 sexies
+
+- **Hecho:** al editar un boceto, «Terminar boceto» va en verde arriba a la derecha y, a la derecha de la vista
+  (debajo del cubo), la paleta del boceto:
+  - línea de construcción (las nuevas salen de construcción);
+  - mostrar cuadrícula (cada 10 mm, más marcada cada 50);
+  - ajuste a la cuadrícula (F9);
+  - mostrar restricciones y mostrar cotas;
+  - mirar de frente;
+  - sección, apagada con «Próximamente».
+  Las restricciones se ven como íconos chicos en verde junto a la geometría (H, V, //, L, =, O, T, F), y doble clic
+  sobre el número de una cota abre un campo para escribir el valor nuevo; si contradice al resto, no cambia nada.
+  Se suma `double-click-control` a los guiones de prueba. En el historial, el lado del cuadro del paso sigue al lado
+  real (QA).
+- **Pruebas:** `design_sketch_palette.txt` (la paleta, y la cota de 40 mm cambiada a 50 con doble clic); pasan las 22
+  de Diseño.
+
+## 2026-11-12 — interfaz: las herramientas del boceto en la barra (QA)
+
+- **Hecho:** la fila de herramientas del boceto, que se montaba sobre la barra de íconos, ya no existe. La pestaña
+  Boceto de la barra tiene sus grupos:
+  - Crear: línea, rectángulo, círculo, arco, Extruir y Revolucionar;
+  - Modificar: recortar … escalar;
+  - Restricciones: cota y las geométricas, con su letra;
+  - Inspeccionar: distancia y área;
+  - Insertar: DXF y SVG de entrada y DXF de salida;
+  - Terminar.
+  Los modos (Referencias F3, Ortogonal F8, Ajuste a la cuadrícula F9, Polar F10) y el plano van a la paleta. En el
+  panel izquierdo quedan solo las restricciones y los grados de libertad.
+- **Pruebas:** `design_sketch_edit` y `design_sketch_fillet` buscan ahora sus herramientas en los grupos de la barra;
+  pasan las 22 de Diseño. Captura revisada a 1400 × 860.
+
+## 2026-11-12 — interfaz: barra de vista abajo al centro (interface.md, navegación, regla 3)
+
+- **Hecho:** la barra de la vista pasa de arriba a abajo al centro, encima de lo que haya abajo (la línea de comandos
+  y la línea de tiempo de Diseño, la barra de movimientos de la vista previa). Tiene:
+  - Girar, Desplazar y Acercar: con uno elegido, arrastrar con el izquierdo hace eso; Esc o tocarlo otra vez vuelve;
+  - Encuadrar todo;
+  - perspectiva u ortogonal, con el ícono de la que está;
+  - el modo de imagen de antes, como estilo.
+  En la vista previa queda arriba, porque abajo están la leyenda, los movimientos y Exportar. Las vistas fijas
+  quedan en el cubo de vistas. El aspecto (degradé en los dos temas, grilla cada 10 mm con una
+  marcada cada 50) ya estaba.
+- **Pruebas:** `view_bar.txt` (girar, desplazar y acercar con el izquierdo, Esc, perspectiva y encuadrar). Capturas
+  revisadas en Preparar y Diseño a 1400 × 860. Falta el estilo con aristas y en alambre (necesita la vista Vulkan).
+
+## 2026-11-12 — API en C: trabajos para el iPhone
+
+- **Pedido:** la sesión del iPhone necesita la API de trabajos de `tisma_engine.h` para el avance, cancelar y la
+  memoria al laminar (`mobile_app.md`, reglas 12 y 19). Hasta hoy la biblioteca solo tenía `tisma_run_cli`.
+- **Hecho:**
+  - `src/cli/c_api.cpp`: contexto, `tisma_open_path`/`_bytes`, ajustes en JSON (poner y leer), estimación y límite de
+    memoria, `tisma_slice_start`/`_poll`/`_cancel`, resumen JSON, G-code a una ruta o por pedazos.
+  - Laminar corre el `slice` de la línea de comandos en un hilo del contexto.
+  - `src/slice/job.*`: un gancho por hilo con el avance por etapas; cancelar se nota en la próxima etapa.
+  - La vista previa y el análisis responden «not implemented yet».
+  - La CI de iOS comprueba que las 14 funciones estén en las dos partes de la biblioteca.
+  - Detalle en `docs/C_API.md`.
+- **Medido (Linux x86_64, pico de memoria del proceso `slice`, 4 hilos):**
+
+  | Modelo | Triángulos | Capas | Pico | Estimado |
+  | --- | ---: | ---: | ---: | ---: |
+  | cubo de 10 mm | 12 | 50 | 65 MB | 80 MB |
+  | esfera de 100 mm | 8 064 | 500 | 98 MB | 158 MB |
+  | Benchy | 225 706 | 240 | 128 MB | 130 MB |
+  | esfera de 100 mm | 319 200 | 500 | 178 MB | 217 MB |
+  | esfera de 100 mm | 1 998 000 | 500 | 323 MB | 538 MB |
+
+  Cancelar a mitad de esa esfera de 319 200 triángulos tarda entre 0,05 y 0,5 s, según la etapa.
+- **Pruebas:** `[c_api]`, 5 casos:
+  - errores por código;
+  - laminado completo con resumen y G-code;
+  - lectura por pedazos igual al archivo;
+  - límite de memoria;
+  - cancelar y volver a laminar;
+  - destruir con un trabajo en marcha.
+- **Sin probar:** en un iPhone real; la memoria en iOS no está medida.
+- **Sigue:** la vista previa por capas y el análisis por la API; los ajustes de un proyecto 3MF.
+
+
+## 2026-11-13 — interfaz: Sección de la vista en Diseño (regla 11 novies)
+
+- **Hecho:** Inspeccionar › Sección, y la casilla «Sección» de la paleta del boceto, cortan la vista con un plano.
+  Lo que queda del otro lado del plano no se dibuja en los cuerpos; la cama no se corta y el diseño no cambia. Un
+  panel a la derecha elige el plano (perpendicular a X, Y o Z; el boceto empieza con el suyo), su lugar a lo largo
+  del eje dentro de la caja de los cuerpos, de qué lado se quita y Cerrar. Se hace en las dos vistas: OpenGL con
+  `u_section` en el sombreador de mallas, y Vulkan con `section` en el bloque del cuadro (`view_common.glsl`); los
+  sombreadores se recompilaron con `tools/compile_shaders.py`. La clave del cuadro incluye la sección, así que la
+  vista se redibuja al moverla.
+- **Pruebas:** `design_section.txt` (el panel, el eje, el diseño sin cambios, Cerrar). Pasan las 65 de Diseño y de la
+  vista, entre ellas las que comparan Vulkan con OpenGL. Captura revisada: la caja de 20 mm cortada en Y = 0 muestra
+  la mitad. La sombra todavía es la del cuerpo entero, y el corte no tiene tapa.
+
+## 2026-11-13 — interfaz: tapa del corte de la Sección (QA)
+
+- **Hecho:** el corte ya no se ve hueco. Las caras de atrás del cuerpo que se ven a través del plano se dibujan
+  planas, como el plano y un poco más oscuras, así que el corte parece macizo. Está en OpenGL y en Vulkan. Es una
+  tapa aproximada: sirve para cuerpos cerrados y no dibuja la tapa por separado. El panel de Sección queda debajo de
+  «Inicio» del cubo y de la paleta del boceto.
+- **Pruebas:** `design_section.txt` da vuelta el lado y comprueba que el panel no pisa «Inicio». Pasan las 65 de
+  Diseño y de la vista. Captura revisada.
+
+## 2026-11-13 — `analyze <modelo> --mode lightest-infill` (pedido de QA para Android e iPhone)
+
+- **Hecho:**
+  - `analyze <modelo> --config <s.json> --case <case.json> --mode lightest-infill -o <r.json>` busca el relleno mínimo
+    sobre una pieza suelta, igual que con un proyecto (`structural_optimization.md`, reglas 2 a 4).
+  - Hace primero la búsqueda uniforme, después las zonas (salvo con `--no-zones`) y los nervios (con `--ribs`).
+  - Sin proyecto, el factor de seguridad pedido es 2, el mismo que trae un proyecto nuevo; `--safety` lo cambia.
+  - El resultado tiene el mismo formato que con un proyecto: `tisma-engineering-result`, `kind` `lightest-infill`, y el
+    resumen con `found`, `density`, `min_safety`, `required_safety`, `zones` y `ribs`.
+  - La búsqueda se movió a `lightest_infill_search` (`src/cli/node.cpp`), que usan las dos rutas.
+  - `analyze` con `--case` va siempre por la ruta del modelo, aunque lleve `--mode`.
+  - Respuesta al iPhone: el motor no lee STEP en ninguna plataforma.
+- **Pruebas:**
+  - el cubo de 10 mm con un caso «as_printed» y `--safety 3`;
+  - un modo inválido y un factor fuera de rango dan error de uso;
+  - la prueba de la ruta de proyecto sigue pasando.
+
+## 2026-11-13 — API en C: el costo en el resumen (P13 del iPhone)
+
+- **Hecho:** `tisma_summary_json` da `cost` = gramos × `extrusion.cost` / 1000, redondeado a centésimos; sale `null`
+  sin precio o sin densidad. Documentado en `docs/C_API.md` y en el encabezado.
+- **Pruebas:** `[c_api]`, un caso nuevo: el cubo con densidad 1,24 y 20 por kg, y sin precio da `null`.
+
+## 2026-11-13 — macOS: comprobar la vista 3D en la CI
+
+- **Visto:** la vista con OpenGL pide un contexto 3.3 core «forward compatible», que macOS da, y no usa nada por
+  encima de OpenGL 4.1. Los shaders `#version 450` son los de Vulkan. En principio, el camino OpenGL ya sirve en macOS
+  sin MoltenVK.
+- **Hecho:** el trabajo de macOS (arm64 y x86_64) saca capturas de Preparar y Vista previa con `--graphics opengl`,
+  con la revisión estricta de las capturas, y las sube como `macos-view-<arch>`. Todavía no cuenta (continue-on-error)
+  hasta ver que pasa en los dos.
+- **Sin probar:** acá no hay Mac; lo dice la CI de GitHub después del envío.
+
+## 2026-11-13 — decisión del dueño: sin Thingiverse ni otros sitios de modelos
+
+- **Decisión (2026-11-13, por QA):** nada de Thingiverse ni de enlaces o descargas de otros sitios de modelos, en
+  ningún programa; solo la biblioteca de Tisma.
+- **Revisado en el motor y los instaladores:** no hay código de Thingiverse ni de otros sitios en `src/`. El instalador
+  de Windows (`packaging/windows/tisma.nsi`) y el `Info.plist` de macOS solo asocian archivos (.3mf, .stl). Ninguno
+  registra `tisma://` ni `prusaslicer://`. No hay nada que sacar.
+- **Queda para las otras sesiones:** la entrada «Thingiverse» del menú Más › Tisma (`apps/tisma/app.cpp`, la interfaz) y
+  `SiteLink.kt` con su `intent-filter` de `tisma://` y `prusaslicer://` (la app de Android).
+- **PLAN.md:** Thingiverse y `thingiverse.md` quedan fuera.
+
+
+
+## 2026-11-13 — interfaz: sin Thingiverse (decisión del dueño)
+
+- **Hecho:** sale la entrada Thingiverse de Más › Tisma y su texto (dueño, 2026-11-13: «usaremos nuestra biblioteca
+  nomás»; interface.md en spec/next). La biblioteca de Tisma queda como la única fuente de modelos en línea.
+  Revisado: la interfaz no tiene token de Thingiverse, no abre enlaces `prusaslicer://` ni `tisma://open`, ni
+  descarga de Printables o Thingiverse, y el instalador no registra ningún esquema de URL.
+- **Pruebas:** `no_model_sites.txt` (Más sin Thingiverse).
+
+## 2026-11-13 — macOS: la vista en la CI de GitHub (resultado)
+
+- **Resultado (corrida 1007, 9d489c8):** en las dos máquinas de macOS de GitHub (arm64 y x86_64) la ventana no abre:
+  «NSGL: Failed to find a suitable pixel format», «cannot open a window with OpenGL 3.3». No hubo capturas. El trabajo
+  sale verde solo porque el paso no cuenta.
+- **Por qué (lo más probable):** esas máquinas virtuales no tienen GPU, y en macOS GLFW pide un renderizador OpenGL
+  acelerado. Cualquier Mac real tiene GPU, así que esto no dice que la vista falle en una Mac de verdad. Con
+  MoltenVK sería igual, porque Vulkan sobre Metal también necesita GPU.
+- **Decisión:** el paso queda sin contar y sigue intentando, por si GitHub cambia las máquinas. La vista en macOS se
+  da por **no probada en hardware**: hace falta que un probador la abra en una Mac (Preparar y Vista previa, con
+  `--graphics opengl`).
+- **Sigue (macOS):** la prueba en una Mac real, la cámara USB con AVFoundation y la firma del .dmg (cuenta del dueño).
+
+## 2026-11-13 — API en C: la vista previa por capas (bloque de noche)
+
+- **Hecho:** `tisma_layer_count`, `tisma_layer_z` y `tisma_preview_segments` (`src/cli/c_api.cpp`). La vista previa
+  se lee del G-code terminado con `read_gcode_preview`, la misma lectura que usa el escritorio, una vez por trabajo.
+  Los segmentos salen por rango de capas y por tandas (`skip`).
+  - Tipos del escritorio a tipos de la API: muro externo; muro interno, que incluye el voladizo; relleno sólido;
+    superior; relleno; soporte, que incluye la interfaz; puente; falda o borde; viaje; el resto, OTHER.
+  - BOTTOM no se da todavía: el motor escribe las superficies de abajo como relleno sólido.
+  - La CI de iOS comprueba también estas 3 funciones.
+- **Pruebas:** `[c_api]`, en el caso del laminado completo:
+  - las capas suben;
+  - las tandas de 37 segmentos dan lo mismo que todo junto;
+  - hay muros externos;
+  - los segmentos de una capa están a su altura;
+  - una capa negativa da error.
+- **Sin medir:** la memoria de la vista previa en un teléfono; hoy lee el G-code entero de una vez.
+- **Sigue:** el análisis por la API (`tisma_analyze_start`), y los ajustes de un proyecto 3MF.
+
+## 2026-11-13 — API en C: el análisis estructural (bloque de noche)
+
+- **Hecho:** `tisma_analyze_start` y `tisma_analysis_json` (`src/cli/c_api.cpp`). El hilo del contexto corre
+  `analyze <proyecto> --sandbox --mode analyze --object N --instance 0 [--quality q]`.
+  - Avance: las líneas `progress N` se leen a medida que llegan, con un `streambuf` propio. En cada línea se mira la
+    cancelación.
+  - Resultado: el resumen de los nodos.
+  - Códigos: `needs_conditions` da `TISMA_NEEDS_CONDITIONS`; `too_large` da `TISMA_TOO_LARGE`.
+  - Después de un análisis no hay resumen de laminado, G-code ni vista previa.
+  - La CI de iOS comprueba también estas 2 funciones.
+- **Pruebas:** `[c_api]`, un caso nuevo con el bloque de PLA de 20 mm y 50 N:
+  - aguanta, con su rango y la masa;
+  - un objeto que no existe falla;
+  - sin condiciones da `TISMA_NEEDS_CONDITIONS`;
+  - una calidad o un objeto inválidos dan `TISMA_BAD_ARGUMENT`;
+  - cancelar en calidad normal termina en `TISMA_STOPPED`.
+- **Sigue:** los ajustes de un proyecto 3MF al laminar por la API (hoy hay que darlos con `tisma_set_settings_json`).
+
+## 2026-11-13 — API en C: un proyecto se lamina con sus ajustes (bloque de noche)
+
+- **Hecho:** si se abre un 3MF y no se dan ajustes, `tisma_slice_start` corre `slice <proyecto> -o … --summary …
+  --sandbox`, como en los nodos, con los ajustes del proyecto. El avance y la cancelación salen de sus líneas
+  `progress`. Un modelo suelto sigue necesitando `tisma_set_settings_json`.
+- **Pruebas:** `[c_api]`, un caso nuevo:
+  - el cubo de 20 mm del proyecto da 100 capas, gramos y la vista previa;
+  - un STL sin ajustes da `TISMA_BAD_SETTINGS`;
+  - cancelar y volver a laminar.
+- **Sin hacer:** el costo cuando el proyecto trae precio (sale `null`).
+- **Con esto, la API de `tisma_engine.h` está completa.**
+
+## 2026-11-13 — tiempo: los cambios de herramienta como preparación (print_time.md, regla 14; bloque de noche)
+
+- **Hecho:**
+  - Cada cambio de herramienta (`tool_change`, también el del MMU) deja una marca de tiempo antes y otra después.
+  - Ya planificado el tiempo, lo que hay entre las dos marcas va a la preparación: la retracción del cambio, el
+    movimiento de la boquilla nueva y el cambio del MMU. Sigue sumando también al tiempo total.
+  - Las esperas de la plantilla (`G4`) ya contaban por `machine_gcode`. Como el planificador suma las esperas al
+    final de la capa y no entre las marcas, no se cuentan dos veces.
+  - Los movimientos `G1` de la plantilla no se cronometran, porque su punto de partida no se conoce; eso ya era así.
+- **Visto y arreglado:** la selección de la primera herramienta, antes de imprimir, escribe la plantilla sin pasar
+  por `tool_change`. Ahora pasa por `machine_gcode` como el resto del inicio, así que sus esperas y calentamientos
+  cuentan en la preparación.
+- **Pruebas:** `[extruders][time]`, un caso nuevo:
+  - con una plantilla que espera 2 s, la preparación es la de los cambios sin plantilla más 2 s por cambio,
+    incluida la selección de la primera herramienta;
+  - corren también `[gcode]`, `[firmware]`, `[determinism]`, `[color_mix]` y `[mmu]`.
+- **La purga en la torre (mismo día):** el rammeo y el bloque de purga de cada cambio en la torre llevan la marca
+  `purge` desde el plan. El emisor abre un intervalo de tiempo al primero y lo cierra en el primer camino que no lo
+  es; ese tiempo va a la preparación. El armazón de la torre no cuenta como purga. El cambio de herramienta que cae
+  dentro de una purga no abre un intervalo propio, así que no se cuenta dos veces. Prueba: dos colores con torre, 50
+  cambios; la preparación pasa de 6 s sin torre a 258 s con torre y queda por debajo del total.
+- **Con esto, la regla 14 está completa.** Las reglas 11 y 15 (aprender de la impresora) necesitan la impresora.
+
+## 2026-11-13 — toolpath_time.md: medición y un choque entre fichas (bloque de noche, sin cambio de código)
+
+- **Medido hoy** (perfil por defecto, `tests/data/settings.json`):
+  - Benchy: 13 430 viajes, 9 418 de menos de 1 mm (contados por segmento), 29,9 m de viaje, 2 209 retracciones,
+    1 h 11 min 30 s;
+  - viajes entre líneas de superficie de arriba: 654; entre líneas de puente: 203;
+  - cubo de 20 mm al 20 % de relleno: 347 retracciones, 20 min 11 s.
+- **Regla 1:** el relleno sólido ya une sus líneas. La superficie de arriba es monótona: la regla une solo líneas que
+  siguen en el mismo sentido, y en la monótona eso no pasa nunca, así que no hay uniones. Las líneas de puente van
+  sueltas a propósito: el código dice que «una unión por el borde quedaría en el aire», y la regla 1 incluye los
+  puentes. **Pregunta para la sesión de fichas:** ¿se unen los puentes, y por dónde va la unión?
+- **Regla 5 probada y revertida:** si un viaje que queda entero dentro de la pieza no retrae (por largo que sea):
+  - el cubo baja de 347 a 1 retracción, que es TT6;
+  - el Benchy baja de 2 209 a 356 retracciones y de 1 h 11 min 30 s a 1 h 5 min 53 s (−7,9 %; TT4 pide −8 %
+    contra 1 h 12 min 28 s, y da −9,1 %).
+  - Pero 16 casos de prueba fallan, sobre todo los de `retraction_travel.md` (R1, R3, R4, R5, R6, R10, R11 y
+    OR1 «alrededor de viajes largos solamente»), además de enfriamiento, velocidad en Z y algunos de análisis.
+    Arman viajes por dentro que esperan retraer por pasar `retraction.min_travel`.
+  - Las dos fichas chocan: la regla 5 de `toolpath_time.md` contra el largo mínimo de `retraction_travel.md` y la
+    regla 5 de `gcode_motion.md`. Pregunté a la sesión de fichas cuál manda y si conviene un ajuste (por ejemplo,
+    retraer dentro solo con `retraction.min_travel` explícito). Hasta la respuesta queda como estaba.
+
+## 2026-11-13 — `retraction.only_crossing_walls` (toolpath_time.md, regla 5, TT6; respuesta de la sesión de fichas)
+
+- **Decisión de la ficha (spec/next):** la regla 5 va detrás de un ajuste nuevo, `retraction.only_crossing_walls`,
+  apagado por defecto. Apagado, mandan `retraction_travel.md` y la regla 5 de `gcode_motion.md` (R1 a R11 y OR1 sin
+  cambios). En los puentes, la unión de la regla 1 va solo si su tramo queda entero sobre lo apoyado.
+- **Hecho:**
+  - el ajuste en `Settings`, la lectura y la escritura de JSON y `docs/CONFIG.md`;
+  - el emisor y el plan de las rampas de caudal: prendido, un viaje que no sale de la pieza (`leaves_part` falso) no
+    retrae, por largo que sea;
+  - su lugar en la tarjeta de retracción (avanzado) y su explicación en español e inglés.
+- **Medido:** cubo de 20 mm al 20 %:
+  - prendido: 347 a 1 retracción, y de 20 min 11 s a 19 min 5 s;
+  - en el Benchy da 356 retracciones y 1 h 5 min 53 s, contra 2 209 y 1 h 11 min 30 s.
+- **Pruebas:**
+  - `[gcode]`, un caso nuevo, TT6: el cubo de prueba con relleno, 52 retracciones por largo y 0 con el ajuste;
+    ida y vuelta del JSON;
+  - pasan `[gcode]`, `[retraction]`, `[settings]` y `[ui]`.
+- **Falta:**
+  - la fila del ajuste en la ventana (sesión de interfaz);
+  - la unión de puentes sobre lo apoyado (regla 1);
+  - las reglas 2, 3, 6, 8 y 9.
+
+
+## 2026-11-13 — interfaz: «Retraer solo al cruzar paredes»
+
+- **Hecho:** la fila de `retraction.only_crossing_walls` (toolpath_time.md, regla 5; TT6) en la tarjeta de retracción,
+  después de «al cambiar de capa», con su texto en los dos idiomas.
+- **Pruebas:** `retract_crossing_walls.txt` (apagado por defecto, un clic lo prende).
+
+## 2026-11-13 — toolpath_time.md regla 1: las líneas de puente unidas sobre lo apoyado
+
+- **Decisión de la ficha (spec/next):** la unión de dos líneas de puente va solo si su tramo queda entero sobre lo
+  apoyado; si no, siguen separadas con un viaje.
+- **Hecho:**
+  - `find_bridges` guarda en `LayerSurfaces::bridge_support` lo impreso abajo alrededor de cada puente.
+  - `join_along_boundary` recibe una zona permitida opcional: una unión entra solo si sus extremos, los vértices del
+    borde entre ellos y los puntos medios quedan adentro.
+  - `rectilinear_fill` la gira al marco de las líneas (`join_inside`).
+  - Los puentes se unen con el largo de la regla 1, que es 2 × (ancho + espacio).
+- **Medido en el Benchy:**
+  - viajes entre líneas de puente, de 203 a 93;
+  - tiempo, de 1 h 11 min 30 s a 1 h 11 min 31 s;
+  - largo extruido de puente, de 967 a 1 024 mm (+5,9 %). Es por los tramos de unión: los puentes del Benchy son
+    cortos. El resto de los tipos no cambia, y el total sube 0,05 %. La ficha aclaró TT5 (spec/next): el 1 % vale
+    para el total y para cada tipo sin uniones; un tipo con uniones puede subir lo que extruyen sus tramos, si el
+    informe lo dice. Cumple.
+- **Pruebas:**
+  - `[infill]`, un caso nuevo: un cuadrado con zona permitida a la izquierda; ninguna unión sale de ella, y hay más
+    piezas que unidas del todo y menos que sueltas;
+  - pasa la batería sin interfaz completa: 996 casos.
+
+## 2026-11-13 — toolpath_time.md regla 2: el orden de las islas con mejoras de a dos (bloque de noche)
+
+- **Ya estaba:** vecino más cercano entre islas por la punta más cercana. Las reglas 3 y 6 (cada línea suelta desde
+  su punta más cercana, y la zona siguiente por su punto más cercano) ya las cumple `order_paths`.
+- **Hecho:** con 3 islas o más y sin etiquetas de objeto, el orden se arma antes del bucle.
+  - Primero el vecino más cercano desde el cursor, con un punto por isla (el centro de la caja de sus extremos).
+  - Después, mejoras de a dos (2-opt): se da vuelta un tramo del orden mientras el recorrido se acorte, hasta 8
+    pasadas.
+  - Dentro de cada isla, todo sigue igual.
+- **Medido:**
+  - placa de 30 cubitos de 5 mm al azar: viaje de 23,9 a 21,1 m (−11,7 %), tiempo de 34 min 36 s a 34 min 21 s;
+  - Benchy (pocas islas por capa): sin cambio en el viaje, +2 s.
+- **Pruebas:** pasa la batería sin interfaz (997 casos). No hay una prueba propia del orden: el punto de partida de
+  cada capa depende de dónde terminó la anterior. Queda la medición de arriba.
+- **Sigue:** la regla 9 (ordenar por tiempo y no por distancia) y la regla 8 (retraer mientras viaja, meta RT5 a
+  aprobar).
+
+## 2026-11-13 — V3: `;WIDTH` solo cuando cambia de verdad (GCODE_OUTPUT.md, «Ancho variable»; bloque de noche)
+
+- **Hecho:** `;WIDTH` se escribe cuando el ancho se aparta más de 0,005 mm del último escrito, y después de cada
+  `;TYPE` nuevo, como pide la ficha. Antes bastaba un cambio en la tercera cifra.
+  - La E de cada movimiento sigue su ancho real: solo se ahorra el comentario.
+- **Medido en el Benchy:**
+  - líneas `;WIDTH`, de 28 374 a 14 829 (la referencia de la ficha es 18 976);
+  - archivo, de 3,62 a 3,45 MB;
+  - mismo largo extruido por tipo y mismo tiempo.
+- **Prueba cambiada:** la torre de flujo (`[calibration]`) calculaba el caudal desde `;WIDTH`; ahora lo calcula desde
+  la E y el largo de cada movimiento, que es exacto. Con escalones de 0,005 mm, `;WIDTH` lo leía hasta 1 % de más.
+  Pasa la batería completa de pruebas unitarias.
+
+
+## 2026-11-13 — `walls.vertical_shell` (walls_extra.md, regla 7, W4)
+
+- **Hecho:** el ajuste `walls.vertical_shell` (`disabled`, `partial`, `enabled`), en la tarjeta «Pendientes», con su
+  guía. Diseño propio (`src/surfaces/surfaces.cpp`, `too_thin`): un punto del relleno de la capa i es macizo cuando
+  queda más cerca del exterior que el espesor t de las capas sólidas, medido en 3D: a la altura dz de la capa i + k,
+  tiene que estar a sqrt(t² − dz²) adentro de su borde. `partial` mide a las regiones de las capas (las paredes
+  cuentan) y solo hacia arriba; `enabled` mide a las regiones de relleno (las paredes no cuentan) y también hacia
+  abajo, sobre los voladizos. Lo agregado es relleno sólido, no superficie de arriba.
+- **Prueba nueva** (`[surfaces]`): pirámide de 45° con paredes de 0,4 mm: anillo macizo de 0,2 mm apagado, 0,447 con
+  `partial`, 0,847 con `enabled`; boca abajo, solo `enabled` agrega abajo.
+- **Medido (W4, capa por tipo, mm extruidos):**
+  - techo de 15°, capa 30: `disabled` y `partial` 38,6 de relleno sólido; `enabled` 131,0. La ficha pide 18,39 de más
+    con `partial` y lo mismo con `enabled`: con 2 paredes, en una pendiente suave el espesor normal (t·cos 15°) casi
+    no baja, y el motor no agrega nada con `partial`. Queda aparte la superficie de arriba (75,22 en la ficha, 0 en
+    el motor), que es el ítem siguiente del plan.
+  - hongo, capa 60: solo `enabled` agrega relleno sólido (31,7 mm; la ficha, 124,4). Cumple «solo `enabled`».
+  - cono, capa 20: la capa ya es toda maciza por `infill.solid_below_area` (área chica), en los tres modos.
+  - Benchy: `enabled` lleva el relleno sólido de 10 655 a 19 860 mm y el tiempo de 1h11m33 a 1h20m01 (+12 %); el
+    corte, de 1,14 a 1,21 s.
+- **Decisión pendiente:** la ficha dice `enabled` por defecto. Con `enabled`, 22 pruebas con números exactos cambian y
+  el Benchy tarda 12 % más. Queda `disabled` por defecto (lo de siempre) hasta que la sesión de fichas o el dueño
+  confirmen el cambio; entonces se rehacen esas pruebas.
+- Pasan todas las pruebas (998 sin interfaz, 93 de interfaz). No probado en una impresora.
+- **Sigue:** las superficies de arriba en pendiente (W4, techo); preguntar a la sesión de fichas por el valor por
+  defecto.
+
+## 2026-11-13 — `walls.vertical_shell` ajustado a W4 (pedido de QA)
+
+- **QA:** las filas de W4 son el contrato (Tisma Slicer quedó abandonado); ajustar hasta que las tres piezas queden
+  dentro del 10 %, y dejar `disabled` por defecto hasta entonces. Si con `enabled` el Benchy sube más de 5 %, avisar.
+- **Regla nueva** (`src/surfaces/surfaces.cpp`), en lugar del criterio en 3D del bloque anterior, que cubría de más
+  en las pendientes suaves y de menos en los voladizos:
+  - `partial`: una separación de línea (ancho de pared menos el solape) de relleno sólido más allá de la piel de
+    arriba, donde la capa i + n + 1 ya no cubre (la pendiente sigue bajando);
+  - `enabled`: además, donde el relleno de la capa de arriba se mete (la pendiente que tapan las paredes), esa franja
+    y 3/4 de línea más; y sobre los voladizos, el relleno que sale del relleno de n capas abajo, y dos líneas más.
+  Los anchos (una línea, 3/4, dos) están ajustados a W4.
+- **Medido (W4, mm de relleno sólido agregado a esa capa):**
+  | Pieza | `partial` | `enabled` | Ficha |
+  |---|---|---|---|
+  | Techo, capa 30 | +17,0 | +17,0 | +18,39 los dos (−7,6 %) |
+  | Hongo, capa 60 | 0 | 117,3 | solo `enabled`, 124,4 (−5,7 %) |
+  | Cono, capa 20 | 0 | 30,0 | solo `enabled`, 30,68 (−2,2 %) |
+  El cono se mide con `infill.solid_below_area` 0: con el valor de fábrica (70 mm²) esa capa ya es toda maciza.
+- **Benchy con `enabled`:** 1h11m33 → 1h21m46 (+14 %). Pasa del 5 % de QA, así que sigue `disabled` por defecto y se
+  avisó a QA.
+- Pasa la batería completa. No probado en una impresora.
+- **Sigue:** que QA decida el valor por defecto; las superficies de arriba en pendiente (techo de W4: 75,22 mm de
+  superficie de arriba en la ficha, 0 en el motor).
+
+## 2026-11-13 — `walls.vertical_shell`: `partial` por defecto (decisión de QA)
+
+- QA: si con `partial` el Benchy sube 5 % o menos, `partial` por defecto; si no, `disabled`.
+- **Medido, Benchy:** `disabled` 1h11m33, `partial` 1h11m41 (+8 s, +0,2 %); relleno sólido 10 655 → 10 970 mm (+3 %).
+- **Hecho:** `partial` por defecto (ajustes, CONFIG.md, guía). Pasa la batería completa (1091 casos) sin cambiar
+  ninguna prueba. No probado en una impresora.
+- **Sigue:** las superficies de arriba en pendiente (techo de W4); el pedido de las apps de `tisma_analyze_start`
+  con un caso JSON y la superficie de vóxeles.
+
+## 2026-11-13 — API en C: análisis de un modelo con un caso (pedido de las apps)
+
+- **Pedido de Android/iPhone:** que la API analice un modelo suelto con un caso JSON, como `analyze --case`, y dé la
+  superficie de vóxeles coloreada por seguridad, como `--mesh`. Hasta ahora usaban la línea de comandos, sin avance ni
+  cancelación en iOS.
+- **Hecho:** `tisma_analyze_case_start(ctx, caso)` y `tisma_analysis_mesh(ctx, &tamaño)`. Corre `analyze <modelo>
+  --config --case --mesh --progress` en su hilo; el avance sale de las líneas `progress: <etapa> <0 a 1>` (ahora las
+  lee `ProgressLines`) y la cancelación se mira en cada una. El informe va por `tisma_analysis_json`, y el PLY queda en
+  el contexto hasta el próximo trabajo. Están en el chequeo de símbolos de iOS de la CI y en docs/C_API.md.
+- **Prueba nueva** (`[c_api]`): cubo con la base fija y 100 N en la cara de arriba: informe, PLY, caso inválido,
+  JSON roto, sin modelo, y cancelación.
+- **Sigue:** las superficies de arriba en pendiente (techo de W4).
+
+## 2026-11-13 — Superficies de arriba en pendiente (techo de W4): investigación, sin cambios
+
+- En el techo de 15°, capa 30, la piel de arriba mide 17,4 mm² (una franja de unos 0,87 mm a lo largo del lado bajo).
+  Nada de esa franja queda «bajo el aire» según la regla 2 de `surfaces_infill.md`: la capa 31 la cubre entera,
+  porque su borde se corre 0,75 mm por capa y el relleno empieza a unos 1,37 mm del borde de la capa.
+- Probado y descartado: no contar la pared de afuera de la capa de arriba como tapa (0,45 mm) sigue dando 0 de
+  superficie de arriba. Para llegar a una línea (20,95 mm) habría que no contar casi 1 mm, sin una razón física.
+- La ficha da, con `disabled`, una línea de superficie de arriba y nada de sólido (el motor, dos líneas de sólido), y
+  con `partial` unas cuatro líneas de superficie de arriba y una de sólido. Es otra forma de armar la piel en
+  pendiente, no solo otra clasificación.
+- **Sigue:** preguntar a QA qué regla de comportamiento quiere (qué parte de la piel en pendiente va como superficie
+  de arriba), antes de cambiar la clasificación, que toca W7 y todas las piezas con escalones.
+- **Respuesta de QA:** la franja tapada por la capa 31 es correcta según la regla 2; W4 (spec/next) ahora comprueba
+  solo el relleno sólido de `vertical_shell` (+18,39 mm; el motor +17,0). Los 20,95 y 75,22 mm quedan de referencia.
+  Ítem cerrado sin cambios; W7 y los escalones no se tocan.
+
+## 2026-11-13 — Contraste del corte con `slicing.md` (C1 a C16)
+
+- **Hecho:** `tests/test_slicing_spec.cpp`, con las piezas de la ficha armadas en la prueba:
+  - C1 a C4: cantidad de capas y Z (cubo, prismas de 10,1 y 10,09 mm, primera capa de 0,3);
+  - C5: el borde del cono es su radio a mitad de la capa (9,85; 6,85; 3,85; 0,85 mm, dentro de 0,01);
+  - C9 a C11: normales invertidas, prismas superpuestos (una isla) y `even_odd` (dos islas de 5 × 20);
+  - C12, C13 y C16: marcos con agujero, `xy_offset` −0,2 y `fill_holes`;
+  - C14 y C15: `xy_offset` 0,2 y `first_layer_shrink` 0,2.
+  Cumplen todos sin cambiar el motor.
+- **Sigue:** C6 a C8 (grietas de 0,05, 5 y 12 mm), C17 (tramos del perímetro con `simplify_tolerance` 0 y 0,5),
+  C18 y C19 (capas más altas que la boquilla).
+
+## 2026-11-13 — `slicing.md` C6 a C8, C17 a C19; cierre de grietas arreglado
+
+- **Encontrado (C6):** el motor cerraba grietas de hasta `slicing.gap_closing_radius` (0,049 mm), y la regla 7 dice
+  hasta el doble (0,098). Una grieta de 0,05 mm dejaba la sección abierta y descartada: el cubo de C6 salía vacío.
+  Tampoco unía extremos abiertos más lejos (la ficha pide cerrar al menos 5 mm).
+- **Arreglo** (`src/slice/layers.cpp`, `close_cracks`): primero hasta 2 × el radio; si queda algo abierto, se unen
+  los extremos más cercanos con un tramo recto hasta 10 mm. C6: ancho 20,05; C7 (5 mm): 25,0 (la ficha 24,94, el
+  modelo 25); C8 (12 mm): la sección se descarta y se cuenta, como pide la ficha.
+- **C17:** con `simplify_tolerance` 0, la capa 11 del cilindro de 128 lados tiene los 128 lados (más los puntos donde
+  el plano cruza la diagonal de cada cara); con 0,5 quedan entre 12 y 24 puntos (Tisma Slicer: 65 y 16, con la
+  tolerancia propia de su G-code). **C18 y C19:** `check_settings` rechaza capas más altas que la boquilla.
+- Pasa la batería completa (1100 casos). No probado en una impresora.
+- **Sigue:** contrastar con `perimeters.md` (PLAN, F2).
+
+## 2026-11-13 — Contraste con `perimeters.md`; inicio de la costura alineada
+
+- **Hecho:** `tests/test_perimeters_spec.cpp` (desde el G-code): P3 (pared de 0,1 mm: nada), P4 (orden de los
+  cordones del marco), P5 a P7 y P9 (dónde empieza la pared de afuera).
+- **Arreglado (P5, P6):** la costura `aligned`, sin costura abajo, empezaba en el punto de Y máxima (en el cubo, la
+  esquina de X mínima). Ahora (`src/gcode/order.cpp`, `aligned_start`) empieza en una esquina si hay (un giro de más
+  de 29°), la de atrás a la derecha, y si no, al frente (Y mínima), como piden P5, P6 y W1. Las capas siguientes la
+  siguen como antes. Benchy: 1h11m41 → 1h11m43; 13 317 → 13 539 viajes, 29,9 → 30,1 m.
+- **Prueba cambiada:** la limpieza con `walls.outer_first` (OR1) necesitaba un viaje largo al relleno; con la costura
+  en la esquina es corto, así que esa parte de la prueba pone `retraction.min_travel` 0.
+- **Diferencia que queda (P4):** el motor cumple la regla 4 (cada contorno de adentro hacia afuera), pero intercala
+  los cordones del agujero y los de afuera por profundidad; la fila P4 pone primero los tres del agujero. Pregunta a
+  QA si la fila manda.
+- Pasa la batería completa (1103 casos). No probado en una impresora.
+
+## 2026-11-13 — Paredes agrupadas por contorno (P4, decisión de QA)
+
+- **QA:** manda la fila P4: primero todos los cordones de un contorno, de adentro hacia afuera, y después el
+  siguiente; intercalar por profundidad suma un viaje por cordón (toolpath_time.md, regla 6).
+- **Hecho** (`src/gcode/writer.cpp`, `wall_contours`): en una isla con más de un contorno (y sin
+  `walls.unsupported_last`), cada pared va con la pared externa más cercana a su primer punto; se imprimen los
+  agujeros primero y después el borde de afuera, cada uno en el orden de siempre (o al revés con `walls.outer_first`).
+  La prueba P4 ahora pide el orden de la fila.
+- **Medido, Benchy:** 13 539 → 15 219 viajes, 30,1 → 33,4 m de viaje, 2226 → 2339 retracciones, 1h11m43 → 1h12m33
+  (+50 s, +1,2 %). En el Benchy, con paredes finas entre agujeros y borde, agrupar viaja más que intercalar. Avisado a
+  QA con los números; si QA prefiere, el orden de los contornos puede salir del más cercano a la boquilla.
+- Pasa la batería completa (1103 casos). No probado en una impresora.
+
+## 2026-11-13 — P4: vuelta al intercalado (decisión de QA con los números)
+
+- QA cambió P4 en spec/next: la regla 4 dentro de cada contorno; el orden entre contornos y el intercalado, por menor
+  viaje. Probado ordenar los contornos por cercanía a la boquilla: Benchy 14 681 viajes, 32,8 m, 1h12m23, todavía
+  peor que intercalar (13 539 viajes, 30,1 m, 1h11m43). Se vuelve al intercalado por profundidad (`writer.cpp` como en
+  2e4364c); la prueba P4 comprueba la regla 4 en cada contorno.
+
+## 2026-11-13 — P8: costura `nearest` en el cilindro
+
+- Con la base de la ficha (sin relleno ni capas sólidas), el inicio de la pared de afuera queda en −135° en todas las
+  capas: cada capa termina en su pared externa y la siguiente empieza en el punto más cercano. La ficha midió en Tisma
+  Slicer un corrimiento lento (−87° a −60°); la regla es el punto más cercano, que se cumple. Con relleno, el inicio
+  salta entre 11° y 155° porque la capa termina en el relleno, que cambia de sentido; eso también es «el más
+  cercano». La prueba P8 pide que entre capas no salte más de 30° (sin relleno).
+
+## 2026-11-13 — Criterio de A1: placa con agujero contra Kirsch
+
+- Placa de 120 × 40 × 2 mm con agujero de 8 mm, tracción de 10 MPa, modelo macizo, vóxeles de 0,25 mm: K = 3,13
+  contra 3,14 de Kirsch con la corrección de ancho de Heywood (0,3 %). El pico queda en el borde del agujero.
+  Detalle en `docs/ANALYSIS.md`. Sin prueba automática: la solución tarda 66 s, demasiado para la batería.
+- Contraste de fichas del motor: las que quedan sin filas probadas son de la interfaz, del servidor o de cosas que
+  esperan al dueño (`pressure_advance_gcode.md` solo si el dueño lo pide; `support_fins.md` después de la primera
+  versión).
+
+## 2026-11-13 — Multigrilla con huecos y regla 9 de toolpath_time: decisiones
+
+- **Multigrilla con huecos (PLAN, A1):** la multigrilla es estructurada (interpolación trilineal por ejes, un nodo
+  grueso por punto de la grilla). Duplicar los nodos gruesos por cada pedazo separado dentro de una celda gruesa
+  obliga a niveles no estructurados (cada nodo grueso con su lista de nodos finos y pesos). Es un rediseño de varios
+  bloques, no de una noche: queda en el plan, con esta nota de diseño. Paso intermedio posible: en cada celda gruesa,
+  interpolar solo desde los nodos gruesos unidos por material al nodo fino (pesos renormalizados); reduce el
+  acoplamiento entre pedazos pero no lo saca.
+- **Regla 9 (ordenar por tiempo):** con los ajustes de fábrica el tiempo de un viaje crece con su largo (la
+  retracción depende del largo, `retraction.min_travel`), así que el más cercano es también el más rápido y el orden
+  no cambia; entre islas, todo viaje sale de la pieza y retrae. Solo cambiaría con `retraction.only_crossing_walls`.
+  Valor bajo: queda sin hacer. La regla 8 sigue «a aprobar».
+
+## 2026-11-13 — Mantenimiento: fuzz del G-code (2000 casos, semilla 20261113) y CI
+
+- **Fuzz:** 2 fallas, las dos arregladas; con los arreglos, 2000 casos, 0 fallas (21 piezas rechazadas por no
+  imprimibles, como siempre).
+  - Caso 1309: líneas de 0,075 mm con un `;WIDTH` que difería un 8 % de su ancho real. Lo trajo el umbral de 0,005 mm
+    de esta noche (`;WIDTH` solo si el ancho cambia más que eso): en una línea fina, 0,005 mm es mucho. Ahora el umbral
+    es el menor entre 0,005 mm y el 1,5 % del ancho (el chequeo admite 2 %).
+  - Caso 186 (tres extrusores, torre, limpieza): el chequeo guardaba lo retraído de cada extrusor al dejarlo, pero no
+    en cuántos tramos (cada tramo redondea E a 5 decimales); al volver, juzgaba la vuelta con la tolerancia de otro
+    extrusor. Ahora guarda los tramos por extrusor (`src/gcode/check.cpp`). El G-code estaba bien.
+- **CI completa (2be5831):** gcc y clang pasan enteras (1328 de 1328). La parte con ASan se cortó al llegar al límite de
+  2 h de la tarea de fondo, con dos fallas: `ui_view_sphere_preview_vulkan_same_as_opengl` (no arrancó Xvfb: del
+  entorno) y la prueba del análisis por la API, que esperaba como mucho 1 min y con ASan el análisis tarda más. La
+  espera de la prueba pasa a 10 min.
+- **Fuzz, dos semillas más** (7040bf2): 2026111302, 2000 casos, 0 fallas (23 rechazadas); 2026111303, 2000 casos,
+  0 fallas (30 rechazadas).
+- **Benchy con los 17 patrones de relleno**, cada uno solo, con `walls.vertical_shell` `enabled` y costura `random`,
+  y con soporte y `retraction.only_crossing_walls`: 51 laminados, todos pasan el chequeo al exportar.
+- **CI completa en 7040bf2:** cortó en la parte gcc por una sola prueba de la interfaz, `ui_script_gears`, con
+  «Xvfb failed to start» (sola pasa). El envoltorio `tests/xvfb_run.sh` reintentaba solo con «Failed to open display»
+  o «Server is already active»; ahora también con «Xvfb failed to start», hasta 5 veces.
+- **Multigrilla, paso intermedio:** no se probó. Tocaría a la vez la restricción, la interpolación y el operador de
+  Galerkin armado por elementos (hoy con pesos trilineales por eje), con pesos propios por nodo. Queda en el plan.
+- **Más mantenimiento** (35613c4): fuzz con la semilla 2026111304, 2000 casos, 0 fallas (16 rechazadas); las piezas
+  de W4 (techo, cono, hongo), los 30 cubos y el cubo de 20 mm con seis juegos de ajustes (de fábrica; `vertical_shell`
+  `enabled` con costura `nearest` y una pared; soporte con gyroid; capas de 0,12 con bufanda; modo vaso; paredes
+  `fixed`, la externa primero y relleno al 100 %): 30 laminados, todos pasan el chequeo.

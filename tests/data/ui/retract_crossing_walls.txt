@@ -1,0 +1,6 @@
+# The new advanced row of the retraction card (toolpath_time.md, rule 5;
+# TT6): «Retraer solo al cruzar paredes», off by default, a click turns it on.
+expect retraction.only_crossing_walls false
+click retraction.only_crossing_walls
+wait 3
+expect retraction.only_crossing_walls true

@@ -217,3 +217,21 @@ TEST_CASE("vase mode: not with supports (VA4)", "[vase]") {
     CHECK(parse_settings(settings_json(s)).vase);
     CHECK_FALSE(parse_settings("{}").vase);
 }
+
+TEST_CASE("vase mode: a hole or several pieces is said once (rule 7, VA5)", "[vase]") {
+    static const std::string said = "Vase mode with holes or several pieces: those turns are not a spiral and leave a seam";
+    Settings s = vase_settings();
+    s.bottom_layers = 3;
+    const auto count = [&](const SlicedModel& m) { return std::count(m.notices.begin(), m.notices.end(), said); };
+    // One cylinder: nothing.
+    CHECK(count(slice_model(cylinder(10.0, 5.0, 64), s)) == 0);
+    // Two boxes apart: said, once.
+    IndexedMesh two = box(10, 10, 5);
+    IndexedMesh other = box(10, 10, 5);
+    const auto base = std::uint32_t(two.vertices.size());
+    for (Vec3f v : other.vertices)
+        v.x += 20.0f, two.vertices.push_back(v);
+    for (auto tri : other.triangles)
+        two.triangles.push_back({tri[0] + base, tri[1] + base, tri[2] + base});
+    CHECK(count(slice_model(two, s)) == 1);
+}

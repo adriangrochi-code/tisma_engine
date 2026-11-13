@@ -927,7 +927,7 @@ public:
     explicit Emitter(const Settings& s)
         : relative_(relative_e(s)), dialect_(dialect_of(s.flavor)), time_(kinematics_of(s)),
           retract_(s.retract_length), retract_feed_(s.retract_speed), lift_(s.retract_lift),
-          min_travel_(s.retract_min_travel), z_feed_(s.travel_z_speed), marlin_(dialect_of(s.flavor).m204_print_travel),
+          min_travel_(s.retract_min_travel), only_crossing_(s.retract_only_crossing_walls), z_feed_(s.travel_z_speed), marlin_(dialect_of(s.flavor).m204_print_travel),
           accel_print_(s.acceleration), accel_travel_(s.travel_acceleration), travel_accel_(s.accel_travel),
           short_travel_accel_(s.accel_short_travel > 0.0 ? s.accel_short_travel : s.accel_travel) {
         const double r = s.filament_diameter / 2.0;
@@ -1067,6 +1067,23 @@ public:
     // nozzle with another offset moves over the same point, at `feed`.
     void tool_change(int next, double length, double restart, const std::string& lines, bool user,
                      std::array<double, 2> offset, double feed, const MmuSwap* mmu = nullptr) {
+        // The change counts as preparation (print_time.md, rule 14): its
+        // moves are the time between a mark before it and one after it, once
+        // planned (the planner adds waits at the layer's end, not between
+        // marks; the change's own waits count through machine_gcode).
+        // On the tower the purge's interval holds the change already.
+        const bool own = !purging_;
+        if (own)
+            changes_.push_back({time_.mark(), 0});
+        struct Close {
+            Emitter& w;
+            std::size_t index;
+            bool own;
+            ~Close() {
+                if (own)
+                    w.changes_[index].after = w.time_.mark();
+            }
+        } close{*this, changes_.size() - 1, own};
         extruder_off();
         wiped_path_.clear();
         if (mmu) {
@@ -1231,7 +1248,28 @@ public:
         other_time_ += seconds;
         preparation_ += seconds;
     }
-    double preparation_time() const { return preparation_; }
+    // The preparation: waits, heating, homing, levelling, and the tool
+    // changes once the time is planned.
+    // From a change's purge on the tower to the next path that is not one:
+    // the time between, preparation (print_time.md, rule 14).
+    void purging(bool on) {
+        if (on == purging_)
+            return;
+        purging_ = on;
+        if (on) {
+            purge_ = changes_.size();
+            changes_.push_back({time_.mark(), 0});
+        } else {
+            changes_[purge_].after = time_.mark();
+        }
+    }
+    double preparation_time() const {
+        double seconds = preparation_;
+        for (const Change& c : changes_)
+            if (c.after > c.before)
+                seconds += std::max(0.0, time_.time_at(c.after) - time_.time_at(c.before));
+        return seconds;
+    }
 
     void machine_gcode(std::string_view lines) {
         std::size_t at = 0;
@@ -1581,6 +1619,9 @@ public:
             text_ += t;
             text_ += '\n';
             type_ = t;
+            // A new type writes its width again (GCODE_OUTPUT.md, «Ancho variable»).
+            width_.clear();
+            width_value_ = std::numeric_limits<double>::quiet_NaN();
             note_ = notes_of(t).extrude;
             tower_ = std::strcmp(t, "Wipe tower") == 0;
             // Overhang perimeters get the bridges' fan (walls_extra.md, rule 8).
@@ -1670,7 +1711,11 @@ public:
         const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
         TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
         const TravelPlan* plan = ready ? planned : &own;
-        const bool retracting = force_retract || plan->leaves_part || plan->length > min_travel_;
+        // With retraction.only_crossing_walls, a travel that stays inside the
+        // part (no outer wall, no air) does not retract however long
+        // (toolpath_time.md, rule 5); without, min_travel decides (rule 5 of
+        // gcode_motion.md).
+        const bool retracting = force_retract || plan->leaves_part || (!only_crossing_ && plan->length > min_travel_);
         if (plan->length > 0.0)
             travel_acceleration(plan->length);
         if (retracting) {
@@ -2118,11 +2163,21 @@ private:
         return feed;
     }
 
-    // ;WIDTH: before the moves of another width (the same width writes the same text).
+    // ;WIDTH: when the width differs by more than kWidthStep from the last
+    // one written (or by more than kWidthShare of it, for fine lines: the
+    // check holds a move's E to its width within 2 %), and after each new
+    // ;TYPE (docs/spec/GCODE_OUTPUT.md, «Ancho variable»). The E of each move
+    // follows its real width either way: only the comment the previews read is
+    // spared.
+    static constexpr double kWidthStep = 0.005; // mm
+    static constexpr double kWidthShare = 0.015;
     void show_width(double width) {
         if (width == width_value_)
             return;
         width_value_ = width;
+        if (!width_.empty() &&
+            std::fabs(width - width_written_) <= std::min(kWidthStep, kWidthShare * width) + 1e-9)
+            return;
         char w[kNumberCapacity];
         const std::string_view width_text(w, format_fixed(w, width, 3));
         if (width_text != width_) {
@@ -2130,6 +2185,7 @@ private:
             text_ += width_text;
             text_ += '\n';
             width_.assign(width_text);
+            width_written_ = width;
         }
     }
 
@@ -2322,6 +2378,7 @@ private:
     double z_limit_ = 5.0; // mm/s Z may move while extruding
     double e_scale_ = 1.0; // the E written per mm of filament
     double retract_, retract_feed_, lift_, min_travel_;
+    bool only_crossing_ = false;
     double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
     // Accelerations (speeds_accels.md, rules 10 to 13): Marlin's M204 P for
     // printing and T for travels, or M204 S for both; as last set.
@@ -2331,6 +2388,14 @@ private:
     // The preparation (print_time.md, rules 10 and 14): heaters from 25 C.
     double heat_rate_nozzle_ = 0.0, heat_rate_bed_ = 0.0, home_time_ = 0.0, probe_time_ = 0.0;
     double nozzle_now_ = 25.0, bed_now_ = 25.0, nozzle_target_ = 0.0, bed_target_ = 0.0, preparation_ = 0.0;
+    // The tool changes: the time marks around each (print_time.md, rule 14).
+    struct Change {
+        std::size_t before = 0;
+        std::size_t after = 0;
+    };
+    std::vector<Change> changes_;
+    bool purging_ = false;
+    std::size_t purge_ = 0; // the open purge's entry in changes_
     double travel_accel_, short_travel_accel_; // asked for travels; 0: none
     double retracted_amount_ = 0.0; // the E the last retraction pulled back (none with G10)
     // retraction_travel.md: the push back's feed (0: the retraction's) and
@@ -2371,6 +2436,7 @@ private:
     double tool_restart_ = 0.0;
     std::string x_, y_, z_, e_text_, width_;
     double width_value_ = std::numeric_limits<double>::quiet_NaN(); // the width width_ was last checked for
+    double width_written_ = 0.0; // the width of the last ;WIDTH written
     long f_ = std::numeric_limits<long>::min(); // none written yet
     const char* type_ = nullptr;
     bool surface_ = false; // the current paths are surface walls
@@ -2505,6 +2571,17 @@ std::vector<Warning> capability_warnings(const Settings& s) {
         out.push_back({kind, -1, 0.0, std::move(message), value});
     };
     char text[200];
+    // An extruder the machine does not have: the first is used (multi_extruder.md,
+    // rule 8 ter, ME14), as Tisma Slicer does.
+    for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
+                                 {"extruders.solid_infill", s.extruder_solid_infill}, {"extruders.support", s.extruder_support},
+                                 {"extruders.support_interface", s.extruder_support_interface},
+                                 {"extruders.wipe_tower", s.extruder_wipe_tower}})
+        if (e > std::max(s.extruders, 1)) {
+            std::snprintf(text, sizeof text, "%s asks for extruder %d, but the machine has %d: extruder 1 is used", key, e,
+                          std::max(s.extruders, 1));
+            add("missing_extruder", text, double(e));
+        }
     // A filament on a pellet printer, or the other way round (pellets.md,
     // rule 1, PE9): a warning; the slicing is the same.
     if (s.material_feedstock != s.feedstock && s.machine_technology == MachineTechnology::Fdm)
@@ -2716,6 +2793,9 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["num_extruders"] = TemplateValue::of(1LL);
     c.variables["initial_extruder"] = c.variables["initial_tool"] = TemplateValue::of(0LL);
     c.variables["is_extruder_used"] = list({TemplateValue::of(true)});
+    // A tool change waits for the next nozzle's temperature (gcode_variables.md);
+    // with ooze prevention the engine waits itself (multi_extruder.md, rule 7).
+    c.variables["wait_for_extruder_temp"] = TemplateValue::of(!s.ooze_prevention);
     c.variables["input_filename_base"] = TemplateValue::of(s.input_name);
     double lo[2] = {0.0, 0.0}, hi[2] = {0.0, 0.0};
     bool any = false;
@@ -2848,6 +2928,74 @@ std::string toolchange_template_error(const Settings& s) {
         return e.what();
     }
     return {};
+}
+
+// The last temperature a G-code sets each tool (from 0) to with M104, M109
+// or G10 S; a command with no T sets `current`'s.
+std::map<int, double> tool_temperatures(std::string_view gcode, int current) {
+    std::map<int, double> out;
+    std::size_t at = 0;
+    while (at < gcode.size()) {
+        const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
+        std::string_view line = gcode.substr(at, end - at);
+        at = end + 1;
+        line = line.substr(0, line.find(';'));
+        line = line.substr(std::min(line.find_first_not_of(" \t"), line.size()));
+        const std::string_view word = line.substr(0, line.find_first_of(" \t\r"));
+        std::string command(word);
+        for (char& c : command)
+            c = char(std::toupper(static_cast<unsigned char>(c)));
+        const bool g10 = command == "G10";
+        if (command != "M104" && command != "M109" && !g10)
+            continue;
+        double celsius = -1.0;
+        int tool = current;
+        for (std::size_t i = word.size(); i < line.size(); ++i) {
+            const char c = char(std::toupper(static_cast<unsigned char>(line[i])));
+            if (i > 0 && line[i - 1] != ' ' && line[i - 1] != '\t')
+                continue;
+            if (c == 'S' || c == 'R')
+                celsius = std::max(celsius, std::atof(std::string(line.substr(i + 1)).c_str()));
+            else if ((c == 'T' && !g10) || (c == 'P' && g10))
+                tool = std::atoi(std::string(line.substr(i + 1)).c_str());
+        }
+        if (celsius >= 0.0)
+            out[tool] = celsius;
+    }
+    return out;
+}
+
+// The tools (from 0) a G-code heats to a temperature above 0.
+std::set<int> heated_tools(std::string_view gcode, int current) {
+    std::set<int> out;
+    for (const auto& [tool, celsius] : tool_temperatures(gcode, current))
+        if (celsius > 0.0)
+            out.insert(tool);
+    return out;
+}
+
+// The G-code without its temperature commands for a tool below 0 (T-1, P-1:
+// a change's previous_extruder at the start, from none). BH49.
+std::string without_negative_tools(std::string_view gcode) {
+    std::string out;
+    std::size_t at = 0;
+    while (at < gcode.size()) {
+        const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
+        const std::string_view line = gcode.substr(at, end - at);
+        at = end + 1;
+        std::string_view code = line.substr(0, line.find(';'));
+        code = code.substr(std::min(code.find_first_not_of(" \t"), code.size()));
+        std::string upper(code);
+        for (char& c : upper)
+            c = char(std::toupper(static_cast<unsigned char>(c)));
+        const bool heater = upper.starts_with("M104") || upper.starts_with("M109") || upper.starts_with("G10");
+        if (heater && (upper.find(" T-") != std::string::npos || upper.find(" P-") != std::string::npos))
+            continue;
+        out.append(line);
+        if (end < gcode.size())
+            out += '\n';
+    }
+    return out;
 }
 
 bool sets_temperature(std::string_view gcode) {
@@ -3263,6 +3411,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // previous_extruder, next_extruder and toolchange_z; T<next> unless that
     // G-code has it; with ooze prevention the next one waited for at its
     // temperature; its filament's start.
+    // The nozzles heated so far (from 0): by the engine's own start, else by
+    // the machine's start G-code; one never heated is heated, and waited
+    // for, before it first prints (multi_extruder.md, rule 8 bis, ME13).
+    std::set<int> heated = heat ? std::set<int>{} : heated_tools(start_gcode, 0);
+    // Without ooze prevention, a tool that stops printing waits at its
+    // filament's idle temperature, and is heated back, waited for, before it
+    // prints again (multi_extruder.md, rule 8 quater, ME15). From 1.
+    const auto idle_of = [&](int tool) { return tool >= 1 ? value_of("idle_temperature", std::size_t(tool - 1)) : 0.0; };
+    std::set<int> idling;
     const auto toolchange_text = [&](int previous, int next, bool middle) {
         std::string lines, user;
         const auto add_user = [&](const std::string& text) {
@@ -3273,6 +3430,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         };
         if (middle && s.ooze_prevention && value_of("temperature", std::size_t(previous - 1)) > 0.0)
             lines += nozzle_gcode(false, previous, standby(previous), "cooldown");
+        if (middle && !s.ooze_prevention && s.extruders > 1 && previous != next && idle_of(previous) > 0.0) {
+            lines += nozzle_gcode(false, previous, idle_of(previous), "idle");
+            idling.insert(previous);
+        }
         if (middle) {
             templates.variables["current_extruder"] = TemplateValue::of(static_cast<long long>(previous - 1));
             add_user(render_template(s.filament_end_gcode, templates, "extrusion.end_gcode"));
@@ -3280,13 +3441,33 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         templates.variables["previous_extruder"] = TemplateValue::of(static_cast<long long>(previous - 1));
         templates.variables["next_extruder"] = TemplateValue::of(static_cast<long long>(next - 1));
         templates.variables["toolchange_z"] = templates.variables["layer_z"];
-        const std::string change = render_template(s.gcode_toolchange, templates, "gcode.toolchange");
+        const std::string change = without_negative_tools(render_template(s.gcode_toolchange, templates, "gcode.toolchange"));
         add_user(change);
         if (!changes_tool(change, next - 1))
             lines += "T" + std::to_string(next - 1) + "\n";
+        for (const auto& [t, celsius] : tool_temperatures(user, next - 1))
+            if (celsius > 0.0)
+                heated.insert(t);
+            else
+                heated.erase(t); // turned off: the one that prints next heats again (BH49)
+        if (s.extruders > 1 && !heated.contains(next - 1) && dialect.wait != Dialect::Wait::None &&
+            (!heat || tool_temperatures(user, next - 1).contains(next - 1))) {
+            const auto layer = templates.variables.find("layer_num");
+            const bool first = layer == templates.variables.end() || layer->second.kind != TemplateValue::Kind::Int ||
+                               layer->second.integer <= 0;
+            const double celsius = first ? first_layer_value("first_layer_temperature", "temperature", std::size_t(next - 1))
+                                         : value_of("temperature", std::size_t(next - 1));
+            if (celsius > 0.0) {
+                lines += nozzle_gcode(true, next, celsius, "its first heating");
+                heated.insert(next - 1);
+            }
+        }
         if (middle && s.ooze_prevention && value_of("temperature", std::size_t(next - 1)) > 0.0 &&
             dialect.wait != Dialect::Wait::None)
             lines += nozzle_gcode(true, next, value_of("temperature", std::size_t(next - 1)));
+        if (middle && idling.erase(next) && value_of("temperature", std::size_t(next - 1)) > 0.0 &&
+            dialect.wait != Dialect::Wait::None)
+            lines += nozzle_gcode(true, next, value_of("temperature", std::size_t(next - 1)), "back from idle");
         templates.variables["current_extruder"] = TemplateValue::of(static_cast<long long>(next - 1));
         if (middle)
             add_user(render_template(s.filament_start_gcode, templates, "extrusion.start_gcode"));
@@ -3331,7 +3512,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // Several extruders: the change's G-code to the first one too, from
     // none (rule 6), and its T unless that G-code has it.
     if (s.extruders > 1) {
-        out << toolchange_text(0, initial_tool, false).first;
+        start_text(toolchange_text(0, initial_tool, false).first); // its waits count too (print_time.md, rule 14)
         g.set_tool(initial_tool, extruder_offset_of(s, std::size_t(initial_tool - 1)));
     }
     // The filament's own start, after the printer's (rule 9).
@@ -3529,6 +3710,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // and 4); -1: the layer's.
         double fan = -1.0;
         bool weak_fan = false;
+        // A change's purge on the wipe tower (its ramming and its block):
+        // preparation in the time (print_time.md, rule 14).
+        bool purge = false;
     };
     // The aligned seam's candidates of each wall loop of a layer (by its
     // place in the layer's walls), found for many layers at once ahead of
@@ -3860,13 +4044,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const bool changes = std::any_of(change_from.begin(), change_from.end(), [](int f) { return f > 0; });
         std::size_t next_block = 0;
         bool shell_laid = tower_layer == nullptr;
-        const auto lay_tower = [&](const std::vector<Toolpath>& paths, int tool) {
+        const auto lay_tower = [&](const std::vector<Toolpath>& paths, int tool, bool purge = false) {
             laying_tool = tool;
             const std::size_t first_step = steps.size();
             for (const Toolpath& t : paths)
                 lay(t, "Wipe tower", speed(s.infill_speed));
-            for (std::size_t k = first_step; k < steps.size(); ++k)
+            for (std::size_t k = first_step; k < steps.size(); ++k) {
                 steps[k].drop = tower_layer->drop;
+                steps[k].purge = purge;
+            }
             if (labels != Labels::None && label_now != -1)
                 for (std::size_t k = first_step; k < steps.size(); ++k)
                     if (steps[k].type) {
@@ -3914,6 +4100,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         };
         for (std::size_t group_index = 0; group_index < order.size(); ++group_index) {
             const int tool = order[group_index];
+            // After a change on one nozzle with blends, each part's sparse
+            // infill first: the transition's mixed plastic stays inside and
+            // the walls come out clean (color_mixing_plus.md, rule 34).
+            const bool infill_first = s.infill_before_walls || (s.single_extruder_mmu && model.blended &&
+                                                                group_index < change_from.size() && change_from[group_index] > 0);
             const bool first_group = group_index == 0;
             if (tower_layer && change_from[group_index] > 0 && next_block < tower_layer->blocks.size()) {
                 // An MMU's ramming first, by the leaving filament, each piece
@@ -3924,8 +4115,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     const std::size_t first_step = steps.size();
                     for (std::size_t k = 0; k < ram.size(); ++k)
                         lay(ram[k], "Wipe tower", tower_layer->ramming_feed[next_block][k]);
-                    for (std::size_t k = first_step; k < steps.size(); ++k)
+                    for (std::size_t k = first_step; k < steps.size(); ++k) {
                         steps[k].drop = tower_layer->drop;
+                        steps[k].purge = true;
+                    }
                     if (labels != Labels::None && label_now != -1)
                         for (std::size_t k = first_step; k < steps.size(); ++k)
                             if (steps[k].type) {
@@ -3933,7 +4126,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                 break;
                             }
                 }
-                lay_tower(tower_layer->blocks[next_block++], tool);
+                lay_tower(tower_layer->blocks[next_block++], tool, true);
                 if (!shell_laid) {
                     lay_tower(tower_layer->shell, tool);
                     shell_laid = true;
@@ -4095,8 +4288,64 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 const double dy = std::max({b[1] - cursor.y, 0.0, cursor.y - b[3]});
                 return std::hypot(dx, dy);
             };
+            // The islands' order (toolpath_time.md, rule 2): nearest neighbour
+            // from the cursor, then improved two at a time (2-opt: a stretch of
+            // the order reversed while that makes the tour shorter), on a point
+            // per island (the middle of its paths' ends). Without object labels,
+            // which keep each object's islands together.
+            std::vector<std::size_t> order;
+            std::size_t order_at = 0;
+            if (labels == Labels::None) {
+                std::vector<std::size_t> todo;
+                for (std::size_t k = 0; k < islands.size(); ++k)
+                    if (!islands[k].ends.empty())
+                        todo.push_back(k);
+                if (todo.size() >= 3) {
+                    const auto middle = [&](std::size_t k) {
+                        const auto& b = end_box[k];
+                        return Point2d{(b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0};
+                    };
+                    std::vector<Point2d> at(islands.size());
+                    for (const std::size_t k : todo)
+                        at[k] = middle(k);
+                    const auto dist = [](const Point2d& p, const Point2d& q) { return std::hypot(p.x - q.x, p.y - q.y); };
+                    Point2d from = cursor;
+                    std::vector<bool> taken(islands.size(), false);
+                    for (std::size_t n = 0; n < todo.size(); ++n) {
+                        std::size_t best = islands.size();
+                        double d = std::numeric_limits<double>::max();
+                        for (const std::size_t k : todo)
+                            if (!taken[k] && dist(from, at[k]) < d)
+                                d = dist(from, at[k]), best = k;
+                        taken[best] = true;
+                        order.push_back(best);
+                        from = at[best];
+                    }
+                    // 2-opt on the open tour from the cursor, a bounded number of passes.
+                    const auto point = [&](std::size_t i) { return i == 0 ? cursor : at[order[i - 1]]; };
+                    bool better = true;
+                    for (int pass = 0; better && pass < 8; ++pass) {
+                        better = false;
+                        for (std::size_t i = 1; i + 1 <= order.size(); ++i)
+                            for (std::size_t j = i + 1; j <= order.size(); ++j) {
+                                // Reverse order[i-1 .. j-1]: edges (i-1, i) and (j, j+1) change.
+                                const double before = dist(point(i - 1), point(i)) +
+                                                      (j < order.size() ? dist(point(j), point(j + 1)) : 0.0);
+                                const double after = dist(point(i - 1), point(j)) +
+                                                     (j < order.size() ? dist(point(i), point(j + 1)) : 0.0);
+                                if (after + 1e-9 < before) {
+                                    std::reverse(order.begin() + std::ptrdiff_t(i - 1), order.begin() + std::ptrdiff_t(j));
+                                    better = true;
+                                }
+                            }
+                    }
+                }
+            }
             for (;;) {
                 std::size_t next = islands.size();
+                if (order_at < order.size()) {
+                    next = order[order_at++];
+                } else {
                 double nearest = std::numeric_limits<double>::max();
                 const auto look = [&](std::size_t k) {
                     for (const Point2d& p : islands[k].ends) {
@@ -4120,6 +4369,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                         look(k);
                 if (next == islands.size())
                     break;
+                }
                 done[next] = true;
                 current = slot(next);
                 --left[current];
@@ -4170,11 +4420,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 const auto fills = [&] {
                     constexpr std::array<std::size_t, 7> kFirstSparse = {4, 0, 1, 2, 3, 5, 6};
                     for (std::size_t j = 0; j < 7; ++j) {
-                        const std::size_t k = s.infill_before_walls ? kFirstSparse[j] : j;
+                        const std::size_t k = infill_first ? kFirstSparse[j] : j;
                         group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
                     }
                 };
-                if (s.infill_before_walls)
+                if (infill_first)
                     fills();
                 // From the inside out, or with walls.outer_first from the outer
                 // wall in (perimeters.md, rule 4).
@@ -4193,7 +4443,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 // they hang from (walls_extra.md, rule 5).
                 for (Toolpath t : i.overhang_walls)
                     lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
-                if (!s.infill_before_walls)
+                if (!infill_first)
                     fills();
                 // The loops that touch nothing held: a second pass of walls,
                 // after the fills (and the layer's bridges) they rest on.
@@ -4289,7 +4539,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             for (const ToolpathPoint& p : st.path.points)
                 w += p.width;
             section[k] = w / double(st.path.points.size()) * h;
-            retracts[k] = st.path.retract || !st.from || st.travel.leaves_part || st.travel.length > s.retract_min_travel;
+            retracts[k] = st.path.retract || !st.from || st.travel.leaves_part ||
+                          (!s.retract_only_crossing_walls && st.travel.length > s.retract_min_travel);
             order.push_back(k);
         }
         // Each extrusion's ramps: the flow it starts from, the one it ends at.
@@ -4539,6 +4790,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 label = wanted;
             }
             const Toolpath& t = step.path;
+            g.purging(step.purge); // the purge's time apart (print_time.md, rule 14)
             if (s.gcode_progress && k > 0)
                 g.progress_mark();
             // A vase's turn starts where the one below ended: no travel, unless
@@ -5036,22 +5288,50 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             for (std::size_t k = 0; k < tool_plan.order[l].size() && k < tool_plan.tower_purge[l].size(); ++k)
                 if (const int from = tool_plan.change_from[l][k]; from > 0)
                     into_objects += std::max(0.0, purge_volume(s, from, tool_plan.order[l][k]) - tool_plan.tower_purge[l][k]);
+        // How much of it the infill took and how much the rest of the objects
+        // (color_mixing_plus.md, rule 40): in proportion to the sinks' volumes.
+        double sparse_sinks = 0.0, other_sinks = 0.0;
+        for (std::size_t l = 0; l < tool_plan.sinks.size() && l < model.layers.size(); ++l) {
+            const double h = model.layers[l].top - model.layers[l].bottom;
+            for (const auto& group : tool_plan.sinks[l])
+                for (const ToolPlan::Sink& sink : group) {
+                    double v = 0.0;
+                    const auto& p = sink.path->points;
+                    for (std::size_t k = 1; k < p.size(); ++k)
+                        v += 0.5 * (p[k - 1].width + p[k].width) * h * std::hypot(p[k].p.x - p[k - 1].p.x, p[k].p.y - p[k - 1].p.y);
+                    (sink.kind == 4 ? sparse_sinks : other_sinks) += v;
+                }
+        }
+        const double infill_share = sparse_sinks + other_sinks > 0.0 ? sparse_sinks / (sparse_sinks + other_sinks) : 0.0;
         const double r = s.filament_diameter / 2.0, area = std::numbers::pi * r * r;
-        const double tower_mm = g.tower_e(), objects_mm = into_objects / area;
+        double tower_mm = g.tower_e(), objects_mm = into_objects / area;
+        // No tower on one nozzle: the machine purges outside the part (a
+        // chute), and what the objects do not take goes there
+        // (color_mixing_plus.md, rule 36, MX24).
+        if (!s.wipe_tower) {
+            double left = 0.0;
+            for (const auto& layer : tool_plan.tower_purge)
+                for (const double v : layer)
+                    left += v;
+            tower_mm = left / area;
+        }
+        const char* where = s.wipe_tower ? "on the wipe tower" : "to the discard";
         if (tower_mm + objects_mm > 0.0) {
-            char text[240];
+            char text[260];
             if (s.filament_density > 0.0) {
                 const auto grams = [&](double mm) { return mm * area / 1000.0 * s.filament_density; };
                 std::snprintf(text, sizeof text,
-                              "The filament changes purge %.2f g of filament: %.2f g on the wipe tower and %.2f g into "
-                              "the objects",
-                              grams(tower_mm + objects_mm), grams(tower_mm), grams(objects_mm));
+                              "The filament changes purge %.2f g of filament: %.2f g %s and %.2f g into "
+                              "the objects (%.2f g into their infill, %.2f g into the rest)",
+                              grams(tower_mm + objects_mm), grams(tower_mm), where, grams(objects_mm),
+                              grams(objects_mm * infill_share), grams(objects_mm * (1.0 - infill_share)));
                 warnings->push_back({"purge", -1, 0.0, text, grams(tower_mm + objects_mm), "information"});
             } else {
                 std::snprintf(text, sizeof text,
-                              "The filament changes purge %.0f mm of filament: %.0f mm on the wipe tower and %.0f mm "
-                              "into the objects",
-                              tower_mm + objects_mm, tower_mm, objects_mm);
+                              "The filament changes purge %.0f mm of filament: %.0f mm %s and %.0f mm "
+                              "into the objects (%.0f mm into their infill, %.0f mm into the rest)",
+                              tower_mm + objects_mm, tower_mm, where, objects_mm, objects_mm * infill_share,
+                              objects_mm * (1.0 - infill_share));
                 warnings->push_back({"purge", -1, 0.0, text, tower_mm + objects_mm, "information"});
             }
         }

@@ -74,7 +74,7 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect, bool fit, bool monotonic, double overlap, double shift,
-                                       double max_join) {
+                                       double max_join, const Polygons* join_inside) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -167,7 +167,20 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
     if (monotonic)
         open = order_monotonic(std::move(open), step, width / 2.0 * kUnitsPerMm);
     else if (connect)
-        open = join_along_boundary(open, turned, max_join > 0.0 ? max_join * kUnitsPerMm : kMaxJoin * step, step);
+    {
+        // The region that holds the joins, in the same turned frame.
+        Polygons inside_turned;
+        if (join_inside)
+            for (const Polygon& path : *join_inside) {
+                Polygon t;
+                t.reserve(path.size());
+                for (const Point64& p : path)
+                    t.push_back(rotate(p, c, -s));
+                inside_turned.push_back(std::move(t));
+            }
+        open = join_along_boundary(open, turned, max_join > 0.0 ? max_join * kUnitsPerMm : kMaxJoin * step, step,
+                                   join_inside ? &inside_turned : nullptr);
+    }
     for (const Polygon& piece : open) {
         if (piece.size() < 2)
             continue;
@@ -208,6 +221,8 @@ std::size_t fill_period(const FillParams& params) {
         return 0;
     case InfillPattern::Honeycomb:
         return 6;
+    case InfillPattern::Honeycomb3d:
+        return 0; // it moves with the height
     case InfillPattern::Rectilinear:
     case InfillPattern::Grid:
     case InfillPattern::Triangles:
@@ -317,9 +332,13 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         out.gaps = gap_fill(Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero), lines,
                             params.width, d);
     }
-    // Bridge lines stay straight: a join along the edge would hang in the air.
+    // Bridge lines are joined only where the join lies entirely over what
+    // holds the bridge (toolpath_time.md, rule 1): a join along a free edge
+    // would hang in the air, so those lines stay apart.
     const double bridge = params.bridge_width > 0.0 ? params.bridge_width : params.width;
-    out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, false, true);
+    out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, !surfaces.bridge_support.empty(),
+                                  true, false, 0.0, 0.0, 2.0 * (bridge + bridge),
+                                  surfaces.bridge_support.empty() ? nullptr : &surfaces.bridge_support);
     if (params.density <= 0.0)
         return out;
     const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
@@ -378,6 +397,9 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(ws, params.density), principal, w);
         break;
     }
+    case InfillPattern::Honeycomb3d: // rows along 0 and 90 degrees, a layer each (rule 11, P8)
+        out.sparse = honeycomb3d_fill(surfaces.sparse, ws / params.density, z, layer % 2 == 0 ? 0.0 : 90.0, w);
+        break;
     case InfillPattern::Concentric:
         out.sparse = concentric_fill(surfaces.sparse, ws / params.density, w);
         break;

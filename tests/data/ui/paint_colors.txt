@@ -1,0 +1,15 @@
+# Painting colours (multi_extruder.md, rule 1; model_tools.md, rule 27): with
+# two filaments the colour channel opens, each filament a swatch; a stroke
+# with filament 2 paints its band in that colour.
+wait 3
+set machine.extruders 2
+filament-color 2 #CC0000
+menu tool_paint
+wait 2
+menu paint_colors
+wait 1
+expect-control paint_color.1
+expect-control paint_color.2
+menu paint_color.2
+paint-drag 772 400 818 420
+expect-paint-area 35

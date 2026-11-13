@@ -7,7 +7,9 @@ menu mode_engineering
 menu tab_design
 menu design_sketch
 menu design_plane_xy
+menu design_group_sketch_modify
 expect-control sketch_edit_fillet
+menu design_group_sketch_modify
 menu design_command
 type REC
 key enter

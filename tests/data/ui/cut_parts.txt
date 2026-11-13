@@ -1,0 +1,14 @@
+# The cut as one object with two parts (model_tools.md, rule 18: MT24): the
+# halves stay together where they were, each a part that can take settings
+# of its own; the Objects list shows them.
+wait 3
+cut 4 parts
+expect-parts 0 2 0 0
+expect-model 0 10
+# MT33: as one object with two parts, the connectors wait with a note.
+key c
+wait 2
+menu cut_two_parts
+wait 1
+expect-control cut_connectors_apart
+expect-text Los conectores son para piezas separadas

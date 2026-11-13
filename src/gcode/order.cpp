@@ -295,10 +295,45 @@ std::vector<std::size_t> concave_corners(const Toolpath& loop, const std::vector
 // The aligned seam among the candidates (never none): the one nearest to a
 // seam of the same wall index below, the first of the nearest; the rear one
 // if there is none below.
+// Where an aligned seam starts when nothing is below it (perimeters.md,
+// rule 6, P5 and P6): at a corner if the loop has one (a turn of more than
+// kCornerTurn), the one at the back, right first; on a round loop, at its
+// front (least Y, then least X).
+constexpr double kCornerTurn = 0.5; // radians, about 29 degrees
+
+std::size_t aligned_start(const Toolpath& loop, const std::vector<std::size_t>& candidates) {
+    const std::size_t n = loop.points.size();
+    std::size_t corner = n, front = candidates.front();
+    for (std::size_t i : candidates) {
+        const Point2d& p = loop.points[i].p;
+        const Point2d& f = loop.points[front].p;
+        if (p.y < f.y || (p.y == f.y && p.x < f.x))
+            front = i;
+        if (n < 3)
+            continue;
+        const Point2d& a = loop.points[(i + n - 1) % n].p;
+        const Point2d& b = loop.points[(i + 1) % n].p;
+        const double t0 = std::atan2(p.y - a.y, p.x - a.x), t1 = std::atan2(b.y - p.y, b.x - p.x);
+        double turn = std::abs(t1 - t0);
+        if (turn > 3.14159265358979323846)
+            turn = 2.0 * 3.14159265358979323846 - turn;
+        if (turn < kCornerTurn)
+            continue;
+        if (corner == n)
+            corner = i;
+        else {
+            const Point2d& c = loop.points[corner].p;
+            if (p.y > c.y + 1e-9 || (std::abs(p.y - c.y) <= 1e-9 && p.x > c.x))
+                corner = i;
+        }
+    }
+    return corner != n ? corner : front;
+}
+
 std::size_t aligned_pick(const Toolpath& loop, const std::vector<std::size_t>& candidates, const SeamMemory& memory) {
     const auto it = memory.below.find(loop.index);
     if (it == memory.below.end() || it->second.empty())
-        return rear_point(loop, candidates);
+        return aligned_start(loop, candidates);
     std::size_t best = candidates.front();
     double nearest = std::numeric_limits<double>::max();
     // With few seams below, the squares first: only the candidates within

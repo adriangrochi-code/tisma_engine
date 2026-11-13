@@ -370,6 +370,71 @@ TEST_CASE("pack: the filaments offered for a printer (rule 12, PK7)", "[pack]") 
     CHECK_THROWS_AS(pack_entry_profile(pack, "../x.json", warnings), PackError);
 }
 
+TEST_CASE("pack: a filament made for some print profiles (compatible_prints; profile_pack_format.md, entries, rule 4)",
+          "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_compatible_prints") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage_compatible_prints"));
+    const PackIndex index = pack_installed(pack);
+    // Acme PLA made for Acme Standard only (named without "vendors/").
+    const fs::path pla = pack / "vendors" / "acme" / "filaments" / "PLA.json";
+    REQUIRE(fs::exists(pla));
+    nlohmann::json entry = nlohmann::json::parse(std::ifstream(pla));
+    entry["compatible_prints"] = {"acme/prints/Standard.json"};
+    std::ofstream(pla) << entry.dump();
+    std::vector<std::string> warnings;
+    CHECK(read_pack_entry(pack, "vendors/acme/filaments/PLA.json", warnings).compatible_prints ==
+          std::vector<std::string>{"acme/prints/Standard.json"});
+    const auto names = [](const std::vector<PackFilamentRef>& refs) {
+        std::vector<std::string> out;
+        for (const PackFilamentRef& r : refs)
+            out.push_back(r.name);
+        return out;
+    };
+    const auto has_pla = [&](const std::vector<PackFilamentRef>& refs) {
+        const std::vector<std::string> n = names(refs);
+        return std::find(n.begin(), n.end(), "Acme PLA") != n.end();
+    };
+    // Offered with no print chosen, with Acme Standard; not with Acme Fine.
+    CHECK(has_pla(pack_filaments_for(pack, index, 1)));
+    CHECK(has_pla(pack_filaments_for(pack, index, 1, "vendors/acme/prints/Standard.json")));
+    CHECK_FALSE(has_pla(pack_filaments_for(pack, index, 1, "vendors/acme/prints/Fine.json")));
+    // Chosen together with Acme Fine: refused.
+    CHECK_THROWS_WITH(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.6", "vendors/acme/filaments/PLA.json",
+                                    "vendors/acme/prints/Fine.json"),
+                      Catch::Matchers::ContainsSubstring("is not for the print profile Acme Fine"));
+    // Without the field it works with any print.
+    entry.erase("compatible_prints");
+    std::ofstream(pla) << entry.dump();
+    CHECK(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.6", "vendors/acme/filaments/PLA.json",
+                        "vendors/acme/prints/Fine.json")
+              .filament);
+    CHECK(pack_print_fits({}, "vendors/acme/prints/Fine.json"));
+    CHECK(pack_print_fits({"vendors/acme/prints/Fine.json"}, "acme/prints/Fine.json"));
+}
+
+TEST_CASE("pack: another print chosen, a filament that no longer fits is switched (profile_pack_format.md, entries, rule 4)",
+          "[pack]") {
+    const std::string fine = "vendors/acme/prints/Fine.json", standard = "vendors/acme/prints/Standard.json";
+    const std::vector<FilamentChoice> filaments = {
+        {"Acme PLA", "PLA", {"acme/prints/Standard.json"}},
+        {"Acme PETG", "PETG", {}},
+        {"Other PLA", "PLA", {fine}},
+        {"Any PLA", "PLA", {}},
+        {"My PLA", "PLA", {}, false}, // the person's own: any print
+    };
+    // It fits: nothing changes.
+    CHECK_FALSE(pack_refit_filament(filaments, "Acme PLA", standard, "Acme PLA"));
+    CHECK_FALSE(pack_refit_filament(filaments, "My PLA", fine, "Acme PLA"));
+    // It does not: the printer's default when it fits...
+    CHECK(pack_refit_filament(filaments, "Acme PLA", fine, "Any PLA") == std::optional<std::string>("Any PLA"));
+    // ...else the first of the same material that fits (not the PETG).
+    CHECK(pack_refit_filament(filaments, "Acme PLA", fine, "Acme PLA") == std::optional<std::string>("Other PLA"));
+    // None fits: it stays.
+    CHECK_FALSE(pack_refit_filament({filaments[0], filaments[1]}, "Acme PLA", fine, "Acme PLA"));
+    // No pack print chosen: nothing to check.
+    CHECK_FALSE(pack_refit_filament(filaments, "Acme PLA", "", "Any PLA"));
+}
+
 TEST_CASE("pack: a variant's defaults always valid for it, an empty set for every printer (rule 12, BH29)", "[pack]") {
     const fs::path pack = fresh_dir("tisma_pack_bh29") / "pack";
     pack_install(pack, staging_from("release1", "tisma_pack_stage_bh29"));
@@ -585,4 +650,87 @@ TEST_CASE("pack: the translation table's archive is named, planned and unpacked 
     CHECK(std::none_of(plain.begin(), plain.end(), [](const PackDownload& d) { return d.name == "translation.tar.xz"; }));
     CHECK(safe_pack_path("translation/prusaslicer.json"));
     CHECK_FALSE(safe_pack_path("translation/../index.json"));
+}
+
+TEST_CASE("pack: settings that cross profiles, the print's bridges and the printer's purge (profile_pack_format.md, "
+          "print profiles, rule 6, PF7 to PF9)",
+          "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_cross") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage_cross"));
+    const PackIndex index = pack_installed(pack);
+    const auto edit = [&](const fs::path& file, const auto& change) {
+        nlohmann::json j = nlohmann::json::parse(std::ifstream(file));
+        change(j);
+        std::ofstream(file) << j.dump();
+    };
+    const fs::path model = pack / "vendors" / "acme" / "models" / "A1.json";
+    const fs::path print = pack / "vendors" / "acme" / "prints" / "Standard.json";
+    const fs::path pla = pack / "vendors" / "acme" / "filaments" / "PLA.json";
+    edit(model, [](nlohmann::json& j) { j["common"]["settings"]["wipe_tower"]["purge_volumes"] = 70; });
+    edit(print, [](nlohmann::json& j) { j["profile"]["settings"]["extrusion"]["bridge_flow_ratio"] = 0.8; });
+    edit(pla, [](nlohmann::json& j) { j["profile"]["settings"]["extrusion"]["type"] = "PLA"; });
+    const auto chosen = [&] {
+        return pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "vendors/acme/filaments/PLA.json",
+                             "vendors/acme/prints/Standard.json");
+    };
+    PackProfiles p = chosen();
+    INFO(nlohmann::json(p.warnings).dump());
+    for (const std::string& w : p.warnings) {
+        CHECK_THAT(w, !Catch::Matchers::ContainsSubstring("bridge_flow_ratio"));
+        CHECK_THAT(w, !Catch::Matchers::ContainsSubstring("purge_volumes"));
+        CHECK_THAT(w, !Catch::Matchers::ContainsSubstring("extrusion.type"));
+    }
+    REQUIRE(p.filament);
+    REQUIRE(p.print);
+    // PF7: the print's bridges' flow over the filament's.
+    CHECK(p.filament->settings.bridge_flow_ratio == 0.8);
+    // PF8: the printer's purge volume, the print's default.
+    REQUIRE(p.print->settings.purge_volumes.size() > 1);
+    CHECK(p.print->settings.purge_volumes[0][1] == 70.0);
+    // PF9: the filament's type read.
+    CHECK(p.filament->settings.filament_type == "PLA");
+    // The print's own purge volume wins.
+    edit(print, [](nlohmann::json& j) { j["profile"]["settings"]["wipe_tower"]["purge_volumes"] = 120; });
+    p = chosen();
+    REQUIRE(p.print);
+    CHECK(p.print->settings.purge_volumes[0][1] == 120.0);
+}
+
+TEST_CASE("pack: a filament's own travels and a resin print's base layers are read (profile_pack_format.md, print "
+          "profiles, rule 6, PF10, PF11; BH56)",
+          "[pack]") {
+    // PF10: the filament's travels, an object like its retraction.
+    std::vector<std::string> warnings;
+    const PackEntry filament = parse_pack_entry(
+        R"({"format": "tisma-pack-entry", "profile": {"format": "tisma-profile", "version": 2, "kind": "filament",
+            "name": "Ramp PLA", "settings": {"extrusion": {"travel": {"ramping_lift": true, "slope": 1, "max_lift": 0.6}}}}})",
+        warnings);
+    INFO(nlohmann::json(warnings).dump());
+    CHECK(warnings.empty());
+    const auto& own = filament.profile.settings.filament_retraction;
+    REQUIRE(own.contains("travel.max_lift"));
+    CHECK(own.at("travel.max_lift") == 0.6);
+    CHECK(own.at("travel.ramping_lift") == 1.0);
+    CHECK(own.at("travel.slope") == 1.0);
+    // PF11: a resin print's base layers, laid over the resin's.
+    warnings.clear();
+    const PackEntry print = parse_pack_entry(
+        R"({"format": "tisma-pack-entry", "profile": {"format": "tisma-profile", "version": 2, "kind": "resin_print",
+            "name": "Fine resin", "settings": {"resin": {"layer_height": 0.05, "bottom_layers": 4}}}})",
+        warnings);
+    INFO(nlohmann::json(warnings).dump());
+    CHECK(warnings.empty());
+    CHECK(nlohmann::json::parse(print.filament_settings) == nlohmann::json::parse(R"({"resin": {"bottom_layers": 4}})"));
+}
+
+TEST_CASE("pack: a printer's flavor_choices is read, not left out (profile_pack_format.md, PF15)", "[pack]") {
+    std::vector<std::string> warnings;
+    const PackEntry printer = parse_pack_entry(
+        R"({"format": "tisma-pack-entry", "profile": {"format": "tisma-profile", "version": 2, "kind": "printer",
+            "name": "101Hero", "settings": {"machine": {"flavor": "marlin", "flavor_choices": ["marlin_legacy", "marlin"]}}}})",
+        warnings);
+    INFO(nlohmann::json(warnings).dump());
+    CHECK(warnings.empty());
+    CHECK(printer.profile.settings.flavor == GcodeFlavor::Marlin);
+    CHECK(printer.profile.settings.flavor_choices == std::vector<GcodeFlavor>{GcodeFlavor::MarlinLegacy, GcodeFlavor::Marlin});
 }

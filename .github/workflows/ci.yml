@@ -113,3 +113,50 @@ jobs:
           plutil -lint pkg/Tisma.app/Contents/Info.plist
           test -x pkg/Tisma.app/Contents/MacOS/tisma && test -s pkg/Tisma.app/Contents/Resources/tisma.icns
           pkg/Tisma.app/Contents/MacOS/tisma-engine --version
+      # The 3D view on macOS (PLAN.md, «macOS antes de la beta»: the view): the
+      # OpenGL 3.3 core view drawn on the runner's display, with the strict
+      # view check of the screenshots, and the pictures kept to look at. Does
+      # not count while it is being brought up.
+      - name: The 3D view draws (OpenGL)
+        continue-on-error: true
+        run: |
+          mkdir -p view
+          for v in prepare preview; do
+            pkg/Tisma.app/Contents/MacOS/tisma tests/data/cube_ascii.stl --lang en --size 900x600 --view $v \
+              --graphics opengl --screenshot view/view_${v}.png
+          done
+          ls -l view
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-view-${{ matrix.arch }}
+          path: view
+          if-no-files-found: warn
+
+  ios:
+    name: iOS library (xcframework)
+    runs-on: macos-15
+    # PLAN.md, «macOS antes de la beta»: green since f1822c4 (2026-11-12), so it counts.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: brew install ninja
+      - name: Build TismaEngine.xcframework
+        run: tools/build_ios.sh build-ios
+      - name: The C entries are in both slices
+        run: |
+          for a in build-ios/iphoneos/libtisma_engine.a build-ios/iphonesimulator/libtisma_engine.a; do
+            symbols=$(nm -gU "$a" 2>/dev/null)
+            for f in tisma_run_cli tisma_free tisma_create tisma_destroy tisma_open_path tisma_open_bytes \
+                     tisma_set_settings_json tisma_estimate_memory tisma_slice_start tisma_poll tisma_cancel \
+                     tisma_write_gcode tisma_read_gcode tisma_summary_json tisma_layer_count tisma_layer_z \
+                     tisma_preview_segments tisma_analyze_start tisma_analysis_json \
+                     tisma_analyze_case_start tisma_analysis_mesh; do
+              grep -q "_${f}\$" <<<"$symbols" || { echo "$a: no $f"; exit 1; }
+            done
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tisma-engine-ios-xcframework
+          path: build-ios/TismaEngine.xcframework
+          if-no-files-found: error

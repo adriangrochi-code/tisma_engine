@@ -258,3 +258,28 @@ TEST_CASE("formats: STL, OBJ and 3MF exports read back to the same triangles", "
     // An empty plate is no model: reading it back says so.
     CHECK_THROWS(parse_model(obj_text(TriangleMesh{}), ".obj"));
 }
+
+TEST_CASE("formats: each part's triangles in a 3MF, for the interface to open them as parts (FM9)", "[formats]") {
+    const auto check_pieces = [](const ModelFile& m) {
+        REQUIRE(m.pieces.size() == m.parts);
+        std::size_t next = 0;
+        for (const ModelFile::Piece& p : m.pieces) {
+            CHECK(p.first == next); // in order, back to back
+            CHECK(p.count > 0);
+            CHECK(p.object < m.objects);
+            next = p.first + p.count;
+        }
+        CHECK(next == m.mesh.triangle_count());
+    };
+    const ModelFile one = read_model(kFormats / "box.3mf");
+    check_pieces(one);
+    CHECK(one.pieces.front().count == 12);
+    const ModelFile two = read_model(kFormats / "box_parts.3mf");
+    check_pieces(two);
+    CHECK(two.pieces[0].count == 12);
+    CHECK(two.pieces[1].count == 12);
+    CHECK(two.pieces[0].object == two.pieces[1].object); // one object of two parts
+    check_pieces(read_model(kFormats / "pi4_prusaslicer_parts.3mf"));
+    // A modifier volume is no part.
+    check_pieces(read_model(kFormats / "box_modifier.3mf"));
+}

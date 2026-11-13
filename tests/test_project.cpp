@@ -212,6 +212,57 @@ TEST_CASE("a project keeps a model's own settings, volumes and height ranges (mo
     CHECK(qb.models.front().volumes[0].lattice_diameter == 1.25);
 }
 
+TEST_CASE("a project keeps a model's parts, each with its extruder, and slices them apart (formats.md, rule 7)",
+          "[project]") {
+    Project p = sample();
+    p.models.front().parts = {{"base", 0, 3, 0}, {"muestra", 3, 1, 5}};
+    for (const std::string& bytes : {write_project(p), write_project_3mf(p)}) {
+        const Project back = read_project(bytes);
+        REQUIRE(back.models.front().parts.size() == 2);
+        CHECK(back.models.front().parts[1].name == "muestra");
+        CHECK(back.models.front().parts[1].first == 3);
+        CHECK(back.models.front().parts[1].count == 1);
+        CHECK(back.models.front().parts[1].extruder == 5);
+        CHECK(back.models.front().parts[0].extruder == 0);
+        CHECK(back.models[1].parts.empty());
+    }
+    // Parts that leave triangles out are not read.
+    Project gap = sample();
+    gap.models.front().parts = {{"base", 0, 2, 0}};
+    CHECK_THROWS(read_project(write_project(gap)));
+    // The slice gets each part as an object of its own, with its extruder.
+    std::vector<ProjectModel> models = p.models;
+    const std::vector<ui::PlateObject> objects = ui::project_objects(models);
+    std::vector<TriangleMesh> placed;
+    for (const ui::PlateObject& o : objects)
+        placed.push_back(o.mesh);
+    const ui::PlateSlice plate = ui::plate_slice(objects, placed, Settings{});
+    REQUIRE(plate.objects.size() == 3);
+    CHECK(plate.by_object);
+    CHECK(plate.objects[0].count == 3);
+    CHECK(plate.objects[0].extruder == 1);
+    CHECK(plate.objects[1].first == 3);
+    CHECK(plate.objects[1].extruder == 5);
+    CHECK(plate.objects[1].object == 0);
+    CHECK(plate.objects[2].first == 4);
+    CHECK(plate.objects[2].object == 1);
+    // MT24: a part's own infill is its alone, over the object's settings.
+    Project own = p;
+    own.models.front().settings = R"({"walls":{"count":3}})";
+    own.models.front().parts[1].settings = R"({"infill":{"density":60}})";
+    const Project own_back = read_project(write_project(own));
+    CHECK(own_back.models.front().parts[1].settings == own.models.front().parts[1].settings);
+    CHECK(own_back.models.front().parts[0].settings.empty());
+    std::vector<ProjectModel> own_models = own_back.models;
+    const std::vector<ui::PlateObject> own_objects = ui::project_objects(own_models);
+    const ui::PlateSlice own_plate = ui::plate_slice(own_objects, placed, Settings{});
+    REQUIRE(own_plate.objects.size() == 3);
+    CHECK(own_plate.objects[0].settings == own.models.front().settings);
+    CHECK(own_plate.objects[1].settings == R"({"infill":{"density":60},"walls":{"count":3}})");
+    CHECK(own_plate.objects[1].part_settings == own.models.front().parts[1].settings);
+    CHECK(own_plate.objects[0].part_settings.empty());
+}
+
 TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine reads it all back (formats.md, rule 11)",
           "[project]") {
     Project p = sample();
@@ -638,4 +689,37 @@ TEST_CASE("a project keeps which models are not printable", "[project]") {
     CHECK(back_3mf.models[0].printable);
     CHECK_FALSE(back_3mf.models[1].printable);
     CHECK(write_project(sample()).find("\"printable\"") == std::string::npos);
+}
+
+TEST_CASE("the paint's slots travel with the project and pick what each mark prints with (MX33)", "[project][paint]") {
+    Project p;
+    p.paint_slots = {3, 0, 1};
+    const Project back = read_project(write_project(p));
+    CHECK(back.paint_slots == std::vector<int>{3, 0, 1});
+    CHECK(read_project(write_project(Project{})).paint_slots.empty());
+    // Too many slots, or one that is no number: the file is refused.
+    std::string bad = write_project(p);
+    const std::size_t at = bad.find("\"paint_slots\"");
+    REQUIRE(at != std::string::npos);
+    std::string many = bad;
+    many.replace(at, bad.find(']', at) - at + 1, "\"paint_slots\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]");
+    CHECK_THROWS_AS(read_project(many), ProjectError);
+    bad.replace(at, bad.find(']', at) - at + 1, "\"paint_slots\": [255]");
+    CHECK_THROWS_AS(read_project(bad), ProjectError);
+
+    // Slot 1 → blend 3, slot 2 empty (the part's own), slot 3 → filament 1;
+    // a mark past the table is the part's own too.
+    Painting paint;
+    paint.set_tree(PaintChannel::Color, 0, {1});
+    paint.set_tree(PaintChannel::Color, 1, {2});
+    paint.set_tree(PaintChannel::Color, 2, {Painting::kSplit, 3, 1, 2, 7});
+    paint.set_tree(PaintChannel::Color, 3, {5});
+    paint.set_tree(PaintChannel::Seam, 0, {1});
+    const Painting slotted = with_color_slots(paint, p.paint_slots);
+    CHECK(slotted.tree(PaintChannel::Color, 0) == Painting::Tree{3});
+    CHECK(slotted.tree(PaintChannel::Color, 1).empty());
+    CHECK(slotted.tree(PaintChannel::Color, 2) == Painting::Tree{Painting::kSplit, 1, 3, 0, 0});
+    CHECK(slotted.size(PaintChannel::Color) == 3); // the last one unpainted now
+    CHECK(slotted.tree(PaintChannel::Seam, 0) == Painting::Tree{1});
+    CHECK(with_color_slots(paint, {}) == paint);
 }

@@ -40,7 +40,8 @@ std::string read_file(const fs::path& p, const char* what) {
 
 // Written whole, then put in place: a cut never leaves half a file.
 void write_file(const fs::path& p, std::string_view data) {
-    fs::create_directories(p.parent_path());
+    if (!p.parent_path().empty()) // a bare name goes in the current folder (BH57)
+        fs::create_directories(p.parent_path());
     const fs::path tmp = p.string() + ".part";
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
@@ -341,8 +342,31 @@ json library_check(const fs::path& dir, const std::string& id, const std::string
             {"analyses", analyses}};
 }
 
+namespace {
+
+// A real day written YYYY-MM-DD (local_library.md, rule 1).
+bool real_day(const std::string& d) {
+    if (d.size() != 10 || d[4] != '-' || d[7] != '-')
+        return false;
+    for (const std::size_t i : {0u, 1u, 2u, 3u, 5u, 6u, 8u, 9u})
+        if (d[i] < '0' || d[i] > '9')
+            return false;
+    const int y = std::stoi(d.substr(0, 4)), m = std::stoi(d.substr(5, 2)), day = std::stoi(d.substr(8, 2));
+    static constexpr int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (m < 1 || m > 12 || day < 1)
+        return false;
+    const bool leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    return day <= kDays[m - 1] + (m == 2 && leap ? 1 : 0);
+}
+
+} // namespace
+
 json library_printed(const fs::path& dir, const std::string& id, const std::string& date,
                      const std::optional<fs::path>& photo, const std::string& note) {
+    // Only a real day; nothing saved otherwise (local_library.md, rule 1; BH58).
+    if (!date.empty() && !real_day(date))
+        fail("usage", "--date must be a real day written YYYY-MM-DD, not '" + date + "'",
+             "--date tiene que ser un día real escrito AAAA-MM-DD, no «" + date + "»");
     json e = read_entry(dir, id);
     json& printed = e["printed"];
     if (!printed.is_array())
@@ -359,7 +383,7 @@ json library_printed(const fs::path& dir, const std::string& id, const std::stri
         kept = "photos/" + std::to_string(n) + ext;
         copy_in(*photo, entry_dir(dir, id) / kept, "photo");
     }
-    printed.push_back({{"date", date.empty() ? now_utc() : date}, {"photo", kept}, {"note", note}});
+    printed.push_back({{"date", date.empty() ? now_utc().substr(0, 10) : date}, {"photo", kept}, {"note", note}}); // without --date, today
     write_entry(dir, e);
     return e;
 }

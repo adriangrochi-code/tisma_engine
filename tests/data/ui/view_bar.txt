@@ -1,0 +1,31 @@
+# The view bar at the bottom in the middle (interface.md, «Navegación de la
+# vista 3D», rule 3): with Girar picked, a left drag turns the view; with
+# Desplazar it moves it; with Acercar, up comes nearer; Esc goes back to the
+# usual (a left drag from an empty place turns nothing). Perspective and
+# orthographic swap; Encuadrar frames all.
+wait 3
+expect-control view_orbit
+expect-control view_pan
+expect-control view_zoom
+expect-control view_fit
+expect-control view_projection
+expect-control view_render
+expect-in-view view_tools
+menu view_orbit
+camera-mark
+mouse left 0.15 0.25 60 20
+expect-camera turned
+menu view_pan
+camera-mark
+mouse left 0.15 0.25 60 20
+expect-camera moved
+menu view_zoom
+camera-mark
+mouse left 0.15 0.35 0 -60
+expect-camera nearer
+key escape
+camera-mark
+mouse left 0.15 0.25 40 30
+expect-camera same
+menu view_projection
+menu view_fit

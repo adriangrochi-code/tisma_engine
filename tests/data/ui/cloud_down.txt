@@ -1,0 +1,9 @@
+# The service's state (cloud.md, rule 4a; CC21): with no node the server says
+# «down», and the dialog says so in the server's words, without blocking the
+# rest (the plans still come).
+menu cloud_chip
+expect-control cloud_window
+cloud-wait
+expect-control cloud_service
+expect-text Tisma Cloud: Down — No nodes are connected.
+expect-cloud plans 2

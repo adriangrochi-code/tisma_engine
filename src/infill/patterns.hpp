@@ -28,6 +28,15 @@ std::vector<Toolpath> honeycomb_fill(const Polygons& region, double side, double
 // twice, so about 4/3 of that), as Tisma Slicer measures (P8).
 double honeycomb_side(double width, double density);
 
+// The 3D honeycomb (infill_patterns.md, rule 11, P8), a lattice of truncated
+// octahedra cut at height z: rows `spacing` mm apart along
+// `principal_degrees`, each straight stretches joined by stretches at 45
+// degrees to them; how much of a row slants grows and shrinks with z (a
+// period of twice the spacing), and neighbouring rows are mirrored, so they
+// close into cells. Own design.
+std::vector<Toolpath> honeycomb3d_fill(const Polygons& region, double spacing, double z, double principal_degrees,
+                                       double width);
+
 // Closed loops parallel to the region's boundary, the first half a bead in
 // and then `spacing` mm apart inwards, outside first (rule 13).
 std::vector<Toolpath> concentric_fill(const Polygons& region, double spacing, double width);

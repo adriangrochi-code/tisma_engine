@@ -342,9 +342,13 @@ private:
             return list[k];
         };
         at(pulled_, tool_) = retracted_;
+        // With its pieces: the rounding they allow comes back with it.
+        at(pulled_pieces_, tool_) = double(pieces_);
         tool_ = std::size_t(n);
         retracted_ = limits_.mmu ? 0.0 : at(pulled_, tool_);
+        pieces_ = limits_.mmu ? 0 : std::size_t(at(pulled_pieces_, tool_));
         at(pulled_, tool_) = 0.0;
+        at(pulled_pieces_, tool_) = 0.0;
         target_ = retracted_;
         tool_back_ = retracted_ > 1e-9;
         pulling_ = false;
@@ -649,6 +653,7 @@ private:
     bool cold_noted_ = false;     // and that note
     std::vector<bool> macro_heats_; // set to 0 before a printer macro, which may heat it: only a note
     std::vector<double> pulled_;  // each extruder's filament pulled back when it left
+    std::vector<double> pulled_pieces_; // and in how many pieces
     bool tool_back_ = false;      // the tool came back from a change: its own extra
     bool tower_ = false;          // in the wipe tower's lines
     bool awaiting_z_ = false;
@@ -753,6 +758,14 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     }
     if (const std::optional<WaveParams> waves = wave_params(s)) // the crests: half the amplitude higher
         limits.wave = std::max(limits.wave, 0.5 * waves->amplitude);
+    // Sublayers (color_mixing_plus.md, rule 10): a pass's top under its
+    // layer's, down to its thinnest pass.
+    if (s.mix_subdivide && std::any_of(model.tool_order.begin(), model.tool_order.end(), [](const auto& o) { return !o.empty(); })) {
+        double thickest = 0.0;
+        for (const Layer& layer : model.layers)
+            thickest = std::max(thickest, layer.top - layer.bottom);
+        limits.wave = std::max(limits.wave, thickest);
+    }
     // The raised loops and the crests, and the travels over them, go that
     // much higher than the top layer (a staggered top layer with no lift
     // went past it: fuzzer, seed 20261029, run 354).

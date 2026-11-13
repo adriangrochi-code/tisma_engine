@@ -115,6 +115,31 @@ using Variables = std::map<std::string, TemplateValue, std::less<>>;
 const TemplateValue& one(const TemplateValue& v) { return v.kind == Kind::List && v.list.size() == 1 ? v.list[0] : v; }
 bool numeric(const TemplateValue& v) { return one(v).kind == Kind::Int || one(v).kind == Kind::Real; }
 double real_of(const TemplateValue& v) { return one(v).kind == Kind::Int ? double(one(v).integer) : one(v).real; }
+
+// A text written as a number ("5000", "0.4", "50%"), as the values a machine's
+// variables or source values bring, counts as that number (gcode_macros.md,
+// rule 10 bis bis; BH50). Anything else stays as it is.
+TemplateValue number_of_text(const TemplateValue& v) {
+    if (v.kind != Kind::Text || v.text.empty())
+        return v;
+    std::string_view t = v.text;
+    if (t.size() > 1 && t.back() == '%')
+        t.remove_suffix(1);
+    if (t.front() == '"')
+        return v;
+    const TemplateValue n = TemplateValue::parse(t);
+    return n.kind == Kind::Int || n.kind == Kind::Real ? n : v;
+}
+
+// A list where one value is expected (a setting per extruder) counts as its
+// only value, or else the value of the extruder in use (gcode_macros.md,
+// rule 10 bis bis, GM15): past the end, the last one.
+const TemplateValue& of_extruder(const TemplateValue& v, long long extruder) {
+    if (v.kind != Kind::List || v.list.empty())
+        return v;
+    const std::size_t at = extruder < 0 ? 0 : std::min<std::size_t>(std::size_t(extruder), v.list.size() - 1);
+    return v.list[at];
+}
 bool ident_start(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; }
 bool ident_char(char c) { return ident_start(c) || (c >= '0' && c <= '9') || c == '.'; }
 
@@ -144,7 +169,10 @@ class Expression {
 public:
     Expression(const Source& source, std::size_t at, std::size_t end,
                const std::function<const TemplateValue*(std::string_view)>& lookup)
-        : src_(source), at_(at), end_(end), lookup_(lookup) {}
+        : src_(source), at_(at), end_(end), lookup_(lookup) {
+        if (const TemplateValue* e = lookup_("current_extruder"); e && e->kind == Kind::Int)
+            extruder_ = e->integer;
+    }
 
     TemplateValue whole() {
         TemplateValue v = ternary();
@@ -274,7 +302,7 @@ private:
             if (!take("/"))
                 src_.fail(at_, "the regular expression has no closing /");
             try {
-                const bool found = std::regex_search(template_text(a), std::regex(pattern));
+                const bool found = std::regex_search(template_text(of_extruder(left, extruder_)), std::regex(pattern));
                 return TemplateValue::of(found == match);
             } catch (const std::regex_error&) {
                 src_.fail(at, "a regular expression that cannot be read");
@@ -308,7 +336,13 @@ private:
             const std::size_t at = at_;
             if (take("+")) {
                 const TemplateValue b = product();
-                if (a.kind == Kind::Text || b.kind == Kind::Text)
+                // Texts are joined, unless they are numbers next to a number
+                // (rule 10 bis bis, BH50): "5000" + 1 is 5001, "a" + 1 is a1.
+                const TemplateValue& x = of_extruder(a, extruder_);
+                const TemplateValue& y = of_extruder(b, extruder_);
+                const bool texts = (x.kind == Kind::Text && y.kind == Kind::Text) || (x.kind == Kind::Text && !numeric(x)) ||
+                                   (y.kind == Kind::Text && !numeric(y));
+                if (texts)
                     a = TemplateValue::of(template_text(a) + template_text(b));
                 else
                     a = arithmetic('+', a, b, at);
@@ -521,6 +555,10 @@ private:
             count(1, 1);
             return TemplateValue::of(static_cast<long long>(std::trunc(number(0))));
         }
+        if (name == "ceil") { // up to the next whole number (gcode_macros.md, rule 4, GM16)
+            count(1, 1);
+            return TemplateValue::of(static_cast<long long>(std::ceil(number(0))));
+        }
         if (name == "round") { // halves up
             count(1, 1);
             return TemplateValue::of(static_cast<long long>(std::floor(number(0) + 0.5)));
@@ -615,6 +653,19 @@ private:
     const Source& src_;
     std::size_t at_, end_;
     const std::function<const TemplateValue*(std::string_view)>& lookup_;
+    long long extruder_ = 0;
+
+    // Inside an expression, a list where one value is expected and a text
+    // written as a number count as that value (rule 10 bis bis, GM15, BH50).
+    TemplateValue one(const TemplateValue& v) const { return number_of_text(of_extruder(v, extruder_)); }
+    bool numeric(const TemplateValue& v) const {
+        const TemplateValue x = one(v);
+        return x.kind == Kind::Int || x.kind == Kind::Real;
+    }
+    double real_of(const TemplateValue& v) const {
+        const TemplateValue x = one(v);
+        return x.kind == Kind::Int ? double(x.integer) : x.real;
+    }
 };
 
 // Where the } that closes the { at `open` is, past texts in quotes.
@@ -841,6 +892,11 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
                         }
                         if (v->kind == TemplateValue::Kind::List)
                             v = &v->list[static_cast<std::size_t>(at)];
+                    } else if (v->kind == TemplateValue::Kind::List) {
+                        // [name] of a list: the value of the extruder in use
+                        // (gcode_macros.md, rule 10 bis bis; BH50).
+                        const TemplateValue* e = lookup("current_extruder");
+                        v = &of_extruder(*v, e && e->kind == TemplateValue::Kind::Int ? e->integer : 0);
                     }
                     out += template_text(*v);
                 }
@@ -866,7 +922,26 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
         const auto word = [&](std::string_view w) {
             return block.substr(0, w.size()) == w && (block.size() == w.size() || !ident_char(block[w.size()]));
         };
-        if (word("if")) {
+        // `then` outside texts: a block of statements, not the {if} form.
+        const auto has_then = [&] {
+            char quote = 0;
+            for (std::size_t k = 0; k + 4 <= block.size(); ++k) {
+                if (quote) {
+                    if (block[k] == '\\')
+                        ++k;
+                    else if (block[k] == quote)
+                        quote = 0;
+                } else if (block[k] == '"') {
+                    quote = '"';
+                } else if (block.substr(k, 4) == "then" && (k == 0 || !ident_char(block[k - 1])) &&
+                           (k + 4 == block.size() || !ident_char(block[k + 4]))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        const bool statements = has_then();
+        if (word("if") && !statements) {
             Expression cond(src, begin + 2, end, lookup);
             bool yes = false;
             if (kept()) {
@@ -874,7 +949,7 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
                 yes = cond.truth(v, begin + 2);
             }
             open.push_back({kept(), yes, kept() && yes, i});
-        } else if (word("elsif")) {
+        } else if (word("elsif") && !statements) {
             if (open.empty() || open.back().after_else)
                 src.fail(i, "an {elsif} without its {if}");
             Branch& b = open.back();
@@ -886,50 +961,122 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
             }
             b.kept = b.outer && !b.taken && yes;
             b.taken = b.taken || yes;
-        } else if (word("else")) {
+        } else if (word("else") && !statements) {
             if (open.empty() || open.back().after_else)
                 src.fail(i, "an {else} without its {if}");
             Branch& b = open.back();
             b.kept = b.outer && !b.taken;
             b.taken = true;
             b.after_else = true;
-        } else if (word("endif")) {
+        } else if (word("endif") && !statements) {
             if (open.empty())
                 src.fail(i, "an {endif} without its {if}");
             open.pop_back();
         } else if (kept()) {
             if (block.empty())
                 src.fail(i, "an empty {}");
-            // Statements apart by ';' (outside texts and brackets): local and
+            // A block of statements (gcode_macros.md, rule 1, GM18): apart by
+            // ';' outside texts and brackets, and by the words of a condition
+            // (if … then, elsif … then, else, endif). Statements: local and
             // global ones, assignments to a variable or a list's item
             // (name = …, name[i] = …), and expressions, whose values are
             // written (PrusaSlicer's documented macro language).
-            std::vector<std::pair<std::size_t, std::size_t>> statements;
+            struct Piece {
+                enum Kind { Statement, If, Elsif, Else, Endif } kind;
+                std::size_t a, b; // the statement, or the condition
+            };
+            std::vector<Piece> pieces;
             {
-                std::size_t from = begin;
-                int depth = 0;
-                char quote = 0;
-                for (std::size_t k = begin; k < end; ++k) {
-                    const char ch = text[k];
-                    if (quote) {
-                        if (ch == '\\')
-                            ++k;
-                        else if (ch == quote)
-                            quote = 0;
-                    } else if (ch == '"') {
-                        quote = ch;
-                    } else if (ch == '(' || ch == '[') {
-                        ++depth;
-                    } else if ((ch == ')' || ch == ']') && depth > 0) {
-                        --depth;
-                    } else if (ch == ';' && depth == 0) {
-                        statements.emplace_back(from, k);
-                        from = k + 1;
+                const auto blank = [&](char ch) { return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'; };
+                const auto word_at = [&](std::size_t k, std::string_view w) {
+                    return k + w.size() <= end && text.substr(k, w.size()) == w &&
+                           (k + w.size() == end || !ident_char(text[k + w.size()])) && (k == begin || !ident_char(text[k - 1]));
+                };
+                // The end of a statement or condition from k: ';' (or, with
+                // `then_ends`, the word then) outside texts and brackets.
+                const auto scan = [&](std::size_t k, bool then_ends) {
+                    int depth = 0;
+                    char quote = 0;
+                    for (; k < end; ++k) {
+                        const char ch = text[k];
+                        if (quote) {
+                            if (ch == '\\')
+                                ++k;
+                            else if (ch == quote)
+                                quote = 0;
+                        } else if (ch == '"') {
+                            quote = ch;
+                        } else if (ch == '(' || ch == '[') {
+                            ++depth;
+                        } else if ((ch == ')' || ch == ']') && depth > 0) {
+                            --depth;
+                        } else if (depth == 0 && (then_ends ? word_at(k, "then") : ch == ';')) {
+                            return k;
+                        }
+                    }
+                    return end;
+                };
+                std::size_t k = begin;
+                while (k < end) {
+                    while (k < end && (blank(text[k]) || text[k] == ';'))
+                        ++k;
+                    if (k >= end)
+                        break;
+                    if (word_at(k, "if") || word_at(k, "elsif")) {
+                        const bool elsif = word_at(k, "elsif");
+                        const std::size_t from = k + (elsif ? 5 : 2), then = scan(from, true);
+                        if (then >= end)
+                            src.fail(k, std::string("an ") + (elsif ? "elsif" : "if") + " without its then");
+                        pieces.push_back({elsif ? Piece::Elsif : Piece::If, from, then});
+                        k = then + 4;
+                    } else if (word_at(k, "endif")) {
+                        pieces.push_back({Piece::Endif, k, k});
+                        k += 5;
+                    } else if (word_at(k, "else")) {
+                        pieces.push_back({Piece::Else, k, k});
+                        k += 4;
+                    } else {
+                        const std::size_t stop = scan(k, false);
+                        pieces.push_back({Piece::Statement, k, stop});
+                        k = stop + 1;
                     }
                 }
-                statements.emplace_back(from, end);
             }
-            for (auto [a, b] : statements) {
+            std::vector<Branch> inner; // the block's own conditions
+            const auto inner_kept = [&] { return inner.empty() || inner.back().kept; };
+            for (const Piece& piece : pieces) {
+                if (piece.kind == Piece::If) {
+                    bool yes = false;
+                    if (inner_kept()) {
+                        Expression cond(src, piece.a, piece.b, lookup);
+                        yes = cond.truth(cond.whole(), piece.a);
+                    }
+                    inner.push_back({inner_kept(), yes, inner_kept() && yes, piece.a});
+                    continue;
+                }
+                if (piece.kind == Piece::Elsif || piece.kind == Piece::Else) {
+                    if (inner.empty() || inner.back().after_else)
+                        src.fail(piece.a, piece.kind == Piece::Elsif ? "an elsif without its if" : "an else without its if");
+                    Branch& br = inner.back();
+                    bool yes = piece.kind == Piece::Else;
+                    if (piece.kind == Piece::Elsif && br.outer && !br.taken) {
+                        Expression cond(src, piece.a, piece.b, lookup);
+                        yes = cond.truth(cond.whole(), piece.a);
+                    }
+                    br.kept = br.outer && !br.taken && yes;
+                    br.taken = br.taken || yes;
+                    br.after_else = piece.kind == Piece::Else;
+                    continue;
+                }
+                if (piece.kind == Piece::Endif) {
+                    if (inner.empty())
+                        src.fail(piece.a, "an endif without its if");
+                    inner.pop_back();
+                    continue;
+                }
+                if (!inner_kept())
+                    continue;
+                std::size_t a = piece.a, b = piece.b;
                 while (a < b && (text[a] == ' ' || text[a] == '\t' || text[a] == '\n' || text[a] == '\r'))
                     ++a;
                 while (b > a && (text[b - 1] == ' ' || text[b - 1] == '\t' || text[b - 1] == '\n' || text[b - 1] == '\r'))
@@ -1001,6 +1148,8 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
                 }
                 out += template_text(Expression(src, a, b, lookup).whole());
             }
+            if (!inner.empty())
+                src.fail(inner.back().at, "an if without its endif");
         }
         i = close + 1;
     }

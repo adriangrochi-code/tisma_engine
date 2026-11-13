@@ -249,6 +249,11 @@ TEST_CASE("calibration: towers write each segment's value", "[calibration]") {
     CHECK(tower_values(0.4, 2.0, 0.4).size() == 5);
     CHECK(tower_values(1, 1, 0).size() == 1);
     CHECK(tower_values(0, 1000, 1).size() == 40);
+    // The values as written, without the sums' noise (BH55): going down,
+    // 1 - 0.4 * 2 is 0.2; going up, 0.2 + 0.3 * 2 is 0.8.
+    CHECK(tower_values(1.0, 0.2, 0.4) == std::vector<double>{1.0, 0.6, 0.2});
+    CHECK(tower_values(0.2, 1.0, 0.3) == std::vector<double>{0.2, 0.5, 0.8});
+    CHECK(tower_values(0.1, 0.7, 0.1) == std::vector<double>{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7});
 
     SECTION("temperature") {
         const CalibrationPrint p = temperature_tower(230, 200, 10);
@@ -590,30 +595,54 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     const SlicedModel m = slice_model(weld_exact(flow.mesh), s);
     const std::string g = gcode_of(m, s);
     CHECK(checks(g, gcode_limits(m, s)));
-    // Each extrusion of a layer at its segment's flow: its section (a
-    // rectangle with rounded sides, gcode_motion.md rules 1 and 4) times its
-    // feed, the feed rounded down to whole mm/min.
-    const auto flows = [&g](const std::string& z) {
+    // Each extrusion of a layer at its segment's flow: the filament it pushes
+    // (E over the filament's section) over the move's time at its feed, the
+    // feed rounded down to whole mm/min. From E itself: ;WIDTH is written in
+    // steps of 0.005 mm (GCODE_OUTPUT.md), which would read the flow 1 % off.
+    const double filament = std::numbers::pi / 4.0 * s.filament_diameter * s.filament_diameter;
+    const auto flows = [&g, filament](const std::string& z) {
         std::vector<double> out;
         const std::size_t from = g.find(";Z:" + z + "\n");
         if (from == std::string::npos)
             return out;
         const std::size_t to = g.find(";Z:", from + 3);
-        std::istringstream in(g.substr(from, to - from));
-        double width = 0.0;
-        for (std::string line; std::getline(in, line);) {
-            if (line.rfind(";WIDTH:", 0) == 0)
-                width = std::stod(line.substr(7));
-            const std::size_t e = line.find(" E"), f = line.find(" F");
-            if (line.rfind("G1 X", 0) != 0 || e == std::string::npos || f == std::string::npos)
+        // The position and E where the layer starts, from everything before it.
+        double x = 0.0, y = 0.0, e = 0.0;
+        bool relative = false;
+        const auto word = [](const std::string& line, char axis, double& v) {
+            const std::size_t at = line.find(std::string(" ") + axis);
+            if (at == std::string::npos)
+                return false;
+            v = std::stod(line.substr(at + 2));
+            return true;
+        };
+        std::istringstream all(g.substr(0, to == std::string::npos ? g.size() : to));
+        std::size_t at = 0;
+        for (std::string line; std::getline(all, line); at += line.size() + 1) {
+            if (line.rfind("M83", 0) == 0)
+                relative = true;
+            else if (line.rfind("M82", 0) == 0)
+                relative = false;
+            else if (line.rfind("G92", 0) == 0)
+                word(line, 'E', e);
+            if (line.rfind("G1 ", 0) != 0 && line.rfind("G0 ", 0) != 0)
                 continue;
-            const double section = (width - 0.2) * 0.2 + std::numbers::pi / 4.0 * 0.2 * 0.2;
-            out.push_back(section * std::stod(line.substr(f + 2)) / 60.0);
+            double nx = x, ny = y, ne = e, f = 0.0;
+            const bool hx = word(line, 'X', nx), hy = word(line, 'Y', ny), he = word(line, 'E', ne),
+                       hf = word(line, 'F', f);
+            const double de = he ? (relative ? ne : ne - e) : 0.0;
+            if (at >= from && (hx || hy) && de > 0.0 && hf) {
+                const double length = std::hypot(nx - x, ny - y);
+                if (length > 0.0)
+                    out.push_back(de * filament / (length / (f / 60.0)));
+            }
+            x = nx, y = ny;
+            if (he && !relative)
+                e = ne;
         }
         return out;
     };
-    // Most at the flow (;WIDTH's three decimals aside), none past it (a few
-    // are held back by the machine's limits).
+    // Most at the flow, none past it (a few are held back by the machine's limits).
     std::vector<double> high = flows("10.200"), low = flows("2.200");
     REQUIRE(high.size() > 50);
     REQUIRE(low.size() > 50);
@@ -765,4 +794,34 @@ TEST_CASE("calibration: bridges and overhangs (docs/CALIBRATION.md)", "[calibrat
     CHECK_FALSE(test.support);
     CHECK_FALSE(test.arcs);
     CHECK(calibration_print_settings(CalibrationKind::Flow, supported).support);
+}
+
+TEST_CASE("blend palette: base, samples and numbers (calibration_models.md, CM8)", "[calibration][mixing]") {
+    using Catch::Matchers::WithinAbs;
+    const PalettePiece ten = palette_piece(10);
+    // 5 columns and 2 rows: 3 + 5 x 15 + 4 x 3 + 3 wide; 3 + 2 x 20 + 3 + 3 deep.
+    CHECK_THAT(ten.width, WithinAbs(93.0, 1e-9));
+    CHECK_THAT(ten.depth, WithinAbs(49.0, 1e-9));
+    REQUIRE(ten.samples.size() == 10);
+    const BoundingBox base = ten.base.bounding_box();
+    CHECK_THAT(base.min.x, WithinAbs(-46.5, 1e-4));
+    CHECK_THAT(base.max.y, WithinAbs(24.5, 1e-4));
+    CHECK_THAT(base.min.z, WithinAbs(0.0, 1e-6));
+    CHECK_THAT(base.max.z, WithinAbs(1.6, 1e-4)); // the numbers stand 0.6 mm out
+    // The first sample at the front left, 3 mm in, past its number (4 + 1 mm).
+    const BoundingBox first = ten.samples[0].bounding_box();
+    CHECK_THAT(first.min.x, WithinAbs(-43.5, 1e-4));
+    CHECK_THAT(first.min.y, WithinAbs(-24.5 + 3.0 + 5.0, 1e-4));
+    CHECK_THAT(first.max.x - first.min.x, WithinAbs(15.0, 1e-4));
+    CHECK_THAT(first.max.y - first.min.y, WithinAbs(15.0, 1e-4));
+    CHECK_THAT(first.min.z, WithinAbs(1.0, 1e-6));
+    CHECK_THAT(first.max.z, WithinAbs(3.0, 1e-6));
+    // Along X, then the next row towards the back.
+    CHECK_THAT(ten.samples[1].bounding_box().min.x - first.min.x, WithinAbs(18.0, 1e-4));
+    CHECK_THAT(ten.samples[5].bounding_box().min.y - first.min.y, WithinAbs(23.0, 1e-4));
+    // 26: 6 rows, the last with one.
+    const PalettePiece all = palette_piece(26);
+    CHECK(all.samples.size() == 26);
+    CHECK_THAT(all.depth, WithinAbs(3.0 + 6 * 20.0 + 5 * 3.0 + 3.0, 1e-9));
+    CHECK(palette_piece(0).samples.empty());
 }

@@ -530,6 +530,7 @@
     X(AlignedRectilinear, "Rectilíneo alineado", "Aligned rectilinear")                                               \
     X(Zigzag, "Zigzag", "Zigzag")                                                                                     \
     X(LineInfill, "Línea", "Line")                                                                                    \
+    X(Honeycomb3d, "Panal 3D", "3D honeycomb")                                                                     \
     X(Honeycomb, "Panal", "Honeycomb")                                                                                \
     X(ConcentricInfill, "Concéntrico", "Concentric")                                                                  \
     X(HilbertInfill, "Hilbert", "Hilbert")                                                                            \
@@ -713,6 +714,10 @@
     X(PaintFuzzy, "Piel difusa", "Fuzzy skin")                                                                        \
     X(PaintColors, "Colores", "Colors")                                                                               \
     X(PaintLater, "Llega cuando el motor tenga varios extrusores", "Comes when the engine has several extruders")   \
+    X(BrushRound, "Pincel", "Brush") \
+    X(BrushSmartFill, "Relleno inteligente", "Smart fill") \
+    X(SmartFillAngle, "Ángulo", "Angle") \
+    X(PaintColorsNeedTwo, "Con más de un filamento o con mezclas de colores", "With more than one filament or with colour blends") \
     X(PaintEnforce, "Forzar", "Enforce")                                                                              \
     X(PaintBlock, "Bloquear", "Block")                                                                                \
     X(BrushSize, "Pincel", "Brush")                                                                                   \
@@ -792,6 +797,17 @@
     X(HostKindRow, "Programa", "Program") \
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
+    X(CameraRow, "Cámara", "Camera") \
+    X(CameraOwn, "La cámara de la impresora", "The printer's camera") \
+    X(CameraNone, "Sin cámara", "No camera") \
+    X(CameraMissing, "%s (no conectada)", "%s (not connected)") \
+    X(CameraNotConnected, "La cámara elegida no está conectada a esta computadora.", "The chosen camera is not connected to this computer.") \
+    X(CameraNoUsb, "No hay cámaras USB conectadas.", "No USB cameras are connected.") \
+    X(CameraRealFps, "%s imágenes/s reales", "%s frames/s actual") \
+    X(CameraGone, "La cámara se desconectó.", "The camera was disconnected.") \
+    X(CameraSilent, "La cámara no manda imágenes hace 10 s.", "The camera has sent no frames for 10 s.") \
+    X(HostRepetierPrinter, "Impresora en el servidor", "Printer on the server") \
+    X(HostRepetierFirst, "vacío: la primera", "empty: the first one") \
     X(HostUser, "Usuario", "User") \
     X(HostPassword, "Contraseña", "Password") \
     X(HostBoardPassword, "Contraseña de la placa", "Board password") \
@@ -994,6 +1010,11 @@
     X(RenderTip, "Cómo se dibuja la vista: luz, oclusión ambiental, ray tracing y suavizado de bordes",                \
       "How the view is drawn: light, ambient occlusion, ray tracing and anti-aliasing")                               \
     X(RenderFast, "Rápida", "Fast")                                                                                   \
+    X(ViewOrbitTip, "Girar: arrastrar con el botón izquierdo gira la vista (Esc vuelve)", "Orbit: dragging with the left button turns the view (Esc goes back)") \
+    X(ViewPanTip, "Desplazar: arrastrar con el botón izquierdo mueve la vista (Esc vuelve)", "Pan: dragging with the left button moves the view (Esc goes back)") \
+    X(ViewZoomTip, "Acercar: arrastrar con el botón izquierdo acerca y aleja (Esc vuelve)", "Zoom: dragging with the left button zooms in and out (Esc goes back)") \
+    X(ViewPerspectiveTip, "En perspectiva: tocar pasa a ortogonal", "Perspective: click for orthographic") \
+    X(ViewOrthographicTip, "Ortogonal: tocar pasa a perspectiva", "Orthographic: click for perspective") \
     X(RenderAmbient, "Oclusión ambiental", "Ambient occlusion")                                                       \
     X(RenderRay, "Ray tracing", "Ray tracing")                                                                        \
     X(RenderFastTip, "Luz por píxel, sin oclusión: lo más liviano", "Per-pixel light, no occlusion: the lightest")     \
@@ -1011,7 +1032,8 @@
     X(RaySamples, "Muestras: %d de %d", "Samples: %d of %d")                                                          \
     X(RayPreparing, "Preparando la escena para los rayos…", "Preparing the scene for the rays…")                     \
     X(RayTooBig, "La escena es demasiado grande para el ray tracing en esta GPU", "The scene is too large for ray tracing on this GPU") \
-    X(DropHint, "Arrastrá un STL o un G-code acá, o usá Abrir", "Drop an STL or G-code file here, or use Open")      \
+    X(DropHint, "Abrir un archivo", "Open a file") \
+    X(DropHintSub, "o arrastrá un STL, un 3MF o un G-code acá", "or drop an STL, 3MF or G-code file here")      \
     X(KindTravel, "Viajes", "Travel")                                                                                 \
     X(KindOuterWall, "Pared externa", "Outer wall")                                                                   \
     X(KindInnerWall, "Pared interna", "Inner wall")                                                                   \
@@ -1144,6 +1166,7 @@
     X(UseValueConfirm, "Este dato no lo publica el fabricante. ¿Usarlo igual?", "The maker does not publish this value. Use it anyway?") \
     X(PublishedHint, "Datos de la comunidad del paquete libre, cada uno con su fuente. Ninguno cambia un ajuste solo.", "Community data from the free pack, each with its source. None changes a setting by itself.") \
     X(PublishedAt, "minuto %s", "minute %s") \
+    X(FilamentRefit, "El filamento no servía con esta impresión: se cambió a %s", "The filament did not work with this print profile: changed to %s") \
     X(PackKeptByHand, "Se mantuvieron tus cambios en %s; el resto vino del perfil elegido", "Your changes to %s were kept; the rest came from the chosen profile") \
     X(PackProfileGone, "Este perfil ya no está en el paquete: %s queda elegido hasta que elijas otro", "This profile is no longer in the pack: %s stays chosen until you choose another") \
     X(CmMaxFlow, "Flujo máximo medido", "Measured maximum flow") \
@@ -1233,12 +1256,11 @@
     X(FlowRow, "Flujo", "Flow")                                                                                       \
     X(FlowTip, "El porcentaje del volumen que se extruye en todas las líneas; lo ajusta la calibración de flujo", "The percentage of the volume every line extrudes; the flow calibration sets it") \
     X(GcodeOpened, "G-code abierto: %s", "G-code opened: %s")                                                         \
-    X(ProjectFromProgram, "Proyecto de %s: %d piezas. Sus ajustes todavía no se traen: se usan los de Tisma",          \
-      "Project from %s: %d parts. Its settings are not brought in yet: Tisma's are used")                              \
-    X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza. Sus ajustes todavía no se traen: se usan los de Tisma",          \
-      "Project from %s: 1 part. Its settings are not brought in yet: Tisma's are used")                                 \
-    X(ProjectSettingsSorted, "Ajustes del proyecto: %d traducidos, %d parecidos, %d sin equivalente (todavía no se aplican)", \
-      "Project settings: %d translated, %d similar, %d without equivalent (not applied yet)")                    \
+    X(ProjectFromProgram, "Proyecto de %s: %d piezas.", "Project from %s: %d parts.") \
+    X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza.", "Project from %s: 1 part.") \
+    X(ProjectSettingsKept, "Sus ajustes no se traen (no hay tabla para ese programa): se usan los de Tisma", "Its settings are not brought in (no table for that program): Tisma's are used") \
+    X(ProjectSettingsSorted, "Ajustes del proyecto: %d traducidos, %d parecidos, %d sin equivalente", \
+      "Project settings: %d translated, %d similar, %d without equivalent")                    \
     X(ProjectFromUnknown, "Proyecto de un programa desconocido: se abrieron las piezas, sin sus ajustes",             \
       "Project from an unknown program: the parts were opened, without their settings")                               \
     X(ViewerOnly, "Vista de un G-code abierto: no se puede volver a laminar", "Viewing an opened G-code file: it cannot be sliced again") \
@@ -1478,7 +1500,74 @@
       "Ctrl+Shift+P: the part goes to Prepare as an object; if it came from there, it replaces it and keeps its place, settings and painting") \
     X(DesignNeedsSolid, "Hacé un sólido primero.", "Make a solid first.") \
     X(DesignRestarted, "El componente de diseño se cerró y se abrió de nuevo.", "The design component closed and was opened again.") \
-    X(DesignMissing, "Falta el componente de diseño: reinstalá Tisma para usar Diseño.", "The design component is missing: reinstall Tisma to use Design.") \
+    X(DesignMissing, "Falta el componente de diseño (solidcraft-cli %s) en %s. Los paquetes de Tisma lo traen; una compilación propia lo baja con -DTISMA_SOLIDCRAFT=ON.", "The design component (solidcraft-cli %s) is missing from %s. Tisma's packages carry it; a build of your own downloads it with -DTISMA_SOLIDCRAFT=ON.") \
+    X(DesignTabSolid, "Sólido", "Solid") \
+    X(DesignTabSketch, "Boceto", "Sketch") \
+    X(DesignTabInspect, "Inspeccionar", "Inspect") \
+    X(DesignTabUtilities, "Utilidades", "Utilities") \
+    X(DesignGroupCreate, "Crear", "Create") \
+    X(DesignGroupModify, "Modificar", "Modify") \
+    X(DesignGroupConstruct, "Construir", "Construct") \
+    X(DesignGroupInsert, "Insertar", "Insert") \
+    X(DesignGroupInspect, "Inspeccionar", "Inspect") \
+    X(DesignGroupUtilities, "Utilidades", "Utilities") \
+    X(DesignGroupFinish, "Terminar", "Finish") \
+    X(DesignTipSketch, "Un boceto en un plano: líneas, rectángulos y círculos con cotas, para extruirlo después.", "A sketch on a plane: lines, rectangles and circles with dimensions, to extrude afterwards.") \
+    X(DesignTipPrimitive, "Agrega este sólido; sus medidas se cambian en su renglón del historial.", "Adds this solid; its sizes change in its row of the history.") \
+    X(DesignTipOperation, "Cambia un cuerpo: después se eligen en la vista sus aristas o caras.", "Changes a body: its edges or faces are then picked in the view.") \
+    X(DesignTipSketchTool, "Dibuja en el boceto: clics en la vista o coordenadas en la línea de comandos.", "Draws in the sketch: clicks in the view or coordinates on the command line.") \
+    X(DesignTipFinish, "Cierra el boceto y vuelve a Sólido.", "Closes the sketch and goes back to Solid.") \
+    X(DesignToolKey, "Tecla:", "Key:") \
+    X(DesignPressPull, "Presionar/Tirar", "Press/Pull") \
+    X(DesignAppearance, "Apariencia", "Appearance") \
+    X(DesignOffsetPlane, "Plano desplazado", "Offset plane") \
+    X(DesignAxisTool, "Eje", "Axis") \
+    X(DesignMeasureTool, "Medir", "Measure") \
+    X(DesignSectionTool, "Sección", "Section") \
+    X(DesignTipSection, "Corta la vista con un plano para ver adentro de los cuerpos; no cambia el diseño", "Cuts the view with a plane to look inside the bodies; the design does not change") \
+    X(SectionAxis, "Perpendicular a", "Square to") \
+    X(SectionFlip, "Dar vuelta el lado que se quita", "Flip the side left out") \
+    X(DesignToolSearch, "Buscar herramienta", "Search tools") \
+    X(DesignNavigator, "Navegador", "Browser") \
+    X(DesignNavOrigin, "Origen", "Origin") \
+    X(DesignNavSketches, "Bocetos", "Sketches") \
+    X(DesignNavBodies, "Cuerpos", "Bodies") \
+    X(DesignNavConstruction, "Construcción", "Construction") \
+    X(DesignNavPlaneTip, "Un clic empieza un boceto en este plano", "A click starts a sketch on this plane") \
+    X(DesignTipSearch, "Busca una herramienta por su nombre; Enter empieza la primera.", "Finds a tool by its name; Enter starts the first one.") \
+    X(DesignSearchNothing, "Ninguna herramienta se llama así", "No tool by that name") \
+    X(DesignRepeat, "Repetir: %s", "Repeat: %s") \
+    X(DesignRepeatShort, "Repetir", "Repeat") \
+    X(DesignRepeatNone, "Repetir (todavía nada)", "Repeat (nothing yet)") \
+    X(DesignTipRepeat, "Vuelve a empezar la última herramienta usada.", "Starts the last tool used again.") \
+    X(DesignTipDeleteLast, "Borra el último paso del diseño.", "Deletes the design's last step.") \
+    X(OpNeedFaceShell, "Elegí al menos una cara para vaciar", "Pick at least one face to open") \
+    X(OpNeedEdge, "Elegí al menos una arista", "Pick at least one edge") \
+    X(OpNeedPoint, "Elegí al menos un punto en la pieza", "Pick at least one point on the part") \
+    X(DesignAccept, "Aceptar", "OK") \
+    X(DesignInPanel, "Se edita en el cuadro de la derecha", "Being edited in the panel on the right") \
+    X(DesignInPanelLeft, "Se edita en el cuadro de la izquierda", "Being edited in the panel on the left") \
+    X(ImportTitle, "Proyecto de %s", "%s project") \
+    X(ImportSummary, "Proyecto de %s: %d piezas, %d placa. Ajustes: %d traducidos, %d parecidos, %d sin equivalente", "%s project: %d pieces, %d plate. Settings: %d translated, %d similar, %d without equivalent") \
+    X(ImportPrinter, "Impresora del proyecto: %s", "The project's printer: %s") \
+    X(ImportShowDetail, "Ver detalle", "Show details") \
+    X(ImportHideDetail, "Ocultar detalle", "Hide details") \
+    X(ImportSearch, "Buscar un ajuste", "Search a setting") \
+    X(ImportTranslated, "Traducidos", "Translated") \
+    X(ImportSimilar, "Parecidos", "Similar") \
+    X(ImportNone, "Sin equivalente", "Without equivalent") \
+    X(ImportUseTheirs, "Usar la impresora del proyecto", "Use the project's printer") \
+    X(ImportUseMine, "Usar la mía", "Use mine") \
+    X(ImportPrinterMissing, "Esa impresora no está en el paquete de perfiles", "That printer is not in the profile pack") \
+    X(KlipperMoonraker, "Klipper (Moonraker)", "Klipper (Moonraker)") \
+    X(ProjectSettingsSkipped, "Sin equivalente (%d): %s…", "No equivalent (%d): %s…") \
+    X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \
+    X(DesignTimelineWaits, "Después de la marca: espera", "After the marker: waiting") \
+    X(DesignTimelineSuppress, "Suprimir", "Suppress") \
+    X(DesignTimelineUnsuppress, "Volver a usar", "Use again") \
+    X(DesignTimelineRename, "Renombrar", "Rename") \
+    X(DesignTimelineDelete, "Borrar", "Delete") \
+    X(DesignTimelineMarker, "Arrastrala para volver atrás en el historial", "Drag it to go back in the history") \
     X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
     X(DesignBuilding, "Construyendo…", "Building…") \
     X(DesignVolume, "Volumen", "Volume") \
@@ -1500,7 +1589,7 @@
     X(OpSplit, "Partir", "Split") \
     X(OpDraft, "Desmoldeo", "Draft") \
     X(OpPickDraft, "Hacé clic en las caras a inclinar; Enter termina", "Click the faces to tilt; Enter finishes") \
-    X(OpOffset, "Desplazar X, Y, Z (mm)", "Offset X, Y, Z (mm)") \
+    X(OpOffset, "Desplazar (mm)", "Offset (mm)") \
     X(OpTurn, "Girar (°)", "Turn (°)") \
     X(OpCopyBody, "Copia (deja el original)", "Copy (keeps the original)") \
     X(OpPlaneOffset, "Corrido (mm)", "Moved by (mm)") \
@@ -1666,7 +1755,14 @@
     X(RuleConflicting, "Esa restricción contradice a otras: no se agregó", "That constraint contradicts others: not added") \
     X(SketchSnaps, "Referencias (F3)", "Snaps (F3)") \
     X(SketchOrtho, "Ortogonal (F8)", "Ortho (F8)") \
-    X(SketchGrid, "Cuadrícula (F9)", "Grid (F9)") \
+    X(SketchGrid, "Ajuste a la cuadrícula (F9)", "Snap to grid (F9)") \
+    X(SketchPalette, "Paleta del boceto", "Sketch palette") \
+    X(SketchConstruction, "Línea de construcción", "Construction line") \
+    X(SketchShowGrid, "Mostrar cuadrícula", "Show grid") \
+    X(SketchShowRules, "Mostrar restricciones", "Show constraints") \
+    X(SketchShowDims, "Mostrar cotas", "Show dimensions") \
+    X(SketchLookAt, "Mirar de frente", "Look at") \
+    X(SketchSection, "Sección", "Section") \
     X(SketchPolar, "Polar (F10)", "Polar (F10)") \
     X(SketchLength, "Largo", "Length") \
     X(SketchAngle, "Ángulo", "Angle") \
@@ -1755,7 +1851,6 @@
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
     X(ShapeGalleryMenu, "Galería de formas", "Shape Gallery") \
-    X(ThingiverseMenu, "Thingiverse", "Thingiverse") \
     X(PackUpToDate, "Los perfiles están al día.", "The profiles are up to date.") \
     X(WizardMenu, "Asistente de configuración…", "Configuration Wizard…") \
     X(CheckConfigUpdatesMenu, "Buscar actualizaciones de la configuración", "Check for Configuration Updates") \
@@ -1789,6 +1884,7 @@
     X(MirrorMenu, "Espejar", "Mirror") \
     X(SplitMenu, "Separar", "Split") \
     X(SplitObjectsMenu, "En piezas", "To objects") \
+    X(SplitPartsMenu, "En partes", "To parts") \
     X(AxisX, "En X", "Along X axis") \
     X(AxisY, "En Y", "Along Y axis") \
     X(AxisZ, "En Z", "Along Z axis") \
@@ -2183,6 +2279,11 @@
     X(PaintMaxRegionWidth, "Ancho máximo de una región pintada", "Widest painted region") \
     X(PaintInterlockingDepth, "Entrelazado de las regiones pintadas", "Painted regions' interlocking") \
     X(SubMultiNozzle, "Boquillas distintas y colores", "Different nozzles and colours") \
+    X(SubColorMix, "Mezcla de colores: capas", "Colour mixing: layers") \
+    X(SumMixCadence, "Alto por filamento", "Height per filament") \
+    X(SumMixSublayers, "Subcapas", "Sublayers") \
+    X(SubColorMixZones, "Mezcla de colores: dónde va", "Colour mixing: where it goes") \
+    X(SumMixShell, "Solo la superficie", "Surface only") \
     X(FineWallsCoarseInfill, "Paredes finas, relleno grueso", "Fine walls, coarse infill") \
     X(ColorMixingRow, "Mezcla de colores", "Color mixing") \
     X(ColorMixingCost, "Con una sola boquilla, cada capa con mezcla es un cambio de filamento con su purga: la impresión usa bastante más filamento y tarda más.", "With a single nozzle, every mixed layer is a filament change with its purge: the print uses much more filament and takes longer.") \
@@ -2281,6 +2382,7 @@
     X(SubResinCorrections, "Correcciones de resina", "Resin corrections") \
     X(SubResinMaterial, "Datos de la resina", "Resin data") \
     X(ResinLayerHeight, "Altura de capa", "Layer height") \
+    X(ResinFirstLayerHeight, "Altura de la primera capa", "First layer height") \
     X(DisplayPixelsX, "Píxeles en X", "Pixels in X") \
     X(DisplayPixelsY, "Píxeles en Y", "Pixels in Y") \
     X(DisplayWidth, "Ancho de la pantalla", "Display width") \
@@ -2444,6 +2546,7 @@
     X(WipeRow, "Barrer al retraer", "Wipe while retracting") \
     X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
     X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
+    X(RetractOnlyCrossingWalls, "Retraer solo al cruzar paredes", "Retract only when crossing walls") \
     X(WipeInward, "Barrer hacia adentro", "Wipe inward") \
     X(Polyholes, "Agujeros como polígonos", "Holes as polygons") \
     X(UnsupportedLast, "Paredes sin apoyo al final", "Unsupported walls last") \
@@ -2501,7 +2604,99 @@
     X(MaxBedTemp, "Cama máxima", "Bed maximum") \
     X(VariablesRow, "Variables del G-code", "G-code variables") \
     X(ListCount, "%d en la lista", "%d in the list") \
-    X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)")
+    X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)") \
+    X(ViewHome, "Inicio", "Home") \
+    X(NavigationPref, "Navegación", "Navigation") \
+    X(NavigationFusion, "Fusion 360", "Fusion 360") \
+    X(NavigationRightOrbits, "Botón derecho gira", "Right button turns") \
+    X(NavigationClassic, "Clásica", "Classic") \
+    X(NavigationNote, "Rueda: desplaza; Mayús + rueda: gira; doble clic con la rueda: encuadra", \
+      "Wheel: moves; Shift + wheel: turns; double click with the wheel: frames") \
+    X(MixChangesPlanned, "Con los modelos de la placa: unos %d cambios de filamento", \
+      "With the plate's models: about %d filament changes") \
+    X(MixPurgeShare, "La purga sería el %.0f %% del filamento. Lo que la baja:", "The purge would be %.0f %% of the filament. What lowers it:") \
+    X(MixSuggestSubdivide, "Apagar las subcapas: %d cambios, purga del %.0f %%", "Sublayers off: %d changes, %.0f %% purge") \
+    X(MixSuggestCadence, "Capas más altas para el filamento que más hay: %d cambios, purga del %.0f %%", \
+      "Higher layers for the larger share: %d changes, %.0f %% purge") \
+    X(MixSuggestSurface, "Solo la superficie: %d cambios, purga del %.0f %%", "Only the surface: %d changes, %.0f %% purge") \
+    X(PurgeByColors, "Según los colores de los filamentos", "By the filaments' colours") \
+    X(PurgePairs, "Pares…", "Pairs…") \
+    X(PurgeByColorsHint, "por colores", "by colours") \
+    X(PurgePairsRow, "Purga por par", "Purge by pair") \
+    X(PurgePairsTitle, "Purga entre filamentos, mm³ (fila: de; columna: a)", "Purge between filaments, mm³ (row: from; column: to)") \
+    X(PurgeResetColors, "Volver a los colores", "Back to the colours") \
+    X(MixSubdivideRow, "Subcapas en las mezclas", "Sublayers in the blends") \
+    X(MixSubMinHeightRow, "Alto mínimo de una subcapa", "Lowest sublayer") \
+    X(MixSubFirstLayerRow, "Dividir la primera capa", "Divide the first layer") \
+    X(MixSubInfillRow, "Dividir también el relleno", "Divide the infill too") \
+    X(MixCadenceRow, "Alto de capa por filamento", "Layer height by filament") \
+    X(MixHeightARow, "Alto del primer filamento", "First filament's height") \
+    X(MixHeightBRow, "Alto del segundo filamento", "Second filament's height") \
+    X(MixStepRow, "Altura del ciclo", "Cycle's height") \
+    X(MixZeroIsLayer, "0: el alto de la capa", "0: the layer's height") \
+    X(MixSurfaceOnlyRow, "Mezcla solo en la superficie", "Blend only on the surface") \
+    X(MixSurfaceDepthRow, "Grosor de la superficie", "Surface's thickness") \
+    X(MixExtraWallsRow, "Paredes de más en las mezclas", "Extra walls in the blends") \
+    X(MixPurgeIntoInfillRow, "Purgar en el relleno", "Purge into the infill") \
+    X(MixPurgeInfillMaxRow, "Relleno máximo para la purga", "Highest infill for the purge") \
+    X(MixPredictorRow, "Predicción del color", "Colour prediction") \
+    X(MixPredictorTip, "Cómo se prevé el color de una mezcla; la espectral usa la TD de cada filamento", \
+      "How a blend's colour is foreseen; the spectral one uses each filament's TD") \
+    X(MixPredictorMixer, "Simple", "Simple") \
+    X(MixPredictorSpectral, "Espectral (con la TD)", "Spectral (with the TD)") \
+    X(MixFilamentGone, "Una mezcla usa un filamento que ya no está: quedó apagada y sus piezas van con el filamento 1", \
+      "A blend uses a filament no longer there: it is off and its models print with filament 1") \
+    X(CutConnectors, "Conectores", "Connectors") \
+    X(CutConnectorNone, "Sin conectores", "No connectors") \
+    X(CutConnectorDowel, "Espiga fija", "Fixed dowel") \
+    X(CutConnectorPin, "Pasador", "Pin") \
+    X(CutShapeRound, "Redondo", "Round") \
+    X(CutShapeSquare, "Cuadrado", "Square") \
+    X(CutConnectorSize, "Tamaño", "Size") \
+    X(CutConnectorDepth, "Profundidad", "Depth") \
+    X(CutConnectorTolerance, "Tolerancia", "Tolerance") \
+    X(CutInvert, "Invertir plano (la espiga arriba)", "Flip the plane (the dowel above)") \
+    X(CutConnectorCount, "%d puestos (clic en el plano; clic derecho saca). Sin ninguno, uno en el medio", \
+      "%d placed (click on the plane; right click removes). With none, one in the middle") \
+    X(CutPinName, "pasador", "pin") \
+    X(CutConnectorsMoved, "Los conectores pasaron a la otra mitad para que apoye plana", \
+      "The connectors went to the other half so that it lies flat") \
+    X(ColorSought, "Color buscado", "Colour sought") \
+    X(FindBlend, "Buscar la mezcla", "Find the blend") \
+    X(ColorNotReached, "Ese color no se alcanza con estos filamentos", "That colour cannot be reached with these filaments") \
+    X(MatchBest, "Elegida: %s (distancia %.1f)", "Chosen: %s (distance %.1f)") \
+    X(MatchRecommended, "Recomendación: %s (distancia %.1f)", "Recommendation: %s (distance %.1f)") \
+    X(QuickPalette, "Paleta rápida", "Quick palette") \
+    X(QuickPaletteSmall, "Ciclos de hasta 2 capas", "Cycles of up to 2 layers") \
+    X(QuickPaletteLarge, "Ciclos de hasta 3 capas", "Cycles of up to 3 layers") \
+    X(QuickPaletteAdded, "%d muestras en la paleta; sus mezclas están en la lista", "%d samples in the palette; their blends are in the list") \
+    X(GradientBlend, "Degradé", "Gradient") \
+    X(GradientAxis, "Eje", "Axis") \
+    X(GradientPlace, "en el %d %%", "at %d %%") \
+    X(GradientTwoPoints, "Entre dos puntos", "Between two points") \
+    X(GradientStart, "Inicio", "Start") \
+    X(GradientEnd, "Fin", "End") \
+    X(GradientPick, "En la pieza", "On the part") \
+    X(GradientPicking, "Clic en la pieza…", "Click the part…") \
+    X(GradientAddFilament, "Añadir filamento", "Add filament") \
+    X(GradientSteps, "Sin subcapas, un degradé en X o Y cambia en escalones de una capa", "Without sublayers, a gradient in X or Y changes in steps of one layer") \
+    X(ObjectParts, "Partes", "Parts") \
+    X(PartItem, "Parte: %s", "Part: %s") \
+    X(CutTwoObjects, "Dos objetos", "Two objects") \
+    X(CutConnectorsApart, "Los conectores son para piezas separadas", "Connectors are for separate pieces") \
+    X(CutTwoParts, "Un objeto con dos partes", "One object, two parts") \
+    X(CutPartBelow, "Abajo", "Lower") \
+    X(CutPartAbove, "Arriba", "Upper") \
+    X(PartObjectsExtruder, "El del objeto", "The object's") \
+    X(MixForPainting, "Para pintar", "For painting") \
+    X(MixPaintFull, "La pintura admite 16 colores: destildá otra mezcla para usar esta", "Painting takes 16 colours: untick another blend to use this one") \
+    X(PalettePieceLoad, "Poner la pieza de muestras en la placa", "Put the sample card on the plate") \
+    X(PalettePieceNames, "Nombre de cada muestra", "Each sample's name") \
+    X(PalettePieceName, "Paleta de colores", "Colour palette") \
+    X(PalettePieceBase, "Base", "Base") \
+    X(TransmissionRow, "Distancia de transmisión (TD)", "Transmission distance (TD)") \
+    X(TransmissionTip, "El espesor en el que el filamento deja pasar casi nada de luz; 0: desconocida. Por encima de 10 mm se ve lo de adentro y no se purga en su relleno", \
+      "The thickness through which the filament lets almost no light pass; 0: unknown. Above 10 mm what is inside shows, so no purge into its infill")
 
 #include <cstdarg>
 #include <optional>

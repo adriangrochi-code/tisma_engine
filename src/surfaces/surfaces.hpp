@@ -21,6 +21,22 @@ struct LayerSurfaces {
     Polygons sparse; // the rest: sparse infill
     Polygons bridge; // solid over nothing printed (see find_bridges)
     double bridge_angle = 0.0; // degrees: the direction of the bridge's lines
+    // What is printed below, around the bridge: its lines' joins go only
+    // over it (toolpath_time.md, rule 1). Empty: the lines stay apart.
+    Polygons bridge_support;
+};
+
+// Keeping the shell thick on slopes (walls_extra.md, rule 7, test W4). With
+// Partial, a top skin that a slope keeps going down from (layer i + count + 1
+// does not cover what is past it) gets one bead more of solid infill. Full
+// adds, along the infill's edge, one bead where the next layer's infill steps
+// in (a slope the walls hide), and over an overhang the infill past the
+// bottom count's layer below and one bead more (the walls do not count).
+// z holds each layer's height (top of the layer); bead is a line's width.
+struct ShellCheck {
+    enum Mode { Off, Partial, Full } mode = Off;
+    std::vector<double> z;
+    double bead = 0.45;
 };
 
 // Splits the infill region of every layer into top, bottom and sparse parts.
@@ -34,8 +50,9 @@ struct LayerSurfaces {
 // many thick layers, docs/VARIABLE_LAYERS.md).
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
                                              const std::vector<int>& top_layers, const std::vector<int>& bottom_layers,
-                                             double min_width = 0.0);
+                                             double min_width = 0.0, const ShellCheck* shell = nullptr);
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
-                                             int top_layers, int bottom_layers, double min_width = 0.0);
+                                             int top_layers, int bottom_layers, double min_width = 0.0,
+                                             const ShellCheck* shell = nullptr);
 
 } // namespace tisma
