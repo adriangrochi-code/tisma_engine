@@ -2345,6 +2345,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     slopes.mode = settings.vertical_shell == VerticalShell::Partial  ? ShellCheck::Partial
                  : settings.vertical_shell == VerticalShell::Enabled ? ShellCheck::Full
                                                                      : ShellCheck::Off;
+    slopes.bead = settings.wall_width - bead_overlap(settings.layer_height); // one line's spacing
     slopes.z.reserve(out.layers.size());
     for (const Layer& layer : out.layers)
         slopes.z.push_back(layer.top);

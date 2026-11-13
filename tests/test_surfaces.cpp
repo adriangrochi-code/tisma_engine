@@ -156,12 +156,11 @@ TEST_CASE("solid parts narrower than a bead grow by a bead into the infill", "[s
 
 TEST_CASE("vertical shell: solid infill under a 45 degree slope by mode (walls_extra.md, rule 7)", "[surfaces]") {
     // A pyramid of 0.2 mm layers, 0.2 mm in per side per layer, with walls
-    // 0.4 mm wide: the shell of 3 layers is 0.6 mm thick. Off, the top skin is
-    // what layer i + 3 leaves: a ring 0.2 mm wide. A point at height dz is far
-    // enough from layer i + k's edge when sqrt(0.6^2 - dz^2) inside it; layer
-    // i + 2 asks the most, 0.4 + 0.447. Partial measures to the regions (the
-    // walls count): a ring 0.447 wide. Full measures to the infill regions:
-    // 0.847 wide.
+    // 0.4 mm wide and lines 0.4 apart. Measured from the infill's edge: off,
+    // the top skin is what layer i + 3 leaves, a ring 0.2 mm wide. Partial
+    // adds a bead past it, up to what layer i + 4 still covers (0.4 more
+    // in): a ring 0.4 wide. Full adds, where the next layer's infill steps in
+    // (0.2), three quarters of a bead more: a ring 0.5 wide.
     std::vector<Polygons> regions, infill;
     std::vector<double> z;
     for (int i = 0; i < 20; ++i) {
@@ -170,30 +169,31 @@ TEST_CASE("vertical shell: solid infill under a 45 degree slope by mode (walls_e
         z.push_back(0.2 * (i + 1));
     }
     const auto ring = [](double side, double width) { return side * side - (side - 2 * width) * (side - 2 * width); };
-    ShellCheck partial{ShellCheck::Partial, z}, full{ShellCheck::Full, z}, off{ShellCheck::Off, z};
+    ShellCheck partial{ShellCheck::Partial, z, 0.4}, full{ShellCheck::Full, z, 0.4}, off{ShellCheck::Off, z, 0.4};
     const std::vector<LayerSurfaces> a = classify_surfaces(regions, infill, 3, 0, 0.0, &off);
     const std::vector<LayerSurfaces> b = classify_surfaces(regions, infill, 3, 0, 0.0, &partial);
     const std::vector<LayerSurfaces> c = classify_surfaces(regions, infill, 3, 0, 0.0, &full);
-    const double wide = 0.4 + std::sqrt(0.36 - 0.16);
-    for (int i = 0; i <= 16; ++i) {
+    for (int i = 0; i <= 15; ++i) {
         INFO("layer " << i);
         const double side = 19.2 - i * 0.4;
         const std::size_t l = std::size_t(i);
         CHECK_THAT(area_mm2(a[l].top), WithinAbs(ring(side, 0.2), 1e-3));
-        CHECK_THAT(area_mm2(b[l].top), WithinAbs(ring(side, wide - 0.4), 1e-3));
-        CHECK_THAT(area_mm2(c[l].top), WithinAbs(ring(side, wide), 1e-3));
+        CHECK_THAT(area_mm2(b[l].top), WithinAbs(ring(side, 0.4), 1e-3));
+        CHECK_THAT(area_mm2(c[l].top), WithinAbs(ring(side, 0.5), 1e-3));
         CHECK_THAT(area_mm2(c[l].top) + area_mm2(c[l].sparse), WithinAbs(side * side, 1e-3));
     }
-    // Upside down (an overhang): only Full looks down.
+    // Upside down (an overhang): only Full looks down. The infill past the
+    // infill 3 layers below (1.0 in from the region's edge, 0.6 from the
+    // infill's) and two beads more: a ring 1.4 wide.
     std::reverse(regions.begin(), regions.end());
     std::reverse(infill.begin(), infill.end());
     const std::vector<LayerSurfaces> d = classify_surfaces(regions, infill, 0, 3, 0.0, &partial);
     const std::vector<LayerSurfaces> e = classify_surfaces(regions, infill, 0, 3, 0.0, &full);
-    for (int i = 3; i < 20; ++i) {
+    for (int i = 3; i < 16; ++i) {
         INFO("layer " << i);
         const double side = 19.2 - (19 - i) * 0.4;
         CHECK_THAT(area_mm2(d[std::size_t(i)].bottom), WithinAbs(ring(side, 0.2), 1e-3));
-        CHECK_THAT(area_mm2(e[std::size_t(i)].bottom), WithinAbs(ring(side, wide), 1e-3));
+        CHECK_THAT(area_mm2(e[std::size_t(i)].bottom), WithinAbs(ring(side, 1.4), 1e-3));
     }
 }
 

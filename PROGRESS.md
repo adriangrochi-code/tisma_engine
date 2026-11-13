@@ -14122,3 +14122,27 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Pasan todas las pruebas (998 sin interfaz, 93 de interfaz). No probado en una impresora.
 - **Sigue:** las superficies de arriba en pendiente (W4, techo); preguntar a la sesión de fichas por el valor por
   defecto.
+
+## 2026-11-13 — `walls.vertical_shell` ajustado a W4 (pedido de QA)
+
+- **QA:** las filas de W4 son el contrato (Tisma Slicer quedó abandonado); ajustar hasta que las tres piezas queden
+  dentro del 10 %, y dejar `disabled` por defecto hasta entonces. Si con `enabled` el Benchy sube más de 5 %, avisar.
+- **Regla nueva** (`src/surfaces/surfaces.cpp`), en lugar del criterio en 3D del bloque anterior, que cubría de más
+  en las pendientes suaves y de menos en los voladizos:
+  - `partial`: una separación de línea (ancho de pared menos el solape) de relleno sólido más allá de la piel de
+    arriba, donde la capa i + n + 1 ya no cubre (la pendiente sigue bajando);
+  - `enabled`: además, donde el relleno de la capa de arriba se mete (la pendiente que tapan las paredes), esa franja
+    y 3/4 de línea más; y sobre los voladizos, el relleno que sale del relleno de n capas abajo, y dos líneas más.
+  Los anchos (una línea, 3/4, dos) están ajustados a W4.
+- **Medido (W4, mm de relleno sólido agregado a esa capa):**
+  | Pieza | `partial` | `enabled` | Ficha |
+  |---|---|---|---|
+  | Techo, capa 30 | +17,0 | +17,0 | +18,39 los dos (−7,6 %) |
+  | Hongo, capa 60 | 0 | 117,3 | solo `enabled`, 124,4 (−5,7 %) |
+  | Cono, capa 20 | 0 | 30,0 | solo `enabled`, 30,68 (−2,2 %) |
+  El cono se mide con `infill.solid_below_area` 0: con el valor de fábrica (70 mm²) esa capa ya es toda maciza.
+- **Benchy con `enabled`:** 1h11m33 → 1h21m46 (+14 %). Pasa del 5 % de QA, así que sigue `disabled` por defecto y se
+  avisó a QA.
+- Pasa la batería completa. No probado en una impresora.
+- **Sigue:** que QA decida el valor por defecto; las superficies de arriba en pendiente (techo de W4: 75,22 mm de
+  superficie de arriba en la ficha, 0 en el motor).

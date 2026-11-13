@@ -26,17 +26,17 @@ struct LayerSurfaces {
     Polygons bridge_support;
 };
 
-// Keeping the shell thick on slopes (walls_extra.md, rule 7). With a mode on,
-// a point of a layer's infill is solid too when it lies closer than the shell
-// thickness (the top or bottom layer count's height) to the part's outside,
-// measured in 3D: some layer within that height above (and, with Full,
-// below) leaves it closer than that, sideways, to its edge. Partial measures
-// to the layer's region, so its walls count, and looks only up; Full measures
-// to the layer's infill region, so the walls do not count, and looks up and
-// down (under overhangs). z holds each layer's height (top of the layer).
+// Keeping the shell thick on slopes (walls_extra.md, rule 7, test W4). With
+// Partial, a top skin that a slope keeps going down from (layer i + count + 1
+// does not cover what is past it) gets one bead more of solid infill. Full
+// adds, along the infill's edge, one bead where the next layer's infill steps
+// in (a slope the walls hide), and over an overhang the infill past the
+// bottom count's layer below and one bead more (the walls do not count).
+// z holds each layer's height (top of the layer); bead is a line's width.
 struct ShellCheck {
     enum Mode { Off, Partial, Full } mode = Off;
     std::vector<double> z;
+    double bead = 0.45;
 };
 
 // Splits the infill region of every layer into top, bottom and sparse parts.

@@ -41,28 +41,6 @@ Polygons widen_thin(const Polygons& solid, const Polygons& infill, double min_wi
     return Clipper2Lib::Union(solid, grown, FillRule::NonZero);
 }
 
-// What of layer i's infill lies closer than the shell thickness to the
-// outside through the layers within that height above (step +1) or below
-// (step -1): the shell's height is the next count layers'. A point at height
-// dz over (or under) layer i is far enough from layer j's edge when it is
-// sqrt(t^2 - dz^2) inside it. Past the first or last layer: nothing, the top
-// and bottom rules already take that.
-Polygons too_thin(const std::vector<Polygons>& cover, const std::vector<double>& z, std::size_t i, int count, int step,
-                  const Polygons& infill) {
-    const std::ptrdiff_t far = std::ptrdiff_t(i) + step * count;
-    if (count <= 0 || far < 0 || far >= std::ptrdiff_t(z.size()) || far >= std::ptrdiff_t(cover.size()))
-        return {};
-    const double t = std::abs(z[std::size_t(far)] - z[i]);
-    Polygons deep = infill;
-    for (int k = 1; k <= count && !deep.empty(); ++k) {
-        const std::size_t j = std::size_t(std::ptrdiff_t(i) + step * k);
-        const double dz = std::abs(z[j] - z[i]);
-        const double inside = dz < t ? std::sqrt(t * t - dz * dz) : 0.0;
-        deep = Clipper2Lib::Intersect(deep, inside > 0.0 ? offset(cover[j], -inside) : cover[j], FillRule::NonZero);
-    }
-    return Clipper2Lib::Difference(infill, deep, FillRule::NonZero);
-}
-
 } // namespace
 
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
@@ -115,10 +93,25 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
             }
         }
         if (check && top_layers > 0) {
-            // Under a slope: solid infill, not a top surface.
-            const Polygons thin =
-                too_thin(shell->mode == ShellCheck::Full ? infill : regions, shell->z, i, top_layers, +1, rest);
+            // Under a slope (walls_extra.md, rule 7): one bead more of solid
+            // infill past the top skin, where the slope keeps going down, so
+            // the skin is as thick across the slope as across a flat top.
+            Polygons thin;
+            const std::size_t past = i + std::size_t(top_layers) + 1;
+            if (!s.top.empty() && past < regions.size()) {
+                thin = Clipper2Lib::Difference(Clipper2Lib::Intersect(offset(s.top, shell->bead), rest, FillRule::NonZero),
+                                               regions[past], FillRule::NonZero);
+            }
+            // Full: also where the walls hide the slope (the infill's edge
+            // steps in from one layer to the next), one bead along that edge.
+            if (shell->mode == ShellCheck::Full && i + 1 < infill.size()) {
+                const Polygons in = Clipper2Lib::Difference(infill[i], infill[i + 1], FillRule::NonZero);
+                if (!in.empty())
+                    thin = Clipper2Lib::Union(
+                        thin, Clipper2Lib::Intersect(offset(in, 0.75 * shell->bead), rest, FillRule::NonZero), FillRule::NonZero);
+            }
             if (!thin.empty()) {
+                // Solid infill, not a top surface.
                 s.top = Clipper2Lib::Union(s.top, thin, FillRule::NonZero);
                 s.top_under = Clipper2Lib::Union(s.top_under, thin, FillRule::NonZero);
                 rest = Clipper2Lib::Difference(rest, thin, FillRule::NonZero);
@@ -131,10 +124,13 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
             s.bottom_exposed =
                 i == 0 ? s.bottom : Clipper2Lib::Difference(s.bottom, regions[i - 1], FillRule::NonZero);
         }
-        if (check && shell->mode == ShellCheck::Full && bottom_layers > 0) {
-            // Over an overhang: solid infill resting on what is printed below.
-            const Polygons thin = too_thin(infill, shell->z, i, bottom_layers, -1, rest);
-            if (!thin.empty()) {
+        if (check && shell->mode == ShellCheck::Full && bottom_layers > 0 && i >= std::size_t(bottom_layers)) {
+            // Over an overhang: where the infill reaches past the infill of
+            // the bottom layers' count below (the walls do not count), and one
+            // bead more, solid infill resting on what is printed below.
+            const Polygons out_of = Clipper2Lib::Difference(rest, infill[i - std::size_t(bottom_layers)], FillRule::NonZero);
+            if (!out_of.empty()) {
+                const Polygons thin = Clipper2Lib::Intersect(offset(out_of, 2.0 * shell->bead), rest, FillRule::NonZero);
                 s.bottom = Clipper2Lib::Union(s.bottom, thin, FillRule::NonZero);
                 rest = Clipper2Lib::Difference(rest, thin, FillRule::NonZero);
             }
