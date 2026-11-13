@@ -13832,6 +13832,29 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Sin probar:** en un iPhone real; la memoria en iOS no está medida.
 - **Sigue:** la vista previa por capas y el análisis por la API; los ajustes de un proyecto 3MF.
 
+
+## 2026-11-13 — interfaz: Sección de la vista en Diseño (regla 11 novies)
+
+- **Hecho:** Inspeccionar › Sección, y la casilla «Sección» de la paleta del boceto, cortan la vista con un plano.
+  Lo que queda del otro lado del plano no se dibuja en los cuerpos; la cama no se corta y el diseño no cambia. Un
+  panel a la derecha elige el plano (perpendicular a X, Y o Z; el boceto empieza con el suyo), su lugar a lo largo
+  del eje dentro de la caja de los cuerpos, de qué lado se quita y Cerrar. Se hace en las dos vistas: OpenGL con
+  `u_section` en el sombreador de mallas, y Vulkan con `section` en el bloque del cuadro (`view_common.glsl`); los
+  sombreadores se recompilaron con `tools/compile_shaders.py`. La clave del cuadro incluye la sección, así que la
+  vista se redibuja al moverla.
+- **Pruebas:** `design_section.txt` (el panel, el eje, el diseño sin cambios, Cerrar). Pasan las 65 de Diseño y de la
+  vista, entre ellas las que comparan Vulkan con OpenGL. Captura revisada: la caja de 20 mm cortada en Y = 0 muestra
+  la mitad. La sombra todavía es la del cuerpo entero, y el corte no tiene tapa.
+
+## 2026-11-13 — interfaz: tapa del corte de la Sección (QA)
+
+- **Hecho:** el corte ya no se ve hueco. Las caras de atrás del cuerpo que se ven a través del plano se dibujan
+  planas, como el plano y un poco más oscuras, así que el corte parece macizo. Está en OpenGL y en Vulkan. Es una
+  tapa aproximada: sirve para cuerpos cerrados y no dibuja la tapa por separado. El panel de Sección queda debajo de
+  «Inicio» del cubo y de la paleta del boceto.
+- **Pruebas:** `design_section.txt` da vuelta el lado y comprueba que el panel no pisa «Inicio». Pasan las 65 de
+  Diseño y de la vista. Captura revisada.
+
 ## 2026-11-13 — `analyze <modelo> --mode lightest-infill` (pedido de QA para Android e iPhone)
 
 - **Hecho:**

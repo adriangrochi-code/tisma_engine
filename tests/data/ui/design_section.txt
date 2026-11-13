@@ -1,0 +1,21 @@
+# The section of the view (cad_design.md, rule 11 novies): Inspeccionar ›
+# Sección cuts the bodies with a plane, here square to Z; its panel picks the
+# axis, the offset and the side; the design does not change; Cerrar ends it.
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-design 8000
+menu design_dialog_accept
+wait 3
+menu design_tab_1
+expect-control design_section
+menu design_section
+expect-control section_panel
+expect-control section_axis_x
+menu section_axis_y
+menu section_flip
+wait 3
+expect-apart section_panel view_home
+expect-design 8000
+menu section_close
+expect-no-control section_panel

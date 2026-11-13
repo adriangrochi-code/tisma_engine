@@ -27,6 +27,9 @@ struct ViewFrame {
     Vec3 key{0, 0, 1}, fill{0, 0, 1}; // towards the key and fill lights, world space, unit
     Vec3 sky{0.80f, 0.82f, 0.95f}, ground{0.30f, 0.28f, 0.27f}; // sRGB colours of the ambient light
     Vec3 background_top{0.17f, 0.17f, 0.19f}, background_bottom{0.10f, 0.10f, 0.12f};
+    // A section of the view (cad_design.md, rule 11 novies): the surfaces on
+    // the side of the plane dot(n, p) > w are not drawn. A zero normal: none.
+    std::array<float, 4> section{0.0f, 0.0f, 0.0f, 0.0f};
     Vec3 plate{0.20f, 0.20f, 0.23f};
     Vec3 model{0.62f, 0.37f, 0.86f};
     Vec3 model_selected{0.80f, 0.62f, 0.97f}; // the chosen model of the plate
