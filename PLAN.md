@@ -341,7 +341,7 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   huecos 0,3 %, superposición 1,3 %, en las transiciones
 - [x] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`. Hecho (2026-11-13,
   `tests/test_perimeters_spec.cpp` con P3 a P7 y P9; P1, P2, P10 y P12 a P14 ya tenían prueba). P4: la regla 4 dentro
-  de cada contorno; entre contornos, intercalado por menor viaje (QA, 2026-11-13); P8 no se contrasta
+  de cada contorno; entre contornos, intercalado por menor viaje (QA, 2026-11-13); P8: el inicio no salta entre capas
 
 ## Estado de F3
 

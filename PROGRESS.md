@@ -14245,3 +14245,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   viaje. Probado ordenar los contornos por cercanía a la boquilla: Benchy 14 681 viajes, 32,8 m, 1h12m23, todavía
   peor que intercalar (13 539 viajes, 30,1 m, 1h11m43). Se vuelve al intercalado por profundidad (`writer.cpp` como en
   2e4364c); la prueba P4 comprueba la regla 4 en cada contorno.
+
+## 2026-11-13 — P8: costura `nearest` en el cilindro
+
+- Con la base de la ficha (sin relleno ni capas sólidas), el inicio de la pared de afuera queda en −135° en todas las
+  capas: cada capa termina en su pared externa y la siguiente empieza en el punto más cercano. La ficha midió en Tisma
+  Slicer un corrimiento lento (−87° a −60°); la regla es el punto más cercano, que se cumple. Con relleno, el inicio
+  salta entre 11° y 155° porque la capa termina en el relleno, que cambia de sentido; eso también es «el más
+  cercano». La prueba P8 pide que entre capas no salte más de 30° (sin relleno).

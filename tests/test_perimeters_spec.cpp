@@ -198,3 +198,27 @@ TEST_CASE("perimeters.md P5-P7, P9: where the outer wall starts", "[perimeters-s
         CHECK(angles.size() >= starts.size() / 3); // spread over many tens of degrees
     }
 }
+
+TEST_CASE("perimeters.md P8: nearest moves the cylinder's start little by little", "[perimeters-spec]") {
+    Settings s = test_printer();
+    s.seam = SeamMode::Nearest;
+    // The spec's base: no infill and no solid layers, so each layer ends at its walls.
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    const std::vector<Loop> starts = outer_starts(gcode_of(cylinder(10, 5, 128), s));
+    REQUIRE(starts.size() >= 20);
+    std::vector<double> angles;
+    for (const Loop& l : starts)
+        angles.push_back(std::atan2(l.y - kCy, l.x - kCx) * 180.0 / kPi);
+    std::string seen;
+    for (double a : angles)
+        seen += std::to_string(int(std::lround(a))) + " ";
+    INFO("angles: " << seen);
+    // From one layer to the next the start moves by little (the spec's
+    // program: -87 to -60 degrees over layers 3 to 24).
+    for (std::size_t k = 1; k < angles.size(); ++k) {
+        double d = std::abs(angles[k] - angles[k - 1]);
+        d = std::min(d, 360.0 - d);
+        CHECK(d < 30.0);
+    }
+}
