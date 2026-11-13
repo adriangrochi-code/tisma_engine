@@ -240,6 +240,19 @@ struct PlateView: View {
 
     /// File (open, information, remove), View (3D and the five sides, Frame), Engineering and Slice.
     private var toolStrip: some View {
+        // With large text the names do not fit: icons only, and VoiceOver still says each name.
+        ViewThatFits(in: .horizontal) {
+            tools.labelStyle(.titleAndIcon)
+            tools.labelStyle(.iconOnly)
+        }
+        .font(.footnote)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .accessibilityIdentifier("plate_tools")
+    }
+
+    private var tools: some View {
         HStack(spacing: 18) {
             Menu {
                 Button("Open a model…", systemImage: "folder") { picking = true }
@@ -257,12 +270,6 @@ struct PlateView: View {
             Button { slice() } label: { Label("Slice", systemImage: "square.stack.3d.up") }
                 .disabled(busy || printer.isEmpty)
         }
-        .labelStyle(.titleAndIcon)
-        .font(.footnote)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
-        .accessibilityIdentifier("plate_tools")
     }
 
     /// The model's name, triangles and size, for File › Information.

@@ -55,6 +55,23 @@ final class ScreensTests: XCTestCase {
         }
     }
 
+    /// Accessibility (QA, beta): the largest text size of Dynamic Type; the sections still open, the tools and
+    /// the printer card are reachable, and the screenshots show nothing cut.
+    func testLargestTextSize() {
+        let app = XCUIApplication()
+        app.launchArguments += ["-wizard.done", "YES", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.otherElements["plate_tools"].waitForExistence(timeout: 10) || app.buttons["Slice"].waitForExistence(timeout: 5),
+                      "the plate's tools")
+        keep("large_plate")
+        for (tab, name) in [("Print", "large_print"), ("Printer", "large_printer"), ("More", "large_more")] {
+            let button = app.tabBars.buttons[tab]
+            XCTAssertTrue(button.waitForExistence(timeout: 10), "the \(tab) section is there")
+            button.tap()
+            keep(name)
+        }
+    }
+
     private func keep(_ name: String) {
         let shot = XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: shot)

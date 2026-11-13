@@ -24,6 +24,18 @@ struct PrinterDrawing: View {
     let shape: String
     var size: CGFloat = 48
 
+    /// The kind as VoiceOver says it.
+    static func spoken(_ shape: String) -> String {
+        switch shape {
+        case "enclosed": return String(localized: "Enclosed")
+        case "delta": return String(localized: "Delta")
+        case "belt": return String(localized: "Belt")
+        case "resin": return String(localized: "Resin")
+        case "pellets": return String(localized: "Pellet")
+        default: return String(localized: "Open-frame")
+        }
+    }
+
     var body: some View {
         Plate(size: size) { ctx, s, ink in
             let w = s.width, h = s.height, sw = w * 0.05
@@ -63,6 +75,8 @@ struct PrinterDrawing: View {
                 line(&ctx, ink, pt(0.15, 0.8), pt(0.85, 0.8), sw * 1.4)
             }
         }
+        .accessibilityElement()
+        .accessibilityLabel(Text(String(format: String(localized: "%@ printer"), Self.spoken(shape))))
         .accessibilityIdentifier("drawing_printer_" + shape)
     }
 }
@@ -100,6 +114,8 @@ struct BedDrawing: View {
             default: break
             }
         }
+        .accessibilityElement()
+        .accessibilityLabel(Text("Build plate"))
         .accessibilityIdentifier("drawing_bed_" + family)
     }
 }
@@ -130,6 +146,7 @@ struct NozzleDrawing: View {
                 ctx.fill(body, with: .color(ink))
             }
         }
+        .accessibilityHidden(true) // the nozzle's size and steel are said by the text beside it
         .accessibilityIdentifier("drawing_nozzle" + (hardened ? "_hardened" : "") + (highFlow ? "_hf" : ""))
     }
 }
@@ -193,7 +210,7 @@ struct PrinterCard: View {
     var body: some View {
         HStack(spacing: 12) {
             if printer.isEmpty {
-                Image(systemName: "printer").font(.title2).frame(width: 48, height: 48)
+                Image(systemName: "printer").font(.title2).frame(width: 48, height: 48).accessibilityHidden(true)
             } else {
                 PrinterDrawing(shape: look?.shape ?? "open")
             }

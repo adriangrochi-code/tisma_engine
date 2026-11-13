@@ -710,4 +710,5 @@
     <string name="unsafe_link">it carries a link</string>
     <string name="unsafe_big">it unpacks to more than allowed</string>
     <string name="service_state">Tisma Cloud: %1$s</string>
+    <string name="plate_3d_desc">The model on the bed, in 3D. One finger turns, two move, pinch zooms</string>
 </resources>

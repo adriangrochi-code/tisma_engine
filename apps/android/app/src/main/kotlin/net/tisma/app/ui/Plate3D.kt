@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -576,7 +578,9 @@ fun Plate3D(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    Box(modifier.testTag("plate_3d")) {
+    // TalkBack: what the view shows and what the fingers do (the GL drawing cannot be read aloud).
+    val described = stringResource(R.string.plate_3d_desc)
+    Box(modifier.testTag("plate_3d").semantics { contentDescription = described }) {
         AndroidView(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {

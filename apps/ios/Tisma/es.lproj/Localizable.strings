@@ -227,3 +227,14 @@
 "Right" = "Derecha";
 "Back" = "Atrás";
 "%@: %d triangles, %.1f × %.1f × %.1f mm" = "%@: %d triángulos, %.1f × %.1f × %.1f mm";
+"%@ printer" = "Impresora %@";
+"Enclosed" = "cerrada";
+"Delta" = "delta";
+"Belt" = "de cinta";
+"Resin" = "de resina";
+"Pellet" = "de pellets";
+"Open-frame" = "abierta";
+"Build plate" = "Placa de impresión";
+"The model on the bed, in 3D" = "El modelo sobre la cama, en 3D";
+"The part in 3D. Touch a face to mark it" = "La pieza en 3D. Toca una cara para marcarla";
+"One finger turns, two move, pinch zooms" = "Un dedo gira, dos mueven, pellizcar acerca";

@@ -694,4 +694,5 @@
     <string name="unsafe_link">trae un enlace</string>
     <string name="unsafe_big">descomprimido ocupa más de lo permitido</string>
     <string name="service_state">Tisma Cloud: %1$s</string>
+    <string name="plate_3d_desc">El modelo sobre la cama, en 3D. Un dedo gira, dos mueven, pellizcar acerca</string>
 </resources>

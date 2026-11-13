@@ -88,9 +88,17 @@ private struct RowView: View {
         case "readOnly":
             LabeledContent(row.label, value: row.value)
         default:
-            HStack {
-                Text(row.label)
-                Spacer()
+            // Large text (Dynamic Type): the label goes above the field instead of being cut.
+            ViewThatFits(in: .horizontal) {
+                HStack { Text(row.label); Spacer(); field }
+                VStack(alignment: .leading) { Text(row.label); field }
+            }
+            .onAppear { text = row.value }
+        }
+    }
+
+    private var field: some View {
+        HStack {
                 TextField(row.value, text: $text)
                     .multilineTextAlignment(.trailing)
                     // mobile_app.md, rule 17: numbers with the phone's number pad (a percent may be typed too).
@@ -102,8 +110,6 @@ private struct RowView: View {
                     .onChange(of: editing) { _, now in if !now && text != row.value { commit() } }
                     .frame(maxWidth: 140)
                 if !row.unit.isEmpty { Text(row.unit).foregroundStyle(.secondary) }
-            }
-            .onAppear { text = row.value }
         }
     }
 
@@ -135,6 +141,7 @@ private struct CustomPicker: View {
                                     if b.isCustom(key: r.key) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
                                 }
                             }
+                            .accessibilityAddTraits(b.isCustom(key: r.key) ? .isSelected : [])
                             .accessibilityIdentifier("pick_" + r.key)
                         }
                     }

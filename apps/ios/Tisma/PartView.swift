@@ -77,6 +77,11 @@ struct PartView: UIViewRepresentable {
         view.backgroundColor = .secondarySystemBackground
         view.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:))))
         view.accessibilityIdentifier = "engineering_part"
+        // VoiceOver: what the view shows and what the fingers do (the drawing itself cannot be read aloud).
+        view.isAccessibilityElement = true
+        view.accessibilityLabel = bed != nil ? String(localized: "The model on the bed, in 3D")
+            : String(localized: "The part in 3D. Touch a face to mark it")
+        view.accessibilityHint = String(localized: "One finger turns, two move, pinch zooms")
         return view
     }
 
