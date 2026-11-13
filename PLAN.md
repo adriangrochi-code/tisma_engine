@@ -1196,7 +1196,9 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   `PROGRESS.md`). Faltan RV4 (V10) y RV5 (V11)
 - [x] V3: `;WIDTH` solo cuando cambia el ancho (hecho 2026-11-13: más de 0,005 mm del último escrito, o con un `;TYPE`
   nuevo; Benchy de 28 374 a 14 829 líneas, referencia 18 976)
-- [ ] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hace el doble de movimientos)
+- [x] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hacía el doble de movimientos).
+  Hecho con la resolución del G-code (2026-10-25); medido el 2026-11-13: Benchy con 118 207 `G1`, contra 202 429 en la
+  medición original y 99 480 de la referencia. La diferencia que queda es sobre todo de viajes (13 313).
 - [x] V5: armar el G-code de cada capa en paralelo y unirlo en orden (hecho 2026-10-26). Cada capa se planea (orden y
   costuras, que siguen de la capa de abajo) y se escribe por separado, en un pipeline de oneTBB: mientras se escribe
   una capa se planean las siguientes, y los recorridos se simplifican en paralelo. La verificación lee el texto en
