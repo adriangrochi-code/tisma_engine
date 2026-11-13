@@ -1397,7 +1397,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 
 - [x] CI de macOS en cada envío, arm64 y x86_64 (runners de GitHub): compila y pasan las pruebas (verde desde
   3667e62, cuenta desde 550cbff).
-- [ ] La vista: MoltenVK o el camino OpenGL que ya existe.
+- [ ] La vista: MoltenVK o el camino OpenGL que ya existe. El camino OpenGL (3.3 core) no usa nada por encima de 4.1,
+  así que debería andar. En la CI de GitHub no se puede comprobar: las máquinas de macOS no tienen GPU y la ventana no
+  abre (2026-11-13). Falta probarlo en una Mac real.
 - [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows): escritos (2026-11-12, NSOpenPanel y NSSavePanel en
   `apps/tisma/file_dialog_macos.mm`); compila la CI de macOS, sin probar a mano en una Mac.
 - [ ] Cámara USB con AVFoundation y el permiso de cámara (`printer_connections.md`, regla 7 de macOS).

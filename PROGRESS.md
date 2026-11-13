@@ -13908,3 +13908,17 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   Revisado: la interfaz no tiene token de Thingiverse, no abre enlaces `prusaslicer://` ni `tisma://open`, ni
   descarga de Printables o Thingiverse, y el instalador no registra ningún esquema de URL.
 - **Pruebas:** `no_model_sites.txt` (Más sin Thingiverse).
+
+## 2026-11-13 — macOS: la vista en la CI de GitHub (resultado)
+
+- **Resultado (corrida 1007, 9d489c8):** en las dos máquinas de macOS de GitHub (arm64 y x86_64) la ventana no abre:
+  «NSGL: Failed to find a suitable pixel format», «cannot open a window with OpenGL 3.3». No hubo capturas. El trabajo
+  sale verde solo porque el paso no cuenta.
+- **Por qué (lo más probable):** esas máquinas virtuales no tienen GPU, y en macOS GLFW pide un renderizador OpenGL
+  acelerado. Cualquier Mac real tiene GPU, así que esto no dice que la vista falle en una Mac de verdad. Con
+  MoltenVK sería igual, porque Vulkan sobre Metal también necesita GPU.
+- **Decisión:** el paso queda sin contar y sigue intentando, por si GitHub cambia las máquinas. La vista en macOS se
+  da por **no probada en hardware**: hace falta que un probador la abra en una Mac (Preparar y Vista previa, con
+  `--graphics opengl`).
+- **Sigue (macOS):** la prueba en una Mac real, la cámara USB con AVFoundation y la firma del .dmg (cuenta del dueño).
+
