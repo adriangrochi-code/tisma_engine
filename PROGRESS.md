@@ -14262,3 +14262,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Contraste de fichas del motor: las que quedan sin filas probadas son de la interfaz, del servidor o de cosas que
   esperan al dueño (`pressure_advance_gcode.md` solo si el dueño lo pide; `support_fins.md` después de la primera
   versión).
+
+## 2026-11-13 — Multigrilla con huecos y regla 9 de toolpath_time: decisiones
+
+- **Multigrilla con huecos (PLAN, A1):** la multigrilla es estructurada (interpolación trilineal por ejes, un nodo
+  grueso por punto de la grilla). Duplicar los nodos gruesos por cada pedazo separado dentro de una celda gruesa
+  obliga a niveles no estructurados (cada nodo grueso con su lista de nodos finos y pesos). Es un rediseño de varios
+  bloques, no de una noche: queda en el plan, con esta nota de diseño. Paso intermedio posible: en cada celda gruesa,
+  interpolar solo desde los nodos gruesos unidos por material al nodo fino (pesos renormalizados); reduce el
+  acoplamiento entre pedazos pero no lo saca.
+- **Regla 9 (ordenar por tiempo):** con los ajustes de fábrica el tiempo de un viaje crece con su largo (la
+  retracción depende del largo, `retraction.min_travel`), así que el más cercano es también el más rápido y el orden
+  no cambia; entre islas, todo viaje sale de la pieza y retrae. Solo cambiaría con `retraction.only_crossing_walls`.
+  Valor bajo: queda sin hacer. La regla 8 sigue «a aprobar».
