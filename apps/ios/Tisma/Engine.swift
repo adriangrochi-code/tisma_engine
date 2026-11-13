@@ -62,7 +62,8 @@ enum Engine {
         // filament and print profile (profile_pack.md, rule 13; parity P10b), as on Android.
         let pack = UserDefaults.standard.string(forKey: "plate.pack") ?? ""
         let args = !pack.isEmpty && Pack.installed
-            ? PackBridge.shared.profileArgs(packDir: Pack.packDir.path, printer: pack, out: out.path)
+            ? PackBridge.shared.profileArgs(packDir: Pack.packDir.path, printer: pack, out: out.path,
+                                            filament: UserDefaults.standard.string(forKey: "plate.packFilament") ?? "")
             : EngineBridge.shared.profileArgs(printer: printer, nozzle: nozzle, filament: filament, out: out.path)
         let r = run(args)
         return (r.code == 0 && FileManager.default.fileExists(atPath: out.path)) ? (out, r.err) : (nil, r.err)

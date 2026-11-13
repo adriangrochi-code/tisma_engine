@@ -10,6 +10,9 @@ import net.tisma.io.copyAll
 /** A file the plan names, for Swift. */
 data class PackFile(val url: String, val name: String, val size: Long)
 
+/** A filament of the installed pack: the path `--filament` takes, its name, vendor and material, and whether it is the default. */
+data class PackFilament(val path: String, val name: String, val vendor: String, val material: String, val isDefault: Boolean)
+
 /** A printer of the installed pack as the lists show it. */
 data class PackPrinter(val vendor: String, val name: String, val nozzle: Double, val id: String)
 
@@ -32,7 +35,26 @@ object PackBridge {
 
     fun listArgs(dataDir: String): List<String> = PackData.listArgs(dataDir)
 
-    fun profileArgs(packDir: String, printer: String, out: String): List<String> = PackData.profileArgs(packDir, printer, out, null, null)
+    /** The pack printer's profile; [filament] a pack filament's path, or empty for the variant's own (rule 13). */
+    fun profileArgs(packDir: String, printer: String, out: String, filament: String): List<String> =
+        PackData.profileArgs(packDir, printer, out, filament.ifEmpty { null }, null)
+
+    /** The installed pack's files at [packDir], read with the system's file manager. */
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    private fun files(packDir: String) = object : PackData.Files {
+        override fun read(path: String): String? = runCatching { FileInput("$packDir/$path").use { it.readText() } }.getOrNull()
+        override fun list(dir: String): List<String> =
+            platform.Foundation.NSFileManager.defaultManager.contentsOfDirectoryAtPath("$packDir/$dir", null)
+                ?.mapNotNull { it as? String }.orEmpty()
+    }
+
+    /** The pack's filaments for [printer] (rule 12: compatible ones only, the printer's vendor's first), the default first. */
+    fun filaments(packDir: String, printer: String): List<PackFilament> {
+        val f = files(packDir)
+        val default = PackData.defaultEntry(f, printer, "filament")
+        return PackData.entriesFor(f, printer, "filaments").map { PackFilament(it.path, it.name, it.vendor, it.material, it.path == default) }
+            .sortedBy { if (it.isDefault) 0 else 1 }
+    }
 
     /** The files `pack plan` names; null when its answer is not a plan. */
     fun plan(json: String): List<PackFile>? = PackData.parsePlan(json)?.downloads?.map { PackFile(it.url, it.name, it.size) }

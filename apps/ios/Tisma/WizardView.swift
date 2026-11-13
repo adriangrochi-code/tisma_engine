@@ -11,6 +11,8 @@ struct WizardView: View {
     @AppStorage("plate.nozzle") private var nozzle = 0.4
     @AppStorage("plate.filament") private var filament = ""
     @AppStorage("plate.pack") private var pack = ""
+    @AppStorage("plate.packFilament") private var packFilament = ""
+    @State private var packFilaments: [PackFilament] = []
     @State private var packPrinters: [PackPrinter] = []
     @State private var query = ""
     @State private var step = 0
@@ -24,6 +26,7 @@ struct WizardView: View {
                 switch step {
                 case 0: printerStep
                 case 1: nozzleStep
+                case 3: packFilamentStep
                 default: filamentStep
                 }
             }
@@ -53,7 +56,13 @@ struct WizardView: View {
                             printer = "\(p.name) \(String(format: "%.2f", p.nozzle))"
                             nozzle = p.nozzle
                             filament = ""
-                            finish()
+                            packFilament = ""
+                            // rule 12: the pack's filaments that fit this printer, its default first.
+                            let (dir, id) = (Pack.packDir.path, p.id)
+                            Task {
+                                packFilaments = await Task.detached { PackBridge.shared.filaments(packDir: dir, printer: id) }.value
+                                if packFilaments.count > 1 { step = 3 } else { finish() }
+                            }
                         } label: {
                             VStack(alignment: .leading) {
                                 Text("\(p.name) · \(String(format: "%.2f mm", p.nozzle))").foregroundStyle(.primary)
@@ -91,6 +100,24 @@ struct WizardView: View {
             Button(String(format: "%.2f mm", n)) { nozzle = n; step = 2 }
         }
         .safeAreaInset(edge: .top) { Text("Which nozzle?").font(.headline).padding(.top) }
+    }
+
+    /// The pack's filaments for its printer (profile_pack.md, rule 12; parity P10c); the default first.
+    private var packFilamentStep: some View {
+        List(packFilaments, id: \.path) { f in
+            Button {
+                packFilament = f.isDefault ? "" : f.path
+                filament = f.name
+                finish()
+            } label: {
+                VStack(alignment: .leading) {
+                    Text(f.name + (f.isDefault ? " · " + String(localized: "the printer's default") : "")).foregroundStyle(.primary)
+                    Text([f.vendor, f.material].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityIdentifier("wizard_pack_filament")
+        }
+        .safeAreaInset(edge: .top) { Text("Which filament?").font(.headline).padding(.top) }
     }
 
     private var filamentStep: some View {
