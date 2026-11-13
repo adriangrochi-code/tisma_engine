@@ -42,6 +42,8 @@ En el conejo al 150 %, el motor viaja 243,6 m y Tisma Slicer 189,6 m.
      líneas;
    - el orden monótono de `surfaces.top_pattern` (todas las líneas en el mismo sentido) se respeta: en ese caso se une
      solo cuando la línea siguiente va en el mismo sentido.
+   En un puente, la unión va solo si su tramo queda entero sobre lo apoyado (pared o relleno de la capa de abajo); si
+   quedaría en el aire, las líneas del puente siguen separadas con un viaje (13-11-2026).
 2. **Orden de islas y de piezas:** en cada capa, el orden de las islas (y de las piezas de la placa) se elige para
    que los viajes sumen lo menos posible: vecino más cercano y después mejoras de a dos (intercambiar dos tramos del
    recorrido mientras acorte). La capa empieza cerca de donde terminó la anterior (`gcode_motion.md`, regla 8).
@@ -50,8 +52,11 @@ En el conejo al 150 %, el motor viaja 243,6 m y Tisma Slicer 189,6 m.
 4. **Lazos de pared:** cada lazo empieza en la costura que pide `walls.seam`. Entre lazos de la misma isla, el viaje va
    por dentro y sin retraer cuando no cruza una pared externa.
 5. **Retraer solo cuando hace falta:** un viaje que queda entero dentro de la pieza (por zonas que se rellenan, sin
-   cruzar una pared externa ni aire) no retrae, aunque sea más largo que `retraction.min_travel`. Los demás siguen la
-   regla 5 de `gcode_motion.md`.
+   cruzar una pared externa ni aire) no retrae, aunque sea más largo que `retraction.min_travel`, solo con
+   `retraction.only_crossing_walls` (sí/no, defecto no; equipo de especificación, 13-11-2026: así no choca con
+   `retraction_travel.md` ni con la regla 5 de `gcode_motion.md`, que siguen valiendo con el ajuste apagado). El paquete
+   de perfiles lo trae de la opción equivalente del programa de origen cuando la tiene. Medido por el motor con el
+   ajuste prendido: Benchy de 2 209 a 356 retracciones y de 1 h 11 min 30 s a 1 h 5 min 53 s.
 6. **Viaje al cambiar de zona:** de un relleno al siguiente, o del relleno a la pared, la zona siguiente se elige y se
    empieza por el punto más cercano, dentro de lo que permite la regla 8 de `gcode_motion.md`.
 7. **Esquinas** (opcional, `gcode.corner_smoothing`, mm, defecto 0 = apagado, de 0 a 0,05): una esquina de una pared
