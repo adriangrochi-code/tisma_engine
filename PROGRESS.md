@@ -12383,5 +12383,20 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   `GcodeLayers` compartido, que además lee el G-code de la nube; el análisis por la API (fdb4f08) toma las
   condiciones del 3MF y no da el mapa de seguridad ni acepta las caras tocadas, que la app usa con
   `analyze --case --mesh`. Se retoma si el motor suma caso y mapa a la API.
+- Teléfonos chicos, tamaño y arranque (13-11, orden de QA; CI `android-memory.yml`, emuladores x86_64 API 34 sin
+  aceleración gráfica; `tools/memory_check.sh` lamina con el motor de la app, como su usuario):
+  | Modelo (esfera generada) | Triángulos | Pico del motor | Estimación de la app | 2 GB (1,1–1,3 GB libres) | 3 GB (1,5–1,6 GB libres) |
+  |---|---|---|---|---|---|
+  | tamaño Benchy | 223 780 | 148–156 MB | 192 MB | lamina | lamina |
+  | grande | 1 998 000 | 299 MB | 699 MB | lamina | lamina |
+  | enorme | 5 116 800 | 677–679 MB | 1 591 MB | avisa y ofrece la nube (cabía) | lamina |
+  Nunca se cerró por memoria: el aviso sale antes, y con margen (la estimación, 300 B por triángulo, es unas 2,3
+  veces lo medido: ~130 MB + ~107 B por triángulo). Se deja así hasta medir en teléfonos reales; el aviso deja
+  laminar igual. Tiempos de laminado no medidos aún (el reloj del usuario de la app no da fracciones).
+  Arranque en frío del APK beta (perfil compilado, hasta el primer cuadro; la app abre en Biblioteca), 5 veces por
+  corrida: 2 GB 1,6–3,3 s, 3 GB 1,6–3,2 s en cuatro corridas; mediana ~2,0 s. Sin probar en hardware.
+  Tamaño: APK beta arm64 7,2 → 6,5 MB (solo es/en, recursos sin uso fuera); lo que más pesa: código 3,1 MB y motor
+  2,8 MB comprimido. iPhone (Release, sin firmar): IPA 4,9 MB, .app 16 MB, casi todo el ejecutable (motor, módulo
+  compartido y Swift; `__text` 9 MB).
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
