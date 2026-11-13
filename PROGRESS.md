@@ -14253,3 +14253,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   Slicer un corrimiento lento (−87° a −60°); la regla es el punto más cercano, que se cumple. Con relleno, el inicio
   salta entre 11° y 155° porque la capa termina en el relleno, que cambia de sentido; eso también es «el más
   cercano». La prueba P8 pide que entre capas no salte más de 30° (sin relleno).
+
+## 2026-11-13 — Criterio de A1: placa con agujero contra Kirsch
+
+- Placa de 120 × 40 × 2 mm con agujero de 8 mm, tracción de 10 MPa, modelo macizo, vóxeles de 0,25 mm: K = 3,13
+  contra 3,14 de Kirsch con la corrección de ancho de Heywood (0,3 %). El pico queda en el borde del agujero.
+  Detalle en `docs/ANALYSIS.md`. Sin prueba automática: la solución tarda 66 s, demasiado para la batería.
+- Contraste de fichas del motor: las que quedan sin filas probadas son de la interfaz, del servidor o de cosas que
+  esperan al dueño (`pressure_advance_gcode.md` solo si el dueño lo pide; `support_fins.md` después de la primera
+  versión).

@@ -446,7 +446,8 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   0,2 % (maciza y como se imprime)
 - [ ] Representar mejor el contacto entre cordones en «como se imprime» (vóxeles parcialmente llenos en vez de
   todo o nada), para llegar al valor convergido con vóxeles más gruesos: hoy hacen falta 8 vóxeles por ancho de línea
-- [ ] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado
+- [x] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado.
+  Medido 2026-11-13: K = 3,13 contra 3,14 de Kirsch con la corrección de ancho de Heywood (0,3 %; `docs/ANALYSIS.md`)
 - [x] Lo que la interfaz necesita del motor: `--estimate` (vóxeles, memoria y tiempo antes de correr), `--progress`
   y `--mesh` (la superficie de los vóxeles coloreada); lo que debe mostrar está en `docs/ANALYSIS.md`, «Para la
   interfaz»
