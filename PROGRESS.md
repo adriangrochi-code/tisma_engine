@@ -14037,3 +14037,24 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   - la unión de puentes sobre lo apoyado (regla 1);
   - las reglas 2, 3, 6, 8 y 9.
 
+## 2026-11-13 — toolpath_time.md regla 1: las líneas de puente unidas sobre lo apoyado
+
+- **Decisión de la ficha (spec/next):** la unión de dos líneas de puente va solo si su tramo queda entero sobre lo
+  apoyado; si no, siguen separadas con un viaje.
+- **Hecho:**
+  - `find_bridges` guarda en `LayerSurfaces::bridge_support` lo impreso abajo alrededor de cada puente.
+  - `join_along_boundary` recibe una zona permitida opcional: una unión entra solo si sus extremos, los vértices del
+    borde entre ellos y los puntos medios quedan adentro.
+  - `rectilinear_fill` la gira al marco de las líneas (`join_inside`).
+  - Los puentes se unen con el largo de la regla 1, que es 2 × (ancho + espacio).
+- **Medido en el Benchy:**
+  - viajes entre líneas de puente, de 203 a 93;
+  - tiempo, de 1 h 11 min 30 s a 1 h 11 min 31 s;
+  - largo extruido de puente, de 967 a 1 024 mm (+5,9 %). Es por los tramos de unión: los puentes del Benchy son
+    cortos. El resto de los tipos no cambia, y el total sube 0,05 %. TT5 pide menos de 1 % por tipo: lo consulté con
+    la sesión de fichas.
+- **Pruebas:**
+  - `[infill]`, un caso nuevo: un cuadrado con zona permitida a la izquierda; ninguna unión sale de ella, y hay más
+    piezas que unidas del todo y menos que sueltas;
+  - pasa la batería sin interfaz completa: 996 casos.
+

@@ -21,6 +21,9 @@ struct LayerSurfaces {
     Polygons sparse; // the rest: sparse infill
     Polygons bridge; // solid over nothing printed (see find_bridges)
     double bridge_angle = 0.0; // degrees: the direction of the bridge's lines
+    // What is printed below, around the bridge: its lines' joins go only
+    // over it (toolpath_time.md, rule 1). Empty: the lines stay apart.
+    Polygons bridge_support;
 };
 
 // Splits the infill region of every layer into top, bottom and sparse parts.
