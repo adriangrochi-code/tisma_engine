@@ -30,7 +30,7 @@ OrcaSlicer) y las mediciones de abajo.
 | `walls.scarf_inner` | — | no | También en los perímetros internos |
 | `walls.extra_if_needed` | — | sí | Agrega perímetros donde la pared inclinada deja huecos (regla 6) |
 | `walls.extra_on_overhangs` | — | no | Llena con perímetros los voladizos que un puente no puede anclar |
-| `walls.vertical_shell` | — | `enabled` | Asegurar el espesor de la cáscara vertical: `disabled`, `partial` o `enabled` |
+| `walls.vertical_shell` | — | `partial` | Asegurar el espesor de la cáscara vertical: `disabled`, `partial` o `enabled` (defecto `partial`, 13-11-2026: en el Benchy +0,2 % de tiempo; `enabled` +14 %) |
 | `walls.detect_overhangs` | — | sí | Los tramos de perímetro sobre el aire se imprimen como voladizo |
 | `walls.avoid_curled_overhangs` | — | no | Los viajes esquivan los voladizos que se pueden levantar |
 | `walls.top_one_wall` | — | `none` | Un solo perímetro en las superficies de arriba: `none`, `top` (todas) o `topmost` (solo la de más arriba) |
