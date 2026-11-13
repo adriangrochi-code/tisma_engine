@@ -90,7 +90,9 @@ tisma_progress tisma_poll(tisma_ctx* ctx);
 void tisma_cancel(tisma_ctx* ctx);
 
 /* The finished slice. The summary JSON: {"print_time_s", "filament_mm",
- * "filament_g", "layers", "cost" (null when unknown), "warnings": [...]}. */
+ * "filament_g" (null without the filament's density), "layers", "cost"
+ * (filament_g times extrusion.cost per kg, rounded to cents; null when
+ * either is unknown), "warnings": [...]}. */
 const char* tisma_summary_json(tisma_ctx* ctx);
 tisma_status tisma_write_gcode(tisma_ctx* ctx, const char* path);
 /* The G-code in pieces: up to `capacity` bytes from `offset`; *written gets

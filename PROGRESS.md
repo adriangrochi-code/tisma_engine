@@ -13849,3 +13849,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   - un modo inválido y un factor fuera de rango dan error de uso;
   - la prueba de la ruta de proyecto sigue pasando.
 
+## 2026-11-13 — API en C: el costo en el resumen (P13 del iPhone)
+
+- **Hecho:** `tisma_summary_json` da `cost` = gramos × `extrusion.cost` / 1000, redondeado a centésimos; sale `null`
+  sin precio o sin densidad. Documentado en `docs/C_API.md` y en el encabezado.
+- **Pruebas:** `[c_api]`, un caso nuevo: el cubo con densidad 1,24 y 20 por kg, y sin precio da `null`.
+

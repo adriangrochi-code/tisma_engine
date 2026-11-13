@@ -26,6 +26,8 @@ biblioteca de iOS (`tools/build_ios.sh`). **Falta:** la vista previa por capas (
 - **Memoria:** `tisma_estimate_memory` es una cota por arriba ajustada a lo medido en Linux x86_64: 80 MB, más 200 B
   por triángulo, más 16 B por mm² de la caja del modelo y por capa. La tabla de lo medido está en `PROGRESS.md`
   (2026-11-12).
+- **Costo:** los gramos por `extrusion.cost` (dinero por kg), redondeado a centésimos. Sale `null` sin precio o sin
+  la densidad del filamento (`extrusion.density`), que es lo que da los gramos.
 - **Errores de laminar:** el código sale del de la línea de comandos (2 → `TISMA_CANNOT_READ`, 4 →
   `TISMA_BAD_MODEL`, el resto `TISMA_ERROR`) y el mensaje es su primera línea `error:`.
 

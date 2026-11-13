@@ -141,15 +141,19 @@ std::string read_text(const fs::path& path) {
     return text.str();
 }
 
-// The summary the header promises, from the command's summary and warnings.
-std::string summary_json(const fs::path& summary, const fs::path& warnings) {
+// The summary the header promises, from the command's summary and warnings;
+// the cost from the grams and extrusion.cost (money per kg), null when either
+// is unknown.
+std::string summary_json(const fs::path& summary, const fs::path& warnings, double cost_per_kg) {
     nlohmann::json s = nlohmann::json::parse(read_text(summary), nullptr, false);
     nlohmann::json w = nlohmann::json::parse(read_text(warnings), nullptr, false);
     nlohmann::json out{{"print_time_s", s.value("print_time_s", 0)},
                        {"filament_mm", s.value("filament_mm", 0.0)},
                        {"filament_g", s.contains("filament_g") ? s["filament_g"] : nlohmann::json(nullptr)},
                        {"layers", s.value("layers", 0)},
-                       {"cost", nullptr},
+                       {"cost", s.contains("filament_g") && s["filament_g"].is_number() && cost_per_kg > 0.0
+                                    ? nlohmann::json(std::round(s["filament_g"].get<double>() * cost_per_kg / 10.0) / 100.0)
+                                    : nlohmann::json(nullptr)},
                        {"warnings", nlohmann::json::array()}};
     if (w.is_object() && w.contains("warnings") && w["warnings"].is_array())
         for (const nlohmann::json& one : w["warnings"])
@@ -160,7 +164,7 @@ std::string summary_json(const fs::path& summary, const fs::path& warnings) {
     return out.dump();
 }
 
-void run_job(tisma_ctx* ctx, std::string model) {
+void run_job(tisma_ctx* ctx, std::string model, double cost_per_kg) {
     const fs::path config = ctx->dir / "settings.json", gcode = ctx->dir / "result.gcode",
                    summary = ctx->dir / "summary.json", warnings = ctx->dir / "warnings.json";
     const std::string args_text[] = {"slice", model, "--config", config.string(), "-o", gcode.string(),
@@ -178,7 +182,7 @@ void run_job(tisma_ctx* ctx, std::string model) {
             code = code_of(rc);
             message = first_error(err.str());
         } else {
-            result = summary_json(summary, warnings);
+            result = summary_json(summary, warnings, cost_per_kg);
         }
     } catch (const tisma::JobCancelled&) {
         state = TISMA_STOPPED;
@@ -354,7 +358,7 @@ tisma_status tisma_slice_start(tisma_ctx* ctx) {
     ctx->hook.stage.store("loading");
     ctx->state.store(TISMA_RUNNING);
     try {
-        ctx->worker = std::thread(run_job, ctx, ctx->model);
+        ctx->worker = std::thread(run_job, ctx, ctx->model, ctx->settings->filament_cost);
     } catch (const std::exception& e) {
         ctx->state.store(TISMA_FAILED);
         return fail(ctx, TISMA_ERROR, std::string("cannot start the job: ") + e.what());

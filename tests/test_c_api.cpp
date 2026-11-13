@@ -3,6 +3,9 @@
 #include <tisma/tisma_engine.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <nlohmann/json.hpp>
+
+#include <cmath>
 
 #include <chrono>
 #include <cstring>
@@ -123,6 +126,27 @@ TEST_CASE("C API: open, settings, memory, slice with progress, summary and G-cod
     size_t segments = 1;
     CHECK(tisma_preview_segments(ctx, 0, 1, 0, nullptr, 0, &segments).code == TISMA_ERROR);
     CHECK(segments == 0);
+    tisma_destroy(ctx);
+}
+
+TEST_CASE("C API: the summary's cost from the grams and extrusion.cost", "[c_api]") {
+    tisma_ctx* ctx = tisma_create();
+    REQUIRE(ctx);
+    REQUIRE(tisma_open_path(ctx, (kData + "/cube_ascii.stl").c_str()).code == TISMA_OK);
+    REQUIRE(tisma_set_settings_json(ctx, R"({"extrusion": {"density": 1.24, "cost": 20}})").code == TISMA_OK);
+    REQUIRE(tisma_slice_start(ctx).code == TISMA_OK);
+    REQUIRE(wait(ctx).state == TISMA_DONE);
+    const nlohmann::json summary = nlohmann::json::parse(tisma_summary_json(ctx));
+    REQUIRE(summary["filament_g"].is_number());
+    REQUIRE(summary["cost"].is_number());
+    const double grams = summary["filament_g"].get<double>();
+    CHECK(grams > 0.0);
+    CHECK(std::abs(summary["cost"].get<double>() - std::round(grams * 20.0 / 10.0) / 100.0) < 1e-9);
+    // Without a price the cost is unknown.
+    REQUIRE(tisma_set_settings_json(ctx, R"({"extrusion": {"density": 1.24}})").code == TISMA_OK);
+    REQUIRE(tisma_slice_start(ctx).code == TISMA_OK);
+    REQUIRE(wait(ctx).state == TISMA_DONE);
+    CHECK(nlohmann::json::parse(tisma_summary_json(ctx))["cost"].is_null());
     tisma_destroy(ctx);
 }
 
