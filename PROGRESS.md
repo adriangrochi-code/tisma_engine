@@ -12362,5 +12362,11 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   con Bonjour (P17, `Discovery` compartido) y cámara (P18); teclado decimal (P22). Avance, cancelar y memoria al
   laminar (P11–P13) esperan la API de trabajos en la biblioteca de iOS del motor (4986dc4, camino a dev); la app la
   busca al arrancar y, sin ella, lamina por la línea de comandos. Sin probar en un iPhone real ni con impresoras.
+- iPhone, paridad (noche del 12 al 13-11, CI de iOS verde hasta c7bcec7, run 43349743206): laminado con la API de
+  trabajos del motor (avance por etapas, Cancelar, memoria; dev 4986dc4) y su costo (be17553); paquete de perfiles,
+  sus impresoras y filamentos en el asistente y la ayuda sin conexión (`PackData`, `Knowledge` compartidos);
+  Ingeniería con carga en un punto, dirección, temperatura, relleno mínimo (proyecto y pieza suelta, be17553) y
+  análisis en la nube; restaurar compras de la App Store (cloud.md 5c); enlaces de Printables y Thingiverse. Quedan
+  P3 (tiras de herramientas) y P9b (un ZIP de un sitio). STEP: el motor no lo lee. Sin probar en un iPhone real.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
