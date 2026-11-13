@@ -14299,3 +14299,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   o «Server is already active»; ahora también con «Xvfb failed to start», hasta 5 veces.
 - **Multigrilla, paso intermedio:** no se probó. Tocaría a la vez la restricción, la interpolación y el operador de
   Galerkin armado por elementos (hoy con pesos trilineales por eje), con pesos propios por nodo. Queda en el plan.
+- **Más mantenimiento** (35613c4): fuzz con la semilla 2026111304, 2000 casos, 0 fallas (16 rechazadas); las piezas
+  de W4 (techo, cono, hongo), los 30 cubos y el cubo de 20 mm con seis juegos de ajustes (de fábrica; `vertical_shell`
+  `enabled` con costura `nearest` y una pared; soporte con gyroid; capas de 0,12 con bufanda; modo vaso; paredes
+  `fixed`, la externa primero y relleno al 100 %): 30 laminados, todos pasan el chequeo.
