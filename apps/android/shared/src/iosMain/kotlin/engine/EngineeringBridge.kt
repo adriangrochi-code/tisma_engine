@@ -137,6 +137,21 @@ object EngineeringBridge {
         listOf("analyze", project, "-o", out, "--summary", summary, "--sandbox", "--mode", "lightest-infill", "--no-zones",
             "--object", "0", "--instance", "0", "--no-gpu") + (if (quality.isEmpty()) emptyList() else listOf("--quality", quality))
 
+    /**
+     * The same on a bare model (dev be17553): `analyze <model> --config --case --mode lightest-infill -o`, one density
+     * (`--no-zones`), held to [safety] (the engine's default is 2).
+     */
+    fun lightestModelArgs(model: String, config: String, caseFile: String, out: String, safety: Double): List<String> =
+        listOf("analyze", model, "--config", config, "--case", caseFile, "--mode", "lightest-infill", "--no-zones",
+            "--safety", safety.toString(), "-o", out)
+
+    /** The density in a result JSON (its `summary`), or -1. */
+    fun lightestDensityInReport(reportJson: String): Int {
+        val o = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(reportJson) as? kotlinx.serialization.json.JsonObject }
+            .getOrNull() ?: return -1
+        return lightestDensity((o["summary"] ?: return -1).toString())
+    }
+
     /** The density found (%), or -1 when none holds (or the part must be solid). */
     fun lightestDensity(summaryJson: String): Int {
         val o = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(summaryJson) as? kotlinx.serialization.json.JsonObject }

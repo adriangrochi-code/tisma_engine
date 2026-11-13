@@ -87,5 +87,7 @@ class LightestInfillTest {
         assertEquals(-1, EngineeringBridge.lightestDensity("""{"found":true,"solid":true,"density":100}"""))
         assertEquals(-1, EngineeringBridge.lightestDensity("""{"found":false}"""))
         assertTrue("lightest-infill" in EngineeringBridge.lightestArgs("p.3mf", "r.tea", "s.json", ""))
+        assertEquals(20, EngineeringBridge.lightestDensityInReport("""{"format":"tisma-engineering-result","summary":{"found":true,"density":20}}"""))
+        assertTrue("--case" in EngineeringBridge.lightestModelArgs("m.stl", "c.json", "k.json", "r.json", 2.0))
     }
 }

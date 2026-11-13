@@ -100,16 +100,12 @@ struct EngineeringView: View {
             }
             // rule 13: the lightest infill that still holds; the engine finds it on a 3MF project for now.
             Section("Lightest infill") {
-                if model?.pathExtension.lowercased() == "3mf" {
-                    Button(busy ? String(localized: "Analyzing…") : String(localized: "Find the lightest infill")) { findLightest() }
-                        .disabled(busy)
-                        .accessibilityIdentifier("engineering_lightest")
-                    if let lightest {
-                        LabeledContent("Lightest infill that holds", value: "\(lightest) %")
-                        Button("Use it for slicing") { useLightest(lightest) }
-                    }
-                } else {
-                    Text("Save it as a project to look for the lightest infill.").foregroundStyle(.secondary)
+                Button(busy ? String(localized: "Analyzing…") : String(localized: "Find the lightest infill")) { findLightest() }
+                    .disabled(busy || printer.isEmpty || same)
+                    .accessibilityIdentifier("engineering_lightest")
+                if let lightest {
+                    LabeledContent("Lightest infill that holds", value: "\(lightest) %")
+                    Button("Use it for slicing") { useLightest(lightest) }
                 }
                 if let lightestNote { Text(lightestNote).font(.footnote) }
             }
@@ -191,17 +187,39 @@ struct EngineeringView: View {
         }
     }
 
+    /// A 3MF project with the conditions it carries; a bare model (or the cube) with the faces marked here (dev be17553).
     private func findLightest() {
-        guard let project = model else { return }
         busy = true; lightest = nil; lightestNote = nil
-        let q = quality
+        let (q, chosen, p, n, f, req) = (quality, model, printer, nozzle, filament, safety)
+        let caseJson = bridge.caseAlong(fixed: fixedFace, loaded: loadFace, newtons: newtons, direction: direction, material: material,
+                                        quality: quality, solid: quick)
         Task.detached {
             let dir = FileManager.default.temporaryDirectory
-            let out = dir.appendingPathComponent("lightest.tea"), summary = dir.appendingPathComponent("lightest.json")
-            try? FileManager.default.removeItem(at: summary)
-            let r = Engine.run(EngineeringBridge.shared.lightestArgs(project: project.path, out: out.path, summary: summary.path, quality: q))
-            let text = (try? String(contentsOf: summary, encoding: .utf8)) ?? ""
-            let d = Int(EngineeringBridge.shared.lightestDensity(summaryJson: text))
+            let out = dir.appendingPathComponent("lightest.json")
+            try? FileManager.default.removeItem(at: out)
+            let r: Engine.Result
+            var text = ""
+            if let project = chosen, project.pathExtension.lowercased() == "3mf" {
+                let summary = dir.appendingPathComponent("lightest_summary.json")
+                try? FileManager.default.removeItem(at: summary)
+                r = Engine.run(EngineeringBridge.shared.lightestArgs(project: project.path, out: dir.appendingPathComponent("lightest.tea").path,
+                                                                     summary: summary.path, quality: q))
+                text = (try? String(contentsOf: summary, encoding: .utf8)) ?? ""
+            } else {
+                let part = chosen ?? Self.cube()
+                let (made, why) = Engine.profile(printer: p, nozzle: n, filament: f)
+                guard let made else { await MainActor.run { lightestNote = "No profile: \(why)"; busy = false }; return }
+                let caseFile = dir.appendingPathComponent("lightest_case.json")
+                try? caseJson.write(to: caseFile, atomically: true, encoding: .utf8)
+                r = Engine.run(EngineeringBridge.shared.lightestModelArgs(model: part.path, config: made.path, caseFile: caseFile.path,
+                                                                          out: out.path, safety: req))
+                print("ENGINE-ANALYZE lightest exit=\(r.code) err=\(r.err.suffix(200))")
+                let report = (try? String(contentsOf: out, encoding: .utf8)) ?? ""
+                text = report
+            }
+            let isProject = chosen?.pathExtension.lowercased() == "3mf"
+            let d = Int(isProject ? EngineeringBridge.shared.lightestDensity(summaryJson: text)
+                                  : EngineeringBridge.shared.lightestDensityInReport(reportJson: text))
             await MainActor.run {
                 busy = false
                 if d >= 0 { lightest = d } else {
