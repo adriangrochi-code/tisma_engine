@@ -14313,3 +14313,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   commit de esta entrada, con gcc y clang en verde.
 - **Sigue al retomar:** ver el resultado de la parte ASan de la CI sobre 35613c4; la multigrilla con huecos (nota de
   diseño arriba); lo que diga QA.
+
+## 2026-11-13 — interfaz: en pausa
+
+- El dueño pausó el trabajo (2026-11-13, 09:20 UTC, por QA). Presionar/Tirar no había empezado: no queda nada a
+  medio hacer. Lo que sigue cuando se retome: Presionar/Tirar, Medir entre caras, Apariencia, el estilo con aristas o
+  en alambre, mover varios modelos juntos, arrastrar las esferas del degradé y fijar herramientas a la barra.
