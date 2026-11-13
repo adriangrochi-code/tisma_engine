@@ -162,8 +162,8 @@ struct EngineeringView: View {
                                 requiredSafety required: Double, nozzleTemperature: Double = 0) -> ([ReportLine], String?, URL?) {
         let dir = FileManager.default.temporaryDirectory
         let part = chosen ?? cube()
-        let (config, why) = Engine.profile(printer: p, nozzle: n, filament: f)
-        guard let profile = config else { return ([], "No profile: \(why)", nil) }
+        let (made, why) = Engine.profile(printer: p, nozzle: n, filament: f)
+        guard let profile = made else { return ([], "No profile: \(why)", nil) }
         let config = dir.appendingPathComponent("engineering_config.json")
         let base = (try? String(contentsOf: profile, encoding: .utf8)) ?? "{}"
         try? EngineeringBridge.shared.withNozzleTemperature(configJson: base, celsius: nozzleTemperature).write(to: config, atomically: true, encoding: .utf8)
