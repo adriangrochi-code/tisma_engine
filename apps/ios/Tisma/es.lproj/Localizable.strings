@@ -207,3 +207,10 @@
 "Toward the back (+Y)" = "Hacia atrás (+Y)";
 "Into the face" = "Hacia la cara";
 "the printer's default" = "el de la impresora";
+"Lightest infill" = "Relleno mínimo";
+"Find the lightest infill" = "Buscar el relleno mínimo";
+"Lightest infill that holds" = "Relleno mínimo que aguanta";
+"Use it for slicing" = "Usarlo al laminar";
+"Save it as a project to look for the lightest infill." = "Guárdalo como proyecto para buscar el relleno mínimo.";
+"No lighter infill holds: keep the one you have." = "Ningún relleno más liviano aguanta: deja el que tienes.";
+"Infill %d %% applied to the settings." = "Relleno del %d %% aplicado a los ajustes.";

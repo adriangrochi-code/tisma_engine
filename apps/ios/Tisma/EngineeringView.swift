@@ -33,6 +33,8 @@ struct EngineeringView: View {
     @State private var map: StressMapData?
     @State private var showMap = true
     @State private var problem: String?
+    @State private var lightest: Int?
+    @State private var lightestNote: String?
 
     private let bridge = EngineeringBridge.shared
 
@@ -94,6 +96,21 @@ struct EngineeringView: View {
                 if printer.isEmpty { Text("Choose a printer on the plate first.").foregroundStyle(.secondary) }
                 if same { Text("The held face and the loaded face must differ.").foregroundStyle(.secondary) }
             }
+            // rule 13: the lightest infill that still holds; the engine finds it on a 3MF project for now.
+            Section("Lightest infill") {
+                if model?.pathExtension.lowercased() == "3mf" {
+                    Button(busy ? String(localized: "Analyzing…") : String(localized: "Find the lightest infill")) { findLightest() }
+                        .disabled(busy)
+                        .accessibilityIdentifier("engineering_lightest")
+                    if let lightest {
+                        LabeledContent("Lightest infill that holds", value: "\(lightest) %")
+                        Button("Use it for slicing") { useLightest(lightest) }
+                    }
+                } else {
+                    Text("Save it as a project to look for the lightest infill.").foregroundStyle(.secondary)
+                }
+                if let lightestNote { Text(lightestNote).font(.footnote) }
+            }
             if !lines.isEmpty {
                 Section("Result") {
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, l in
@@ -133,6 +150,34 @@ struct EngineeringView: View {
             if marking == "fixed" { fixedPick = f; fixed = "touched" } else { loadPick = f; loaded = "touched"; loadPoint = nil }
         }
         map = nil; lines = []
+    }
+
+    private func findLightest() {
+        guard let project = model else { return }
+        busy = true; lightest = nil; lightestNote = nil
+        let q = quality
+        Task.detached {
+            let dir = FileManager.default.temporaryDirectory
+            let out = dir.appendingPathComponent("lightest.tea"), summary = dir.appendingPathComponent("lightest.json")
+            try? FileManager.default.removeItem(at: summary)
+            let r = Engine.run(EngineeringBridge.shared.lightestArgs(project: project.path, out: out.path, summary: summary.path, quality: q))
+            let text = (try? String(contentsOf: summary, encoding: .utf8)) ?? ""
+            let d = Int(EngineeringBridge.shared.lightestDensity(summaryJson: text))
+            await MainActor.run {
+                busy = false
+                if d >= 0 { lightest = d } else {
+                    lightestNote = r.code == 0 ? String(localized: "No lighter infill holds: keep the one you have.")
+                        : (r.err.split(separator: "\n").last.map(String.init) ?? "exit \(r.code)")
+                }
+            }
+        }
+    }
+
+    /// The density goes to the person's settings (infill.density), as Android applies it to the slice.
+    private func useLightest(_ d: Int) {
+        guard let panel = PanelModel.shared.bridge else { return }
+        if panel.set(key: "infill.density", text: "\(d)") { PanelModel.shared.changed() }
+        lightestNote = String(format: String(localized: "Infill %d %% applied to the settings."), d)
     }
 
     private func analyze() {

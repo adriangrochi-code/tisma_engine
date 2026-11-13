@@ -79,3 +79,13 @@ class EngineeringExtrasTest {
         assertTrue("230" in hot && "210" !in hot, hot)
     }
 }
+
+class LightestInfillTest {
+    @Test
+    fun theDensityOnlyWhenFound() {
+        assertEquals(15, EngineeringBridge.lightestDensity("""{"found":true,"density":15.0}"""))
+        assertEquals(-1, EngineeringBridge.lightestDensity("""{"found":true,"solid":true,"density":100}"""))
+        assertEquals(-1, EngineeringBridge.lightestDensity("""{"found":false}"""))
+        assertTrue("lightest-infill" in EngineeringBridge.lightestArgs("p.3mf", "r.tea", "s.json", ""))
+    }
+}

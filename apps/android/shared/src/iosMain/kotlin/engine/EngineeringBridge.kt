@@ -129,6 +129,23 @@ object EngineeringBridge {
         StressMapData(m.positions.toNSData(), m.colors.toNSData(), m.triangles)
     }.getOrNull()
 
+    /**
+     * «Relleno mínimo» (mobile_app.md, rule 13; parity P16) on a 3MF project, as Android runs it: the lightest
+     * infill that still holds, one density for the whole part (`--no-zones`), on the project's first object.
+     */
+    fun lightestArgs(project: String, out: String, summary: String, quality: String): List<String> =
+        listOf("analyze", project, "-o", out, "--summary", summary, "--sandbox", "--mode", "lightest-infill", "--no-zones",
+            "--object", "0", "--instance", "0", "--no-gpu") + (if (quality.isEmpty()) emptyList() else listOf("--quality", quality))
+
+    /** The density found (%), or -1 when none holds (or the part must be solid). */
+    fun lightestDensity(summaryJson: String): Int {
+        val o = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(summaryJson) as? kotlinx.serialization.json.JsonObject }
+            .getOrNull() ?: return -1
+        fun t(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        if (t("found") != "true" || t("solid") == "true") return -1
+        return t("density")?.toDoubleOrNull()?.toInt() ?: -1
+    }
+
     private fun FloatArray.toNSData(): NSData = if (isEmpty()) NSData() else usePinned { p ->
         NSData.create(bytes = p.addressOf(0), length = (size * 4).toULong())
     }
