@@ -12371,5 +12371,11 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - Decisión del dueño (13-11, 02:40, por QA; mobile_app.md regla 10 en spec/next): las apps usan solo la biblioteca
   de Tisma. Quitados de Android y del iPhone los enlaces tisma://open y prusaslicer://open, las descargas de
   Printables y Thingiverse, su preferencia, sus pruebas y textos (P9 y P9b dejan de existir).
+- Beta para tiendas (13-11, orden de QA): CI `stores.yml` que firma y sube a TestFlight y a la prueba interna de
+  Google Play (se salta sin secretos; listas del dueño en apps/ios/PLAN.md y apps/android/BETA.md), fichas es/en,
+  política de privacidad y capturas en `apps/stores/`. Accesibilidad (51c5979): nombres para VoiceOver y TalkBack en
+  los dibujos, la vista 3D y las filas elegidas; filas de ajustes y tira de herramientas que se apilan o quedan en
+  iconos con letra grande; pruebas a letra máxima en iOS (`testLargestTextSize`) y al doble en Android (nada fuera
+  de la ventana en las 8 pantallas). Sin probar con VoiceOver o TalkBack en un teléfono real ni con cuentas reales.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
