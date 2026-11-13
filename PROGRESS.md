@@ -14168,3 +14168,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Prueba nueva** (`[c_api]`): cubo con la base fija y 100 N en la cara de arriba: informe, PLY, caso inválido,
   JSON roto, sin modelo, y cancelación.
 - **Sigue:** las superficies de arriba en pendiente (techo de W4).
+
+## 2026-11-13 — Superficies de arriba en pendiente (techo de W4): investigación, sin cambios
+
+- En el techo de 15°, capa 30, la piel de arriba mide 17,4 mm² (una franja de unos 0,87 mm a lo largo del lado bajo).
+  Nada de esa franja queda «bajo el aire» según la regla 2 de `surfaces_infill.md`: la capa 31 la cubre entera,
+  porque su borde se corre 0,75 mm por capa y el relleno empieza a unos 1,37 mm del borde de la capa.
+- Probado y descartado: no contar la pared de afuera de la capa de arriba como tapa (0,45 mm) sigue dando 0 de
+  superficie de arriba. Para llegar a una línea (20,95 mm) habría que no contar casi 1 mm, sin una razón física.
+- La ficha da, con `disabled`, una línea de superficie de arriba y nada de sólido (el motor, dos líneas de sólido), y
+  con `partial` unas cuatro líneas de superficie de arriba y una de sólido. Es otra forma de armar la piel en
+  pendiente, no solo otra clasificación.
+- **Sigue:** preguntar a QA qué regla de comportamiento quiere (qué parte de la piel en pendiente va como superficie
+  de arriba), antes de cambiar la clasificación, que toca W7 y todas las piezas con escalones.
