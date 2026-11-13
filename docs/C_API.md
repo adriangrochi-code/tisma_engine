@@ -19,9 +19,12 @@ biblioteca de iOS (`tools/build_ios.sh`). La vista previa por capas y el anális
   `infill` 50, `gcode` 60, `finishing` 95, y `done` 100 (o `cancelled`, `failed`).
 - **Cancelar:** se nota en la próxima etapa. Medido: entre 0,05 y 0,5 s en una esfera de 319 200 triángulos. El
   trabajo queda en `TISMA_STOPPED` con el código `TISMA_CANCELLED`, sin resultado.
-- **Ajustes:** hay que darlos con `tisma_set_settings_json` antes de laminar (si no, `TISMA_BAD_SETTINGS`). Los
-  scripts de posprocesado no corren: en una app no hay nadie que los confirme.
-- **Proyectos:** un 3MF abre como modelo; sus ajustes todavía no se toman.
+- **Ajustes:** un modelo suelto (STL, OBJ) los necesita con `tisma_set_settings_json` antes de laminar (si no,
+  `TISMA_BAD_SETTINGS`). Los scripts de posprocesado no corren: en una app no hay nadie que los confirme.
+- **Proyectos:** un 3MF sin ajustes dados se lamina con los suyos, igual que en los nodos
+  (`slice <proyecto> --sandbox`). El avance sale de sus líneas `progress` y ahí se mira la cancelación. Con ajustes
+  dados, el 3MF se lamina como un modelo con esos ajustes. En ese caso el costo del resumen sale `null`: el precio del
+  proyecto todavía no se lee.
 - **Memoria:** `tisma_estimate_memory` es una cota por arriba ajustada a lo medido en Linux x86_64: 80 MB, más 200 B
   por triángulo, más 16 B por mm² de la caja del modelo y por capa. La tabla de lo medido está en `PROGRESS.md`
   (2026-11-12).

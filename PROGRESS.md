@@ -13958,3 +13958,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   - cancelar en calidad normal termina en `TISMA_STOPPED`.
 - **Sigue:** los ajustes de un proyecto 3MF al laminar por la API (hoy hay que darlos con `tisma_set_settings_json`).
 
+## 2026-11-13 — API en C: un proyecto se lamina con sus ajustes (bloque de noche)
+
+- **Hecho:** si se abre un 3MF y no se dan ajustes, `tisma_slice_start` corre `slice <proyecto> -o … --summary …
+  --sandbox`, como en los nodos, con los ajustes del proyecto. El avance y la cancelación salen de sus líneas
+  `progress`. Un modelo suelto sigue necesitando `tisma_set_settings_json`.
+- **Pruebas:** `[c_api]`, un caso nuevo:
+  - el cubo de 20 mm del proyecto da 100 capas, gramos y la vista previa;
+  - un STL sin ajustes da `TISMA_BAD_SETTINGS`;
+  - cancelar y volver a laminar.
+- **Sin hacer:** el costo cuando el proyecto trae precio (sale `null`).
+- **Con esto, la API de `tisma_engine.h` está completa.**
+

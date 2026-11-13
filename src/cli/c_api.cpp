@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstring>
@@ -45,6 +46,7 @@ struct tisma_ctx {
     std::size_t triangles = 0;
     double size[3] = {0.0, 0.0, 0.0}; // mm, the model's box
     std::optional<tisma::Settings> settings;
+    bool project = false; // a 3MF: it can be sliced with its own settings
     uint64_t memory_limit = 0;
 
     // The job.
@@ -117,6 +119,10 @@ tisma_status take_model(tisma_ctx* ctx, const fs::path& path, const tisma::Model
             }
         }
     ctx->model = path.string();
+    std::string extension = path.extension().string();
+    for (char& ch : extension)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    ctx->project = extension == ".3mf";
     ctx->triangles = model.mesh.triangle_count();
     for (int a = 0; a < 3; ++a)
         ctx->size[a] = static_cast<double>(hi[a] - lo[a]);
@@ -175,13 +181,56 @@ std::string summary_json(const fs::path& summary, const fs::path& warnings, doub
     return out.dump();
 }
 
+// The command's output, read line by line as it comes: each "progress N"
+// line is the job's percent, and the cancel is looked at there, so a
+// cancelled analysis stops at its next progress line.
+class ProgressLines : public std::streambuf {
+public:
+    explicit ProgressLines(tisma::JobHook& hook) : hook_(hook) {}
+
+protected:
+    int overflow(int c) override {
+        if (c == traits_type::eof())
+            return traits_type::not_eof(c);
+        if (c != '\n') {
+            line_.push_back(static_cast<char>(c));
+            return c;
+        }
+        if (line_.rfind("progress ", 0) == 0) {
+            int v = 0;
+            const char* begin = line_.data() + 9;
+            const auto [end, ec] = std::from_chars(begin, line_.data() + line_.size(), v);
+            if (ec == std::errc() && v > hook_.percent.load())
+                hook_.percent.store(std::min(v, 99));
+        }
+        line_.clear();
+        tisma::job_check();
+        return c;
+    }
+
+private:
+    tisma::JobHook& hook_;
+    std::string line_;
+};
+
 void run_job(tisma_ctx* ctx, std::string model, double cost_per_kg) {
     const fs::path config = ctx->dir / "settings.json", gcode = ctx->dir / "result.gcode",
                    summary = ctx->dir / "summary.json", warnings = ctx->dir / "warnings.json";
-    const std::string args_text[] = {"slice", model, "--config", config.string(), "-o", gcode.string(),
-                                     "--summary", summary.string(), "--warnings", warnings.string()};
-    std::vector<std::string_view> args(std::begin(args_text), std::end(args_text));
-    std::ostringstream out, err;
+    // A project without settings given: sliced with its own settings, as
+    // the nodes slice it (cloud.md, rule 18), its progress lines read as they
+    // come. Otherwise the model with the settings given.
+    const bool own_settings = !ctx->settings;
+    std::vector<std::string> args_text =
+        own_settings ? std::vector<std::string>{"slice", model, "-o", gcode.string(), "--summary", summary.string(), "--sandbox"}
+                     : std::vector<std::string>{"slice", model, "--config", config.string(), "-o", gcode.string(),
+                                                "--summary", summary.string(), "--warnings", warnings.string()};
+    std::vector<std::string_view> args(args_text.begin(), args_text.end());
+    ProgressLines lines(ctx->hook);
+    std::ostringstream plain;
+    std::ostream progress_out(&lines);
+    progress_out.exceptions(std::ios::badbit);
+    std::ostream& out = own_settings ? progress_out : static_cast<std::ostream&>(plain);
+    std::ostringstream err;
     tisma_code code = TISMA_OK;
     std::string message, result;
     int state = TISMA_DONE;
@@ -223,38 +272,6 @@ void run_job(tisma_ctx* ctx, std::string model, double cost_per_kg) {
     ctx->hook.stage.store(state == TISMA_DONE ? "done" : state == TISMA_STOPPED ? "cancelled" : "failed");
     ctx->state.store(state);
 }
-
-// The command's output, read line by line as it comes: each "progress N"
-// line is the job's percent, and the cancel is looked at there, so a
-// cancelled analysis stops at its next progress line.
-class ProgressLines : public std::streambuf {
-public:
-    explicit ProgressLines(tisma::JobHook& hook) : hook_(hook) {}
-
-protected:
-    int overflow(int c) override {
-        if (c == traits_type::eof())
-            return traits_type::not_eof(c);
-        if (c != '\n') {
-            line_.push_back(static_cast<char>(c));
-            return c;
-        }
-        if (line_.rfind("progress ", 0) == 0) {
-            int v = 0;
-            const char* begin = line_.data() + 9;
-            const auto [end, ec] = std::from_chars(begin, line_.data() + line_.size(), v);
-            if (ec == std::errc() && v > hook_.percent.load())
-                hook_.percent.store(std::min(v, 99));
-        }
-        line_.clear();
-        tisma::job_check();
-        return c;
-    }
-
-private:
-    tisma::JobHook& hook_;
-    std::string line_;
-};
 
 tisma_code analysis_code(const nlohmann::json& summary, int exit_code) {
     const std::string code = summary.is_object() ? summary.value("code", std::string()) : std::string();
@@ -442,11 +459,11 @@ tisma_status tisma_slice_start(tisma_ctx* ctx) {
     join(ctx);
     if (ctx->model.empty())
         return fail(ctx, TISMA_NOTHING_TO_SLICE, "no model open");
-    if (!ctx->settings)
-        return fail(ctx, TISMA_BAD_SETTINGS, "no settings: call tisma_set_settings_json first");
+    if (!ctx->settings && !ctx->project)
+        return fail(ctx, TISMA_BAD_SETTINGS, "no settings: call tisma_set_settings_json first (a project has its own)");
     if (ctx->memory_limit > 0 && tisma_estimate_memory(ctx) > ctx->memory_limit)
         return fail(ctx, TISMA_TOO_LARGE, "the slice would take more memory than the limit set");
-    {
+    if (ctx->settings) {
         // No post-processing scripts: an app has nobody at a terminal to
         // confirm them (gcode_templates.md, rules 16 and 17).
         tisma::Settings settings = *ctx->settings;
@@ -469,7 +486,7 @@ tisma_status tisma_slice_start(tisma_ctx* ctx) {
     ctx->analysis = false;
     ctx->state.store(TISMA_RUNNING);
     try {
-        ctx->worker = std::thread(run_job, ctx, ctx->model, ctx->settings->filament_cost);
+        ctx->worker = std::thread(run_job, ctx, ctx->model, ctx->settings ? ctx->settings->filament_cost : 0.0);
     } catch (const std::exception& e) {
         ctx->state.store(TISMA_FAILED);
         return fail(ctx, TISMA_ERROR, std::string("cannot start the job: ") + e.what());

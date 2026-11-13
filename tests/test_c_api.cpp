@@ -284,3 +284,40 @@ TEST_CASE("C API: the structural analysis of a project's object, with progress, 
     std::filesystem::remove(loaded);
 }
 
+
+TEST_CASE("C API: a project slices with its own settings when none are given", "[c_api]") {
+    using namespace tisma;
+    Project p;
+    p.settings = ui::default_settings();
+    p.settings.gpu = GpuMode::Off;
+    p.settings.filament_density = 1.24;
+    ProjectModel m;
+    m.name = "box.stl";
+    m.mesh = make_box(20.0, 20.0, 20.0);
+    m.offset = {100.0, 100.0, 0.0};
+    p.models.push_back(m);
+    const auto project = test_temp_dir() / "tisma_c_api_project.3mf";
+    save_project(project, p);
+
+    tisma_ctx* ctx = tisma_create();
+    REQUIRE(ctx);
+    // A model file still needs settings.
+    REQUIRE(tisma_open_path(ctx, (kData + "/cube_ascii.stl").c_str()).code == TISMA_OK);
+    CHECK(tisma_slice_start(ctx).code == TISMA_BAD_SETTINGS);
+    REQUIRE(tisma_open_path(ctx, project.string().c_str()).code == TISMA_OK);
+    REQUIRE(tisma_slice_start(ctx).code == TISMA_OK);
+    const tisma_progress done = wait(ctx);
+    INFO((done.error.message ? done.error.message : ""));
+    REQUIRE(done.state == TISMA_DONE);
+    const nlohmann::json summary = nlohmann::json::parse(tisma_summary_json(ctx));
+    CHECK(summary["layers"].get<int>() == 100); // 20 mm at the default 0.2 mm
+    CHECK(summary["filament_g"].get<double>() > 0.0);
+    CHECK(tisma_layer_count(ctx) == 100);
+    // Cancelled at its next progress line.
+    REQUIRE(tisma_slice_start(ctx).code == TISMA_OK);
+    tisma_cancel(ctx);
+    const tisma_progress stopped = wait(ctx);
+    REQUIRE((stopped.state == TISMA_STOPPED || stopped.state == TISMA_DONE));
+    tisma_destroy(ctx);
+    std::filesystem::remove(project);
+}
