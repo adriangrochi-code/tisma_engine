@@ -10,6 +10,7 @@ on:
     paths:
       - ".github/workflows/android-memory.yml"
       - "apps/android/tools/memory_check.sh"
+      - "apps/android/app/src/main/generated/**"
   workflow_dispatch:
 
 permissions:
