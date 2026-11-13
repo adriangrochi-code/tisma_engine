@@ -83,6 +83,50 @@ enum Engine {
         return (r, gcode, try? String(contentsOf: summary, encoding: .utf8))
     }
 
+    /// An analysis as a job of the engine's library (tisma_engine.h, `tisma_analyze_case_start`, dev 76d53f8): the
+    /// open part with the case the person marked, its progress ("solving") and a way to cancel it (mobile_app.md,
+    /// rule 13; parity with the slice's rule 12). The report and the safety map are what `analyze --case --mesh` writes.
+    final class AnalysisJob: @unchecked Sendable {
+        enum Outcome {
+            /// The report JSON and the voxel surface colored by safety (PLY), when the engine gave one.
+            case done(report: String, mesh: Data?)
+            case cancelled
+            case failed(String)
+            /// The library refused before analyzing: the command line may still do it.
+            case refused(String)
+        }
+
+        private let ctx = tisma_create()
+        deinit { tisma_destroy(ctx) }
+
+        func cancel() { tisma_cancel(ctx) }
+
+        private static func text(_ s: tisma_status) -> String { s.message.map { String(cString: $0) } ?? "code \(s.code.rawValue)" }
+
+        func run(model: URL, settings: String, caseJson: String, progress: @escaping (Int, String) -> Void) -> Outcome {
+            guard ctx != nil else { return .refused("the engine has no context") }
+            var s = tisma_open_path(ctx, model.path)
+            guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
+            s = tisma_set_settings_json(ctx, settings)
+            guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
+            s = tisma_analyze_case_start(ctx, caseJson)
+            guard s.code == TISMA_OK else { return .refused(Self.text(s)) }
+            while true {
+                let p = tisma_poll(ctx)
+                if p.state == TISMA_DONE {
+                    let report = tisma_analysis_json(ctx).map { String(cString: $0) } ?? "{}"
+                    var size = 0
+                    let mesh = tisma_analysis_mesh(ctx, &size).flatMap { size > 0 ? Data(bytes: $0, count: size) : nil }
+                    return .done(report: report, mesh: mesh)
+                }
+                if p.state == TISMA_STOPPED { return .cancelled }
+                if p.state == TISMA_FAILED { return .failed(Self.text(p.error)) }
+                progress(Int(p.percent), p.stage.map { String(cString: $0) } ?? "")
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+        }
+    }
+
     /// A slice as a job of the engine's library (tisma_engine.h, docs/C_API.md): its progress by stage, a way to cancel
     /// it, and the memory it needs checked first (mobile_app.md, rules 12 and 19). One job per object.
     final class SliceJob: @unchecked Sendable {

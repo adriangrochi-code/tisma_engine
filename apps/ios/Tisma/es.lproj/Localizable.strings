@@ -240,3 +240,10 @@
 "One finger turns, two move, pinch zooms" = "Un dedo gira, dos mueven, pellizcar acerca";
 
 "The library is too large for this version; update the app." = "La biblioteca es demasiado grande para esta versión; actualizá la app.";
+
+/* The analysis' stages, from the engine's progress (tisma_poll). */
+"solving" = "Resolviendo";
+"voxels" = "Armando los vóxeles";
+"estimate" = "Estimando";
+"summary" = "Resumiendo";
+"resolution" = "Ajustando la resolución";

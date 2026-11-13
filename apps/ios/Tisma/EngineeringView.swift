@@ -29,6 +29,9 @@ struct EngineeringView: View {
     @State private var safety = 2.0
     @State private var quick = false
     @State private var busy = false
+    @State private var job: Engine.AnalysisJob?
+    @State private var percent = 0
+    @State private var stageText = ""
     @State private var lines: [ReportLine] = []
     @State private var map: StressMapData?
     @State private var showMap = true
@@ -95,6 +98,13 @@ struct EngineeringView: View {
                 Button(busy ? String(localized: "Analyzing…") : String(localized: "Analyze")) { analyze() }
                     .disabled(busy || printer.isEmpty || same)
                     .accessibilityIdentifier("engineering_run")
+                // The analysis in the background, with its progress and a way to stop it (as the slice, rule 12).
+                if busy, let job {
+                    ProgressView(value: Double(percent), total: 100) {
+                        Text(stageText.isEmpty ? String(localized: "Analyzing…") : String(localized: String.LocalizationValue(stageText)))
+                    }
+                    Button("Cancel", role: .cancel) { job.cancel() }.accessibilityIdentifier("engineering_cancel")
+                }
                 if printer.isEmpty { Text("Choose a printer on the plate first.").foregroundStyle(.secondary) }
                 if same { Text("The held face and the loaded face must differ.").foregroundStyle(.secondary) }
             }
@@ -244,11 +254,15 @@ struct EngineeringView: View {
                                         quality: quality, solid: quick)
         let required = safety
         let celsius = temperature
+        let job = Engine.AnalysisJob()
+        self.job = job; percent = 0; stageText = ""
         Task.detached {
             let (found, failed, voxels) = Self.run(model: chosen, printer: p, nozzle: n, filament: f, caseJson: caseJson,
-                                                   requiredSafety: required, nozzleTemperature: celsius)
+                                                   requiredSafety: required, nozzleTemperature: celsius, job: job) { pc, stage in
+                Task { @MainActor in percent = pc; stageText = stage }
+            }
             let colored = voxels.flatMap { EngineeringBridge.shared.stressMap(path: $0.path, maxFaces: 400_000) }
-            await MainActor.run { lines = found; problem = failed; map = colored; showMap = colored != nil; busy = false }
+            await MainActor.run { lines = found; problem = failed; map = colored; showMap = colored != nil; busy = false; self.job = nil }
         }
     }
 
@@ -261,7 +275,8 @@ struct EngineeringView: View {
 
     /// Runs `analyze` (off the main thread): the result lines or why there are none, and the safety map's file.
     nonisolated static func run(model chosen: URL?, printer p: String, nozzle n: Double, filament f: String?, caseJson: String,
-                                requiredSafety required: Double, nozzleTemperature: Double = 0) -> ([ReportLine], String?, URL?) {
+                                requiredSafety required: Double, nozzleTemperature: Double = 0, job: Engine.AnalysisJob? = nil,
+                                progress: @escaping (Int, String) -> Void = { _, _ in }) -> ([ReportLine], String?, URL?) {
         let dir = FileManager.default.temporaryDirectory
         let part = chosen ?? cube()
         let (made, why) = Engine.profile(printer: p, nozzle: n, filament: f)
@@ -274,6 +289,19 @@ struct EngineeringView: View {
         let voxels = dir.appendingPathComponent("voxels.ply")
         try? FileManager.default.removeItem(at: out)
         try? FileManager.default.removeItem(at: voxels)
+        // The engine's library first: progress and cancel; the command line when the library refuses (an older one).
+        if let job {
+            let settings = (try? String(contentsOf: config, encoding: .utf8)) ?? "{}"
+            switch job.run(model: part, settings: settings, caseJson: caseJson, progress: progress) {
+            case .done(let report, let mesh):
+                print("ENGINE-ANALYZE library done, map \(mesh?.count ?? 0) bytes")
+                let map = mesh.flatMap { (try? $0.write(to: voxels)) != nil ? voxels : nil }
+                return (EngineeringBridge.shared.report(json: report, requiredSafety: required), nil, map)
+            case .cancelled: return ([], String(localized: "Cancelled."), nil)
+            case .failed(let why): return ([], why, nil)
+            case .refused(let why): print("ENGINE-ANALYZE library refused: \(why)")
+            }
+        }
         guard (try? caseJson.write(to: caseFile, atomically: true, encoding: .utf8)) != nil else { return ([], "case.json", nil) }
         let r = Engine.run(EngineeringBridge.shared.analyzeArgs(model: part.path, config: config.path, caseFile: caseFile.path,
                                                                 out: out.path, mesh: voxels.path))
