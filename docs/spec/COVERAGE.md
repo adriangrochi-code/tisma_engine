@@ -311,7 +311,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Pieza de prueba propia «Mabel», con mecanismos (pedido del dueño, 26-10-2026; Tisma Slicer no la tiene) | `quality_model.md` | ✔ (ficha) |
 | Recorrido que ahorra tiempo sin cambiar el perfil (pedido del dueño, 26-10-2026) | `toolpath_time.md` | ✔ (ficha) |
 | Biblioteca de modelos de Tisma Cloud con laminados hechos y análisis (pedido del dueño, 26-10-2026; Tisma Slicer no la tiene) | `model_library.md` | ✔ (ficha; más adelante) |
-| Thingiverse dentro del programa | `thingiverse.md` | ✔ (la búsqueda con la API se confirma con un token antes de programarla, regla 20) |
+| Thingiverse y enlaces de otros sitios de modelos | — | descartado (decisión del dueño, 11 y 13-11-2026): solo la biblioteca de Tisma, `p2p_library.md` |
 | App de teléfono: laminar, ajustes, Ingeniería, impresoras por WiFi y cámara | `mobile_app.md` (app nueva, de cero, sobre el motor) | ✔ |
 | Acceso remoto a las impresoras y detección de fallas con la cámara | `cloud.md` (reglas 12 a 17) | ◐ falta la detección de fallas (Obico, servicio aparte) |
 

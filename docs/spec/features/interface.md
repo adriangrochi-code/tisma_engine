@@ -262,7 +262,7 @@ Tarjetas armadas con lo que antes estaba en los menús, en columnas de tres. Cad
 gris, y se ve apagada si no se puede usar. Los subtítulos de una tarjeta van en gris y negrita. Capturas
 `45_more_top.png`, `46_more_middle.png`, `47_more_bottom.png`. En orden:
 
-1. **Tisma:** Thingiverse; Tisma Cloud account…; Preferences…
+1. **Tisma:** Tisma Cloud account…; Preferences… (sin Thingiverse ni otros sitios de modelos: decisión del dueño, 13-11-2026, «usaremos nuestra biblioteca nomás»; el programa no abre enlaces `prusaslicer://` ni `tisma://open` de otros sitios)
 2. **File:**
    - New Project (Ctrl+N), Open Project… (Ctrl+O);
    - Recent projects: la lista, numerada;

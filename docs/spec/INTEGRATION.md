@@ -57,7 +57,7 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 | Acceso remoto a impresoras | Contrato | `features/cloud.md` (puentes) | Ficha nueva |
 | App de Android | Ficha (app nueva) | `mobile_app.md` | Decisión del dueño: se hace de cero en el repositorio del motor, sobre su API; la vieja no se usa |
 | Biblioteca de modelos (nueva, pedido del dueño) | Ficha y contrato | `model_library.md`, `cloud.md` (regla 23) | Ficha lista; más adelante |
-| Thingiverse | Ficha y contrato | `thingiverse.md`, `cloud.md` (regla 22) | Ficha lista; la API se confirma con un token antes de programarla; falta el paso por el servidor |
+| Thingiverse | — | — | Descartado (decisión del dueño, 11-11-2026) |
 | Detección de fallas con la cámara (Obico) | Contrato | `features/cloud.md` | Obico es AGPL: va como servicio aparte, nunca dentro del motor |
 | Perfiles | Datos | `profile_pack.md` | Hecho (repositorio de perfiles) |
 | Ayuda, tutoriales y guías de calibración | Datos | `assistant.md` | Hecho (repositorio de perfiles) |
@@ -74,5 +74,4 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 ## Siguientes fichas
 
 Las tres que faltaban (`step_faces.md`, `problem_reports.md` y `thingiverse.md`) están escritas. Lo que queda:
-- confirmar la API de Thingiverse con un token real (`thingiverse.md`, regla 20);
 - medir los proyectos de Bambu Studio y OrcaSlicer con archivos reales (`formats.md`, regla 18).

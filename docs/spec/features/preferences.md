@@ -78,7 +78,6 @@ Complementos, Otros) y, a la derecha, cada opción con un interruptor violeta, u
 | GUI | Calidad de la vista 3D | la del motor | `docs/UI.md` (modos de dibujo) |
 | Asistente | Tutoriales, glosario junto a los ajustes, fichas de materiales | sí | `assistant.md` |
 | Complementos | Correr complementos al laminar | sí | `plugins.md` |
-| Other | Thingiverse app token (secreto, en el almacén de claves) | vacío: usa Tisma Cloud | `thingiverse.md`, regla 9 |
 
 3. **Buscador:** arriba del diálogo, un campo que filtra las opciones por nombre en todas las páginas.
 4. **OK guarda y aplica** sin reiniciar. Las que necesitan reiniciar (idioma, tamaño de letra) lo dicen al lado y
