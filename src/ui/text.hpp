@@ -2546,6 +2546,7 @@
     X(WipeRow, "Barrer al retraer", "Wipe while retracting") \
     X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
     X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
+    X(RetractOnlyCrossingWalls, "Retraer solo al cruzar paredes", "Retract only when crossing walls") \
     X(WipeInward, "Barrer hacia adentro", "Wipe inward") \
     X(Polyholes, "Agujeros como polígonos", "Holes as polygons") \
     X(UnsupportedLast, "Paredes sin apoyo al final", "Unsupported walls last") \

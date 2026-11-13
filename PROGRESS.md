@@ -14037,6 +14037,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   - la unión de puentes sobre lo apoyado (regla 1);
   - las reglas 2, 3, 6, 8 y 9.
 
+
+## 2026-11-13 — interfaz: «Retraer solo al cruzar paredes»
+
+- **Hecho:** la fila de `retraction.only_crossing_walls` (toolpath_time.md, regla 5; TT6) en la tarjeta de retracción,
+  después de «al cambiar de capa», con su texto en los dos idiomas.
+- **Pruebas:** `retract_crossing_walls.txt` (apagado por defecto, un clic lo prende).
+
 ## 2026-11-13 — toolpath_time.md regla 1: las líneas de puente unidas sobre lo apoyado
 
 - **Decisión de la ficha (spec/next):** la unión de dos líneas de puente va solo si su tramo queda entero sobre lo
