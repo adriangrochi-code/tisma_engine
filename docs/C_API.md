@@ -41,6 +41,11 @@ biblioteca de iOS (`tools/build_ios.sh`). La vista previa por capas y el anális
   - `tisma_analysis_json` da el resumen: veredicto, `min_safety` con su rango, desplazamiento, masa, material y vóxeles.
   - Sin zona fija o sin fuerza: `TISMA_NEEDS_CONDITIONS`; demasiado grande para la memoria: `TISMA_TOO_LARGE`.
   - Un análisis no deja G-code ni vista previa.
+  - `tisma_analyze_case_start(caso)` analiza el modelo abierto (STL, OBJ o 3MF sin condiciones) con un caso JSON,
+    como `analyze <modelo> --config --case --mesh --progress`: caras fijas y cargadas, fuerzas y dirección
+    (docs/ANALYSIS.md). Usa los ajustes del contexto (o los de fábrica). El avance sale de las líneas
+    `progress: <etapa> <0 a 1>`. `tisma_analysis_json` da el informe del análisis y `tisma_analysis_mesh` la superficie
+    de los vóxeles coloreada por seguridad, en PLY, hasta el próximo trabajo.
 - **Errores de laminar:** el código sale del de la línea de comandos (2 → `TISMA_CANNOT_READ`, 4 →
   `TISMA_BAD_MODEL`, el resto `TISMA_ERROR`) y el mensaje es su primera línea `error:`.
 

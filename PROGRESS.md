@@ -14155,3 +14155,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   ninguna prueba. No probado en una impresora.
 - **Sigue:** las superficies de arriba en pendiente (techo de W4); el pedido de las apps de `tisma_analyze_start`
   con un caso JSON y la superficie de vóxeles.
+
+## 2026-11-13 — API en C: análisis de un modelo con un caso (pedido de las apps)
+
+- **Pedido de Android/iPhone:** que la API analice un modelo suelto con un caso JSON, como `analyze --case`, y dé la
+  superficie de vóxeles coloreada por seguridad, como `--mesh`. Hasta ahora usaban la línea de comandos, sin avance ni
+  cancelación en iOS.
+- **Hecho:** `tisma_analyze_case_start(ctx, caso)` y `tisma_analysis_mesh(ctx, &tamaño)`. Corre `analyze <modelo>
+  --config --case --mesh --progress` en su hilo; el avance sale de las líneas `progress: <etapa> <0 a 1>` (ahora las
+  lee `ProgressLines`) y la cancelación se mira en cada una. El informe va por `tisma_analysis_json`, y el PLY queda en
+  el contexto hasta el próximo trabajo. Están en el chequeo de símbolos de iOS de la CI y en docs/C_API.md.
+- **Prueba nueva** (`[c_api]`): cubo con la base fija y 100 N en la cara de arriba: informe, PLY, caso inválido,
+  JSON roto, sin modelo, y cancelación.
+- **Sigue:** las superficies de arriba en pendiente (techo de W4).

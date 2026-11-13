@@ -285,6 +285,52 @@ TEST_CASE("C API: the structural analysis of a project's object, with progress, 
 }
 
 
+TEST_CASE("C API: the analysis of a bare model with a case, its report and voxel surface", "[c_api]") {
+    tisma_ctx* ctx = tisma_create();
+    REQUIRE(ctx);
+    const char* push = R"({"material": "bambu-pla-basic", "model": "as_printed", "voxel": 1.0, "rows_per_layer": 1,
+                            "fixtures": [{"name": "bed", "face": "bottom"}],
+                            "loads": [{"name": "push", "face": "top", "force": [0, 0, -100]}]})";
+    CHECK(tisma_analyze_case_start(ctx, push).code == TISMA_NOTHING_TO_SLICE);
+    REQUIRE(tisma_open_path(ctx, (kData + "/cube_ascii.stl").c_str()).code == TISMA_OK);
+    REQUIRE(tisma_set_settings_json(ctx, read_file(kData + "/settings.json").c_str()).code == TISMA_OK);
+    CHECK(tisma_analyze_case_start(ctx, nullptr).code == TISMA_BAD_ARGUMENT);
+    CHECK(tisma_analyze_case_start(ctx, "{not json").code == TISMA_BAD_ARGUMENT);
+    size_t size = 1;
+    CHECK(tisma_analysis_mesh(ctx, &size) == nullptr);
+    CHECK(size == 0);
+
+    REQUIRE(tisma_analyze_case_start(ctx, push).code == TISMA_OK);
+    const tisma_progress done = wait(ctx);
+    INFO((done.error.message ? done.error.message : ""));
+    REQUIRE(done.state == TISMA_DONE);
+    CHECK(done.percent == 100);
+    const char* text = tisma_analysis_json(ctx);
+    REQUIRE(text);
+    const nlohmann::json report = nlohmann::json::parse(text);
+    CHECK(report.is_object());
+    const unsigned char* mesh = tisma_analysis_mesh(ctx, &size);
+    REQUIRE(mesh);
+    REQUIRE(size > 3);
+    CHECK(std::string(reinterpret_cast<const char*>(mesh), 3) == "ply");
+    CHECK(tisma_summary_json(ctx) == nullptr);
+
+    // A case the analysis cannot take fails with its reason.
+    REQUIRE(tisma_analyze_case_start(ctx, R"({"fixtures": [], "loads": []})").code == TISMA_OK);
+    const tisma_progress bad = wait(ctx);
+    CHECK(bad.state == TISMA_FAILED);
+    CHECK(tisma_analysis_mesh(ctx, &size) == nullptr);
+
+    // Cancelled: it stops at its next progress line (or ends done first).
+    REQUIRE(tisma_analyze_case_start(ctx, push).code == TISMA_OK);
+    tisma_cancel(ctx);
+    const tisma_progress stopped = wait(ctx);
+    REQUIRE((stopped.state == TISMA_STOPPED || stopped.state == TISMA_DONE));
+    if (stopped.state == TISMA_STOPPED)
+        CHECK(stopped.error.code == TISMA_CANCELLED);
+    tisma_destroy(ctx);
+}
+
 TEST_CASE("C API: a project slices with its own settings when none are given", "[c_api]") {
     using namespace tisma;
     Project p;

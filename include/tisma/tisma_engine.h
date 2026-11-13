@@ -144,6 +144,19 @@ tisma_status tisma_preview_segments(tisma_ctx* ctx, int first, int count, size_t
 tisma_status tisma_analyze_start(tisma_ctx* ctx, int object, const char* quality);
 const char* tisma_analysis_json(tisma_ctx* ctx);
 
+/* The same on the open model (a bare STL, OBJ or 3MF) with a case: the
+ * fixed and loaded faces, forces and the rest, as `analyze --case` takes it
+ * (docs/ANALYSIS.md), as JSON text; the settings are the context's (the
+ * defaults if none were set). Progress by tisma_poll, cancel as above. The
+ * result is the analysis report (tisma_analysis_json, docs/ANALYSIS.md) and
+ * the printed voxels' surface coloured by safety (tisma_analysis_mesh), the
+ * PLY `analyze --mesh` writes. A case that is not valid fails with
+ * TISMA_ERROR and the reason in the message. */
+tisma_status tisma_analyze_case_start(tisma_ctx* ctx, const char* case_json);
+/* The voxel surface of the last analysis with a case: *size bytes of PLY,
+ * valid until the next job or tisma_destroy; null when there is none. */
+const unsigned char* tisma_analysis_mesh(tisma_ctx* ctx, size_t* size);
+
 /* The command line in the same process, for platforms that cannot start a
  * program (iOS: apps/ios/PLAN.md). argv as main gets it (argv[0] is the
  * program's name and is skipped); the return value is the program's exit

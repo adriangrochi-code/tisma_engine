@@ -23,6 +23,7 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -57,6 +58,7 @@ struct tisma_ctx {
     tisma_code job_code = TISMA_OK;
     std::string job_message;
     std::string summary; // JSON, when TISMA_DONE
+    std::string mesh;    // an analysis on a model: the voxel surface (PLY)
     bool analysis = false; // the last job was an analysis, not a slice
 
     // The strings handed out, one of each kind.
@@ -202,6 +204,13 @@ protected:
             const auto [end, ec] = std::from_chars(begin, line_.data() + line_.size(), v);
             if (ec == std::errc() && v > hook_.percent.load())
                 hook_.percent.store(std::min(v, 99));
+        } else if (line_.rfind("progress: ", 0) == 0) {
+            // The analysis on a model: "progress: <stage> <done, 0 to 1>".
+            const std::size_t space = line_.rfind(' ');
+            const double done = std::strtod(line_.c_str() + space + 1, nullptr);
+            const int v = int(done * 100.0);
+            if (v > hook_.percent.load())
+                hook_.percent.store(std::min(v, 99));
         }
         line_.clear();
         tisma::job_check();
@@ -282,11 +291,18 @@ tisma_code analysis_code(const nlohmann::json& summary, int exit_code) {
     return code_of(exit_code);
 }
 
-void run_analysis_job(tisma_ctx* ctx, std::string project, int object, std::string quality) {
-    const fs::path tea = ctx->dir / "result.tea", summary = ctx->dir / "analysis.json";
-    std::vector<std::string> text{"analyze", project,  "-o",       tea.string(), "--summary", summary.string(),
-                                  "--sandbox", "--mode", "analyze", "--object", std::to_string(object),
-                                  "--instance", "0"};
+// An analysis: of a project's object (its own conditions and settings, the
+// nodes' way), or of the model with a case (case_file not empty).
+void run_analysis_job(tisma_ctx* ctx, std::string project, int object, std::string quality, std::string case_file) {
+    const fs::path tea = ctx->dir / "result.tea", summary = ctx->dir / "analysis.json",
+                   config = ctx->dir / "settings.json", mesh = ctx->dir / "voxels.ply";
+    const bool with_case = !case_file.empty();
+    std::vector<std::string> text =
+        with_case ? std::vector<std::string>{"analyze", project, "--config", config.string(), "--case", case_file,
+                                             "-o", summary.string(), "--mesh", mesh.string(), "--progress"}
+                  : std::vector<std::string>{"analyze", project,  "-o",       tea.string(), "--summary", summary.string(),
+                                             "--sandbox", "--mode", "analyze", "--object", std::to_string(object),
+                                             "--instance", "0"};
     if (!quality.empty()) {
         text.push_back("--quality");
         text.push_back(quality);
@@ -297,7 +313,7 @@ void run_analysis_job(tisma_ctx* ctx, std::string project, int object, std::stri
     out.exceptions(std::ios::badbit); // the cancel thrown from a line goes through
     std::ostringstream err;
     tisma_code code = TISMA_OK;
-    std::string message, result;
+    std::string message, result, mesh_bytes;
     int state = TISMA_DONE;
     try {
         tisma::JobScope scope(ctx->hook);
@@ -313,6 +329,8 @@ void run_analysis_job(tisma_ctx* ctx, std::string project, int object, std::stri
                 state = TISMA_FAILED;
                 code = TISMA_ERROR;
                 message = "the analysis wrote no summary";
+            } else if (with_case) {
+                mesh_bytes = read_text(mesh);
             }
         }
     } catch (const tisma::JobCancelled&) {
@@ -333,6 +351,7 @@ void run_analysis_job(tisma_ctx* ctx, std::string project, int object, std::stri
         ctx->job_code = code;
         ctx->job_message = std::move(message);
         ctx->summary = std::move(result);
+        ctx->mesh = std::move(mesh_bytes);
     }
     if (state == TISMA_DONE)
         ctx->hook.percent.store(100);
@@ -656,6 +675,7 @@ tisma_status tisma_analyze_start(tisma_ctx* ctx, int object, const char* quality
         ctx->job_code = TISMA_OK;
         ctx->job_message.clear();
         ctx->summary.clear();
+        ctx->mesh.clear();
     }
     ctx->hook.cancel.store(false);
     ctx->hook.percent.store(0);
@@ -664,7 +684,7 @@ tisma_status tisma_analyze_start(tisma_ctx* ctx, int object, const char* quality
     ctx->analysis = true;
     ctx->state.store(TISMA_RUNNING);
     try {
-        ctx->worker = std::thread(run_analysis_job, ctx, ctx->model, object, q);
+        ctx->worker = std::thread(run_analysis_job, ctx, ctx->model, object, q, std::string());
     } catch (const std::exception& e) {
         ctx->state.store(TISMA_FAILED);
         return fail(ctx, TISMA_ERROR, std::string("cannot start the job: ") + e.what());
@@ -678,6 +698,60 @@ const char* tisma_analysis_json(tisma_ctx* ctx) {
     std::lock_guard lock(ctx->result_mutex);
     ctx->summary_out = ctx->summary;
     return ctx->summary_out.c_str();
+}
+
+tisma_status tisma_analyze_case_start(tisma_ctx* ctx, const char* case_json) {
+    if (!ctx || !case_json)
+        return fail(ctx, TISMA_BAD_ARGUMENT, "null context or case");
+    if (running(ctx))
+        return fail(ctx, TISMA_BUSY, "a job is running on this context");
+    join(ctx);
+    if (ctx->model.empty())
+        return fail(ctx, TISMA_NOTHING_TO_SLICE, "no model open");
+    if (!nlohmann::json::accept(case_json))
+        return fail(ctx, TISMA_BAD_ARGUMENT, "the case is not JSON");
+    const fs::path case_file = ctx->dir / "case.json";
+    {
+        std::ofstream file(case_file, std::ios::binary | std::ios::trunc);
+        file << case_json;
+        std::ofstream config(ctx->dir / "settings.json", std::ios::binary | std::ios::trunc);
+        config << tisma::settings_json(ctx->settings ? *ctx->settings : tisma::Settings{});
+        if (!file || !config)
+            return fail(ctx, TISMA_ERROR, "cannot write the case in the context's folder");
+    }
+    {
+        std::lock_guard lock(ctx->result_mutex);
+        ctx->job_code = TISMA_OK;
+        ctx->job_message.clear();
+        ctx->summary.clear();
+        ctx->mesh.clear();
+    }
+    ctx->hook.cancel.store(false);
+    ctx->hook.percent.store(0);
+    ctx->hook.stage.store("solving");
+    ctx->preview.reset();
+    ctx->analysis = true;
+    ctx->state.store(TISMA_RUNNING);
+    try {
+        ctx->worker = std::thread(run_analysis_job, ctx, ctx->model, 0, std::string(), case_file.string());
+    } catch (const std::exception& e) {
+        ctx->state.store(TISMA_FAILED);
+        return fail(ctx, TISMA_ERROR, std::string("cannot start the job: ") + e.what());
+    }
+    return ok();
+}
+
+const unsigned char* tisma_analysis_mesh(tisma_ctx* ctx, size_t* size) {
+    if (size)
+        *size = 0;
+    if (!ctx || ctx->state.load() != TISMA_DONE || !ctx->analysis)
+        return nullptr;
+    std::lock_guard lock(ctx->result_mutex);
+    if (ctx->mesh.empty())
+        return nullptr;
+    if (size)
+        *size = ctx->mesh.size();
+    return reinterpret_cast<const unsigned char*>(ctx->mesh.data());
 }
 
 } // extern "C"
