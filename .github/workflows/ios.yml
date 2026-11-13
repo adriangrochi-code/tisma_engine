@@ -61,7 +61,8 @@ jobs:
         working-directory: apps/ios
         run: |
           xcodegen generate
-          device=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r,l in d.items() if "iOS" in r for x in l if x["name"].startswith("iPhone")))')
+          device=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; p=[x for r,l in d.items() if "iOS" in r for x in l if x["name"].startswith("iPhone")]; m=[x for x in p if "Pro Max" in x["name"]]; print((m or p)[-1]["udid"])')
+          # The App Store's screenshots are 6.9" (1320 x 2868): a Pro Max when the runner has one.
           echo "Simulator $device"
           set +e
           TEST_RUNNER_SCREENSHOT_DIR="$RUNNER_TEMP/screens" xcodebuild test -project Tisma.xcodeproj -scheme Tisma -destination "id=$device" -resultBundlePath "$RUNNER_TEMP/Tisma.xcresult" > "$RUNNER_TEMP/xcodebuild.log" 2>&1
