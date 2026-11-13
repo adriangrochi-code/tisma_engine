@@ -70,7 +70,7 @@ X = 100, Y = 100), con `walls.count` 3 salvo que se diga otra cosa. Las posicion
 | P1 | Cubo de 20 × 20 × 10 mm | — | Por capa (desde la segunda), tres vueltas de 0,45 mm de ancho, a 0,225, 0,632 y 1,039 mm del borde. Largo de la vuelta externa: 78,14 mm (el cuadrado entero mediría 78,20) |
 | P2 | Paredes rectas de 20 mm de largo, 5 mm de alto y espesor de 0,1 a 3,0 mm | — | Tabla P2 |
 | P3 | Pared de 0,1 mm | — | No se imprime. Como no queda nada, Tisma Slicer da error: «la impresión está vacía» |
-| P4 | Marco de 20 × 20 mm con un agujero de 10 × 10 mm | — | Orden por capa: los tres cordones del agujero, del más interno al que toca el agujero; después los tres de afuera, del más interno al externo |
+| P4 | Marco de 20 × 20 mm con un agujero de 10 × 10 mm | — | Cada contorno, de adentro hacia afuera (regla 4). El orden entre contornos y el intercalado de sus cordones los elige el motor por menor viaje (`toolpath_time.md`); no hace falta empezar por el agujero (13-11-2026: agrupar por contorno subía el Benchy 50 s) |
 | P5 | Cubo de P1 | `walls.seam` `aligned` | Todas las capas empiezan en la esquina de X e Y máximas |
 | P6 | Cilindro de radio 10 mm, 128 lados | `aligned` | Todas las capas empiezan en el punto de Y mínima (frente) |
 | P7 | Cilindro de P6 | `rear` | Todas las capas empiezan en el punto de Y máxima |
