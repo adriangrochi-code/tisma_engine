@@ -35,6 +35,12 @@ desventajas».
    `peer_key`, `manifest_signature` (firma del par sobre `{"files":[...]}`, ver 3 bis bis), `swarm` (`{"protocol": "libp2p/tisma-library/1", "piece_size": 1048576, "piece_roots": {…}}`, donde
    `piece_roots` lleva una entrada por cada archivo del modelo y ninguna otra: la clave es el `sha256` del archivo y el
    valor, el SHA-256 de las huellas de sus pedazos (32 bytes cada una, seguidas en orden); acordado con el motor) y `checked` (lo revisó un sembrador).
+3 ter bis. **Tamaño y búsqueda** (12-11-2026, medido por el servidor: unos 0,7 KB comprimidos por modelo): el índice
+   se baja entero, con ETag (304 si no cambió) y comprimido; no hay páginas ni búsqueda en el servidor. La app busca
+   en su copia del índice firmado, sin distinguir tildes ni mayúsculas. La app no acepta un índice de más de 64 MB
+   comprimido ni de 256 MB sin comprimir: lo descarta con el aviso «La biblioteca es demasiado grande para esta
+   versión; actualizá la app». Las diferencias firmadas (bajar solo los cambios desde un `sequence`) quedan para
+   después de la beta, cuando el índice pase de unos 20 000 modelos.
 3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
    (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `models` (código de publicación y motivo), `accounts`, `peers`, `addresses` (IP
    con `until`) y `revoked_keys`. Una IP va como `{"sha256": SHA-256(sal del día + IP), "until"}`, con `address_salt` en la lista.
