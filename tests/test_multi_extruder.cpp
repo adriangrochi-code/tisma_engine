@@ -1,6 +1,7 @@
 // Several extruders (docs/spec/features/multi_extruder.md, rules 1 to 8 and
 // 16; tests ME1 to ME5 and ME10).
 
+#include "gcode/preview.hpp"
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
@@ -1119,4 +1120,37 @@ TEST_CASE("extruders: a tool that stops printing waits at its idle temperature (
     s.ooze_prevention = false;
     s.variables.erase("idle_temperature");
     CHECK_THAT(gcode_of(two_colours(), s), !ContainsSubstring("back from idle"));
+}
+
+TEST_CASE("extruders: a tool change's time counts as preparation (print_time.md, rule 14)", "[extruders][time]") {
+    const auto seconds = [](const std::string& text, const std::string& which) {
+        const std::string key = "; estimated " + which + " = ";
+        const std::size_t at = text.find(key);
+        if (at == std::string::npos)
+            return 0.0;
+        return parse_duration(text.substr(at + key.size(), text.find('\n', at) - at - key.size()));
+    };
+    Settings s = base();
+    s.toolchange_length = {4.0};
+    // A change that goes to a corner and back and waits 2 s, as a dock would.
+    s.gcode_toolchange = "G1 X5 Y5 F6000\nG4 S2";
+    const std::string text = gcode_of(two_colours(), s);
+    // The changes in the print (the settings listed at the end hold the template too).
+    const std::size_t end = text.find("; estimated printing time");
+    REQUIRE(end != std::string::npos);
+    std::size_t changes = 0;
+    for (std::size_t at = text.find("\nG4 S2\n"); at < end; at = text.find("\nG4 S2\n", at + 1))
+        ++changes;
+    REQUIRE(changes >= 2);
+    const double prep = seconds(text, "preparation time");
+    // Without the template: the changes' retractions alone.
+    Settings plain = s;
+    plain.gcode_toolchange.clear();
+    const double moves = seconds(gcode_of(two_colours(), plain), "preparation time");
+    CHECK(moves > 0.0);
+    // With it: the waits on top, each once (the template's G1 has no known
+    // start: not timed). The first tool's selection, before the print, is
+    // not a change and its wait is not counted yet (PROGRESS.md, 2026-11-13).
+    CHECK_THAT(prep, Catch::Matchers::WithinAbs(moves + 2.0 * double(changes - 1), 1.5));
+    CHECK(prep < seconds(text, "printing time"));
 }

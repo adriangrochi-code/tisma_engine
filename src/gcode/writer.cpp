@@ -1067,6 +1067,15 @@ public:
     // nozzle with another offset moves over the same point, at `feed`.
     void tool_change(int next, double length, double restart, const std::string& lines, bool user,
                      std::array<double, 2> offset, double feed, const MmuSwap* mmu = nullptr) {
+        // The change counts as preparation (print_time.md, rule 14): its
+        // moves are the time between a mark before it and one after it, once
+        // planned (the planner adds waits at the layer's end, not between
+        // marks; the change's own waits count through machine_gcode).
+        changes_.push_back({time_.mark(), 0});
+        struct Close {
+            Emitter& w;
+            ~Close() { w.changes_.back().after = w.time_.mark(); }
+        } close{*this};
         extruder_off();
         wiped_path_.clear();
         if (mmu) {
@@ -1231,7 +1240,14 @@ public:
         other_time_ += seconds;
         preparation_ += seconds;
     }
-    double preparation_time() const { return preparation_; }
+    // The preparation: waits, heating, homing, levelling, and the tool
+    // changes once the time is planned.
+    double preparation_time() const {
+        double seconds = preparation_;
+        for (const Change& c : changes_)
+            seconds += std::max(0.0, time_.time_at(c.after) - time_.time_at(c.before));
+        return seconds;
+    }
 
     void machine_gcode(std::string_view lines) {
         std::size_t at = 0;
@@ -2331,6 +2347,12 @@ private:
     // The preparation (print_time.md, rules 10 and 14): heaters from 25 C.
     double heat_rate_nozzle_ = 0.0, heat_rate_bed_ = 0.0, home_time_ = 0.0, probe_time_ = 0.0;
     double nozzle_now_ = 25.0, bed_now_ = 25.0, nozzle_target_ = 0.0, bed_target_ = 0.0, preparation_ = 0.0;
+    // The tool changes: the time marks around each (print_time.md, rule 14).
+    struct Change {
+        std::size_t before = 0;
+        std::size_t after = 0;
+    };
+    std::vector<Change> changes_;
     double travel_accel_, short_travel_accel_; // asked for travels; 0: none
     double retracted_amount_ = 0.0; // the E the last retraction pulled back (none with G10)
     // retraction_travel.md: the push back's feed (0: the retraction's) and

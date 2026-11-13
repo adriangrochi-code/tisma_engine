@@ -13970,3 +13970,20 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Sin hacer:** el costo cuando el proyecto trae precio (sale `null`).
 - **Con esto, la API de `tisma_engine.h` está completa.**
 
+## 2026-11-13 — tiempo: los cambios de herramienta como preparación (print_time.md, regla 14; bloque de noche)
+
+- **Hecho:**
+  - Cada cambio de herramienta (`tool_change`, también el del MMU) deja una marca de tiempo antes y otra después.
+  - Ya planificado el tiempo, lo que hay entre las dos marcas va a la preparación: la retracción del cambio, el
+    movimiento de la boquilla nueva y el cambio del MMU. Sigue sumando también al tiempo total.
+  - Las esperas de la plantilla (`G4`) ya contaban por `machine_gcode`. Como el planificador suma las esperas al
+    final de la capa y no entre las marcas, no se cuentan dos veces.
+  - Los movimientos `G1` de la plantilla no se cronometran, porque su punto de partida no se conoce; eso ya era así.
+- **Visto:** la selección de la primera herramienta antes de imprimir escribe la plantilla, pero no pasa por
+  `tool_change`, así que su `G4` no se cuenta. Queda para revisar.
+- **Pruebas:** `[extruders][time]`, un caso nuevo:
+  - con una plantilla que espera 2 s, la preparación es la de los cambios sin plantilla más 2 s por cambio;
+  - corren también `[gcode]`, `[firmware]`, `[determinism]`, `[color_mix]` y `[mmu]`.
+- **Falta de la regla 14:** la purga en la torre como preparación. Las reglas 11 y 15 (aprender de la impresora)
+  necesitan la impresora.
+
