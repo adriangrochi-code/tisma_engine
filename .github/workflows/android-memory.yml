@@ -43,6 +43,8 @@ jobs:
         run: |
           python3 bench/gen_sphere.py "$RUNNER_TEMP/benchy_size.stl" --segments 335
           python3 bench/gen_sphere.py "$RUNNER_TEMP/big.stl" --segments 1000
+          # 5 million triangles: past what the app's estimate lets a 2 or 3 GB phone slice, to see the warning.
+          python3 bench/gen_sphere.py "$RUNNER_TEMP/huge.stl" --segments 1600
       - name: Start the emulator
         run: |
           export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"; echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
@@ -62,7 +64,7 @@ jobs:
           set -o pipefail
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           apps/android/tools/memory_check.sh tests/data/printer_settings.json \
-            "$RUNNER_TEMP/benchy_size.stl" "$RUNNER_TEMP/big.stl" | tee -a "$GITHUB_STEP_SUMMARY"
+            "$RUNNER_TEMP/benchy_size.stl" "$RUNNER_TEMP/big.stl" "$RUNNER_TEMP/huge.stl" | tee -a "$GITHUB_STEP_SUMMARY"
       # Cold start (QA, 13-11-2026: the time until the Plate shows, to be under 2 s): the app stopped and started
       # again five times after a first start, on the testers' build (R8 and its startup profile, as installed from
       # the store); `am start -W` gives the time to the first drawn frame.

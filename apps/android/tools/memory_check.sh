@@ -26,7 +26,7 @@ missed=0
 run=$(mktemp)
 cat > "$run" <<'RUN'
 lib=$1; model=$2
-start=$(date +%s%N)
+start=$(cut -d' ' -f1 /proc/uptime | tr -d .)
 "$lib/libtisma_engine.so" slice "$model" --config /data/local/tmp/mem/config.json -o cache/mem.gcode \
     --summary cache/mem.json > /dev/null 2> cache/mem.err &
 pid=$!; peak=0
@@ -36,12 +36,12 @@ while kill -0 $pid 2>/dev/null; do
     sleep 0.1
 done
 wait $pid; code=$?
-end=$(date +%s%N)
+end=$(cut -d' ' -f1 /proc/uptime | tr -d .)
 bytes=$(stat -c %s cache/mem.gcode 2>/dev/null || echo 0)
 layers=$(grep -o '"layers": *[0-9]*' cache/mem.json 2>/dev/null | grep -o '[0-9]*$')
 [ "$code" != 0 ] && tail -3 cache/mem.err
 rm -f cache/mem.gcode cache/mem.json
-echo RESULT $code $((peak / 1024)) $(((end - start) / 1000000)) $bytes ${layers:-?}
+echo RESULT $code $((peak / 1024)) $(((end - start) * 10)) $bytes ${layers:-?}
 RUN
 adb push -q "$run" /data/local/tmp/mem/run.sh > /dev/null
 adb shell chmod 644 /data/local/tmp/mem/run.sh
