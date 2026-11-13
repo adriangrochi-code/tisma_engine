@@ -71,6 +71,26 @@ jobs:
           grep -E ': error: |Test Case .* failed|ENGINE-SLICE|ENGINE-ANALYZE|ENGINE-CAL|ENGINE-PACK' "$RUNNER_TEMP/xcodebuild.log" | head -40
           tail -40 "$RUNNER_TEMP/xcodebuild.log"
           exit $code
+      # The app's size for the App Store (QA, 13-11-2026): a Release build for devices, unsigned, and what weighs
+      # most in it. The download is about the zipped size; the App Store thins it further per device.
+      - name: The app's size (Release, device)
+        continue-on-error: true
+        run: |
+          (cd apps/android && ./gradlew --no-daemon -q :shared:linkReleaseFrameworkIosArm64)
+          cd apps/ios
+          xcodebuild build -project Tisma.xcodeproj -scheme Tisma -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/release" CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/release.log" 2>&1 || { tail -30 "$RUNNER_TEMP/release.log"; exit 1; }
+          app=$(find "$RUNNER_TEMP/release/Build/Products/Release-iphoneos" -maxdepth 1 -name "*.app" | head -1)
+          (cd "$(dirname "$app")" && mkdir -p Payload && cp -R "$app" Payload/ && zip -qr "$RUNNER_TEMP/Tisma.ipa" Payload)
+          {
+            echo "### iOS app size"
+            echo "IPA (zipped, unsigned): $(( $(stat -f%z "$RUNNER_TEMP/Tisma.ipa") / 1024 )) KB; .app: $(du -sk "$app" | cut -f1) KB"
+            echo '```'
+            (cd "$app" && du -sk * | sort -rn | head -15)
+            echo "executable sections:"
+            size -m "$app/Tisma" 2>/dev/null | grep -E "Section|total" | sort -t: -k2 -rn | head -8
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Keep the screenshots
         if: always()
         uses: actions/upload-artifact@v4

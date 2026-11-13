@@ -32,6 +32,12 @@ android {
         buildConfigField("String", "UPDATES_KEY", "\"" + (project.findProperty("tisma.updatesKey") as String? ?: "") + "\"")
     }
 
+    // Only the app's two languages (mobile_app.md): the libraries' strings in other languages are left out, as
+    // the app's own screens would be in English or Spanish anyway (QA, 13-11-2026: the apps' size).
+    androidResources {
+        localeFilters += listOf("en", "es")
+    }
+
     // The upload key for Google Play (apps/android/BETA.md, «Publicar»): only from the environment, never in the
     // repository. Without it, a release build is not signed and cannot go to the store.
     val uploadKeystore = System.getenv("TISMA_UPLOAD_KEYSTORE")?.takeIf { it.isNotBlank() && file(it).isFile }
@@ -47,6 +53,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            // Resources nothing refers to after R8 (QA, 13-11-2026: the apps' size).
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             if (uploadKeystore != null) signingConfig = signingConfigs.getByName("upload")
         }
