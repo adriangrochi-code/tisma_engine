@@ -14181,3 +14181,6 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   pendiente, no solo otra clasificación.
 - **Sigue:** preguntar a QA qué regla de comportamiento quiere (qué parte de la piel en pendiente va como superficie
   de arriba), antes de cambiar la clasificación, que toca W7 y todas las piezas con escalones.
+- **Respuesta de QA:** la franja tapada por la capa 31 es correcta según la regla 2; W4 (spec/next) ahora comprueba
+  solo el relleno sólido de `vertical_shell` (+18,39 mm; el motor +17,0). Los 20,95 y 75,22 mm quedan de referencia.
+  Ítem cerrado sin cambios; W7 y los escalones no se tocan.

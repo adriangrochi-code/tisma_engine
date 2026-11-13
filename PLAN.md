@@ -1095,11 +1095,8 @@ Con el PR #23 (2026-10-26):
   contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
 - [x] **`walls.vertical_shell`** (`walls_extra.md` regla 7, W4; hecho 2026-11-13): `disabled`, `partial` y `enabled`.
   W4 dentro del 10 %. Por defecto `partial` (QA: Benchy +0,2 %; con `enabled`, +14 %)
-- [ ] **Las superficies de arriba en pendiente** (`walls_extra.md` regla 7, W4): en el techo
-  de 15° de W4, capa 30, Tisma Slicer da 20,95 mm de superficie de arriba con `disabled` y 75,22 más 18,39 de
-  relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno
-  sólido. La diferencia está en cómo se arman las superficies de arriba en las pendientes (`src/surfaces/`), antes
-  que en el ajuste
+- [x] **Las superficies de arriba en pendiente** (W4, techo): sin cambios. QA (2026-11-13): la regla 2 de
+  `surfaces_infill.md` (lo que queda bajo el aire) es la que vale; W4 ahora mide solo el sólido de `vertical_shell`
 - [x] **`machine`** (alias `max_speed` y `max_acceleration`, `custom_parameters`), **`print`** (`custom_parameters`,
   `variables`) y **`calibration`** (pruebas por franjas, CA1 a CA7; hechos 2026-10-28). Quedan `machine.feedstock`
   (pellets, P3), `machine.high_flow_nozzle`, `machine.process` (WAAM), la prueba VFA y las pruebas por parches. `fins`,
