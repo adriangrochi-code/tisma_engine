@@ -13899,3 +13899,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `SiteLink.kt` con su `intent-filter` de `tisma://` y `prusaslicer://` (la app de Android).
 - **PLAN.md:** Thingiverse y `thingiverse.md` quedan fuera.
 
+
+
+## 2026-11-13 — interfaz: sin Thingiverse (decisión del dueño)
+
+- **Hecho:** sale la entrada Thingiverse de Más › Tisma y su texto (dueño, 2026-11-13: «usaremos nuestra biblioteca
+  nomás»; interface.md en spec/next). La biblioteca de Tisma queda como la única fuente de modelos en línea.
+  Revisado: la interfaz no tiene token de Thingiverse, no abre enlaces `prusaslicer://` ni `tisma://open`, ni
+  descarga de Printables o Thingiverse, y el instalador no registra ningún esquema de URL.
+- **Pruebas:** `no_model_sites.txt` (Más sin Thingiverse).

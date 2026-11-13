@@ -20630,9 +20630,8 @@ void App::more_menu() {
         };
 
         // 1. Tisma.
+        // No other sites of models: the Tisma library only (owner, 2026-11-13).
         card(tr(T::MoreTisma));
-        if (item("thingiverse", tr(T::ThingiverseMenu)))
-            open_link("https://www.thingiverse.com/");
         if (item("cloud", tr(T::CloudMenu)))
             cloud_open_ = true;
         if (item("config", tr(T::ConfigMenu), "Ctrl+,"))

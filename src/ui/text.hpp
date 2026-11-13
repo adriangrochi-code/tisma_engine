@@ -1851,7 +1851,6 @@
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
     X(ShapeGalleryMenu, "Galería de formas", "Shape Gallery") \
-    X(ThingiverseMenu, "Thingiverse", "Thingiverse") \
     X(PackUpToDate, "Los perfiles están al día.", "The profiles are up to date.") \
     X(WizardMenu, "Asistente de configuración…", "Configuration Wizard…") \
     X(CheckConfigUpdatesMenu, "Buscar actualizaciones de la configuración", "Check for Configuration Updates") \

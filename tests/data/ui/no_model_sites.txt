@@ -1,0 +1,5 @@
+# The Tisma library is the only place of models online (owner, 2026-11-13,
+# interface.md, menu Tisma): Más › Tisma has no Thingiverse.
+menu more
+expect-control cloud
+expect-no-control thingiverse
