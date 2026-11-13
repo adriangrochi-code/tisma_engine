@@ -4,8 +4,9 @@
 // its stages through a JobHook (slice/job.hpp). Own design.
 //
 // Open, settings, memory estimate, slice with progress and cancel, summary,
-// G-code, and the preview by layers. The analysis answers "not implemented
-// yet" (TISMA_ERROR) for now.
+// G-code, the preview by layers, and the structural analysis of a project's
+// object (the command line's `analyze <project> --sandbox`, its progress lines
+// read as they come).
 
 #include "cli/cli.hpp"
 #include "config/settings.hpp"
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -53,6 +55,7 @@ struct tisma_ctx {
     tisma_code job_code = TISMA_OK;
     std::string job_message;
     std::string summary; // JSON, when TISMA_DONE
+    bool analysis = false; // the last job was an analysis, not a slice
 
     // The strings handed out, one of each kind.
     std::string message, settings_text, summary_out, error_out;
@@ -78,6 +81,9 @@ tisma_status fail(tisma_ctx* ctx, tisma_code code, std::string text) {
 }
 
 bool running(const tisma_ctx* ctx) { return ctx->state.load() == TISMA_RUNNING; }
+
+// A finished slice (not an analysis).
+bool slice_done(const tisma_ctx* ctx) { return ctx->state.load() == TISMA_DONE && !ctx->analysis; }
 
 // A finished worker is joined before the context starts another or goes.
 void join(tisma_ctx* ctx) {
@@ -218,7 +224,105 @@ void run_job(tisma_ctx* ctx, std::string model, double cost_per_kg) {
     ctx->state.store(state);
 }
 
-const char* not_yet = "not implemented yet";
+// The command's output, read line by line as it comes: each "progress N"
+// line is the job's percent, and the cancel is looked at there, so a
+// cancelled analysis stops at its next progress line.
+class ProgressLines : public std::streambuf {
+public:
+    explicit ProgressLines(tisma::JobHook& hook) : hook_(hook) {}
+
+protected:
+    int overflow(int c) override {
+        if (c == traits_type::eof())
+            return traits_type::not_eof(c);
+        if (c != '\n') {
+            line_.push_back(static_cast<char>(c));
+            return c;
+        }
+        if (line_.rfind("progress ", 0) == 0) {
+            int v = 0;
+            const char* begin = line_.data() + 9;
+            const auto [end, ec] = std::from_chars(begin, line_.data() + line_.size(), v);
+            if (ec == std::errc() && v > hook_.percent.load())
+                hook_.percent.store(std::min(v, 99));
+        }
+        line_.clear();
+        tisma::job_check();
+        return c;
+    }
+
+private:
+    tisma::JobHook& hook_;
+    std::string line_;
+};
+
+tisma_code analysis_code(const nlohmann::json& summary, int exit_code) {
+    const std::string code = summary.is_object() ? summary.value("code", std::string()) : std::string();
+    if (code == "needs_conditions")
+        return TISMA_NEEDS_CONDITIONS;
+    if (code == "too_large")
+        return TISMA_TOO_LARGE;
+    return code_of(exit_code);
+}
+
+void run_analysis_job(tisma_ctx* ctx, std::string project, int object, std::string quality) {
+    const fs::path tea = ctx->dir / "result.tea", summary = ctx->dir / "analysis.json";
+    std::vector<std::string> text{"analyze", project,  "-o",       tea.string(), "--summary", summary.string(),
+                                  "--sandbox", "--mode", "analyze", "--object", std::to_string(object),
+                                  "--instance", "0"};
+    if (!quality.empty()) {
+        text.push_back("--quality");
+        text.push_back(quality);
+    }
+    std::vector<std::string_view> args(text.begin(), text.end());
+    ProgressLines lines(ctx->hook);
+    std::ostream out(&lines);
+    out.exceptions(std::ios::badbit); // the cancel thrown from a line goes through
+    std::ostringstream err;
+    tisma_code code = TISMA_OK;
+    std::string message, result;
+    int state = TISMA_DONE;
+    try {
+        tisma::JobScope scope(ctx->hook);
+        const int rc = tisma::run_cli(args, out, err);
+        const nlohmann::json s = nlohmann::json::parse(read_text(summary), nullptr, false);
+        if (rc != tisma::kExitOk) {
+            state = TISMA_FAILED;
+            code = analysis_code(s, rc);
+            message = s.is_object() && s.contains("error") ? s["error"].get<std::string>() : first_error(err.str());
+        } else {
+            result = s.is_discarded() ? std::string() : s.dump();
+            if (result.empty()) {
+                state = TISMA_FAILED;
+                code = TISMA_ERROR;
+                message = "the analysis wrote no summary";
+            }
+        }
+    } catch (const tisma::JobCancelled&) {
+        state = TISMA_STOPPED;
+        code = TISMA_CANCELLED;
+        message = "cancelled";
+    } catch (const std::exception& e) {
+        state = TISMA_FAILED;
+        code = TISMA_ERROR;
+        message = std::string("internal: ") + e.what();
+    } catch (...) {
+        state = TISMA_FAILED;
+        code = TISMA_ERROR;
+        message = "internal: unknown";
+    }
+    {
+        std::lock_guard lock(ctx->result_mutex);
+        ctx->job_code = code;
+        ctx->job_message = std::move(message);
+        ctx->summary = std::move(result);
+    }
+    if (state == TISMA_DONE)
+        ctx->hook.percent.store(100);
+    ctx->hook.stage.store(state == TISMA_DONE ? "done" : state == TISMA_STOPPED ? "cancelled" : "failed");
+    ctx->state.store(state);
+}
+
 
 } // namespace
 
@@ -362,6 +466,7 @@ tisma_status tisma_slice_start(tisma_ctx* ctx) {
     ctx->hook.percent.store(0);
     ctx->hook.stage.store("loading");
     ctx->preview.reset();
+    ctx->analysis = false;
     ctx->state.store(TISMA_RUNNING);
     try {
         ctx->worker = std::thread(run_job, ctx, ctx->model, ctx->settings->filament_cost);
@@ -394,7 +499,7 @@ void tisma_cancel(tisma_ctx* ctx) {
 }
 
 const char* tisma_summary_json(tisma_ctx* ctx) {
-    if (!ctx || ctx->state.load() != TISMA_DONE)
+    if (!ctx || !slice_done(ctx))
         return nullptr;
     std::lock_guard lock(ctx->result_mutex);
     ctx->summary_out = ctx->summary;
@@ -404,7 +509,7 @@ const char* tisma_summary_json(tisma_ctx* ctx) {
 tisma_status tisma_write_gcode(tisma_ctx* ctx, const char* path) {
     if (!ctx || !path)
         return fail(ctx, TISMA_BAD_ARGUMENT, "null context or path");
-    if (ctx->state.load() != TISMA_DONE)
+    if (!slice_done(ctx))
         return fail(ctx, TISMA_NOT_READY, "no finished slice");
     std::error_code ec;
     fs::copy_file(ctx->dir / "result.gcode", path, fs::copy_options::overwrite_existing, ec);
@@ -417,7 +522,7 @@ tisma_status tisma_read_gcode(tisma_ctx* ctx, uint64_t offset, char* buffer, siz
     if (!ctx || !written || (!buffer && capacity > 0))
         return fail(ctx, TISMA_BAD_ARGUMENT, "null context, buffer or written");
     *written = 0;
-    if (ctx->state.load() != TISMA_DONE)
+    if (!slice_done(ctx))
         return fail(ctx, TISMA_NOT_READY, "no finished slice");
     std::ifstream in(ctx->dir / "result.gcode", std::ios::binary);
     if (!in)
@@ -434,7 +539,7 @@ tisma_status tisma_read_gcode(tisma_ctx* ctx, uint64_t offset, char* buffer, siz
 // preview reads it (gcode/preview.hpp), once. Null without a finished slice
 // or when the G-code cannot be read.
 static const tisma::GcodePreview* preview_of(tisma_ctx* ctx) {
-    if (!ctx || ctx->state.load() != TISMA_DONE)
+    if (!ctx || !slice_done(ctx))
         return nullptr;
     if (!ctx->preview) {
         const std::string text = read_text(ctx->dir / "result.gcode");
@@ -492,7 +597,7 @@ tisma_status tisma_preview_segments(tisma_ctx* ctx, int first, int count, size_t
         *written = 0;
     if (!ctx || !written || (!out && capacity > 0) || first < 0 || count < 0)
         return fail(ctx, TISMA_BAD_ARGUMENT, "null context, output or written, or a negative layer or count");
-    if (ctx->state.load() != TISMA_DONE)
+    if (!slice_done(ctx))
         return fail(ctx, TISMA_NOT_READY, "no finished slice");
     const tisma::GcodePreview* p = preview_of(ctx);
     if (!p)
@@ -518,8 +623,44 @@ tisma_status tisma_preview_segments(tisma_ctx* ctx, int first, int count, size_t
     return ok();
 }
 
-tisma_status tisma_analyze_start(tisma_ctx* ctx, int, const char*) { return fail(ctx, TISMA_ERROR, not_yet); }
+tisma_status tisma_analyze_start(tisma_ctx* ctx, int object, const char* quality) {
+    if (!ctx || object < 0)
+        return fail(ctx, TISMA_BAD_ARGUMENT, "null context or a negative object");
+    if (running(ctx))
+        return fail(ctx, TISMA_BUSY, "a job is running on this context");
+    join(ctx);
+    if (ctx->model.empty())
+        return fail(ctx, TISMA_NOTHING_TO_SLICE, "no project open");
+    std::string q = quality ? quality : "";
+    if (!q.empty() && q != "fast" && q != "normal" && q != "high" && q != "extreme" && q != "ultra")
+        return fail(ctx, TISMA_BAD_ARGUMENT, "the quality is fast, normal, high or extreme");
+    {
+        std::lock_guard lock(ctx->result_mutex);
+        ctx->job_code = TISMA_OK;
+        ctx->job_message.clear();
+        ctx->summary.clear();
+    }
+    ctx->hook.cancel.store(false);
+    ctx->hook.percent.store(0);
+    ctx->hook.stage.store("solving");
+    ctx->preview.reset();
+    ctx->analysis = true;
+    ctx->state.store(TISMA_RUNNING);
+    try {
+        ctx->worker = std::thread(run_analysis_job, ctx, ctx->model, object, q);
+    } catch (const std::exception& e) {
+        ctx->state.store(TISMA_FAILED);
+        return fail(ctx, TISMA_ERROR, std::string("cannot start the job: ") + e.what());
+    }
+    return ok();
+}
 
-const char* tisma_analysis_json(tisma_ctx*) { return nullptr; }
+const char* tisma_analysis_json(tisma_ctx* ctx) {
+    if (!ctx || ctx->state.load() != TISMA_DONE || !ctx->analysis)
+        return nullptr;
+    std::lock_guard lock(ctx->result_mutex);
+    ctx->summary_out = ctx->summary;
+    return ctx->summary_out.c_str();
+}
 
 } // extern "C"

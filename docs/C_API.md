@@ -7,8 +7,7 @@ documento explica cómo se usa.
 **Estado (2026-11-12):** interfaz acordada con la sesión de la app de Android el 2026-11-04. **Implementada la
 primera versión** (`src/cli/c_api.cpp`, pedido de la sesión del iPhone): contexto, abrir por ruta o bytes, ajustes,
 estimación y límite de memoria, laminar con avance y cancelar, resumen y G-code (entero o por pedazos). Va en la
-biblioteca de iOS (`tools/build_ios.sh`). La vista previa por capas está desde el 2026-11-13. **Falta:** el análisis
-(`tisma_analyze_start` da `TISMA_ERROR`).
+biblioteca de iOS (`tools/build_ios.sh`). La vista previa por capas y el análisis están desde el 2026-11-13.
 
 ## Cómo funciona la primera versión
 
@@ -32,6 +31,13 @@ biblioteca de iOS (`tools/build_ios.sh`). La vista previa por capas está desde 
   y queda en el contexto hasta el próximo trabajo. Hoy el G-code entero está en memoria mientras se lee; para un
   teléfono es lo próximo a mejorar si pesa. Tipos: las superficies de abajo salen como relleno sólido
   (`TISMA_PATH_BOTTOM` todavía no se da), y el relleno de huecos, el planchado y la torre de purga son `TISMA_PATH_OTHER`.
+- **Análisis:**
+  - `tisma_analyze_start(objeto, calidad)` corre el análisis de un proyecto abierto con `tisma_open_path`, igual que
+    los nodos (`analyze <proyecto> --sandbox --mode analyze`), con los ajustes del proyecto.
+  - El avance sale de sus líneas `progress`, leídas a medida que llegan; ahí se mira también la cancelación.
+  - `tisma_analysis_json` da el resumen: veredicto, `min_safety` con su rango, desplazamiento, masa, material y vóxeles.
+  - Sin zona fija o sin fuerza: `TISMA_NEEDS_CONDITIONS`; demasiado grande para la memoria: `TISMA_TOO_LARGE`.
+  - Un análisis no deja G-code ni vista previa.
 - **Errores de laminar:** el código sale del de la línea de comandos (2 → `TISMA_CANNOT_READ`, 4 →
   `TISMA_BAD_MODEL`, el resto `TISMA_ERROR`) y el mensaje es su primera línea `error:`.
 

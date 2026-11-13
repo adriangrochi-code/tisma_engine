@@ -13940,3 +13940,21 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Sin medir:** la memoria de la vista previa en un teléfono; hoy lee el G-code entero de una vez.
 - **Sigue:** el análisis por la API (`tisma_analyze_start`), y los ajustes de un proyecto 3MF.
 
+## 2026-11-13 — API en C: el análisis estructural (bloque de noche)
+
+- **Hecho:** `tisma_analyze_start` y `tisma_analysis_json` (`src/cli/c_api.cpp`). El hilo del contexto corre
+  `analyze <proyecto> --sandbox --mode analyze --object N --instance 0 [--quality q]`.
+  - Avance: las líneas `progress N` se leen a medida que llegan, con un `streambuf` propio. En cada línea se mira la
+    cancelación.
+  - Resultado: el resumen de los nodos.
+  - Códigos: `needs_conditions` da `TISMA_NEEDS_CONDITIONS`; `too_large` da `TISMA_TOO_LARGE`.
+  - Después de un análisis no hay resumen de laminado, G-code ni vista previa.
+  - La CI de iOS comprueba también estas 2 funciones.
+- **Pruebas:** `[c_api]`, un caso nuevo con el bloque de PLA de 20 mm y 50 N:
+  - aguanta, con su rango y la masa;
+  - un objeto que no existe falla;
+  - sin condiciones da `TISMA_NEEDS_CONDITIONS`;
+  - una calidad o un objeto inválidos dan `TISMA_BAD_ARGUMENT`;
+  - cancelar en calidad normal termina en `TISMA_STOPPED`.
+- **Sigue:** los ajustes de un proyecto 3MF al laminar por la API (hoy hay que darlos con `tisma_set_settings_json`).
+

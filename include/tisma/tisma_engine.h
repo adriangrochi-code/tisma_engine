@@ -3,8 +3,7 @@
  * Plain C, no platform dependency. Status: interface agreed on 2026-11-04;
  * since 2026-11-12 the context, opening, settings, the memory estimate, the
  * slice with progress and cancel, the summary, the G-code and (since
- * 2026-11-13) the preview by layers are implemented. The analysis answers
- * TISMA_ERROR ("not implemented yet").
+ * 2026-11-13) the preview by layers and the analysis are implemented.
  *
  * Threads: a context is used from one thread at a time. Slicing and
  * analysing run on the engine's own worker; the caller polls. No callback
@@ -133,10 +132,15 @@ double tisma_layer_z(tisma_ctx* ctx, int layer);
 tisma_status tisma_preview_segments(tisma_ctx* ctx, int first, int count, size_t skip, tisma_segment* out,
                                     size_t capacity, size_t* written);
 
-/* Engineering (engineering_panel.md): the conditions come with a project;
- * the quality is "fast", "normal", "high" or "extreme". Progress by
- * tisma_poll; the result is the structural report JSON (verdict, safety
- * factor and its likely range, displacement, mass). */
+/* Engineering (engineering_panel.md): the conditions come with a project
+ * (opened with tisma_open_path; its own settings are used); object counts
+ * from 0 in the project's order; the quality is "fast", "normal", "high" or
+ * "extreme" (null: the project's). Progress by tisma_poll (stage "solving");
+ * a cancel is seen at the next progress step. The result is the summary JSON
+ * of the nodes' analysis (cloud.md, rule 19): verdict, min_safety with
+ * min_safety_low and min_safety_high, required_safety, max_displacement_mm,
+ * mass_g, family, voxels. A part without a fixed zone or a force fails with
+ * TISMA_NEEDS_CONDITIONS; one too large for memory with TISMA_TOO_LARGE. */
 tisma_status tisma_analyze_start(tisma_ctx* ctx, int object, const char* quality);
 const char* tisma_analysis_json(tisma_ctx* ctx);
 

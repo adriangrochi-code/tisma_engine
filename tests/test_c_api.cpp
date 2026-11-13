@@ -1,4 +1,8 @@
+#include "mesh/shapes.hpp"
+#include "project/project.hpp"
 #include "slice/job.hpp"
+#include "test_temp.hpp"
+#include "ui/slicing.hpp"
 
 #include <tisma/tisma_engine.h>
 
@@ -203,3 +207,80 @@ TEST_CASE("C API: a cancelled slice stops, and the context slices again", "[c_ap
     REQUIRE(tisma_slice_start(ctx).code == TISMA_OK);
     tisma_destroy(ctx);
 }
+
+TEST_CASE("C API: the structural analysis of a project's object, with progress, and its errors", "[c_api]") {
+    using namespace tisma;
+    // A 20 mm PLA block held at its bottom, 50 N down on its top.
+    Project p;
+    p.settings = ui::default_settings();
+    p.settings.gpu = GpuMode::Off;
+    ProjectModel m;
+    m.name = "box.stl";
+    m.mesh = make_box(20.0, 20.0, 20.0);
+    m.offset = {100.0, 100.0, 0.0};
+    EngineeringCondition fixed, push;
+    fixed.kind = ConditionKind::FixedZone;
+    push.kind = ConditionKind::ForceZone;
+    push.newtons = 50.0;
+    push.direction = ForceDirection::Axis;
+    push.axis = -3;
+    for (std::uint32_t t = 0; t < m.mesh.triangle_count(); ++t) {
+        bool bottom = true, top = true;
+        for (int k = 0; k < 3; ++k)
+            bottom &= m.mesh.corner(t, k).z == 0.0f, top &= m.mesh.corner(t, k).z == 20.0f;
+        if (bottom)
+            fixed.triangles.push_back(t);
+        if (top)
+            push.triangles.push_back(t);
+    }
+    const auto dir = test_temp_dir();
+    const auto bare = dir / "tisma_c_api_bare.3mf", loaded = dir / "tisma_c_api_loaded.3mf";
+    p.models.push_back(m);
+    save_project(bare, p);
+    p.models[0].engineering.conditions = {fixed, push};
+    save_project(loaded, p);
+
+    tisma_ctx* ctx = tisma_create();
+    REQUIRE(ctx);
+    CHECK(tisma_analyze_start(ctx, 0, "fast").code == TISMA_NOTHING_TO_SLICE);
+    REQUIRE(tisma_open_path(ctx, loaded.string().c_str()).code == TISMA_OK);
+    CHECK(tisma_analyze_start(ctx, 0, "best").code == TISMA_BAD_ARGUMENT);
+    CHECK(tisma_analyze_start(ctx, -1, "fast").code == TISMA_BAD_ARGUMENT);
+    REQUIRE(tisma_analyze_start(ctx, 0, "fast").code == TISMA_OK);
+    const tisma_progress done = wait(ctx);
+    INFO((done.error.message ? done.error.message : ""));
+    REQUIRE(done.state == TISMA_DONE);
+    CHECK(done.percent == 100);
+    const nlohmann::json report = nlohmann::json::parse(tisma_analysis_json(ctx));
+    CHECK(report["verdict"] == "holds");
+    CHECK(report["min_safety"].get<double>() > 2.0);
+    CHECK(report["min_safety_low"].get<double>() <= report["min_safety"].get<double>());
+    CHECK(report["max_displacement_mm"].get<double>() > 0.0);
+    CHECK(report["mass_g"].get<double>() > 0.0);
+    // An analysis is not a slice.
+    CHECK(tisma_summary_json(ctx) == nullptr);
+    CHECK(tisma_layer_count(ctx) == 0);
+
+    // Another object, or no conditions: the codes say it.
+    REQUIRE(tisma_analyze_start(ctx, 3, "fast").code == TISMA_OK);
+    CHECK(wait(ctx).state == TISMA_FAILED);
+    REQUIRE(tisma_open_path(ctx, bare.string().c_str()).code == TISMA_OK);
+    REQUIRE(tisma_analyze_start(ctx, 0, "fast").code == TISMA_OK);
+    const tisma_progress none = wait(ctx);
+    CHECK(none.state == TISMA_FAILED);
+    CHECK(none.error.code == TISMA_NEEDS_CONDITIONS);
+    CHECK(tisma_analysis_json(ctx) == nullptr);
+
+    // Cancelled: it stops at its next progress line (or ends done first).
+    REQUIRE(tisma_open_path(ctx, loaded.string().c_str()).code == TISMA_OK);
+    REQUIRE(tisma_analyze_start(ctx, 0, "normal").code == TISMA_OK);
+    tisma_cancel(ctx);
+    const tisma_progress stopped = wait(ctx);
+    REQUIRE((stopped.state == TISMA_STOPPED || stopped.state == TISMA_DONE));
+    if (stopped.state == TISMA_STOPPED)
+        CHECK(stopped.error.code == TISMA_CANCELLED);
+    tisma_destroy(ctx);
+    std::filesystem::remove(bare);
+    std::filesystem::remove(loaded);
+}
+

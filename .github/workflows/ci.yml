@@ -150,7 +150,7 @@ jobs:
             for f in tisma_run_cli tisma_free tisma_create tisma_destroy tisma_open_path tisma_open_bytes \
                      tisma_set_settings_json tisma_estimate_memory tisma_slice_start tisma_poll tisma_cancel \
                      tisma_write_gcode tisma_read_gcode tisma_summary_json tisma_layer_count tisma_layer_z \
-                     tisma_preview_segments; do
+                     tisma_preview_segments tisma_analyze_start tisma_analysis_json; do
               grep -q "_${f}\$" <<<"$symbols" || { echo "$a: no $f"; exit 1; }
             done
           done
