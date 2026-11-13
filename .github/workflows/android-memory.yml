@@ -38,7 +38,7 @@ jobs:
             "system-images;android-34;google_apis;x86_64" > /dev/null
       - name: Build the debug APK (engine inside)
         working-directory: apps/android
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleBeta
       - name: The models
         run: |
           python3 bench/gen_sphere.py "$RUNNER_TEMP/benchy_size.stl" --segments 335
@@ -57,22 +57,28 @@ jobs:
           timeout 600 sh -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 5; done'
           adb shell settings put global window_animation_scale 0
           adb install -r apps/android/app/build/outputs/apk/debug/app-x86_64-debug.apk
+      - name: Slice and measure
+        run: |
+          set -o pipefail
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          apps/android/tools/memory_check.sh tests/data/printer_settings.json \
+            "$RUNNER_TEMP/benchy_size.stl" "$RUNNER_TEMP/big.stl" | tee -a "$GITHUB_STEP_SUMMARY"
       # Cold start (QA, 13-11-2026: the time until the Plate shows, to be under 2 s): the app stopped and started
-      # again five times after a first start; `am start -W` gives the time to the first drawn frame.
+      # again five times after a first start, on the testers' build (R8 and its startup profile, as installed from
+      # the store); `am start -W` gives the time to the first drawn frame.
       - name: Cold start
+        if: ${{ !cancelled() }}
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           pkg=net.tismaservidores.tisma
+          adb install -r apps/android/app/build/outputs/apk/beta/app-x86_64-beta.apk
           act=$(adb shell cmd package resolve-activity --brief $pkg | tail -1 | tr -d '\r')
           adb shell am start -W -n "$act" > /dev/null; sleep 5
+          # Compiled with its startup profile, as the store's install does (cloud profiles) and the app's own
+          # profile installer does after a while.
+          adb shell cmd package compile -m speed-profile -f $pkg
           for i in 1 2 3 4 5; do
             adb shell am force-stop $pkg; sleep 2
             adb shell am start -W -n "$act" | tr -d '\r' | sed -n 's/^TotalTime: //p'
           done | tee "$RUNNER_TEMP/cold.txt"
           echo "Cold start on ${{ matrix.ram }} MB (ms, five runs): $(tr '\n' ' ' < "$RUNNER_TEMP/cold.txt")" | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Slice and measure
-        if: always()
-        run: |
-          export PATH="$ANDROID_HOME/platform-tools:$PATH"
-          apps/android/tools/memory_check.sh tests/data/printer_settings.json \
-            "$RUNNER_TEMP/benchy_size.stl" "$RUNNER_TEMP/big.stl" | tee -a "$GITHUB_STEP_SUMMARY"

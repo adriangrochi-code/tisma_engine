@@ -6,13 +6,18 @@
 # cloud when the estimate is above the free memory. A run killed for memory without that warning is a failure.
 #
 #   memory_check.sh <config.json> <model.stl>...      (prints one line per model; exit 1 on a missed warning)
-set -u
+set -u -o pipefail
 PKG=net.tismaservidores.tisma
 cfg=$1; shift
 adb shell mkdir -p /data/local/tmp/mem
 adb push -q "$cfg" /data/local/tmp/mem/config.json > /dev/null
 adb shell chmod 644 /data/local/tmp/mem/config.json
-lib=$(adb shell pm dump "$PKG" | sed -n 's/.*nativeLibraryDir=\(.*\)$/\1/p' | head -1 | tr -d '\r')
+# The engine is unpacked next to the installed APK: <dir of base.apk>/lib/<abi>/libtisma_engine.so.
+apk=$(adb shell pm path "$PKG" | head -1 | tr -d '\r' | sed 's/^package://')
+abi=$(adb shell getprop ro.product.cpu.abi | tr -d '\r')
+lib="$(dirname "$apk")/lib/${abi%%-*}"
+[ "$abi" = arm64-v8a ] && lib="$(dirname "$apk")/lib/arm64"
+adb shell "run-as $PKG test -x $lib/libtisma_engine.so" || { echo "No engine at $lib"; exit 2; }
 total=$(adb shell grep MemTotal /proc/meminfo | awk '{print int($2/1024)}')
 missed=0
 for model in "$@"; do
@@ -41,8 +46,10 @@ for model in "$@"; do
     '" | tr -d '\r')
     read -r code peak ms <<< "$out"
     verdict=ok
-    if [ "$code" != 0 ] && [ "$warns" = no ]; then verdict="KILLED WITHOUT WARNING"; missed=1; fi
-    if [ "$code" != 0 ] && [ "$warns" = yes ]; then verdict="warned (and it would not fit)"; fi
+    # 137: killed (SIGKILL, what the low-memory killer sends); any other failure is a fault of the check or engine.
+    if [ "$code" != 0 ] && [ "$code" != 137 ]; then verdict="ENGINE FAILED (exit $code)"; missed=1; fi
+    if [ "$code" = 137 ] && [ "$warns" = no ]; then verdict="KILLED WITHOUT WARNING"; missed=1; fi
+    if [ "$code" = 137 ] && [ "$warns" = yes ]; then verdict="warned (and it would not fit)"; fi
     if [ "$code" = 0 ] && [ "$warns" = yes ]; then verdict="warned (it would have fit)"; fi
     echo "RAM ${total} MB | $name: ${tris} triangles | free ${free} MB | estimate ${need} MB | warning ${warns} | engine exit ${code}, peak ${peak} MB, ${ms} ms | ${verdict}"
     adb shell rm -f "/data/local/tmp/mem/$name"
