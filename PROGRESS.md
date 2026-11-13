@@ -14292,3 +14292,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   espera de la prueba pasa a 10 min.
 - **Fuzz, dos semillas más** (7040bf2): 2026111302, 2000 casos, 0 fallas (23 rechazadas); 2026111303, 2000 casos,
   0 fallas (30 rechazadas).
+- **Benchy con los 17 patrones de relleno**, cada uno solo, con `walls.vertical_shell` `enabled` y costura `random`,
+  y con soporte y `retraction.only_crossing_walls`: 51 laminados, todos pasan el chequeo al exportar.
+- **CI completa en 7040bf2:** cortó en la parte gcc por una sola prueba de la interfaz, `ui_script_gears`, con
+  «Xvfb failed to start» (sola pasa). El envoltorio `tests/xvfb_run.sh` reintentaba solo con «Failed to open display»
+  o «Server is already active»; ahora también con «Xvfb failed to start», hasta 5 veces.
+- **Multigrilla, paso intermedio:** no se probó. Tocaría a la vez la restricción, la interpolación y el operador de
+  Galerkin armado por elementos (hoy con pesos trilineales por eje), con pesos propios por nodo. Queda en el plan.
