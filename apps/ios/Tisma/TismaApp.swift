@@ -128,6 +128,9 @@ struct PlateView: View {
     @State private var percent = 0
     @State private var stageText = ""
     @State private var framing = 0
+    @State private var viewFrom = "3d"
+    @State private var engineering = false
+    @State private var info: String?
 
     private var model: Catalog.PrinterModel? { Engine.catalog?.printer(name: printer) }
 
@@ -137,7 +140,7 @@ struct PlateView: View {
                 // rule 6: the bed and the model in 3D (one finger turns, two move, pinch zooms; «Frame» puts it back).
                 if let partMesh {
                     Section {
-                        PartView(mesh: partMesh, bed: look?.bedArea.map { $0.doubleValue } ?? [0, 0, 220, 220], frame: framing)
+                        PartView(mesh: partMesh, bed: look?.bedArea.map { $0.doubleValue } ?? [0, 0, 220, 220], frame: framing, viewFrom: viewFrom)
                             .frame(height: 280)
                             .listRowInsets(EdgeInsets())
                             .accessibilityIdentifier("plate_3d")
@@ -208,6 +211,15 @@ struct PlateView: View {
                 }
             }
             .navigationTitle("Plate")
+            // mobile_app.md, rule 6 (parity P3): the tools in a strip below, the model still in view.
+            .safeAreaInset(edge: .bottom) { toolStrip }
+            .navigationDestination(isPresented: $engineering) {
+                EngineeringView(model: opened, printer: printer, nozzle: nozzle, filament: filament.isEmpty
+                    ? Engine.catalog.flatMap { c in model.flatMap { c.filamentsFor(p: $0).first?.fullName } } : filament)
+            }
+            .alert(info ?? "", isPresented: Binding(get: { info != nil }, set: { if !$0 { info = nil } })) {
+                Button("OK", role: .cancel) { info = nil }
+            }
             .task(id: openedPath) {
                 let chosen = opened
                 partMesh = await Task.detached { PartMesh.load(chosen ?? EngineeringView.cube()) }.value
@@ -262,6 +274,41 @@ struct PlateView: View {
             }
             await MainActor.run { busy = false }
         }
+    }
+
+    /// File (open, information, remove), View (3D and the five sides, Frame), Engineering and Slice.
+    private var toolStrip: some View {
+        HStack(spacing: 18) {
+            Menu {
+                Button("Open a model…", systemImage: "folder") { picking = true }
+                Button("Information", systemImage: "info.circle") { info = modelInfo() }
+                Button("Remove", systemImage: "trash", role: .destructive) { openedPath = ""; gcode = nil; result = nil }
+                    .disabled(openedPath.isEmpty)
+            } label: { Label("File", systemImage: "doc") }
+            Menu {
+                ForEach([("3d", "3D"), ("top", "Top"), ("front", "Front"), ("left", "Left"), ("right", "Right"), ("back", "Back")], id: \.0) { v in
+                    Button(LocalizedStringKey(v.1)) { viewFrom = v.0; framing += 1 }
+                }
+                Button("Frame") { framing += 1 }
+            } label: { Label("View", systemImage: "cube") }
+            Button { engineering = true } label: { Label("Engineering", systemImage: "hammer") }
+            Button { slice() } label: { Label("Slice", systemImage: "square.stack.3d.up") }
+                .disabled(busy || printer.isEmpty)
+        }
+        .labelStyle(.titleAndIcon)
+        .font(.footnote)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .accessibilityIdentifier("plate_tools")
+    }
+
+    /// The model's name, triangles and size, for File › Information.
+    private func modelInfo() -> String {
+        let name = opened?.lastPathComponent ?? String(localized: "The 20 mm cube")
+        guard let m = partMesh else { return name }
+        let b = m.bounds
+        return String(format: String(localized: "%@: %d triangles, %.1f × %.1f × %.1f mm"), name, m.triangles, b[3] - b[0], b[4] - b[1], b[5] - b[2])
     }
 
     /// The card's look from `tisma-engine profile` for the chosen printer (off the main thread).

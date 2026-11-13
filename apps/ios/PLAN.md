@@ -90,7 +90,7 @@ se marca con la fecha.
 | Regla | Android | iPhone | Hueco |
 |---|---|---|---|
 | 5 Secciones | sí | sí | — |
-| 6 Placa | cama y modelo en 3D, tarjeta, Laminar, salida (guardar, compartir, mandar), gestos, tiras de herramientas | tarjeta, Laminar, vista previa, mandar; la cama y el modelo en 3D con gestos y Encuadrar (P1, 12-11); compartir y guardar el G-code (P2, 12-11) | P3: tiras de herramientas (Archivo, Vista, Ingeniería, Laminar) |
+| 6 Placa | cama y modelo en 3D, tarjeta, Laminar, salida (guardar, compartir, mandar), gestos, tiras de herramientas | tarjeta, Laminar, vista previa, mandar; la cama y el modelo en 3D con gestos y Encuadrar (P1, 12-11); compartir y guardar el G-code (P2, 12-11) | — (tiras de herramientas abajo: Archivo, Vista con las cinco caras, Ingeniería y Laminar, P3, 13-11) |
 | 7 Impresión y Material | niveles y vista Personalizada | niveles y vista Personalizada (P4, 12-11) | — |
 | 8 Impresora | Conexión y Calibración | Conexión y Calibración (P5, 12-11) | — |
 | 9 Más | cuenta, biblioteca, ayuda, informar un problema, preferencias, créditos | cuenta, biblioteca compartida | ayuda (P21, 12-11); informar un problema (P6, `app` `ios`, 12-11: el servidor lo acepta desde cc28f98 de tisma-cloud, en producción cuando el dueño actualice); preferencias (el servidor) y créditos (P7, 12-11; la lista de bibliotecas del motor en iOS la confirma el motor) |

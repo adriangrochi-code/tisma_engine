@@ -229,3 +229,12 @@
 "The model is larger than 200 MB." = "El modelo pesa más de 200 MB.";
 "The model could not be downloaded: %@" = "No se pudo bajar el modelo: %@";
 "OK" = "Aceptar";
+"Information" = "Información";
+"Remove" = "Quitar";
+"View" = "Vista";
+"3D" = "3D";
+"Front" = "Frente";
+"Left" = "Izquierda";
+"Right" = "Derecha";
+"Back" = "Atrás";
+"%@: %d triangles, %.1f × %.1f × %.1f mm" = "%@: %d triángulos, %.1f × %.1f × %.1f mm";

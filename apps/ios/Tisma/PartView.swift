@@ -60,6 +60,8 @@ struct PartView: UIViewRepresentable {
     var bed: [Double]?
     /// A change re-frames the camera («Encuadrar»).
     var frame = 0
+    /// Where the camera looks from (rule 6, the View tools): 3d, top, front, left, right or back.
+    var viewFrom = "3d"
     /// A point load's place (the model file's coordinates), drawn as a small ball.
     var point: SCNVector3?
     /// The touched triangle and the touched point on it (the model file's coordinates).
@@ -84,9 +86,10 @@ struct PartView: UIViewRepresentable {
         root.childNodes.filter { $0.name != "camera" }.forEach { $0.removeFromParentNode() }
         defer {
             // The first time and on «Encuadrar»: the camera in front of and above the whole scene.
-            if context.coordinator.framed != frame {
+            if context.coordinator.framed != frame || context.coordinator.viewFrom != viewFrom {
                 context.coordinator.framed = frame
-                Self.frame(view, root)
+                context.coordinator.viewFrom = viewFrom
+                Self.frame(view, root, from: viewFrom)
             }
         }
         // The engine's Z is up; SceneKit's Y.
@@ -127,7 +130,7 @@ struct PartView: UIViewRepresentable {
     }
 
     /// Puts the camera where the whole scene shows.
-    static func frame(_ view: SCNView, _ root: SCNNode) {
+    static func frame(_ view: SCNView, _ root: SCNNode, from: String = "3d") {
         let content = root.childNodes.filter { $0.name != "camera" }
         guard !content.isEmpty else { return }
         var lo = SCNVector3(Float.greatestFiniteMagnitude, .greatestFiniteMagnitude, .greatestFiniteMagnitude)
@@ -143,13 +146,22 @@ struct PartView: UIViewRepresentable {
         let camera = root.childNode(withName: "camera", recursively: false) ?? {
             let n = SCNNode(); n.name = "camera"; n.camera = SCNCamera(); n.camera?.zFar = 100_000; root.addChildNode(n); return n
         }()
-        camera.position = SCNVector3(c.x, c.y + r * 0.9, c.z + r * 1.6)
-        camera.look(at: c)
+        // The engine's Z is SceneKit's Y, and the engine's front (−Y) is SceneKit's +Z.
+        let d = r * 1.9
+        switch from {
+        case "top": camera.position = SCNVector3(c.x, c.y + d, c.z); camera.look(at: c, up: SCNVector3(0, 0, -1), localFront: SCNVector3(0, 0, -1))
+        case "front": camera.position = SCNVector3(c.x, c.y, c.z + d); camera.look(at: c)
+        case "back": camera.position = SCNVector3(c.x, c.y, c.z - d); camera.look(at: c)
+        case "left": camera.position = SCNVector3(c.x - d, c.y, c.z); camera.look(at: c)
+        case "right": camera.position = SCNVector3(c.x + d, c.y, c.z); camera.look(at: c)
+        default: camera.position = SCNVector3(c.x, c.y + r * 0.9, c.z + r * 1.6); camera.look(at: c)
+        }
         view.pointOfView = camera
     }
 
     final class Coordinator: NSObject {
         var framed = -1
+        var viewFrom = "3d"
         var onTap: (Int, SCNVector3) -> Void
         init(onTap: @escaping (Int, SCNVector3) -> Void) { self.onTap = onTap }
 
