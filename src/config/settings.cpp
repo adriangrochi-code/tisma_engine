@@ -2352,7 +2352,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction",
                {"length", "speed", "lift", "min_travel", "unretract_speed", "restart_extra", "on_layer_change", "wipe",
-                "before_wipe", "after_wipe", "wipe_inward", "wipe_inward_distance", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
+                "before_wipe", "after_wipe", "wipe_inward", "wipe_inward_distance", "only_crossing_walls", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
                 "coast"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    // A tool change's (multi_extruder.md, rule 5): one value for
@@ -2375,13 +2375,15 @@ Settings parse_checked(std::string_view text) {
                        (n == "toolchange_length" ? s.toolchange_length : s.toolchange_restart_extra) = std::move(list);
                        return;
                    }
-                   if (n == "on_layer_change" || n == "wipe" || n == "firmware" || n == "wipe_inward") {
+                   if (n == "on_layer_change" || n == "wipe" || n == "firmware" || n == "wipe_inward" ||
+                       n == "only_crossing_walls") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       (n == "wipe"          ? s.wipe
-                        : n == "firmware"    ? s.firmware_retraction
-                        : n == "wipe_inward" ? s.wipe_inward
-                                             : s.retract_layer_change) = g.at(n).get<bool>();
+                       (n == "wipe"                  ? s.wipe
+                        : n == "firmware"            ? s.firmware_retraction
+                        : n == "wipe_inward"         ? s.wipe_inward
+                        : n == "only_crossing_walls" ? s.retract_only_crossing_walls
+                                                     : s.retract_layer_change) = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "wipe_inward_distance") { // mm, or % of the outer wall's width
@@ -3746,6 +3748,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.before_wipe", num(s.before_wipe)},
         {"retraction.after_wipe", num(s.after_wipe)},
         {"retraction.wipe_inward", flag(s.wipe_inward)},
+        {"retraction.only_crossing_walls", flag(s.retract_only_crossing_walls)},
         {"retraction.wipe_inward_distance", s.wipe_inward_distance.percent ? num(s.wipe_inward_distance.value) + "%"
                                                                             : num(s.wipe_inward_distance.value)},
         {"retraction.coast", num(s.coast)},
@@ -4302,6 +4305,7 @@ std::string settings_json(const Settings& s) {
           {"before_wipe", s.before_wipe},
           {"after_wipe", s.after_wipe},
           {"wipe_inward", s.wipe_inward},
+          {"only_crossing_walls", s.retract_only_crossing_walls},
           {"wipe_inward_distance", s.wipe_inward_distance.percent
                                        ? ordered_json(json(s.wipe_inward_distance.value).dump() + "%")
                                        : ordered_json(s.wipe_inward_distance.value)},

@@ -14015,3 +14015,25 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
     regla 5 de `gcode_motion.md`. Pregunté a la sesión de fichas cuál manda y si conviene un ajuste (por ejemplo,
     retraer dentro solo con `retraction.min_travel` explícito). Hasta la respuesta queda como estaba.
 
+## 2026-11-13 — `retraction.only_crossing_walls` (toolpath_time.md, regla 5, TT6; respuesta de la sesión de fichas)
+
+- **Decisión de la ficha (spec/next):** la regla 5 va detrás de un ajuste nuevo, `retraction.only_crossing_walls`,
+  apagado por defecto. Apagado, mandan `retraction_travel.md` y la regla 5 de `gcode_motion.md` (R1 a R11 y OR1 sin
+  cambios). En los puentes, la unión de la regla 1 va solo si su tramo queda entero sobre lo apoyado.
+- **Hecho:**
+  - el ajuste en `Settings`, la lectura y la escritura de JSON y `docs/CONFIG.md`;
+  - el emisor y el plan de las rampas de caudal: prendido, un viaje que no sale de la pieza (`leaves_part` falso) no
+    retrae, por largo que sea;
+  - su lugar en la tarjeta de retracción (avanzado) y su explicación en español e inglés.
+- **Medido:** cubo de 20 mm al 20 %:
+  - prendido: 347 a 1 retracción, y de 20 min 11 s a 19 min 5 s;
+  - en el Benchy da 356 retracciones y 1 h 5 min 53 s, contra 2 209 y 1 h 11 min 30 s.
+- **Pruebas:**
+  - `[gcode]`, un caso nuevo, TT6: el cubo de prueba con relleno, 52 retracciones por largo y 0 con el ajuste;
+    ida y vuelta del JSON;
+  - pasan `[gcode]`, `[retraction]`, `[settings]` y `[ui]`.
+- **Falta:**
+  - la fila del ajuste en la ventana (sesión de interfaz);
+  - la unión de puentes sobre lo apoyado (regla 1);
+  - las reglas 2, 3, 6, 8 y 9.
+

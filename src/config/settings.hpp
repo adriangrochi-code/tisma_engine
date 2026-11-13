@@ -709,6 +709,8 @@ struct Settings {
     // The wipe after an outer wall moved inward, toward the inner wall next
     // to it (orca_2_5.md, rule 1): by mm, or % of the outer wall's width.
     bool wipe_inward = false;
+    // Retract only on travels that cross an outer wall or air (toolpath_time.md, rule 5).
+    bool retract_only_crossing_walls = false;
     Speed wipe_inward_distance{50.0, true};
     double coast = 0.0;              // mm of each wall's and infill's end run without E (coasting.md); 0: off
     double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit

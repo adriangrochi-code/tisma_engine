@@ -376,6 +376,42 @@ TEST_CASE("retraction: around long travels only, and E comes back to where it wa
     CHECK_FALSE(retracted);
 }
 
+TEST_CASE("retraction.only_crossing_walls: travels inside the part do not retract (toolpath_time.md, rule 5, TT6)", "[gcode]") {
+    // The cube with infill: its travels stay inside, between infill lines
+    // and layers; only the first one, from outside, crosses a wall.
+    Settings s = test_printer();
+    s.infill_density = 20.0;
+    const auto retractions = [](const std::string& gcode) {
+        std::size_t n = 0;
+        double e = 0.0;
+        for (const std::string& l : lines_of(gcode)) {
+            if (l.rfind("G92 E", 0) == 0) {
+                e = std::stod(l.substr(5));
+                continue;
+            }
+            if (l.rfind("G1", 0) != 0 || l.find(" X") != std::string::npos || l.find(" Y") != std::string::npos)
+                continue;
+            const std::size_t at = l.find(" E");
+            if (at == std::string::npos)
+                continue;
+            const double ne = std::stod(l.substr(at + 2));
+            n += ne < e ? 1 : 0;
+            e = ne;
+        }
+        return n;
+    };
+    const std::size_t by_length = retractions(cube_gcode(s));
+    s.retract_only_crossing_walls = true;
+    const std::string inside = cube_gcode(s);
+    const std::size_t crossing = retractions(inside);
+    INFO(by_length << " retractions by length, " << crossing << " only crossing walls");
+    CHECK(by_length > 20);
+    CHECK(crossing <= 2);
+    // The settings round trip.
+    CHECK(parse_settings(settings_json(s)).retract_only_crossing_walls);
+    CHECK_FALSE(parse_settings("{}").retract_only_crossing_walls);
+}
+
 TEST_CASE("travels go round the hole of a tube instead of across it", "[gcode]") {
     Settings s = test_printer();
     std::ostringstream out;

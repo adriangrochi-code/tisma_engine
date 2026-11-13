@@ -927,7 +927,7 @@ public:
     explicit Emitter(const Settings& s)
         : relative_(relative_e(s)), dialect_(dialect_of(s.flavor)), time_(kinematics_of(s)),
           retract_(s.retract_length), retract_feed_(s.retract_speed), lift_(s.retract_lift),
-          min_travel_(s.retract_min_travel), z_feed_(s.travel_z_speed), marlin_(dialect_of(s.flavor).m204_print_travel),
+          min_travel_(s.retract_min_travel), only_crossing_(s.retract_only_crossing_walls), z_feed_(s.travel_z_speed), marlin_(dialect_of(s.flavor).m204_print_travel),
           accel_print_(s.acceleration), accel_travel_(s.travel_acceleration), travel_accel_(s.accel_travel),
           short_travel_accel_(s.accel_short_travel > 0.0 ? s.accel_short_travel : s.accel_travel) {
         const double r = s.filament_diameter / 2.0;
@@ -1708,7 +1708,11 @@ public:
         const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
         TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
         const TravelPlan* plan = ready ? planned : &own;
-        const bool retracting = force_retract || plan->leaves_part || plan->length > min_travel_;
+        // With retraction.only_crossing_walls, a travel that stays inside the
+        // part (no outer wall, no air) does not retract however long
+        // (toolpath_time.md, rule 5); without, min_travel decides (rule 5 of
+        // gcode_motion.md).
+        const bool retracting = force_retract || plan->leaves_part || (!only_crossing_ && plan->length > min_travel_);
         if (plan->length > 0.0)
             travel_acceleration(plan->length);
         if (retracting) {
@@ -2360,6 +2364,7 @@ private:
     double z_limit_ = 5.0; // mm/s Z may move while extruding
     double e_scale_ = 1.0; // the E written per mm of filament
     double retract_, retract_feed_, lift_, min_travel_;
+    bool only_crossing_ = false;
     double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
     // Accelerations (speeds_accels.md, rules 10 to 13): Marlin's M204 P for
     // printing and T for travels, or M204 S for both; as last set.
@@ -4462,7 +4467,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             for (const ToolpathPoint& p : st.path.points)
                 w += p.width;
             section[k] = w / double(st.path.points.size()) * h;
-            retracts[k] = st.path.retract || !st.from || st.travel.leaves_part || st.travel.length > s.retract_min_travel;
+            retracts[k] = st.path.retract || !st.from || st.travel.leaves_part ||
+                          (!s.retract_only_crossing_walls && st.travel.length > s.retract_min_travel);
             order.push_back(k);
         }
         // Each extrusion's ramps: the flow it starts from, the one it ends at.

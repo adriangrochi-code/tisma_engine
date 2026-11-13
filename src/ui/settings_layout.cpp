@@ -342,6 +342,7 @@ const std::vector<SectionLayout>& material_layout() {
             {"retraction.unretract_speed", A},
             {"retraction.restart_extra", A},
             {"retraction.on_layer_change", N},
+            {"retraction.only_crossing_walls", A},
             {"retraction.firmware", A}}},
           {"wipe", T::SubWipe,
            {{"retraction.wipe", N},
