@@ -12377,5 +12377,11 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   los dibujos, la vista 3D y las filas elegidas; filas de ajustes y tira de herramientas que se apilan o quedan en
   iconos con letra grande; pruebas a letra máxima en iOS (`testLargestTextSize`) y al doble en Android (nada fuera
   de la ventana en las 8 pantallas). Sin probar con VoiceOver o TalkBack en un teléfono real ni con cuentas reales.
+- Índice de la biblioteca (ad3372c, p2p_library 3 ter bis): más de 64 MB comprimido o 256 MB sin comprimir se
+  rechaza con «actualizá la app» en las dos apps; queda el índice guardado. CI de iOS verde.
+- Decisión (13-11): la API nueva del motor no se adopta todavía. La vista previa por capas (88300d5) da lo mismo que
+  `GcodeLayers` compartido, que además lee el G-code de la nube; el análisis por la API (fdb4f08) toma las
+  condiciones del 3MF y no da el mapa de seguridad ni acepta las caras tocadas, que la app usa con
+  `analyze --case --mesh`. Se retoma si el motor suma caso y mapa a la API.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
