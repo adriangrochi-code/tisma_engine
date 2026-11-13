@@ -168,6 +168,19 @@ final class BridgeTests: XCTestCase {
         XCTAssertNil(problem)
         XCTAssertEqual(lines.first?.key, "verdict")
         XCTAssertGreaterThan(map?.triangles ?? 0, 0, "the safety map")
+
+        // The same case through the engine's library (dev 76d53f8): progress comes, and the report and map agree.
+        var stages: [String] = []
+        let job = Engine.AnalysisJob()
+        let (viaLib, libProblem, libVoxels) = EngineeringView.run(model: nil, printer: printer.name,
+                                                                  nozzle: printer.nozzles.first?.doubleValue ?? 0.4, filament: f,
+                                                                  caseJson: caseJson, requiredSafety: 2, job: job) { _, stage in stages.append(stage) }
+        let libMap = libVoxels.flatMap { EngineeringBridge.shared.stressMap(path: $0.path, maxFaces: 400_000) }
+        print("ENGINE-ANALYZE library lines=\(viaLib.map { "\($0.key)=\($0.value)" }) problem=\(libProblem ?? "") map=\(libMap?.triangles ?? -1) stages=\(Set(stages))")
+        XCTAssertNil(libProblem)
+        XCTAssertEqual(viaLib.first?.key, "verdict")
+        XCTAssertEqual(viaLib.first?.value, lines.first?.value, "the library and the command line agree")
+        XCTAssertGreaterThan(libMap?.triangles ?? 0, 0, "the safety map from the library")
     }
 
     /// MA2 and rule 12 through the engine's library: progress comes, the cube is sliced, and the summary reads (with
