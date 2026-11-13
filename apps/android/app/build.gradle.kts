@@ -24,24 +24,37 @@ android {
         applicationId = "net.tismaservidores.tisma"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
+        // The stores need a new number for each upload: the release workflow passes its run number.
+        versionCode = (project.findProperty("tisma.versionCode") as String?)?.toIntOrNull() ?: 2
         versionName = "0.1.0-beta.1"
         // The project's Ed25519 public key for the updates (app_updates.md, rules 5 and 13), as 64 hex digits:
         // -Ptisma.updatesKey=…; empty until the owner makes the key, and then the updater stays off.
         buildConfigField("String", "UPDATES_KEY", "\"" + (project.findProperty("tisma.updatesKey") as String? ?: "") + "\"")
     }
 
+    // The upload key for Google Play (apps/android/BETA.md, «Publicar»): only from the environment, never in the
+    // repository. Without it, a release build is not signed and cannot go to the store.
+    val uploadKeystore = System.getenv("TISMA_UPLOAD_KEYSTORE")?.takeIf { it.isNotBlank() && file(it).isFile }
+    if (uploadKeystore != null) {
+        signingConfigs.create("upload") {
+            storeFile = file(uploadKeystore)
+            storePassword = System.getenv("TISMA_UPLOAD_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("TISMA_UPLOAD_KEY_ALIAS")
+            keyPassword = System.getenv("TISMA_UPLOAD_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            if (uploadKeystore != null) signingConfig = signingConfigs.getByName("upload")
         }
         // For testers: shrunk by R8 (the arm64 APK goes from about 33 MB to 9 MB, without SolidCraft) and signed
         // with the debug key until the owner's release key exists. The tests run on debug: a beta is smoke-tested
         // on an emulator before it is handed out.
         create("beta") {
             initWith(getByName("release"))
-            isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
         }

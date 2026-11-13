@@ -1,0 +1,163 @@
+name: Stores
+
+# The beta builds for the stores (apps/ios/PLAN.md and apps/android/BETA.md, «Publicar»): a signed App Bundle to
+# Google Play's internal testing and a signed archive to TestFlight. Started by hand. Each job checks its secrets
+# first and, while the owner has not loaded them, says so and stops without failing. The secrets are only read
+# here, never written to the repository or printed.
+on:
+  workflow_dispatch:
+    inputs:
+      play_status:
+        description: "Play release status: completed, or draft while the app has never been published"
+        default: draft
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  play:
+    name: Google Play (internal testing)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/android
+    env:
+      HAS_SECRETS: ${{ secrets.PLAY_UPLOAD_KEYSTORE_B64 != '' && secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - name: Secrets for Google Play
+        if: env.HAS_SECRETS != 'true'
+        working-directory: .
+        run: |
+          echo "::notice::No Play secrets yet (PLAY_UPLOAD_KEYSTORE_B64, PLAY_KEYSTORE_PASSWORD, PLAY_KEY_ALIAS, PLAY_KEY_PASSWORD, PLAY_SERVICE_ACCOUNT_JSON): nothing to upload"
+      - uses: actions/checkout@v4
+        if: env.HAS_SECRETS == 'true'
+      - uses: actions/setup-java@v4
+        if: env.HAS_SECRETS == 'true'
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install the NDK the engine is built with
+        if: env.HAS_SECRETS == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" > /dev/null
+      - name: Build the signed App Bundle
+        if: env.HAS_SECRETS == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_B64 }}
+          TISMA_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_KEYSTORE_PASSWORD }}
+          TISMA_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_KEY_ALIAS }}
+          TISMA_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_KEY_PASSWORD }}
+        run: |
+          export TISMA_UPLOAD_KEYSTORE="$RUNNER_TEMP/upload.jks"
+          echo "$KEYSTORE_B64" | base64 -d > "$TISMA_UPLOAD_KEYSTORE"
+          ./gradlew --no-daemon :app:bundleRelease -Ptisma.versionCode=$((1000 + GITHUB_RUN_NUMBER))
+          rm -f "$TISMA_UPLOAD_KEYSTORE"
+      - name: Upload to the internal testing track
+        if: env.HAS_SECRETS == 'true'
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          key="$RUNNER_TEMP/play.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$key"
+          python3 ../../tools/play_upload.py --service-account "$key" --package net.tismaservidores.tisma \
+            --bundle app/build/outputs/bundle/release/app-release.aab --track internal --status "${{ inputs.play_status }}"
+          rm -f "$key"
+
+  testflight:
+    name: TestFlight
+    runs-on: macos-15
+    env:
+      HAS_SECRETS: ${{ secrets.IOS_DIST_CERT_P12_B64 != '' && secrets.IOS_PROFILE_B64 != '' && secrets.ASC_KEY_P8_B64 != '' }}
+    steps:
+      - name: Secrets for the App Store
+        if: env.HAS_SECRETS != 'true'
+        run: |
+          echo "::notice::No App Store secrets yet (APPLE_TEAM_ID, IOS_DIST_CERT_P12_B64, IOS_DIST_CERT_PASSWORD, IOS_PROFILE_B64, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_B64): nothing to upload"
+      - uses: actions/checkout@v4
+        if: env.HAS_SECRETS == 'true'
+      - uses: actions/setup-java@v4
+        if: env.HAS_SECRETS == 'true'
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: The shared module for devices
+        if: env.HAS_SECRETS == 'true'
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :shared:linkReleaseFrameworkIosArm64
+      - name: Get the engine as an iOS library (the CI's xcframework of dev)
+        if: env.HAS_SECRETS == 'true'
+        working-directory: apps/ios
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=tisma-engine-ios-xcframework&per_page=30" \
+            --jq '[.artifacts[] | select(.expired == false and .workflow_run.head_branch == "dev")] | sort_by(.created_at) | last | .id // empty')
+          test -n "$id" || { echo "::error::No TismaEngine.xcframework from dev"; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$RUNNER_TEMP/engine.zip"
+          mkdir -p Engine/TismaEngine.xcframework && unzip -q "$RUNNER_TEMP/engine.zip" -d Engine/TismaEngine.xcframework
+      - name: Get XcodeGen (THIRD_PARTY.md, build tools)
+        if: env.HAS_SECRETS == 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" https://github.com/yonaskolb/XcodeGen/releases/download/2.42.0/xcodegen.zip
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
+          echo "$RUNNER_TEMP/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: The signing certificate and profile in a temporary keychain
+        if: env.HAS_SECRETS == 'true'
+        env:
+          CERT_B64: ${{ secrets.IOS_DIST_CERT_P12_B64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+        run: |
+          kc="$RUNNER_TEMP/build.keychain-db"; pw=$(uuidgen)
+          security create-keychain -p "$pw" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$pw" "$kc"
+          echo "$CERT_B64" | base64 -d > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$kc"
+          security set-key-partition-list -S apple-tool:,apple: -k "$pw" "$kc" > /dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/dist.p12"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$PROFILE_B64" | base64 -d > "$RUNNER_TEMP/tisma.mobileprovision"
+          uuid=$(security cms -D -i "$RUNNER_TEMP/tisma.mobileprovision" | plutil -extract UUID raw -)
+          name=$(security cms -D -i "$RUNNER_TEMP/tisma.mobileprovision" | plutil -extract Name raw -)
+          cp "$RUNNER_TEMP/tisma.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+          echo "PROFILE_NAME=$name" >> "$GITHUB_ENV"
+      - name: Archive and export the app
+        if: env.HAS_SECRETS == 'true'
+        working-directory: apps/ios
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodegen generate
+          xcodebuild archive -project Tisma.xcodeproj -scheme Tisma -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Tisma.xcarchive" \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" CURRENT_PROJECT_VERSION=$((1000 + GITHUB_RUN_NUMBER)) \
+            | tail -30
+          cat > "$RUNNER_TEMP/export.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict><key>net.tismaservidores.tisma</key><string>$PROFILE_NAME</string></dict>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Tisma.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath "$RUNNER_TEMP/export" | tail -20
+      - name: Upload to TestFlight
+        if: env.HAS_SECRETS == 'true'
+        env:
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          KEY_B64: ${{ secrets.ASC_KEY_P8_B64 }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$KEY_B64" | base64 -d > "$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
+          xcrun altool --upload-app -t ios -f "$RUNNER_TEMP"/export/*.ipa --apiKey "$KEY_ID" --apiIssuer "$ISSUER"
+          rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"

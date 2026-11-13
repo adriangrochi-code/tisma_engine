@@ -44,3 +44,23 @@ Las actualizaciones automáticas están apagadas en esta beta. Cada versión nue
   exportar y compartir como `.tismalib`.
 - **El CAD** usa SolidCraft dentro de la app; no se probó en teléfonos reales.
 - Ninguna impresión real se hizo con esta beta todavía: revisá el G-code antes de imprimir algo grande.
+
+
+## Publicar en Google Play, prueba interna (lo que carga el dueño)
+
+El flujo `.github/workflows/stores.yml` («Stores», a mano) arma el App Bundle firmado (`:app:bundleRelease`, con R8)
+y lo sube a la pista `internal` con `tools/play_upload.py` (la API de Google Play Developer v3, solo biblioteca
+estándar). Sin estos secretos del repositorio dice qué falta y termina sin fallar:
+
+- [ ] Cuenta de Google Play Console y la app creada con el identificador `net.tismaservidores.tisma` (o el que
+      decida el dueño; no cambia después de publicar).
+- [ ] La clave de subida (un .jks propio; Play firma la versión final con la suya, «Play App Signing»):
+      `PLAY_UPLOAD_KEYSTORE_B64` (en base64), `PLAY_KEYSTORE_PASSWORD`, `PLAY_KEY_ALIAS`, `PLAY_KEY_PASSWORD`.
+- [ ] Una cuenta de servicio de Google Cloud con acceso a la API, invitada en Play Console con permiso de versiones:
+      su JSON en `PLAY_SERVICE_ACCOUNT_JSON`.
+- [ ] La primera subida va como borrador (`play_status` = `draft`) mientras la app no se publicó nunca; después,
+      `completed`.
+- [ ] Los testers de la prueba interna (correos o un grupo de Google).
+- [ ] Más adelante: los productos de suscripción de Google Play y su `google_play` en `store_products` del servidor.
+
+El código de versión es `1000 + número de corrida`. Sin probar todavía con cuentas reales.

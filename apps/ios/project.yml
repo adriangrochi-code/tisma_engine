@@ -71,6 +71,10 @@ targets:
         # Signed to run locally (no team): the simulator's Keychain needs a signed app.
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
+      # The store build (.github/workflows/stores.yml): the shared module for devices, release.
+      configs:
+        Release:
+          FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../android/shared/build/bin/iosArm64/releaseFramework
   TismaTests:
     type: bundle.unit-test
     platform: iOS

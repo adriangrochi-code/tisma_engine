@@ -104,6 +104,25 @@ se marca con la fecha.
 | 17 Teclado numérico | sí | teclado decimal (P22, 12-11; con signo en los desplazamientos) | — |
 | 18, 19 Rendimiento | medido | sin medir | se mide en un iPhone cuando haya cuenta de Apple |
 
+## Publicar en TestFlight (lo que carga el dueño)
+
+El flujo `.github/workflows/stores.yml` (se lanza a mano, «Stores») firma la app y la sube a TestFlight. Sin estos
+secretos del repositorio (Settings › Secrets and variables › Actions) dice qué falta y termina sin fallar:
+
+- [ ] Cuenta de Apple Developer (Organización si va a nombre de la empresa) y el equipo: `APPLE_TEAM_ID`.
+- [ ] El identificador de la app `net.tismaservidores.tisma` registrado (o el que decida el dueño; no cambia después de
+      publicar) y la app creada en App Store Connect.
+- [ ] Certificado «Apple Distribution» exportado como .p12: `IOS_DIST_CERT_P12_B64` (en base64) y su contraseña
+      `IOS_DIST_CERT_PASSWORD`.
+- [ ] Perfil de aprovisionamiento «App Store» para ese identificador: `IOS_PROFILE_B64` (el .mobileprovision en
+      base64).
+- [ ] Clave de la API de App Store Connect (rol App Manager): `ASC_KEY_ID`, `ASC_ISSUER_ID` y el .p8 en base64,
+      `ASC_KEY_P8_B64`.
+- [ ] En App Store Connect: el acceso de prueba interna de TestFlight y, para pruebas externas, la revisión de la beta.
+- [ ] Más adelante: los productos de suscripción (StoreKit) y su `app_store` en `store_products` del servidor.
+
+Cada subida lleva el número de compilación `1000 + número de corrida`. Sin probar todavía con cuentas reales.
+
 ## Pendiente del dueño
 
 - Cuenta de Apple Developer (TestFlight y StoreKit); productos de suscripción en App Store Connect y Google Play.
