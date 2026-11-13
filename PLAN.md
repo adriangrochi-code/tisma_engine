@@ -283,9 +283,8 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [ ] Medir el corte en GPU contra la CPU en una GPU real (acá solo hay lavapipe)
 - [x] Prueba de áreas por capa con piezas de área conocida (pirámide, cubo; esfera: el volumen cortado coincide con el de la malla al 0,0002 %); tiempos medidos
 - [x] Ajustes propios (`docs/CONFIG.md`) y `slice` con el corte completo: modos de relleno, compensación XY y de primera capa
-- [ ] Contrastar el corte con los casos de la ficha `docs/spec/features/slicing.md` cuando esté en `main` (simplificación, alturas variables). Hecho
-  (2026-11-13, `tests/test_slicing_spec.cpp`): C1 a C5 y C9 a C16 cumplen. Quedan C6 a C8 (grietas), C17 (tramos tras
-  simplificar) y C18 y C19 (errores de altura)
+- [x] Contrastar el corte con los casos de la ficha `docs/spec/features/slicing.md` cuando esté en `main` (simplificación, alturas variables). Hecho
+  (2026-11-13, `tests/test_slicing_spec.cpp`): C1 a C19 cumplen; C6 y C7 después de arreglar el cierre de grietas
 
 ## Estado de F2
 

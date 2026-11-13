@@ -14196,3 +14196,17 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   Cumplen todos sin cambiar el motor.
 - **Sigue:** C6 a C8 (grietas de 0,05, 5 y 12 mm), C17 (tramos del perímetro con `simplify_tolerance` 0 y 0,5),
   C18 y C19 (capas más altas que la boquilla).
+
+## 2026-11-13 — `slicing.md` C6 a C8, C17 a C19; cierre de grietas arreglado
+
+- **Encontrado (C6):** el motor cerraba grietas de hasta `slicing.gap_closing_radius` (0,049 mm), y la regla 7 dice
+  hasta el doble (0,098). Una grieta de 0,05 mm dejaba la sección abierta y descartada: el cubo de C6 salía vacío.
+  Tampoco unía extremos abiertos más lejos (la ficha pide cerrar al menos 5 mm).
+- **Arreglo** (`src/slice/layers.cpp`, `close_cracks`): primero hasta 2 × el radio; si queda algo abierto, se unen
+  los extremos más cercanos con un tramo recto hasta 10 mm. C6: ancho 20,05; C7 (5 mm): 25,0 (la ficha 24,94, el
+  modelo 25); C8 (12 mm): la sección se descarta y se cuenta, como pide la ficha.
+- **C17:** con `simplify_tolerance` 0, la capa 11 del cilindro de 128 lados tiene los 128 lados (más los puntos donde
+  el plano cruza la diagonal de cada cara); con 0,5 quedan entre 12 y 24 puntos (Tisma Slicer: 65 y 16, con la
+  tolerancia propia de su G-code). **C18 y C19:** `check_settings` rechaza capas más altas que la boquilla.
+- Pasa la batería completa (1100 casos). No probado en una impresora.
+- **Sigue:** contrastar con `perimeters.md` (PLAN, F2).

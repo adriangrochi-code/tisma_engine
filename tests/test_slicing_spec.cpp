@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -203,4 +204,81 @@ TEST_CASE("slicing.md C5: the cone's edge is the cone's radius at the middle of 
                 far = std::max(far, std::hypot(to_mm(q.x), to_mm(q.y)));
         CHECK_THAT(far, WithinAbs(radius, 0.01));
     }
+}
+
+namespace {
+
+// The cube of C1 with its right face moved `shift` mm out, on its own: the
+// other faces end at x = 10, so every section has two cracks `shift` wide.
+TriangleMesh cracked_cube(float shift) {
+    TriangleMesh m;
+    const float a = 10.0f, h = 10.0f, r = a + shift;
+    const Vec3f v[8] = {{-a, -a, 0}, {a, -a, 0}, {a, a, 0}, {-a, a, 0}, {-a, -a, h}, {a, -a, h}, {a, a, h}, {-a, a, h}};
+    const int faces[5][4] = {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4}, {2, 3, 7, 6}, {3, 0, 4, 7}};
+    for (const auto& f : faces) {
+        m.add_triangle(v[f[0]], v[f[1]], v[f[2]]);
+        m.add_triangle(v[f[0]], v[f[2]], v[f[3]]);
+    }
+    const Vec3f q[4] = {{r, -a, 0}, {r, a, 0}, {r, a, h}, {r, -a, h}};
+    m.add_triangle(q[0], q[1], q[2]);
+    m.add_triangle(q[0], q[2], q[3]);
+    return m;
+}
+
+} // namespace
+
+TEST_CASE("slicing.md C6-C8: cracks of 0.05 and 5 mm close; one of 12 mm drops the section", "[slicing-spec]") {
+    Settings s;
+    for (const auto& [shift, width] : {std::pair{0.05f, 20.05}, {5.0f, 25.0}}) {
+        INFO("crack " << shift);
+        const SlicedModel sliced = slice(cracked_cube(shift), s);
+        REQUIRE(sliced.layers.size() == 50);
+        CHECK(sliced.open_contours == 0);
+        for (const Polygons& r : sliced.regions) {
+            REQUIRE(islands(r) == 1);
+            const Box2 b = bounds(r);
+            // The spec's own program gave 24.94 for 5 mm; the engine closes to the model's 25.
+            CHECK_THAT(b.x1 - b.x0, WithinAbs(width, 0.07));
+        }
+    }
+    // 12 mm: not closed. Every section is dropped (never printed open) and counted.
+    const SlicedModel wide = slice(cracked_cube(12.0f), s);
+    CHECK(wide.open_contours > 0);
+    for (const Polygons& r : wide.regions)
+        CHECK(area_mm2(r) < 1.0);
+}
+
+TEST_CASE("slicing.md C17: simplify_tolerance takes points off the cylinder's outline", "[slicing-spec]") {
+    TriangleMesh cyl;
+    const int n = 128;
+    for (int k = 0; k < n; ++k) {
+        const double a0 = 2.0 * 3.14159265358979323846 * k / n, a1 = 2.0 * 3.14159265358979323846 * (k + 1) / n;
+        const Vec3f b0{float(10 * std::cos(a0)), float(10 * std::sin(a0)), 0}, b1{float(10 * std::cos(a1)), float(10 * std::sin(a1)), 0};
+        const Vec3f t0{b0.x, b0.y, 5}, t1{b1.x, b1.y, 5};
+        cyl.add_triangle({0, 0, 0}, b1, b0);
+        cyl.add_triangle({0, 0, 5}, t0, t1);
+        cyl.add_triangle(b0, b1, t1);
+        cyl.add_triangle(b0, t1, t0);
+    }
+    Settings s;
+    s.simplify_tolerance = 0.0;
+    const SlicedModel exact = slice(cyl, s);
+    s.simplify_tolerance = 0.5;
+    const SlicedModel coarse = slice(cyl, s);
+    REQUIRE(exact.regions.size() > 11);
+    REQUIRE(coarse.regions.size() > 11);
+    // Layer 11 (from 1): every one of the 128 sides with 0 (and the points
+    // where the plane crosses each side's diagonal); far fewer with 0.5 (the
+    // spec's program: 65 and 16, with its G-code's own tolerance).
+    CHECK(exact.regions[10].front().size() >= 128);
+    const std::size_t few = coarse.regions[10].front().size();
+    CHECK(few >= 12);
+    CHECK(few <= 24);
+}
+
+TEST_CASE("slicing.md C18, C19: layers thicker than the nozzle are refused", "[slicing-spec]") {
+    CHECK_THROWS_WITH(check_settings(parse_settings(R"({"layers": {"first_height": 0.5}})")),
+                      Catch::Matchers::ContainsSubstring("thicker than 0.4 mm"));
+    CHECK_THROWS_WITH(check_settings(parse_settings(R"({"layers": {"height": 0.5}})")),
+                      Catch::Matchers::ContainsSubstring("thicker than 0.4 mm"));
 }
