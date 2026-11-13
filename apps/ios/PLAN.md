@@ -99,7 +99,7 @@ se marca con la fecha.
 | 12 Laminar | avance, cancelar, memoria, costo, vista previa | vista previa; avance por etapas, cancelar y memoria con la API de trabajos del motor (P11, P12, 12-11; en dev desde 4986dc4) | P13: el costo (el motor lo da null por ahora) |
 | 13 Ingeniería | caras tocadas, punto, dirección, temperatura, mapa, relleno mínimo | caras tocadas, mapa | P16b: relleno mínimo en una pieza suelta (el motor lo agrega). Hecho: punto, dirección y temperatura (P14, P15) y relleno mínimo en proyectos 3MF (P16), 12-11 y 13-11 |
 | 14 Impresoras | búsqueda en la red, cámara | las cinco clases, mandar, pausar, seguir, parar, avisos | — (búsqueda en la red con Bonjour, P17, y cámara, P18, 12-11) |
-| 15 Nube | Google, analizar en la nube, impresoras remotas, pagos | cuenta, laminar en la nube | P19: analizar en la nube; P20: impresoras remotas de los puentes; restaurar compras con StoreKit 2 al abrir la sesión (12-11); comprar y Google esperan al dueño (cuenta de Apple) |
+| 15 Nube | Google, analizar en la nube, impresoras remotas, pagos | cuenta, laminar en la nube | P20: impresoras remotas de los puentes; analizar en la nube (P19, 13-11); restaurar compras con StoreKit 2 al abrir la sesión (12-11); comprar y Google esperan al dueño (cuenta de Apple) |
 | 16 Ayuda sin conexión | sí | la ayuda del paquete en Más, con búsqueda (P21, 12-11) | — |
 | 17 Teclado numérico | sí | teclado decimal (P22, 12-11; con signo en los desplazamientos) | — |
 | 18, 19 Rendimiento | medido | sin medir | se mide en un iPhone cuando haya cuenta de Apple |

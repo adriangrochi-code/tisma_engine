@@ -214,3 +214,5 @@
 "Save it as a project to look for the lightest infill." = "Guárdalo como proyecto para buscar el relleno mínimo.";
 "No lighter infill holds: keep the one you have." = "Ningún relleno más liviano aguanta: deja el que tienes.";
 "Infill %d %% applied to the settings." = "Relleno del %d %% aplicado a los ajustes.";
+"Analyze in the cloud" = "Analizar en la nube";
+"Lightest infill in the cloud" = "Relleno mínimo en la nube";

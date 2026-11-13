@@ -33,6 +33,8 @@ struct EngineeringView: View {
     @State private var map: StressMapData?
     @State private var showMap = true
     @State private var problem: String?
+    @State private var cloudLine: String?
+    @State private var cloudLines: [ReportLine] = []
     @State private var lightest: Int?
     @State private var lightestNote: String?
 
@@ -111,6 +113,18 @@ struct EngineeringView: View {
                 }
                 if let lightestNote { Text(lightestNote).font(.footnote) }
             }
+            // cloud.md, rule 6 (parity P19): the project analyzed in Tisma Cloud, with the conditions it carries.
+            if model?.pathExtension.lowercased() == "3mf", Keychain.read("cloud.token") != nil {
+                Section("Tisma Cloud") {
+                    Button("Analyze in the cloud") { cloud(lightest: false) }.disabled(busy)
+                    Button("Lightest infill in the cloud") { cloud(lightest: true) }.disabled(busy)
+                    if let cloudLine { Text(cloudLine).font(.footnote) }
+                    ForEach(Array(cloudLines.enumerated()), id: \.offset) { _, l in
+                        let (title, value) = Self.show(l)
+                        LabeledContent(title, value: value)
+                    }
+                }
+            }
             if !lines.isEmpty {
                 Section("Result") {
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, l in
@@ -150,6 +164,31 @@ struct EngineeringView: View {
             if marking == "fixed" { fixedPick = f; fixed = "touched" } else { loadPick = f; loaded = "touched"; loadPoint = nil }
         }
         map = nil; lines = []
+    }
+
+    private func cloud(lightest: Bool) {
+        guard let project = model, let token = Keychain.read("cloud.token") else { return }
+        busy = true; cloudLines = []; cloudLine = String(localized: "Sending…")
+        let (server, q, spanish) = (Prefs.server, quality, Locale.current.language.languageCode?.identifier == "es")
+        Task.detached {
+            do {
+                let id = try CloudBridge.shared.submitAnalysis(server: server, token: token, path: project.path,
+                                                               name: project.lastPathComponent, lightest: lightest, quality: q)
+                while true {
+                    let l = try CloudBridge.shared.jobLine(server: server, token: token, id: id, spanish: spanish)
+                    await MainActor.run { cloudLine = l.text }
+                    if l.finished {
+                        let summary = l.done ? ((try? CloudBridge.shared.jobSummary(server: server, token: token, id: id)) ?? []) : []
+                        await MainActor.run { cloudLines = summary; busy = false }
+                        return
+                    }
+                    try await Task.sleep(for: .seconds(3))
+                }
+            } catch {
+                let m = error.localizedDescription
+                await MainActor.run { cloudLine = m; busy = false }
+            }
+        }
     }
 
     private func findLightest() {

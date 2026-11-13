@@ -71,6 +71,27 @@ object CloudBridge {
     fun sendAppStorePurchase(server: String, token: String, productId: String, signedTransaction: String): String =
         CloudClient(server, token).purchase(StorePurchase("app_store", productId, signedTransaction = signedTransaction)).plan
 
+    /**
+     * cloud.md, rule 6 (parity P19): the 3MF project at [path] analyzed in the cloud, with the conditions it carries;
+     * [lightest] looks for the lightest infill instead (plan class `fea_optimize`). The job's id.
+     */
+    @Throws(CloudException::class)
+    fun submitAnalysis(server: String, token: String, path: String, name: String, lightest: Boolean, quality: String): String {
+        val looks = net.tisma.io.FileInput(path).use { looksLikeZip(it) }
+        if (!looks) throw CloudException(422, "Not a 3MF project")
+        val size = net.tisma.io.FileInput(path).use { measure(it) }
+        val q = FeaQuality.entries.firstOrNull { it.wire == quality } ?: FeaQuality.NORMAL
+        val request = JobRequest.Fea(if (lightest) FeaMode.LIGHTEST_INFILL else FeaMode.ANALYZE, q, 0, 0)
+        return CloudClient(server, token).submit(request, name, size) { net.tisma.io.FileInput(path) }.id
+    }
+
+    /** A finished job's summary as key and value lines (the verdict, safety, density…), for the screen. */
+    @Throws(CloudException::class)
+    fun jobSummary(server: String, token: String, id: String): List<net.tisma.app.engine.ReportLine> =
+        CloudClient(server, token).job(id).summary.entries.map { (k, v) ->
+            net.tisma.app.engine.ReportLine(k, (v as? kotlinx.serialization.json.JsonPrimitive)?.content ?: v.toString())
+        }
+
     /** A job's state for the screen: «queued», «running 40 %», «done», or «failed: …» in the phone's language. */
     @Throws(CloudException::class)
     fun jobLine(server: String, token: String, id: String, spanish: Boolean): JobLine {
