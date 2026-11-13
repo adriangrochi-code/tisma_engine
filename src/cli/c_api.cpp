@@ -3,13 +3,14 @@
 // the command line's `slice` on a thread of the context's own, and reports
 // its stages through a JobHook (slice/job.hpp). Own design.
 //
-// First version: open, settings, memory estimate, slice with progress and
-// cancel, summary and G-code. The preview by layers and the analysis answer
-// "not implemented yet" (TISMA_ERROR) for now.
+// Open, settings, memory estimate, slice with progress and cancel, summary,
+// G-code, and the preview by layers. The analysis answers "not implemented
+// yet" (TISMA_ERROR) for now.
 
 #include "cli/cli.hpp"
 #include "config/settings.hpp"
 #include "io/model.hpp"
+#include "gcode/preview.hpp"
 #include "slice/job.hpp"
 
 #include <tisma/tisma_engine.h>
@@ -56,6 +57,10 @@ struct tisma_ctx {
     // The strings handed out, one of each kind.
     std::string message, settings_text, summary_out, error_out;
     std::string stage_out;
+
+    // The finished slice's preview, read from its G-code the first time it
+    // is asked for; dropped when another job starts.
+    std::optional<tisma::GcodePreview> preview;
 };
 
 namespace {
@@ -356,6 +361,7 @@ tisma_status tisma_slice_start(tisma_ctx* ctx) {
     ctx->hook.cancel.store(false);
     ctx->hook.percent.store(0);
     ctx->hook.stage.store("loading");
+    ctx->preview.reset();
     ctx->state.store(TISMA_RUNNING);
     try {
         ctx->worker = std::thread(run_job, ctx, ctx->model, ctx->settings->filament_cost);
@@ -424,14 +430,92 @@ tisma_status tisma_read_gcode(tisma_ctx* ctx, uint64_t offset, char* buffer, siz
     return ok();
 }
 
-int tisma_layer_count(tisma_ctx*) { return 0; }
+// The preview of the finished slice: its G-code read as the desktop's
+// preview reads it (gcode/preview.hpp), once. Null without a finished slice
+// or when the G-code cannot be read.
+static const tisma::GcodePreview* preview_of(tisma_ctx* ctx) {
+    if (!ctx || ctx->state.load() != TISMA_DONE)
+        return nullptr;
+    if (!ctx->preview) {
+        const std::string text = read_text(ctx->dir / "result.gcode");
+        if (text.empty())
+            return nullptr;
+        const double diameter = ctx->settings ? ctx->settings->filament_diameter : 1.75;
+        ctx->preview = tisma::read_gcode_preview(text, diameter > 0.0 ? diameter : 1.75);
+    }
+    return &*ctx->preview;
+}
 
-double tisma_layer_z(tisma_ctx*, int) { return 0.0; }
+static uint8_t path_type(tisma::LineKind kind) {
+    using K = tisma::LineKind;
+    switch (kind) {
+    case K::Travel:
+        return TISMA_PATH_TRAVEL;
+    case K::OuterWall:
+        return TISMA_PATH_OUTER_WALL;
+    case K::InnerWall:
+    case K::OverhangWall:
+        return TISMA_PATH_INNER_WALL;
+    case K::SparseInfill:
+        return TISMA_PATH_SPARSE_INFILL;
+    case K::SolidInfill:
+        return TISMA_PATH_SOLID_INFILL;
+    case K::TopSolidInfill:
+        return TISMA_PATH_TOP;
+    case K::BridgeInfill:
+        return TISMA_PATH_BRIDGE;
+    case K::Support:
+    case K::SupportInterface:
+        return TISMA_PATH_SUPPORT;
+    case K::SkirtBrim:
+        return TISMA_PATH_SKIRT;
+    default:
+        return TISMA_PATH_OTHER;
+    }
+}
 
-tisma_status tisma_preview_segments(tisma_ctx* ctx, int, int, size_t, tisma_segment*, size_t, size_t* written) {
+int tisma_layer_count(tisma_ctx* ctx) {
+    const tisma::GcodePreview* p = preview_of(ctx);
+    return p ? static_cast<int>(p->layers.size()) : 0;
+}
+
+double tisma_layer_z(tisma_ctx* ctx, int layer) {
+    const tisma::GcodePreview* p = preview_of(ctx);
+    if (!p || layer < 0 || static_cast<std::size_t>(layer) >= p->layers.size())
+        return 0.0;
+    return p->layers[static_cast<std::size_t>(layer)].z;
+}
+
+tisma_status tisma_preview_segments(tisma_ctx* ctx, int first, int count, size_t skip, tisma_segment* out,
+                                    size_t capacity, size_t* written) {
     if (written)
         *written = 0;
-    return fail(ctx, TISMA_ERROR, not_yet);
+    if (!ctx || !written || (!out && capacity > 0) || first < 0 || count < 0)
+        return fail(ctx, TISMA_BAD_ARGUMENT, "null context, output or written, or a negative layer or count");
+    if (ctx->state.load() != TISMA_DONE)
+        return fail(ctx, TISMA_NOT_READY, "no finished slice");
+    const tisma::GcodePreview* p = preview_of(ctx);
+    if (!p)
+        return fail(ctx, TISMA_CANNOT_READ, "the G-code is gone from the context's folder");
+    const std::size_t from = std::min(static_cast<std::size_t>(first), p->layers.size());
+    const std::size_t to = std::min(from + static_cast<std::size_t>(count), p->layers.size());
+    std::size_t index = 0, n = 0;
+    for (std::size_t l = from; l < to && n < capacity; ++l) {
+        const tisma::PreviewLayer& layer = p->layers[l];
+        if (index + layer.count <= skip) { // the whole layer was handed already
+            index += layer.count;
+            continue;
+        }
+        for (std::size_t m = 0; m < layer.count && n < capacity; ++m, ++index) {
+            if (index < skip)
+                continue;
+            const tisma::PreviewMove& move = p->moves[layer.first + m];
+            out[n++] = {move.x0, move.y0, move.z0, move.x1, move.y1, move.z1,
+                        move.width, move.height, move.feed, path_type(move.kind)};
+        }
+    }
+    *written = n;
+    return ok();
 }
 
 tisma_status tisma_analyze_start(tisma_ctx* ctx, int, const char*) { return fail(ctx, TISMA_ERROR, not_yet); }

@@ -13922,3 +13922,21 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `--graphics opengl`).
 - **Sigue (macOS):** la prueba en una Mac real, la cámara USB con AVFoundation y la firma del .dmg (cuenta del dueño).
 
+## 2026-11-13 — API en C: la vista previa por capas (bloque de noche)
+
+- **Hecho:** `tisma_layer_count`, `tisma_layer_z` y `tisma_preview_segments` (`src/cli/c_api.cpp`). La vista previa
+  se lee del G-code terminado con `read_gcode_preview`, la misma lectura que usa el escritorio, una vez por trabajo.
+  Los segmentos salen por rango de capas y por tandas (`skip`).
+  - Tipos del escritorio a tipos de la API: muro externo; muro interno, que incluye el voladizo; relleno sólido;
+    superior; relleno; soporte, que incluye la interfaz; puente; falda o borde; viaje; el resto, OTHER.
+  - BOTTOM no se da todavía: el motor escribe las superficies de abajo como relleno sólido.
+  - La CI de iOS comprueba también estas 3 funciones.
+- **Pruebas:** `[c_api]`, en el caso del laminado completo:
+  - las capas suben;
+  - las tandas de 37 segmentos dan lo mismo que todo junto;
+  - hay muros externos;
+  - los segmentos de una capa están a su altura;
+  - una capa negativa da error.
+- **Sin medir:** la memoria de la vista previa en un teléfono; hoy lee el G-code entero de una vez.
+- **Sigue:** el análisis por la API (`tisma_analyze_start`), y los ajustes de un proyecto 3MF.
+

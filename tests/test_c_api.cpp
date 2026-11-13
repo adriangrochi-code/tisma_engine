@@ -14,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -122,10 +123,41 @@ TEST_CASE("C API: open, settings, memory, slice with progress, summary and G-cod
     CHECK(pieces == written);
     std::filesystem::remove(out);
 
-    // The preview and the analysis are not there yet, and say so.
-    size_t segments = 1;
-    CHECK(tisma_preview_segments(ctx, 0, 1, 0, nullptr, 0, &segments).code == TISMA_ERROR);
-    CHECK(segments == 0);
+    // The preview by layers: the layers go up, and the segments come in
+    // pieces that add up to the same as all at once.
+    const int layers = tisma_layer_count(ctx);
+    CHECK(layers >= 50);
+    for (int l = 1; l < layers; ++l)
+        CHECK(tisma_layer_z(ctx, l) > tisma_layer_z(ctx, l - 1));
+    CHECK(tisma_layer_z(ctx, layers) == 0.0);
+    std::vector<tisma_segment> all(200000);
+    size_t total = 0;
+    REQUIRE(tisma_preview_segments(ctx, 0, layers, 0, all.data(), all.size(), &total).code == TISMA_OK);
+    REQUIRE(total > 0);
+    REQUIRE(total < all.size());
+    size_t handed = 0, piece = 0, outer = 0;
+    tisma_segment chunk[37];
+    do {
+        REQUIRE(tisma_preview_segments(ctx, 0, layers, handed, chunk, 37, &piece).code == TISMA_OK);
+        for (size_t i = 0; i < piece; ++i) {
+            const tisma_segment& x = chunk[i];
+            const tisma_segment& y = all[handed + i];
+            CHECK((x.x0 == y.x0 && x.y0 == y.y0 && x.z0 == y.z0 && x.x1 == y.x1 && x.y1 == y.y1 && x.z1 == y.z1 &&
+                   x.width == y.width && x.height == y.height && x.speed == y.speed && x.type == y.type));
+            outer += chunk[i].type == TISMA_PATH_OUTER_WALL ? 1 : 0;
+        }
+        handed += piece;
+    } while (piece > 0);
+    CHECK(handed == total);
+    CHECK(outer > 0);
+    // One layer: its segments at its height.
+    size_t one = 0;
+    REQUIRE(tisma_preview_segments(ctx, 10, 1, 0, all.data(), all.size(), &one).code == TISMA_OK);
+    REQUIRE(one > 0);
+    for (size_t i = 0; i < one; ++i)
+        if (all[i].type != TISMA_PATH_TRAVEL)
+            CHECK(std::abs(all[i].z1 - tisma_layer_z(ctx, 10)) < 1e-3);
+    CHECK(tisma_preview_segments(ctx, -1, 1, 0, all.data(), all.size(), &one).code == TISMA_BAD_ARGUMENT);
     tisma_destroy(ctx);
 }
 

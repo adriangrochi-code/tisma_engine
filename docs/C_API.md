@@ -7,8 +7,8 @@ documento explica cómo se usa.
 **Estado (2026-11-12):** interfaz acordada con la sesión de la app de Android el 2026-11-04. **Implementada la
 primera versión** (`src/cli/c_api.cpp`, pedido de la sesión del iPhone): contexto, abrir por ruta o bytes, ajustes,
 estimación y límite de memoria, laminar con avance y cancelar, resumen y G-code (entero o por pedazos). Va en la
-biblioteca de iOS (`tools/build_ios.sh`). **Falta:** la vista previa por capas (`tisma_layer_count` da 0 y
-`tisma_preview_segments` da `TISMA_ERROR`) y el análisis (`tisma_analyze_start` da `TISMA_ERROR`).
+biblioteca de iOS (`tools/build_ios.sh`). La vista previa por capas está desde el 2026-11-13. **Falta:** el análisis
+(`tisma_analyze_start` da `TISMA_ERROR`).
 
 ## Cómo funciona la primera versión
 
@@ -28,6 +28,10 @@ biblioteca de iOS (`tools/build_ios.sh`). **Falta:** la vista previa por capas (
   (2026-11-12).
 - **Costo:** los gramos por `extrusion.cost` (dinero por kg), redondeado a centésimos. Sale `null` sin precio o sin
   la densidad del filamento (`extrusion.density`), que es lo que da los gramos.
+- **Vista previa:** se lee del G-code terminado la primera vez que se pide, igual que la vista previa del escritorio,
+  y queda en el contexto hasta el próximo trabajo. Hoy el G-code entero está en memoria mientras se lee; para un
+  teléfono es lo próximo a mejorar si pesa. Tipos: las superficies de abajo salen como relleno sólido
+  (`TISMA_PATH_BOTTOM` todavía no se da), y el relleno de huecos, el planchado y la torre de purga son `TISMA_PATH_OTHER`.
 - **Errores de laminar:** el código sale del de la línea de comandos (2 → `TISMA_CANNOT_READ`, 4 →
   `TISMA_BAD_MODEL`, el resto `TISMA_ERROR`) y el mensaje es su primera línea `error:`.
 

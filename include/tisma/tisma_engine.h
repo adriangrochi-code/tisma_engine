@@ -2,9 +2,9 @@
  * apps that cannot link C++ directly (the Android app through the NDK).
  * Plain C, no platform dependency. Status: interface agreed on 2026-11-04;
  * since 2026-11-12 the context, opening, settings, the memory estimate, the
- * slice with progress and cancel, the summary and the G-code are
- * implemented. The preview by layers and the analysis answer TISMA_ERROR
- * ("not implemented yet").
+ * slice with progress and cancel, the summary, the G-code and (since
+ * 2026-11-13) the preview by layers are implemented. The analysis answers
+ * TISMA_ERROR ("not implemented yet").
  *
  * Threads: a context is used from one thread at a time. Slicing and
  * analysing run on the engine's own worker; the caller polls. No callback
@@ -99,7 +99,11 @@ tisma_status tisma_write_gcode(tisma_ctx* ctx, const char* path);
  * how many (0 at the end). */
 tisma_status tisma_read_gcode(tisma_ctx* ctx, uint64_t offset, char* buffer, size_t capacity, size_t* written);
 
-/* The preview, layer by layer so a phone never holds it all. */
+/* The preview, layer by layer so a phone never holds it all. Read from the
+ * finished slice's G-code the first time it is asked for (as the desktop's
+ * preview reads it); before a finished slice, 0 layers and TISMA_NOT_READY.
+ * The engine's bottom surfaces print as solid infill: TISMA_PATH_BOTTOM is not
+ * given yet; gap fill, ironing and the wipe tower are TISMA_PATH_OTHER. */
 typedef enum tisma_path_type {
     TISMA_PATH_OUTER_WALL = 0,
     TISMA_PATH_INNER_WALL = 1,
