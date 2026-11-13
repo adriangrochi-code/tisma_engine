@@ -796,6 +796,8 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
 - [x] Diseño: menú radial (11 septies, CD28) y buscador con la tecla S (11 octies, CD29) (2026-11-11; fijar a la
   barra falta)
 - [ ] Diseño: herramientas que faltan, en gris «Próximamente» (11 novies) y tema claro (11 decies)
+  (2026-11-13: Sección hecha, en Inspeccionar y en la paleta del boceto; faltan Presionar/Tirar, Medir entre caras y
+  Apariencia)
 
 ### Pedidos del dueño sobre la interfaz (2026-10-28, por el equipo de fichas)
 

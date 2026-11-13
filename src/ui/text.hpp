@@ -1524,6 +1524,9 @@
     X(DesignAxisTool, "Eje", "Axis") \
     X(DesignMeasureTool, "Medir", "Measure") \
     X(DesignSectionTool, "Sección", "Section") \
+    X(DesignTipSection, "Corta la vista con un plano para ver adentro de los cuerpos; no cambia el diseño", "Cuts the view with a plane to look inside the bodies; the design does not change") \
+    X(SectionAxis, "Perpendicular a", "Square to") \
+    X(SectionFlip, "Dar vuelta el lado que se quita", "Flip the side left out") \
     X(DesignToolSearch, "Buscar herramienta", "Search tools") \
     X(DesignNavigator, "Navegador", "Browser") \
     X(DesignNavOrigin, "Origen", "Origin") \

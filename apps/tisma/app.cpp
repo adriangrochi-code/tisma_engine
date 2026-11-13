@@ -615,6 +615,12 @@ private:
     // Design's toolbar over the view, as Fusion 360 lays it out (cad_design.md,
     // rule 11 bis): tabs, groups with their main tools and a menu of all.
     void design_toolbar();
+    // The section of the view (cad_design.md, rule 11 novies): a plane square
+    // to X, Y or Z at an offset, what is past it left out of the bodies.
+    bool design_section_ = false, section_flip_ = false;
+    int section_axis_ = 2;
+    double section_offset_ = 0.0;
+    void section_panel();
     int design_tab_ = 0;           // Sólido, Boceto, Inspeccionar, Utilidades
     // The timeline under the view (cad_design.md, rule 11 quater): its
     // marker, how many features count (the rest wait, grey, CD27); the
@@ -15876,7 +15882,8 @@ void App::design_toolbar() {
     // Inspeccionar and Utilidades.
     tabs.push_back({T::DesignTabInspect,
                     {Group{T::DesignGroupInspect, "design_group_inspect", 2,
-                           {soon("design_measure_tool", "measure", T::DesignMeasureTool), soon("design_section", "section", T::DesignSectionTool)}}}});
+                           {soon("design_measure_tool", "measure", T::DesignMeasureTool), Tool{"design_section", "section", tr(T::DesignSectionTool), tr(T::DesignTipSection), "", true, false,
+                                 [this] { design_section_ = !design_section_; }}}}}});
     tabs.push_back({T::DesignTabUtilities,
                     {Group{T::DesignGroupUtilities, "design_group_utilities", 1,
                            {{"design_tool_search", "search", tr(T::DesignToolSearch), tr(T::DesignTipSearch), "S", true, false,
@@ -23938,6 +23945,55 @@ void App::sketch_overlay() {
     dl->PopClipRect();
 }
 
+// The section's panel (rule 11 novies), at the right of the view while it is
+// on: the plane square to X, Y or Z, where it goes along that axis (within
+// the bodies' box), which side is left out, and closing it.
+void App::section_panel() {
+    if (!design_section_)
+        return;
+    const float w = 240.0f * scale_;
+    const float y = sketch_edit_ ? 470.0f * scale_ : 260.0f * scale_; // under the view cube, and the sketch's palette when there is one
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 12.0f * scale_, view_pos_.y + y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * scale_, 10.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##section_panel", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    note_rect("section_panel");
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::DesignSectionTool));
+    ImGui::Separator();
+    loc::TextDisabled("%s", tr(T::SectionAxis));
+    for (int a = 0; a < 3; ++a) {
+        ImGui::SameLine();
+        const char* name[] = {"X", "Y", "Z"};
+        if (ImGui::RadioButton((std::string(name[a]) + "##section_axis" + std::to_string(a)).c_str(),
+                               section_axis_ == a))
+            section_axis_ = a;
+        note_rect("section_axis_" + std::string(1, char('x' + a)));
+    }
+    double lo = -100.0, hi = 100.0;
+    if (!design_box_.empty) {
+        const float los[] = {design_box_.min.x, design_box_.min.y, design_box_.min.z};
+        const float his[] = {design_box_.max.x, design_box_.max.y, design_box_.max.z};
+        lo = los[section_axis_], hi = his[section_axis_];
+    }
+    ImGui::SetNextItemWidth(w - 24.0f * scale_);
+    ImGui::SliderScalar("##section_offset", ImGuiDataType_Double, &section_offset_, &lo, &hi,
+                        field_text("##section_offset", "%.2f mm", section_offset_));
+    note_rect("section_offset");
+    ImGui::Checkbox(tr(T::SectionFlip), &section_flip_);
+    note_rect("section_flip");
+    if (ImGui::Button((std::string(tr(T::Close)) + "##section_close").c_str()))
+        design_section_ = false;
+    note_rect("section_close");
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 // Rule 11 sexies: «Finish sketch» in green at the top of the view, and the
 // sketch's palette at the right, under the view cube.
 void App::sketch_palette() {
@@ -23997,11 +24053,11 @@ void App::sketch_palette() {
     if (ImGui::Button((std::string(tr(T::SketchLookAt)) + "##sketch_look_at").c_str()))
         sketch_look_at();
     note_rect("sketch_look_at");
-    // The section of the view is not here yet: seen off, never hidden (rule 11 novies).
-    ImGui::BeginDisabled();
-    ImGui::Button((std::string(tr(T::SketchSection)) + " · " + tr(T::ComingSoon) + "##sketch_section").c_str());
+    // The section of the view, square to the sketch's plane (rule 11 novies).
+    if (ImGui::Checkbox((std::string(tr(T::SketchSection)) + "##sketch_section").c_str(), &design_section_) && design_section_)
+        section_axis_ = sketch->plane == cad::SketchPlane::XY ? 2 : sketch->plane == cad::SketchPlane::XZ ? 1 : 0,
+        section_offset_ = 0.0, section_flip_ = false;
     note_rect("sketch_section");
-    ImGui::EndDisabled();
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
@@ -25004,7 +25060,7 @@ void App::layout() {
         else if (tab_ == Tab::Design && design_page_ == DesignPage::Gears)
             gears_panel();
         else if (tab_ == Tab::Design)
-            design_panel(), design_toolbar();
+            design_panel(), design_toolbar(), section_panel();
         else if (tab_ == Tab::Structural)
             structural_panel();
         else if (tab_ == Tab::Aerodynamics)
@@ -25287,6 +25343,12 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.sky = vec(theme_.sky);
     f.ground = vec(theme_.ground);
     f.background_top = vec(theme_.view_top);
+    // The section of Design's view: the bodies past the plane left out.
+    if (tab_ == Tab::Design && design_section_) {
+        const float sign = section_flip_ ? -1.0f : 1.0f;
+        f.section = {section_axis_ == 0 ? sign : 0.0f, section_axis_ == 1 ? sign : 0.0f, section_axis_ == 2 ? sign : 0.0f,
+                     sign * float(section_offset_)};
+    }
     f.background_bottom = vec(theme_.view_bottom);
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);

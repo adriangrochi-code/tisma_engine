@@ -223,7 +223,10 @@ const std::string kMeshFragment = kVersion + kLighting + R"(
 in vec3 v_position;
 in vec3 v_normal;
 uniform vec3 u_colour;
+uniform vec4 u_section; // xyz: the plane's normal (zero: no section), w: its offset
 void main() {
+    if (dot(u_section.xyz, u_section.xyz) > 0.0 && dot(u_section.xyz, v_position) > u_section.w)
+        discard; // the part in front of the section is left out
     vec3 n = normalize(v_normal);
     if (gbuffer(n))
         return;
@@ -1064,6 +1067,7 @@ std::vector<double> frame_key(const ViewFrame& f) {
     k.insert(k.end(), f.view.begin(), f.view.end());
     k.insert(k.end(), f.projection.begin(), f.projection.end());
     k.insert(k.end(), f.selected_model.begin(), f.selected_model.end());
+    k.insert(k.end(), f.section.begin(), f.section.end());
     for (const Vec3 p : {f.eye, f.key, f.fill, f.sky, f.ground, f.background_top, f.background_bottom, f.plate, f.model,
                          f.model_selected, f.selected_offset})
         vec(p);
@@ -1393,6 +1397,8 @@ void Renderer::clear_ray_scene() {
 
 void Renderer::lit_uniforms(unsigned p, const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility) {
     glUseProgram(p);
+    if (p == p_.mesh) // the section cuts the models (cad_design.md, rule 11 novies)
+        glUniform4f(glGetUniformLocation(p, "u_section"), f.section[0], f.section[1], f.section[2], f.section[3]);
     uniform(p, "u_view_projection", vp);
     uniform(p, "u_view", f.view);
     uniform(p, "u_eye", f.eye);
@@ -1429,6 +1435,7 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     // it wins over the plate and the model's top. Neither casts a shadow.
     if ((bed_model_.count > 0 || bed_art_.count > 0) && !casters && !under) {
         lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
+        glUniform4f(glGetUniformLocation(p_.mesh, "u_section"), 0.0f, 0.0f, 0.0f, 0.0f); // the bed is not cut
         uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
         uniform(p_.mesh, "u_model", identity());
         if (bed_model_.count > 0) {
