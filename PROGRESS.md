@@ -14290,3 +14290,5 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   2 h de la tarea de fondo, con dos fallas: `ui_view_sphere_preview_vulkan_same_as_opengl` (no arrancó Xvfb: del
   entorno) y la prueba del análisis por la API, que esperaba como mucho 1 min y con ASan el análisis tarda más. La
   espera de la prueba pasa a 10 min.
+- **Fuzz, dos semillas más** (7040bf2): 2026111302, 2000 casos, 0 fallas (23 rechazadas); 2026111303, 2000 casos,
+  0 fallas (30 rechazadas).
