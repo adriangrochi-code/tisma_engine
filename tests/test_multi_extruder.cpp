@@ -1148,9 +1148,8 @@ TEST_CASE("extruders: a tool change's time counts as preparation (print_time.md,
     plain.gcode_toolchange.clear();
     const double moves = seconds(gcode_of(two_colours(), plain), "preparation time");
     CHECK(moves > 0.0);
-    // With it: the waits on top, each once (the template's G1 has no known
-    // start: not timed). The first tool's selection, before the print, is
-    // not a change and its wait is not counted yet (PROGRESS.md, 2026-11-13).
-    CHECK_THAT(prep, Catch::Matchers::WithinAbs(moves + 2.0 * double(changes - 1), 1.5));
+    // With it: the waits on top, each once, the first tool's selection
+    // before the print too (the template's G1 has no known start: not timed).
+    CHECK_THAT(prep, Catch::Matchers::WithinAbs(moves + 2.0 * double(changes), 1.5));
     CHECK(prep < seconds(text, "printing time"));
 }

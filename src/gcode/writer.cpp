@@ -3468,7 +3468,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // Several extruders: the change's G-code to the first one too, from
     // none (rule 6), and its T unless that G-code has it.
     if (s.extruders > 1) {
-        out << toolchange_text(0, initial_tool, false).first;
+        start_text(toolchange_text(0, initial_tool, false).first); // its waits count too (print_time.md, rule 14)
         g.set_tool(initial_tool, extruder_offset_of(s, std::size_t(initial_tool - 1)));
     }
     // The filament's own start, after the printer's (rule 9).
