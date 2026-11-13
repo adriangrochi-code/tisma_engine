@@ -84,7 +84,7 @@ Las metas están en `BENCHMARKS.md` (RT1 a RT6).
 | TT2 | Benchy: viajes entre líneas de superficie de arriba y de puente | 100 o menos (hoy 807) |
 | TT3 | Conejo: largo de los viajes | 190 m o menos (hoy 243,6) |
 | TT4 | Benchy: tiempo estimado con el mismo perfil | Al menos 8 % menos que hoy (1 h 12 m 28 s) |
-| TT5 | Largo extruido por tipo de línea, antes y después | Igual, con menos de 1 % de diferencia |
+| TT5 | Largo extruido por tipo de línea y total, antes y después | El total, con menos de 1 % de diferencia; cada tipo sin uniones (regla 1), menos de 1 %; un tipo con uniones puede subir lo que extruyen sus tramos de unión (en el Benchy, los puentes cortos +5,9 %), y el informe lo dice |
 | TT6 | Cubo de 20 mm con relleno: viajes que no cruzan la pared externa | Ninguno retrae |
 | TT8 | Benchy con la regla 8 | Ninguna retracción con la boquilla quieta salvo las de viajes cortos; el tiempo estimado baja |
 | TT7 | `gcode.corner_smoothing` 0,02 en el Benchy | La pared externa no cambia; ninguna esquina interna se aparta más de 0,02 mm |
