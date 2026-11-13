@@ -45,8 +45,11 @@ jobs:
           python3 bench/gen_sphere.py "$RUNNER_TEMP/big.stl" --segments 1000
       - name: Start the emulator
         run: |
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n small -k "system-images;android-34;google_apis;x86_64" -d pixel_5
-          printf 'hw.ramSize=%s\n' "${{ matrix.ram }}" >> "$HOME/.android/avd/small.avd/config.ini"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"; echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n small -k "system-images;android-34;google_apis;x86_64" \
+            -d pixel_5 -p "$ANDROID_AVD_HOME/small.avd"
+          printf 'hw.ramSize=%s\n' "${{ matrix.ram }}" >> "$ANDROID_AVD_HOME/small.avd/config.ini"
           "$ANDROID_HOME/emulator/emulator" -avd small -no-window -no-audio -no-boot-anim -no-snapshot \
             -memory ${{ matrix.ram }} -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
@@ -54,7 +57,21 @@ jobs:
           timeout 600 sh -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 5; done'
           adb shell settings put global window_animation_scale 0
           adb install -r apps/android/app/build/outputs/apk/debug/app-x86_64-debug.apk
+      # Cold start (QA, 13-11-2026: the time until the Plate shows, to be under 2 s): the app stopped and started
+      # again five times after a first start; `am start -W` gives the time to the first drawn frame.
+      - name: Cold start
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          pkg=net.tismaservidores.tisma
+          act=$(adb shell cmd package resolve-activity --brief $pkg | tail -1 | tr -d '\r')
+          adb shell am start -W -n "$act" > /dev/null; sleep 5
+          for i in 1 2 3 4 5; do
+            adb shell am force-stop $pkg; sleep 2
+            adb shell am start -W -n "$act" | tr -d '\r' | sed -n 's/^TotalTime: //p'
+          done | tee "$RUNNER_TEMP/cold.txt"
+          echo "Cold start on ${{ matrix.ram }} MB (ms, five runs): $(tr '\n' ' ' < "$RUNNER_TEMP/cold.txt")" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Slice and measure
+        if: always()
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           apps/android/tools/memory_check.sh tests/data/printer_settings.json \
