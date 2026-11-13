@@ -96,16 +96,19 @@ class StoreBillingTest {
         val play = FakePlay()
         val vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5, billing = play)
         vm.signIn("ana@example.com", "password1")
-        val end = System.currentTimeMillis() + 20_000
+        // Each wait has its own 20 s: on a slow runner one shared deadline left the last wait none (CI, 13-11).
+        var end = System.currentTimeMillis() + 20_000
         while ((vm.state.value.account == null || vm.state.value.plans.isEmpty()) && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
         server.storeDown = 1
         vm.buy(vm.state.value.plans.first { it.name == "Pro" })
+        end = System.currentTimeMillis() + 20_000
         while (settings.pendingPurchases.isEmpty() && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
         assertEquals(1, settings.pendingPurchases.size)
         assertEquals("Maker", vm.state.value.account?.plan)
         // The next refresh sends it again; the store answers now.
         vm.refreshAccount()
         // The account refresh may show the plan before the purchase's own answer is back: wait for both.
+        end = System.currentTimeMillis() + 20_000
         while ((vm.state.value.account?.plan != "Pro" || settings.pendingPurchases.isNotEmpty()) && System.currentTimeMillis() < end) {
             ShadowLooper.idleMainLooper(); Thread.sleep(10)
         }
