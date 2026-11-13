@@ -12413,5 +12413,11 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   en la CI de Android y, si se puede, de iOS): registrar e iniciar sesión, /v1/status, trabajo de laminado hasta el
   G-code, informe de un problema e índice firmado de la biblioteca. Pedida a la sesión de la nube la receta para
   correrlo como caja negra (sin clonar ni leer su código, `CLAUDE.md`). El arranque en frío queda para un teléfono real.
+  Receta de la sesión de la nube (13-11, 09:22; caja negra): artefacto «tisma-cloud-linux» del último CI verde de
+  main de tisma-cloud (ci.yml; desde ccfe9a5), bajado con un PAT de solo lectura de Actions como secreto; arranque
+  `bash tc/tools/ci_master.sh start "$PWD/tc/dist" 18994` (SQLite, nodo propio con el motor nightly; espera
+  /v1/health y nodes_online ≥ 1) y `stop`; salidas url, email, password, token, library_project_key. HTTP plano; desde
+  el emulador el host es 10.0.2.2. Registro: el código de 6 cifras queda en el log del servicio sin SMTP. No hay
+  paquete para macOS: iOS necesitaría un maestro en otra máquina. Falta que el dueño cargue el PAT como secreto.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
