@@ -251,7 +251,7 @@ struct Settings {
     // The odd inner loops half a layer up (walls.staggered, staggered_perimeters.md).
     bool walls_staggered = false;
     TopOneWall top_one_wall = TopOneWall::None;
-    VerticalShell vertical_shell = VerticalShell::Disabled; // the spec says enabled: PROGRESS.md, 2026-11-13
+    VerticalShell vertical_shell = VerticalShell::Partial; // QA, 2026-11-13: PROGRESS.md
     bool first_layer_one_wall = false;
     bool extra_if_needed = true;
     bool extra_on_overhangs = false; // loops fill an overhang held from one side (rule 5)

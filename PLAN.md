@@ -1094,7 +1094,7 @@ Con el PR #23 (2026-10-26):
   queda aun con 100 %); no es un largo mínimo ni una histéresis del tamaño del margen. Las filas medidas son el
   contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
 - [x] **`walls.vertical_shell`** (`walls_extra.md` regla 7, W4; hecho 2026-11-13): `disabled`, `partial` y `enabled`.
-  W4 dentro del 10 %. Por defecto `disabled`: con `enabled` el Benchy sube 14 % y QA decide (PROGRESS.md, 2026-11-13)
+  W4 dentro del 10 %. Por defecto `partial` (QA: Benchy +0,2 %; con `enabled`, +14 %)
 - [ ] **Las superficies de arriba en pendiente** (`walls_extra.md` regla 7, W4): en el techo
   de 15° de W4, capa 30, Tisma Slicer da 20,95 mm de superficie de arriba con `disabled` y 75,22 más 18,39 de
   relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno

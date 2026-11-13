@@ -14146,3 +14146,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Pasa la batería completa. No probado en una impresora.
 - **Sigue:** que QA decida el valor por defecto; las superficies de arriba en pendiente (techo de W4: 75,22 mm de
   superficie de arriba en la ficha, 0 en el motor).
+
+## 2026-11-13 — `walls.vertical_shell`: `partial` por defecto (decisión de QA)
+
+- QA: si con `partial` el Benchy sube 5 % o menos, `partial` por defecto; si no, `disabled`.
+- **Medido, Benchy:** `disabled` 1h11m33, `partial` 1h11m41 (+8 s, +0,2 %); relleno sólido 10 655 → 10 970 mm (+3 %).
+- **Hecho:** `partial` por defecto (ajustes, CONFIG.md, guía). Pasa la batería completa (1091 casos) sin cambiar
+  ninguna prueba. No probado en una impresora.
+- **Sigue:** las superficies de arriba en pendiente (techo de W4); el pedido de las apps de `tisma_analyze_start`
+  con un caso JSON y la superficie de vóxeles.
