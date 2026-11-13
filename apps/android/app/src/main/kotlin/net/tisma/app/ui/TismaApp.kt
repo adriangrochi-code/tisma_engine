@@ -221,22 +221,6 @@ fun TismaApp(
             if (n > 0) { slice.scansArrived(n); library.refresh() }
         }
     }
-    // mobile_app.md, rule 10: «Open <file> from <site>?» before downloading; with downloads off, it offers to allow them.
-    sliceState.siteLink?.let { r ->
-        var allowed by remember { mutableStateOf(settings.allowSiteDownloads) }
-        androidx.compose.material3.AlertDialog(onDismissRequest = { slice.cancelSiteLink() },
-            title = { Text(stringResource(R.string.site_open, r.fileName, r.site)) },
-            text = { if (!allowed) Text(stringResource(R.string.site_allow_hint)) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    if (!allowed) { settings.allowSiteDownloads = true; allowed = true }
-                    slice.acceptSiteLink()
-                }, modifier = Modifier.testTag("site_open")) {
-                    Text(stringResource(if (allowed) R.string.site_open_yes else R.string.site_allow_and_open))
-                }
-            },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { slice.cancelSiteLink() }) { Text(stringResource(R.string.cancel)) } })
-    }
     BackHandler(enabled = nav.stack.isNotEmpty()) { nav.back() }
 
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE

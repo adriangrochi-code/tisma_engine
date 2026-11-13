@@ -131,9 +131,6 @@ class MainActivity : ComponentActivity() {
 
     /** A model shared from another app or opened with Tisma goes to the plate (MA5). */
     private fun handleShared(intent: android.content.Intent?) {
-        // mobile_app.md, rule 10: a model site's link asks first, then downloads (SiteLink).
-        intent?.data?.takeIf { intent.action == android.content.Intent.ACTION_VIEW && it.scheme?.lowercase() in net.tisma.app.engine.SiteLink.SCHEMES }
-            ?.let { slice.linkOpened(it.toString()); nav.select(net.tisma.app.ui.Section.PLATE); return }
         val uri: android.net.Uri = sharedUri(intent) ?: return
         val name = runCatching {
             contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->

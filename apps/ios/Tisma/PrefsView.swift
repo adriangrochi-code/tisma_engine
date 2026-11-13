@@ -13,7 +13,6 @@ enum Prefs {
 /// «Preferencias»: the server (another Tisma Cloud, such as a company's own), applied at the next start.
 struct PrefsView: View {
     @AppStorage("cloud.server") private var server = ""
-    @AppStorage("prefs.siteDownloads") private var allowSites = false
 
     var body: some View {
         Form {
@@ -25,11 +24,6 @@ struct PrefsView: View {
                 Text("Tisma Cloud server")
             } footer: {
                 Text("Empty: Tisma's own. The account uses the new server from the next start.")
-            }
-            Section {
-                Toggle("Allow downloads from supported sites", isOn: $allowSites).accessibilityIdentifier("pref_site_downloads")
-            } footer: {
-                Text("Links from Printables and Thingiverse («Open in…») bring their model to the plate.")
             }
         }
         .navigationTitle("Preferences")

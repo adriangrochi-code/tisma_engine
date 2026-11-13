@@ -47,10 +47,6 @@ targets:
         # The print notices read the printer now and then in the background (PrintWatcher).
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [net.tismaservidores.tisma.watch]
-        # Links from model sites (mobile_app.md, rule 10): tisma:// and Printables' prusaslicer://.
-        CFBundleURLTypes:
-          - CFBundleURLName: net.tismaservidores.tisma.open
-            CFBundleURLSchemes: [tisma, prusaslicer]
         # The printer search (printer_connections.md, «Búsqueda en la red»): the Bonjour types it browses.
         NSBonjourServices: [_octoprint._tcp, _moonraker._tcp, _http._tcp]
         CFBundleDocumentTypes:

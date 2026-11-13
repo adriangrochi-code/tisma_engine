@@ -594,13 +594,6 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
         net.tisma.app.p2p.SafeFile.Problem.TOO_BIG -> R.string.unsafe_big
     }) + (if (n.detail.isNotBlank()) ": " + n.detail else ""))
     is SliceNotice.ScansArrived -> resources.getQuantityString(R.plurals.scans_arrived, n.count, n.count)
-    is SliceNotice.SiteRefused -> when (n.reason) {
-        net.tisma.app.engine.SiteLink.Reason.NOT_HTTPS -> getString(R.string.site_not_https)
-        net.tisma.app.engine.SiteLink.Reason.SITE -> getString(R.string.site_not_listed)
-        net.tisma.app.engine.SiteLink.Reason.KIND -> getString(R.string.site_kind)
-        net.tisma.app.engine.SiteLink.Reason.NOT_A_LINK -> getString(R.string.site_bad_link)
-        null -> getString(R.string.site_failed, n.detail)
-    }
     is SliceNotice.KeptChanges -> getString(R.string.profile_kept_changes,
         n.labels.take(3).joinToString(", ") + if (n.labels.size > 3) " (+${n.labels.size - 3})" else "")
 }

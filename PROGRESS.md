@@ -12368,5 +12368,8 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   Ingeniería con carga en un punto, dirección, temperatura, relleno mínimo (proyecto y pieza suelta, be17553) y
   análisis en la nube; restaurar compras de la App Store (cloud.md 5c); enlaces de Printables y Thingiverse. Quedan
   P3 (tiras de herramientas) y P9b (un ZIP de un sitio). STEP: el motor no lo lee. Sin probar en un iPhone real.
+- Decisión del dueño (13-11, 02:40, por QA; mobile_app.md regla 10 en spec/next): las apps usan solo la biblioteca
+  de Tisma. Quitados de Android y del iPhone los enlaces tisma://open y prusaslicer://open, las descargas de
+  Printables y Thingiverse, su preferencia, sus pruebas y textos (P9 y P9b dejan de existir).
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
