@@ -13,7 +13,9 @@ menu design_section
 expect-control section_panel
 expect-control section_axis_x
 menu section_axis_y
+menu section_flip
 wait 3
+expect-apart section_panel view_home
 expect-design 8000
 menu section_close
 expect-no-control section_panel

@@ -23952,7 +23952,13 @@ void App::section_panel() {
     if (!design_section_)
         return;
     const float w = 240.0f * scale_;
-    const float y = sketch_edit_ ? 470.0f * scale_ : 260.0f * scale_; // under the view cube, and the sketch's palette when there is one
+    // Under the view cube and its «Inicio», and under the sketch's palette when there is one.
+    float y = view_pos_.y + 260.0f * scale_;
+    if (const auto home = g_menu_rects.find("view_home"); home != g_menu_rects.end())
+        y = std::max(y, home->second.w + 28.0f * scale_);
+    if (const auto palette = g_menu_rects.find("sketch_palette"); sketch_edit_ && palette != g_menu_rects.end())
+        y = std::max(y, palette->second.w + 12.0f * scale_);
+    y -= view_pos_.y;
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 12.0f * scale_, view_pos_.y + y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.92f);
@@ -24058,6 +24064,8 @@ void App::sketch_palette() {
         section_axis_ = sketch->plane == cad::SketchPlane::XY ? 2 : sketch->plane == cad::SketchPlane::XZ ? 1 : 0,
         section_offset_ = 0.0, section_flip_ = false;
     note_rect("sketch_section");
+    g_menu_rects["sketch_palette"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                            ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);

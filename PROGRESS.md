@@ -13845,3 +13845,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `design_section.txt` (el panel, el eje, el diseño sin cambios, Cerrar). Pasan las 65 de Diseño y de la
   vista, entre ellas las que comparan Vulkan con OpenGL. Captura revisada: la caja de 20 mm cortada en Y = 0 muestra
   la mitad. La sombra todavía es la del cuerpo entero, y el corte no tiene tapa.
+
+## 2026-11-13 — interfaz: tapa del corte de la Sección (QA)
+
+- **Hecho:** el corte ya no se ve hueco. Las caras de atrás del cuerpo que se ven a través del plano se dibujan
+  planas, como el plano y un poco más oscuras, así que el corte parece macizo. Está en OpenGL y en Vulkan. Es una
+  tapa aproximada: sirve para cuerpos cerrados y no dibuja la tapa por separado. El panel de Sección queda debajo de
+  «Inicio» del cubo y de la paleta del boceto.
+- **Pruebas:** `design_section.txt` da vuelta el lado y comprueba que el panel no pisa «Inicio». Pasan las 65 de
+  Diseño y de la vista. Captura revisada.

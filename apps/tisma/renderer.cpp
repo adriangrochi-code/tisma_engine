@@ -225,12 +225,20 @@ in vec3 v_normal;
 uniform vec3 u_colour;
 uniform vec4 u_section; // xyz: the plane's normal (zero: no section), w: its offset
 void main() {
-    if (dot(u_section.xyz, u_section.xyz) > 0.0 && dot(u_section.xyz, v_position) > u_section.w)
+    bool cut = dot(u_section.xyz, u_section.xyz) > 0.0;
+    if (cut && dot(u_section.xyz, v_position) > u_section.w)
         discard; // the part in front of the section is left out
     vec3 n = normalize(v_normal);
+    vec3 base = u_colour;
+    // The cap: through the cut, the inside of a closed body shows its back
+    // faces; drawn flat as the plane, a little darker, the cut looks solid.
+    if (cut && !gl_FrontFacing) {
+        n = normalize(u_section.xyz);
+        base = u_colour * 0.72;
+    }
     if (gbuffer(n))
         return;
-    colour = vec4(shade(to_linear(u_colour), n, v_position, 64.0, 0.5), 1.0);
+    colour = vec4(shade(to_linear(base), n, v_position, 64.0, 0.5), 1.0);
 }
 )";
 
