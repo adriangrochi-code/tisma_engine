@@ -14058,8 +14058,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   - viajes entre líneas de puente, de 203 a 93;
   - tiempo, de 1 h 11 min 30 s a 1 h 11 min 31 s;
   - largo extruido de puente, de 967 a 1 024 mm (+5,9 %). Es por los tramos de unión: los puentes del Benchy son
-    cortos. El resto de los tipos no cambia, y el total sube 0,05 %. TT5 pide menos de 1 % por tipo: lo consulté con
-    la sesión de fichas.
+    cortos. El resto de los tipos no cambia, y el total sube 0,05 %. La ficha aclaró TT5 (spec/next): el 1 % vale
+    para el total y para cada tipo sin uniones; un tipo con uniones puede subir lo que extruyen sus tramos, si el
+    informe lo dice. Cumple.
 - **Pruebas:**
   - `[infill]`, un caso nuevo: un cuadrado con zona permitida a la izquierda; ninguna unión sale de ella, y hay más
     piezas que unidas del todo y menos que sueltas;
