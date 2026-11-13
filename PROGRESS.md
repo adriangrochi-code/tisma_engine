@@ -13888,3 +13888,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   hasta ver que pasa en los dos.
 - **Sin probar:** acá no hay Mac; lo dice la CI de GitHub después del envío.
 
+## 2026-11-13 — decisión del dueño: sin Thingiverse ni otros sitios de modelos
+
+- **Decisión (2026-11-13, por QA):** nada de Thingiverse ni de enlaces o descargas de otros sitios de modelos, en
+  ningún programa; solo la biblioteca de Tisma.
+- **Revisado en el motor y los instaladores:** no hay código de Thingiverse ni de otros sitios en `src/`. El instalador
+  de Windows (`packaging/windows/tisma.nsi`) y el `Info.plist` de macOS solo asocian archivos (.3mf, .stl). Ninguno
+  registra `tisma://` ni `prusaslicer://`. No hay nada que sacar.
+- **Queda para las otras sesiones:** la entrada «Thingiverse» del menú Más › Tisma (`apps/tisma/app.cpp`, la interfaz) y
+  `SiteLink.kt` con su `intent-filter` de `tisma://` y `prusaslicer://` (la app de Android).
+- **PLAN.md:** Thingiverse y `thingiverse.md` quedan fuera.
+

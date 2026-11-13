@@ -1076,7 +1076,9 @@ Con el PR #23 (2026-10-26):
     con el mismo armado de la placa que la interfaz. Falta: `analyze` (los apoyos, las cargas y el material tienen
     que ir en el proyecto primero), los proyectos de otros laminadores (`formats.md`, regla 18) y un avance más fino
     durante el corte. El proyecto como paquete 3MF (`formats.md`, reglas 6 a 11), hecho el 2026-11-02;
-  - [ ] después: el puente de impresoras (reglas 12 a 17), la biblioteca de modelos y Thingiverse
+  - [ ] después: el puente de impresoras (reglas 12 a 17) y la biblioteca de modelos. **Thingiverse fuera** (decisión
+    del dueño, 2026-11-13): nada de Thingiverse ni de enlaces o descargas de otros sitios de modelos, en ningún programa;
+    solo la biblioteca de Tisma.
 - [ ] `printer_connections.md` (F9), `mobile_app.md` (la API de C) e `INTEGRATION.md`
 - [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;
   `docs/spec/qa/2026-10-28-ajustes.md` en `spec/next` cc8d580, `tools/check_spec.py` limpio): lee 368 de 479 claves
@@ -1177,8 +1179,8 @@ tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
 
 Con el PR #24 (2026-10-26):
 - [ ] `step_faces.md` (STEP con caras: calidad al abrir, la cara de cada triángulo, pintar y cargas por cara, volver a
-  teselar), `problem_reports.md` (informar un problema) y `thingiverse.md` (el sitio dentro del programa; su API
-  espera rutas confirmadas, regla 20)
+  teselar), `problem_reports.md` (informar un problema). `thingiverse.md` queda fuera (decisión del dueño, 2026-11-13: solo la
+  biblioteca de Tisma)
 
 ### Velocidad del laminado (medición de caja negra del equipo de specs, 2026-10-26)
 
