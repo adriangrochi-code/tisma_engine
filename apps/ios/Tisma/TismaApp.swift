@@ -34,6 +34,23 @@ struct RootView: View {
     @AppStorage("plate.opened") private var openedPath = ""
     @AppStorage("wizard.done") private var wizardDone = false
     @Environment(\.scenePhase) private var phase
+    @AppStorage("prefs.siteDownloads") private var allowSites = false
+    @State private var siteRequest: SiteLink.Request?
+    @State private var siteProblem: String?
+
+    private func openSite(_ r: SiteLink.Request) {
+        siteRequest = nil
+        Task {
+            do {
+                let file = try await SiteLink.download(r)
+                openedPath = file.path; tab = 0
+            } catch let why as SiteLink.Reason {
+                siteProblem = SiteLink.text(why)
+            } catch {
+                siteProblem = SiteLink.text(.failed(error.localizedDescription))
+            }
+        }
+    }
 
     var body: some View {
         TabView(selection: $tab) {
@@ -48,7 +65,28 @@ struct RootView: View {
         .fullScreenCover(isPresented: Binding(get: { !wizardDone }, set: { _ in })) { WizardView() }
         // «Compartir con Tisma» from another app (MA5): the model goes onto the plate.
         .onOpenURL { url in
+            // A model site's link (mobile_app.md, rule 10): asked first, downloaded only when allowed.
+            if SiteLink.schemes.contains(url.scheme?.lowercased() ?? "") {
+                switch SiteLink.parse(url) {
+                case .success(let r): siteRequest = r
+                case .failure(let why): siteProblem = SiteLink.text(why)
+                }
+                return
+            }
             if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 }
+        }
+        .alert(siteRequest.map { String(format: String(localized: "Open %@ from %@?"), $0.fileName, $0.site) } ?? "",
+               isPresented: Binding(get: { siteRequest != nil }, set: { if !$0 { siteRequest = nil } })) {
+            Button(allowSites ? String(localized: "Open") : String(localized: "Allow and open")) {
+                allowSites = true
+                if let r = siteRequest { openSite(r) }
+            }
+            Button("Cancel", role: .cancel) { siteRequest = nil }
+        } message: {
+            if !allowSites { Text("Downloads from supported sites are off. «Allow and open» turns them on (changed in Preferences).") }
+        }
+        .alert(siteProblem ?? "", isPresented: Binding(get: { siteProblem != nil }, set: { if !$0 { siteProblem = nil } })) {
+            Button("OK", role: .cancel) { siteProblem = nil }
         }
         // The saved printer is followed while the app is open; in the background, only while it prints.
         .onChange(of: phase, initial: true) { _, now in

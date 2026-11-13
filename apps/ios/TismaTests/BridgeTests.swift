@@ -283,4 +283,17 @@ final class BridgeTests: XCTestCase {
         }
         XCTAssertTrue(PackBridge.shared.help(dir: "/nonexistent").isEmpty)
     }
+
+    /// Site links (parity P9): the same rules as Android's.
+    func testSiteLinksFollowTheRules() {
+        func parse(_ s: String) -> Result<SiteLink.Request, SiteLink.Reason> { SiteLink.parse(URL(string: s)!) }
+        let ok = parse("prusaslicer://open?file=https%3A%2F%2Ffiles.printables.com%2Fmedia%2Fprints%2F1%2Fcube%2520v2.stl")
+        guard case .success(let r) = ok else { return XCTFail("\(ok)") }
+        XCTAssertEqual(r.site, "files.printables.com")
+        XCTAssertEqual(r.fileName, "cube v2.stl")
+        XCTAssertEqual(parse("tisma://open?file=http%3A%2F%2Fprintables.com%2Fa.stl"), .failure(.notHttps))
+        XCTAssertEqual(parse("tisma://open?file=https%3A%2F%2Fexample.com%2Fa.stl"), .failure(.site))
+        XCTAssertEqual(parse("tisma://open?file=https%3A%2F%2Fwww.thingiverse.com%2Fa.exe"), .failure(.kind))
+        XCTAssertEqual(parse("tisma://other?file=x"), .failure(.notALink))
+    }
 }
