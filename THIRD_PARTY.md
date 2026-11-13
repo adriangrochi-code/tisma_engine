@@ -67,6 +67,7 @@ de los mismos datos.
 | Kotlin coroutines (Android) | org.jetbrains.kotlinx:kotlinx-coroutines-android | 1.10.2 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.coroutines | El hilo principal de Android. |
 | kotlinx.serialization JSON | org.jetbrains.kotlinx:kotlinx-serialization-json | 1.9.0 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.serialization | Leer y escribir el JSON de Tisma Cloud (`cloud.md`). |
 | AndroidX Core | androidx.core:core-ktx | 1.17.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | Base de la app. |
+| AndroidX ProfileInstaller | androidx.profileinstaller:profileinstaller | 1.4.1 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx/releases/profileinstaller | Instala el perfil de arranque de la app (ya venía con Compose; ahora explícita). |
 | AndroidSVG | com.caverock:androidsvg-aar | 1.4 | Apache-2.0 | POM publicado (sin dependencias) | https://bigbadaboom.github.io/androidsvg/ | Pasa a imagen las texturas SVG de las camas del paquete de perfiles (`profile_pack.md`, regla 14). |
 | AndroidX Activity Compose | androidx.activity:activity-compose | 1.11.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | La actividad con Compose, elegir y guardar archivos. |
 | AndroidX Lifecycle ViewModel Compose | androidx.lifecycle:lifecycle-viewmodel-compose | 2.9.4 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | El estado de las pantallas sobrevive a girar el teléfono. |
@@ -101,11 +102,15 @@ en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica
 | Robolectric | org.robolectric:robolectric | 4.16 | MIT (trae ASM, BSD-3-Clause; Bouncy Castle, MIT; ICU4J, Unicode-3.0; Guava, Apache-2.0; javax.annotation-api, CDDL-1.1 o GPL-2.0 con excepción) | Android en la JVM, sin emulador. Baja `android-all-instrumented` (Apache-2.0, AOSP) en la primera corrida. |
 | AndroidX Test Core | androidx.test:core | 1.7.0 | Apache-2.0 | El contexto de la app en las pruebas. |
 | Compose UI Test JUnit4 | androidx.compose.ui:ui-test-junit4 | la del BOM | Apache-2.0 | Pruebas de las pantallas. |
+| AndroidX Benchmark Macro JUnit4 | androidx.benchmark:benchmark-macro-junit4 | 1.4.1 | Apache-2.0 | Genera el perfil de arranque en un emulador (`:baselineprofile`). |
+| AndroidX Test Ext JUnit | androidx.test.ext:junit | 1.2.1 | Apache-2.0 | Ejecutor del generador del perfil. |
+| UI Automator | androidx.test.uiautomator:uiautomator | 2.3.0 | Apache-2.0 | Recorre la app al generar el perfil. |
 
 | Herramienta de compilación de la app | Versión | Licencia | Uso |
 |---|---|---|---|
 | Gradle y su envoltorio (`gradlew`, `gradle/wrapper/`) | 8.14.3 | Apache-2.0 | Compila la app. |
 | Android Gradle Plugin | 8.13.2 | Apache-2.0 | Compila el APK. |
+| AndroidX Baseline Profile Gradle Plugin (`androidx.baselineprofile`) | 1.4.1 | Apache-2.0 | Genera y agrega a la app su perfil de arranque (QA, 13-11-2026). |
 | Kotlin (compilador, Kotlin/Native para iOS y complementos Multiplatform, Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app y el módulo compartido con iPhone (`apps/android/shared`). |
 | Android SDK (plataforma 36, build-tools 36.0.0) | — | Licencia del SDK de Android (aceptada en la máquina que compila) | Compila el APK; no se guarda en el repositorio. |
 | Android NDK | r29 (29.0.14206865) | Licencia del SDK de Android; su `libc++` es Apache-2.0 con la excepción LLVM | Compila `tisma-engine` para el teléfono. La r28 no sirve: su `libc++` no tiene `std::from_chars` con decimales, que el motor usa. |

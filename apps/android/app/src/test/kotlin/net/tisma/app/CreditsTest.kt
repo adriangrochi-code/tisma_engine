@@ -20,7 +20,9 @@ class CreditsTest {
         val credited = c.libraries.flatMap { it.gradle }.toSet()
         val toml = File(android, "gradle/libs.versions.toml").readText()
         val testOnly = setOf("junit:junit", "org.jetbrains.kotlin:kotlin-test-junit", "org.jetbrains.kotlinx:kotlinx-coroutines-test",
-            "org.robolectric:robolectric", "androidx.test:core", "androidx.compose.ui:ui-test-junit4", "androidx.compose.ui:ui-test-manifest")
+            "org.robolectric:robolectric", "androidx.test:core", "androidx.compose.ui:ui-test-junit4", "androidx.compose.ui:ui-test-manifest",
+            // The startup profile's generator (:baselineprofile), on an emulator only.
+            "androidx.benchmark:benchmark-macro-junit4", "androidx.test.ext:junit", "androidx.test.uiautomator:uiautomator")
         val modules = Regex("""module\s*=\s*"([^"]+)"""").findAll(toml).map { it.groupValues[1] }.filter { it !in testOnly }.toList()
         val missing = modules.filter { it !in credited }
         assertTrue(missing.isEmpty(), "no credit for: $missing")

@@ -49,14 +49,15 @@
    ]
   },
   {
-   "name": "AndroidX (Core, Activity, Lifecycle)",
+   "name": "AndroidX (Core, Activity, Lifecycle, ProfileInstaller)",
    "gradle": [
     "androidx.core:core-ktx",
     "androidx.activity:activity-compose",
     "androidx.lifecycle:lifecycle-viewmodel-compose",
-    "androidx.lifecycle:lifecycle-runtime-compose"
+    "androidx.lifecycle:lifecycle-runtime-compose",
+    "androidx.profileinstaller:profileinstaller"
    ],
-   "version": "1.17.0, 1.11.0, 2.9.4",
+   "version": "1.17.0, 1.11.0, 2.9.4, 1.4.1",
    "license": "Apache-2.0",
    "url": "https://developer.android.com/jetpack/androidx",
    "notices": [

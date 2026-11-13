@@ -1,0 +1,59 @@
+name: Android startup profile
+
+# The app's startup profile (QA, 13-11-2026: cold start under 2 s): :baselineprofile drives the app on an emulator
+# from a cold start through its main sections, and the plugin writes the profile (apps/android/app/src/main/
+# generated/baselineProfiles). It is kept as an artifact to be committed with the app; started by hand or when the
+# generator changes.
+on:
+  push:
+    paths:
+      - ".github/workflows/android-profile.yml"
+      - "apps/android/baselineprofile/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    name: Generate the startup profile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install the NDK, the emulator and its system image
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" emulator platform-tools \
+            "system-images;android-34;google_apis;x86_64" > /dev/null
+      - name: Start the emulator
+        run: |
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"; echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n profile -k "system-images;android-34;google_apis;x86_64" \
+            -d pixel_5 -p "$ANDROID_AVD_HOME/profile.avd"
+          "$ANDROID_HOME/emulator/emulator" -avd profile -no-window -no-audio -no-boot-anim -no-snapshot \
+            -memory 4096 -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb wait-for-device
+          timeout 600 sh -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 5; done'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+      - name: Generate
+        working-directory: apps/android
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          ./gradlew --no-daemon :app:generateBaselineProfile -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile
+          ls -la app/src/main/generated/baselineProfiles/
+          echo "Startup profile: $(wc -l < app/src/main/generated/baselineProfiles/baseline-prof.txt) rules" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-startup-profile
+          path: apps/android/app/src/main/generated/baselineProfiles/
+          if-no-files-found: error

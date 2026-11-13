@@ -24,4 +24,4 @@ rootProject.name = "tisma-android"
 // mockprinters: printer simulators written from the public API documentation.
 // shared: Kotlin Multiplatform logic shared with the iPhone app (apps/ios/PLAN.md).
 // app: the Android app.
-include(":shared", ":cloud", ":mockcloud", ":printers", ":mockprinters", ":app")
+include(":shared", ":cloud", ":mockcloud", ":printers", ":mockprinters", ":app", ":baselineprofile")
