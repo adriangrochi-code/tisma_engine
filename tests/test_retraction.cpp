@@ -357,11 +357,13 @@ TEST_CASE("retraction: the wipe after the outer wall moved inward (orca_2_5.md, 
     // wipe, after the last wall, over the path.
     s.wipe_inward_distance = {50.0, true};
     s.walls_outer_first = true;
+    s.retract_min_travel = 0.0; // the move on to the infill retracts however short (the seam's corner is near it)
     w = layer_wipes(read(gcode_of(cube(), s)));
     REQUIRE(w.wipes > 0);
     CHECK(w.off_path < 2e-3);
     // With one wall too (the travel to the infill retracts whatever its length).
     s.walls_outer_first = false;
+    s.retract_min_travel = 2.0;
     s.wall_count = 1;
     s.retract_min_travel = 0.0;
     w = layer_wipes(read(gcode_of(cube(), s)));

@@ -14210,3 +14210,18 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   tolerancia propia de su G-code). **C18 y C19:** `check_settings` rechaza capas más altas que la boquilla.
 - Pasa la batería completa (1100 casos). No probado en una impresora.
 - **Sigue:** contrastar con `perimeters.md` (PLAN, F2).
+
+## 2026-11-13 — Contraste con `perimeters.md`; inicio de la costura alineada
+
+- **Hecho:** `tests/test_perimeters_spec.cpp` (desde el G-code): P3 (pared de 0,1 mm: nada), P4 (orden de los
+  cordones del marco), P5 a P7 y P9 (dónde empieza la pared de afuera).
+- **Arreglado (P5, P6):** la costura `aligned`, sin costura abajo, empezaba en el punto de Y máxima (en el cubo, la
+  esquina de X mínima). Ahora (`src/gcode/order.cpp`, `aligned_start`) empieza en una esquina si hay (un giro de más
+  de 29°), la de atrás a la derecha, y si no, al frente (Y mínima), como piden P5, P6 y W1. Las capas siguientes la
+  siguen como antes. Benchy: 1h11m41 → 1h11m43; 13 317 → 13 539 viajes, 29,9 → 30,1 m.
+- **Prueba cambiada:** la limpieza con `walls.outer_first` (OR1) necesitaba un viaje largo al relleno; con la costura
+  en la esquina es corto, así que esa parte de la prueba pone `retraction.min_travel` 0.
+- **Diferencia que queda (P4):** el motor cumple la regla 4 (cada contorno de adentro hacia afuera), pero intercala
+  los cordones del agujero y los de afuera por profundidad; la fila P4 pone primero los tres del agujero. Pregunta a
+  QA si la fila manda.
+- Pasa la batería completa (1103 casos). No probado en una impresora.
