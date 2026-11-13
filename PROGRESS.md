@@ -12408,5 +12408,10 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - iPhone: Ingeniería por la biblioteca del motor (dev 76d53f8: `tisma_analyze_case_start`, informe y mapa), con avance
   y Cancelar; la línea de comandos queda si la biblioteca se niega. Prueba: mismo veredicto que la línea de comandos y
   mapa de seguridad (CI de iOS verde, b818563).
+- Pausa (dueño, 13-11, 09:20 UTC, por QA): «Pausa el trabajo hoy». Todo subido en `android`; ci.sh verde. Pendiente
+  al seguir: la prueba de punta a punta contra un tisma-cloud real (maestro con SQLite y un nodo con el motor nightly,
+  en la CI de Android y, si se puede, de iOS): registrar e iniciar sesión, /v1/status, trabajo de laminado hasta el
+  G-code, informe de un problema e índice firmado de la biblioteca. Pedida a la sesión de la nube la receta para
+  correrlo como caja negra (sin clonar ni leer su código, `CLAUDE.md`). El arranque en frío queda para un teléfono real.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
