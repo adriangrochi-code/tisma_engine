@@ -113,6 +113,25 @@ jobs:
           plutil -lint pkg/Tisma.app/Contents/Info.plist
           test -x pkg/Tisma.app/Contents/MacOS/tisma && test -s pkg/Tisma.app/Contents/Resources/tisma.icns
           pkg/Tisma.app/Contents/MacOS/tisma-engine --version
+      # The 3D view on macOS (PLAN.md, «macOS antes de la beta»: the view): the
+      # OpenGL 3.3 core view drawn on the runner's display, with the strict
+      # view check of the screenshots, and the pictures kept to look at. Does
+      # not count while it is being brought up.
+      - name: The 3D view draws (OpenGL)
+        continue-on-error: true
+        run: |
+          mkdir -p view
+          for v in prepare preview; do
+            pkg/Tisma.app/Contents/MacOS/tisma tests/data/cube_ascii.stl --lang en --size 900x600 --view $v \
+              --graphics opengl --screenshot view/view_${v}.png
+          done
+          ls -l view
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-view-${{ matrix.arch }}
+          path: view
+          if-no-files-found: warn
 
   ios:
     name: iOS library (xcframework)

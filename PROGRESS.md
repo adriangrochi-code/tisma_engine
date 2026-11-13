@@ -13855,3 +13855,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   sin precio o sin densidad. Documentado en `docs/C_API.md` y en el encabezado.
 - **Pruebas:** `[c_api]`, un caso nuevo: el cubo con densidad 1,24 y 20 por kg, y sin precio da `null`.
 
+## 2026-11-13 — macOS: comprobar la vista 3D en la CI
+
+- **Visto:** la vista con OpenGL pide un contexto 3.3 core «forward compatible», que macOS da, y no usa nada por
+  encima de OpenGL 4.1. Los shaders `#version 450` son los de Vulkan. En principio, el camino OpenGL ya sirve en macOS
+  sin MoltenVK.
+- **Hecho:** el trabajo de macOS (arm64 y x86_64) saca capturas de Preparar y Vista previa con `--graphics opengl`,
+  con la revisión estricta de las capturas, y las sube como `macos-view-<arch>`. Todavía no cuenta (continue-on-error)
+  hasta ver que pasa en los dos.
+- **Sin probar:** acá no hay Mac; lo dice la CI de GitHub después del envío.
+
