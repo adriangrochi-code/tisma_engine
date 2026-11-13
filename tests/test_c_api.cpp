@@ -32,8 +32,10 @@ std::string read_file(const std::string& path) {
 }
 
 // Polls until the job ends (at most a minute).
+// A job's end, or after 10 minutes (the analysis under the address
+// sanitizer takes more than one).
 tisma_progress wait(tisma_ctx* ctx) {
-    const auto until = std::chrono::steady_clock::now() + std::chrono::minutes(1);
+    const auto until = std::chrono::steady_clock::now() + std::chrono::minutes(10);
     tisma_progress p = tisma_poll(ctx);
     while (p.state == TISMA_RUNNING && std::chrono::steady_clock::now() < until) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));

@@ -2164,15 +2164,19 @@ private:
     }
 
     // ;WIDTH: when the width differs by more than kWidthStep from the last
-    // one written, and after each new ;TYPE (docs/spec/GCODE_OUTPUT.md, «Ancho
-    // variable»). The E of each move follows its real width either way: only
-    // the comment the previews read is spared.
+    // one written (or by more than kWidthShare of it, for fine lines: the
+    // check holds a move's E to its width within 2 %), and after each new
+    // ;TYPE (docs/spec/GCODE_OUTPUT.md, «Ancho variable»). The E of each move
+    // follows its real width either way: only the comment the previews read is
+    // spared.
     static constexpr double kWidthStep = 0.005; // mm
+    static constexpr double kWidthShare = 0.015;
     void show_width(double width) {
         if (width == width_value_)
             return;
         width_value_ = width;
-        if (!width_.empty() && std::fabs(width - width_written_) <= kWidthStep + 1e-9)
+        if (!width_.empty() &&
+            std::fabs(width - width_written_) <= std::min(kWidthStep, kWidthShare * width) + 1e-9)
             return;
         char w[kNumberCapacity];
         const std::string_view width_text(w, format_fixed(w, width, 3));

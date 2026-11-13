@@ -14275,3 +14275,18 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   retracción depende del largo, `retraction.min_travel`), así que el más cercano es también el más rápido y el orden
   no cambia; entre islas, todo viaje sale de la pieza y retrae. Solo cambiaría con `retraction.only_crossing_walls`.
   Valor bajo: queda sin hacer. La regla 8 sigue «a aprobar».
+
+## 2026-11-13 — Mantenimiento: fuzz del G-code (2000 casos, semilla 20261113) y CI
+
+- **Fuzz:** 2 fallas, las dos arregladas; con los arreglos, 2000 casos, 0 fallas (21 piezas rechazadas por no
+  imprimibles, como siempre).
+  - Caso 1309: líneas de 0,075 mm con un `;WIDTH` que difería un 8 % de su ancho real. Lo trajo el umbral de 0,005 mm
+    de esta noche (`;WIDTH` solo si el ancho cambia más que eso): en una línea fina, 0,005 mm es mucho. Ahora el umbral
+    es el menor entre 0,005 mm y el 1,5 % del ancho (el chequeo admite 2 %).
+  - Caso 186 (tres extrusores, torre, limpieza): el chequeo guardaba lo retraído de cada extrusor al dejarlo, pero no
+    en cuántos tramos (cada tramo redondea E a 5 decimales); al volver, juzgaba la vuelta con la tolerancia de otro
+    extrusor. Ahora guarda los tramos por extrusor (`src/gcode/check.cpp`). El G-code estaba bien.
+- **CI completa (2be5831):** gcc y clang pasan enteras (1328 de 1328). La parte con ASan se cortó al llegar al límite de
+  2 h de la tarea de fondo, con dos fallas: `ui_view_sphere_preview_vulkan_same_as_opengl` (no arrancó Xvfb: del
+  entorno) y la prueba del análisis por la API, que esperaba como mucho 1 min y con ASan el análisis tarda más. La
+  espera de la prueba pasa a 10 min.

@@ -342,9 +342,13 @@ private:
             return list[k];
         };
         at(pulled_, tool_) = retracted_;
+        // With its pieces: the rounding they allow comes back with it.
+        at(pulled_pieces_, tool_) = double(pieces_);
         tool_ = std::size_t(n);
         retracted_ = limits_.mmu ? 0.0 : at(pulled_, tool_);
+        pieces_ = limits_.mmu ? 0 : std::size_t(at(pulled_pieces_, tool_));
         at(pulled_, tool_) = 0.0;
+        at(pulled_pieces_, tool_) = 0.0;
         target_ = retracted_;
         tool_back_ = retracted_ > 1e-9;
         pulling_ = false;
@@ -649,6 +653,7 @@ private:
     bool cold_noted_ = false;     // and that note
     std::vector<bool> macro_heats_; // set to 0 before a printer macro, which may heat it: only a note
     std::vector<double> pulled_;  // each extruder's filament pulled back when it left
+    std::vector<double> pulled_pieces_; // and in how many pieces
     bool tool_back_ = false;      // the tool came back from a change: its own extra
     bool tower_ = false;          // in the wipe tower's lines
     bool awaiting_z_ = false;
