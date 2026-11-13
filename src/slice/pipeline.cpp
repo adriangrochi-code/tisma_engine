@@ -2340,11 +2340,19 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     };
     const int top_count = shell(settings.top_layers, settings.top_min_thickness);
     const int bottom_count = shell(settings.bottom_layers, settings.bottom_min_thickness);
+    // The shell's thickness on slopes (walls_extra.md, rule 7).
+    ShellCheck slopes;
+    slopes.mode = settings.vertical_shell == VerticalShell::Partial  ? ShellCheck::Partial
+                 : settings.vertical_shell == VerticalShell::Enabled ? ShellCheck::Full
+                                                                     : ShellCheck::Off;
+    slopes.z.reserve(out.layers.size());
+    for (const Layer& layer : out.layers)
+        slopes.z.push_back(layer.top);
     out.surfaces = variable_layers(settings)
                        ? classify_surfaces(skins, infill, skin_counts(stack.share, top_count, +1),
-                                           skin_counts(stack.share, bottom_count, -1), settings.wall_width)
+                                           skin_counts(stack.share, bottom_count, -1), settings.wall_width, &slopes)
                        : classify_surfaces(skins, infill, top_count * ratio, bottom_count * ratio,
-                                           settings.wall_width);
+                                           settings.wall_width, &slopes);
     // What the other extruders' parts lay counts as printed below.
     std::vector<Polygons> others;
     if (frame && frame->cover) {

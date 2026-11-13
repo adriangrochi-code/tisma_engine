@@ -557,6 +557,10 @@ const char* top_one_wall_name(TopOneWall where) {
     return where == TopOneWall::Top ? "top" : where == TopOneWall::Topmost ? "topmost" : "none";
 }
 
+const char* vertical_shell_name(VerticalShell mode) {
+    return mode == VerticalShell::Disabled ? "disabled" : mode == VerticalShell::Partial ? "partial" : "enabled";
+}
+
 const char* draft_shield_name(DraftShield shield) {
     return shield == DraftShield::Enabled ? "enabled" : shield == DraftShield::Limited ? "limited" : "disabled";
 }
@@ -1065,7 +1069,7 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
-                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
+                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall", "vertical_shell",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
                 "spread_count", "transition_length", "transition_angle", "transition_margin", "polyholes", "polyhole_margin",
                 "polyhole_twist", "polyhole_max_edges", "unsupported_last"},
@@ -1073,6 +1077,13 @@ Settings parse_checked(std::string_view text) {
         if (n == "generator") {
             s.wall_generator =
                 choice<WallGenerator>(g, n, k, {{"variable", WallGenerator::Variable}, {"fixed", WallGenerator::Fixed}});
+            return;
+        }
+        if (n == "vertical_shell") {
+            s.vertical_shell = choice<VerticalShell>(g, n, k,
+                                                     {{"disabled", VerticalShell::Disabled},
+                                                      {"partial", VerticalShell::Partial},
+                                                      {"enabled", VerticalShell::Enabled}});
             return;
         }
         if (n == "top_one_wall") {
@@ -3771,6 +3782,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.polyhole_max_edges", std::to_string(s.polyhole_max_edges)},
         {"walls.staggered", flag(s.walls_staggered)},
         {"walls.top_one_wall", top_one_wall_name(s.top_one_wall)},
+        {"walls.vertical_shell", vertical_shell_name(s.vertical_shell)},
         {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
         {"walls.extra_if_needed", flag(s.extra_if_needed)},
         {"walls.avoid_curled_overhangs", flag(s.avoid_curled_overhangs)},
@@ -4004,6 +4016,7 @@ std::string settings_json(const Settings& s) {
           {"polyhole_max_edges", s.polyhole_max_edges},
           {"staggered", s.walls_staggered},
           {"top_one_wall", top_one_wall_name(s.top_one_wall)},
+          {"vertical_shell", vertical_shell_name(s.vertical_shell)},
           {"first_layer_one_wall", s.first_layer_one_wall},
           {"extra_if_needed", s.extra_if_needed},
           {"avoid_curled_overhangs", s.avoid_curled_overhangs},

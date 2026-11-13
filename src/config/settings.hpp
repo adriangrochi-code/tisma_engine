@@ -72,6 +72,8 @@ enum class ObjectLabels { None, OctoPrint, Firmware };
 enum class StrictParser { None, Anycubic };
 // Where a top surface keeps only its outer wall (walls_extra.md, rule 10).
 enum class TopOneWall { None, Top, Topmost };
+// Solid infill to keep the shell thick on slopes (walls_extra.md, rule 7).
+enum class VerticalShell { Disabled, Partial, Enabled };
 
 // Which surfaces are ironed (ironing.md): every top surface, only the highest
 // of each part, or every solid layer.
@@ -249,6 +251,7 @@ struct Settings {
     // The odd inner loops half a layer up (walls.staggered, staggered_perimeters.md).
     bool walls_staggered = false;
     TopOneWall top_one_wall = TopOneWall::None;
+    VerticalShell vertical_shell = VerticalShell::Disabled; // the spec says enabled: PROGRESS.md, 2026-11-13
     bool first_layer_one_wall = false;
     bool extra_if_needed = true;
     bool extra_on_overhangs = false; // loops fill an overhang held from one side (rule 5)
@@ -1020,6 +1023,7 @@ const char* limits_usage_name(LimitsUsage usage);
 // The names of a draft shield and a brim type in the settings.
 const char* draft_shield_name(DraftShield shield);
 const char* top_one_wall_name(TopOneWall where);
+const char* vertical_shell_name(VerticalShell mode);
 const char* object_labels_name(ObjectLabels labels);
 const char* strict_parser_name(StrictParser parser);
 // Whether the G-code goes out binary: gcode.binary, unless the printer's

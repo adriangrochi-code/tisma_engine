@@ -26,6 +26,19 @@ struct LayerSurfaces {
     Polygons bridge_support;
 };
 
+// Keeping the shell thick on slopes (walls_extra.md, rule 7). With a mode on,
+// a point of a layer's infill is solid too when it lies closer than the shell
+// thickness (the top or bottom layer count's height) to the part's outside,
+// measured in 3D: some layer within that height above (and, with Full,
+// below) leaves it closer than that, sideways, to its edge. Partial measures
+// to the layer's region, so its walls count, and looks only up; Full measures
+// to the layer's infill region, so the walls do not count, and looks up and
+// down (under overhangs). z holds each layer's height (top of the layer).
+struct ShellCheck {
+    enum Mode { Off, Partial, Full } mode = Off;
+    std::vector<double> z;
+};
+
 // Splits the infill region of every layer into top, bottom and sparse parts.
 // Part of layer i is top when one of the top_layers layers above it does not
 // cover it (the layers above the last one cover nothing), and bottom likewise
@@ -37,8 +50,9 @@ struct LayerSurfaces {
 // many thick layers, docs/VARIABLE_LAYERS.md).
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
                                              const std::vector<int>& top_layers, const std::vector<int>& bottom_layers,
-                                             double min_width = 0.0);
+                                             double min_width = 0.0, const ShellCheck* shell = nullptr);
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
-                                             int top_layers, int bottom_layers, double min_width = 0.0);
+                                             int top_layers, int bottom_layers, double min_width = 0.0,
+                                             const ShellCheck* shell = nullptr);
 
 } // namespace tisma

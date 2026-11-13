@@ -14096,3 +14096,29 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   la E y el largo de cada movimiento, que es exacto. Con escalones de 0,005 mm, `;WIDTH` lo leía hasta 1 % de más.
   Pasa la batería completa de pruebas unitarias.
 
+
+## 2026-11-13 — `walls.vertical_shell` (walls_extra.md, regla 7, W4)
+
+- **Hecho:** el ajuste `walls.vertical_shell` (`disabled`, `partial`, `enabled`), en la tarjeta «Pendientes», con su
+  guía. Diseño propio (`src/surfaces/surfaces.cpp`, `too_thin`): un punto del relleno de la capa i es macizo cuando
+  queda más cerca del exterior que el espesor t de las capas sólidas, medido en 3D: a la altura dz de la capa i + k,
+  tiene que estar a sqrt(t² − dz²) adentro de su borde. `partial` mide a las regiones de las capas (las paredes
+  cuentan) y solo hacia arriba; `enabled` mide a las regiones de relleno (las paredes no cuentan) y también hacia
+  abajo, sobre los voladizos. Lo agregado es relleno sólido, no superficie de arriba.
+- **Prueba nueva** (`[surfaces]`): pirámide de 45° con paredes de 0,4 mm: anillo macizo de 0,2 mm apagado, 0,447 con
+  `partial`, 0,847 con `enabled`; boca abajo, solo `enabled` agrega abajo.
+- **Medido (W4, capa por tipo, mm extruidos):**
+  - techo de 15°, capa 30: `disabled` y `partial` 38,6 de relleno sólido; `enabled` 131,0. La ficha pide 18,39 de más
+    con `partial` y lo mismo con `enabled`: con 2 paredes, en una pendiente suave el espesor normal (t·cos 15°) casi
+    no baja, y el motor no agrega nada con `partial`. Queda aparte la superficie de arriba (75,22 en la ficha, 0 en
+    el motor), que es el ítem siguiente del plan.
+  - hongo, capa 60: solo `enabled` agrega relleno sólido (31,7 mm; la ficha, 124,4). Cumple «solo `enabled`».
+  - cono, capa 20: la capa ya es toda maciza por `infill.solid_below_area` (área chica), en los tres modos.
+  - Benchy: `enabled` lleva el relleno sólido de 10 655 a 19 860 mm y el tiempo de 1h11m33 a 1h20m01 (+12 %); el
+    corte, de 1,14 a 1,21 s.
+- **Decisión pendiente:** la ficha dice `enabled` por defecto. Con `enabled`, 22 pruebas con números exactos cambian y
+  el Benchy tarda 12 % más. Queda `disabled` por defecto (lo de siempre) hasta que la sesión de fichas o el dueño
+  confirmen el cambio; entonces se rehacen esas pruebas.
+- Pasan todas las pruebas (998 sin interfaz, 93 de interfaz). No probado en una impresora.
+- **Sigue:** las superficies de arriba en pendiente (W4, techo); preguntar a la sesión de fichas por el valor por
+  defecto.
