@@ -268,6 +268,43 @@ TEST_CASE("models that cannot be printed end with a clear error and no G-code", 
     CHECK_FALSE(std::filesystem::exists(out));
 }
 
+TEST_CASE("analyze <model> --mode lightest-infill: the lowest infill that holds, as for a project", "[cli]") {
+    const auto dir = test_temp_dir();
+    const auto result = dir / "tisma_test_lightest.json", case_file = dir / "tisma_test_lightest_case.json";
+    {
+        std::ofstream c(case_file);
+        c << R"({"material": "bambu-pla-basic", "model": "as_printed", "voxel": 1.0, "rows_per_layer": 1,
+                 "fixtures": [{"name": "bed", "face": "bottom"}],
+                 "loads": [{"name": "push", "face": "top", "force": [0, 0, -100]}]})";
+    }
+    const std::vector<std::string> base{"analyze", kData + "/cube_ascii.stl", "--config", kData + "/settings.json",
+                                        "--case", case_file.string(), "-o", result.string()};
+    std::vector<std::string> args = base;
+    for (const char* more : {"--mode", "lightest-infill", "--no-zones", "--safety", "3"})
+        args.push_back(more);
+    const Run r = run(args);
+    REQUIRE(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("lightest_infill: "));
+    std::ifstream json(result);
+    const nlohmann::json doc = nlohmann::json::parse(json);
+    CHECK(doc["kind"] == "lightest-infill");
+    const nlohmann::json& summary = doc["summary"];
+    CHECK(summary["found"] == true);
+    CHECK(summary["solid"] == false);
+    CHECK(summary["required_safety"] == 3.0);
+    CHECK(summary["min_safety"].get<double>() >= 3.0);
+    CHECK(summary["density"].get<int>() >= 0);
+    CHECK(summary["density"].get<int>() <= 100);
+    CHECK_FALSE(summary.contains("zones"));
+    // A mode that only a project has, and a factor out of range.
+    args = base;
+    args.insert(args.end(), {"--mode", "resin-structure"});
+    CHECK(run(args).code == kExitUsage);
+    args = base;
+    args.insert(args.end(), {"--mode", "lightest-infill", "--safety", "0.5"});
+    CHECK(run(args).code == kExitUsage);
+}
+
 TEST_CASE("analyze writes the report and the map", "[cli]") {
     const auto dir = test_temp_dir();
     const auto report = dir / "tisma_test_analysis.json", map = dir / "tisma_test_analysis.vtk";

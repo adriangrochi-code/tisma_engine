@@ -126,6 +126,8 @@ constexpr std::string_view kUsage =
     "                     (changes over the project's own settings)\n"
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
+    "                       [--mode lightest-infill [--no-zones] [--ribs] [--safety <factor, 2>]]\n"
+    "                       (the lowest infill that holds, as for a project: structural_optimization.md, rules 2 to 4)\n"
     "  tisma-engine analyze <project> -o <report.json> [--config <settings.json>] [...]\n"
     "                       (the first part with Engineering conditions, as the project keeps them)\n"
     "  tisma-engine analyze <project> -o <result.tea> --summary <summary.json> --sandbox --mode analyze\n"
@@ -1131,7 +1133,40 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     return kExitOk;
 }
 
-int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+int cmd_analyze(std::span<const std::string_view> all_args, std::ostream& out, std::ostream& err) {
+    // The optimizing modes on a model with its case, as on a project
+    // (structural_optimization.md, rules 2 to 4): --mode lightest-infill
+    // [--no-zones] [--ribs] [--safety <factor>].
+    std::string mode = "analyze";
+    bool no_zones = false, ribs = false;
+    ProjectEngineering engineering;
+    std::vector<std::string_view> rest;
+    for (std::size_t i = 0; i < all_args.size(); ++i) {
+        const std::string_view a = all_args[i];
+        if (a == "--mode" && i + 1 < all_args.size()) {
+            mode = std::string(all_args[++i]);
+        } else if (a == "--no-zones") {
+            no_zones = true;
+        } else if (a == "--ribs") {
+            ribs = true;
+        } else if (a == "--safety" && i + 1 < all_args.size()) {
+            double v = 0.0;
+            const std::string_view text = all_args[++i];
+            const auto [end, ec] = chars_to(text.data(), text.data() + text.size(), v);
+            if (ec != std::errc() || end != text.data() + text.size() || !(v >= 1.0 && v <= 10.0)) {
+                err << "error: --safety is a factor from 1 to 10\n";
+                return kExitUsage;
+            }
+            engineering.structural.safety_factor = v;
+        } else {
+            rest.push_back(a);
+        }
+    }
+    if (mode != "analyze" && mode != "lightest-infill") {
+        err << "error: analyze <model>: --mode is analyze or lightest-infill\n";
+        return kExitUsage;
+    }
+    const std::span<const std::string_view> args(rest);
     const std::optional<SliceArgs> parsed = parse_slice_args(args, err, true);
     if (!parsed) {
         err << kUsage;
@@ -1183,6 +1218,38 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     std::unique_ptr<gpu::Context> gpu;
     if (settings.gpu == GpuMode::Auto && analysis.model == AnalysisModel::AsPrinted)
         gpu = gpu::Context::create();
+    if (mode == "lightest-infill") {
+        if (analysis.fixtures.empty() || analysis.loads.empty()) {
+            err << "error: the case needs a fixed zone and a force\n";
+            return kExitInput;
+        }
+        nlohmann::json result{{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "lightest-infill"},
+                              {"part", std::filesystem::path(parsed->model).filename().string()}};
+        try {
+            result["summary"] = lightest_infill_search(mesh, stl.mesh, settings, analysis, engineering, no_zones, ribs,
+                                                       [&](double done) {
+                                                           if (parsed->progress)
+                                                               out << "progress: lightest-infill " << done << std::endl;
+                                                       },
+                                                       result);
+        } catch (const AnalysisError& e) {
+            err << "error: " << e.what() << "\n";
+            return kExitAnalysis;
+        }
+        const nlohmann::json& summary = result["summary"];
+        if (summary["found"].get<bool>() && !summary["solid"].get<bool>())
+            out << "lightest_infill: " << summary["density"].get<int>() << " %, min_safety " << summary["min_safety"].dump()
+                << " (asked " << engineering.structural.safety_factor << ")\n";
+        else
+            out << "lightest_infill: " << (summary["solid"].get<bool>() ? "the case analyses the part solid" : "not even 100 % holds")
+                << "\n";
+        if (!write_file(parsed->output, [&](std::ostream& json) { json << result.dump(2) << "\n"; })) {
+            err << "error: cannot write '" << parsed->output << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->output << "\n";
+        return kExitOk;
+    }
     if (parsed->estimate) {
         AnalysisEstimate estimate;
         try {

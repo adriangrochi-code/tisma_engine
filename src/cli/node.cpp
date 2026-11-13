@@ -549,7 +549,76 @@ std::string slice_summary_json(const std::filesystem::path& gcode, double filame
     return summary.dump(2);
 }
 
+nlohmann::json lightest_infill_search(const IndexedMesh& mesh, const TriangleMesh& part, const Settings& settings,
+                                      const AnalysisCase& c, const ProjectEngineering& e, bool no_zones, bool ribs,
+                                      const std::function<void(double)>& progress, nlohmann::json& result) {
+    // structural_optimization.md, rules 2 to 4: the lowest uniform infill
+    // that holds; then by zones (unless no_zones) and with ribs, each
+    // proposed only when lighter. The zones are boxes on the bed, where the
+    // part stands (the desktop turns them into the part's own volumes; the
+    // boxes and their settings are in the result).
+    const double steps = 1.0 + (no_zones ? 0.0 : 1.0) + (ribs ? 1.0 : 0.0);
+    int stage = 0;
+    const auto share = [&](double done) {
+        if (progress)
+            progress((double(stage) + std::clamp(done, 0.0, 1.0)) / steps);
+    };
+    LightestInfill best;
+    ZonedInfill zoned;
+    RibbedInfill ribbed;
+    best = lightest_infill(mesh, part, settings, c, e, share);
+    ++stage;
+    if (best.found && !best.solid && !no_zones) {
+        zoned = zoned_infill(mesh, part, settings, c, e, best.density, share);
+        ++stage;
+    }
+    if (best.found && !best.solid && ribs)
+        ribbed = ribbed_infill(mesh, part, settings, c, e, best.density, share);
+    const auto boxes = [](const std::vector<MeshModifier>& mods) {
+        nlohmann::json list = nlohmann::json::array();
+        for (const MeshModifier& m : mods) {
+            const BoundingBox b = m.mesh.bounding_box();
+            list.push_back({{"name", m.name},
+                            {"min", {b.min.x, b.min.y, b.min.z}},
+                            {"max", {b.max.x, b.max.y, b.max.z}},
+                            {"settings", nlohmann::json::parse(m.settings)}});
+        }
+        return list;
+    };
+    const auto finite = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
+    nlohmann::json summary{{"mode", "lightest-infill"},
+                           {"solid", best.solid},
+                           {"found", best.found},
+                           {"density", best.found ? nlohmann::json(best.density) : nlohmann::json(nullptr)},
+                           {"min_safety", finite(best.min_safety)},
+                           {"required_safety", e.structural.safety_factor},
+                           {"analyses", best.analyses + zoned.analyses + ribbed.analyses}};
+    if (!no_zones && best.found && !best.solid) {
+        summary["zones"] = {{"found", zoned.found},
+                            {"lighter", zoned.lighter},
+                            {"levels", zoned.zones.density},
+                            {"mass_g", zoned.mass_g},
+                            {"uniform_mass_g", zoned.uniform_mass_g}};
+        if (zoned.lighter)
+            result["zones"] = boxes(zoned.zones.modifiers);
+    }
+    if (ribs && best.found && !best.solid) {
+        summary["ribs"] = {{"found", ribbed.found},
+                           {"lighter", ribbed.lighter},
+                           {"density", ribbed.density},
+                           {"angles", ribbed.ribs.angles}};
+        if (ribbed.lighter)
+            result["ribs"] = boxes(ribbed.ribs.modifiers);
+    }
+    return summary;
+}
+
 bool node_analyze_wanted(std::span<const std::string_view> args) {
+    // A model with its load case (--case) is analysed by `analyze <model>`,
+    // whatever the mode.
+    for (const std::string_view a : args)
+        if (a == "--case")
+            return false;
     for (const std::string_view a : args)
         if (a == "--summary" || a == "--sandbox" || a == "--mode" || a == "--object" || a == "--instance")
             return true;
@@ -727,64 +796,16 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         // each proposed only when lighter. The zones are boxes on the bed,
         // where the part stands (the desktop turns them into the part's own
         // volumes; the boxes and their settings are in the result).
-        const double steps = 1.0 + (no_zones ? 0.0 : 1.0) + (ribs ? 1.0 : 0.0);
-        int stage = 0;
-        const auto share = [&](double done) {
-            progress(10 + int((double(stage) + std::clamp(done, 0.0, 1.0)) / steps * 85.0));
-        };
-        LightestInfill best;
-        ZonedInfill zoned;
-        RibbedInfill ribbed;
+        nlohmann::json result{{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "lightest-infill"},
+                              {"object", index}, {"instance", 0}, {"part", model.name}, {"fingerprint", fingerprint}};
+        nlohmann::json summary;
         try {
-            best = lightest_infill(mesh, part.mesh, settings, c, placed, share);
-            ++stage;
-            if (best.found && !best.solid && !no_zones) {
-                zoned = zoned_infill(mesh, part.mesh, settings, c, placed, best.density, share);
-                ++stage;
-            }
-            if (best.found && !best.solid && ribs)
-                ribbed = ribbed_infill(mesh, part.mesh, settings, c, placed, best.density, share);
+            summary = lightest_infill_search(mesh, part.mesh, settings, c, placed, no_zones, ribs,
+                                             [&](double done) { progress(10 + int(std::clamp(done, 0.0, 1.0) * 85.0)); },
+                                             result);
         } catch (const AnalysisError& e) {
             return fail_coded(kExitAnalysis, e.what(), "too_large",
                               "la pieza es demasiado grande para analizarla con esta memoria; probá la calidad rápida");
-        }
-        const auto boxes = [](const std::vector<MeshModifier>& mods) {
-            nlohmann::json list = nlohmann::json::array();
-            for (const MeshModifier& m : mods) {
-                const BoundingBox b = m.mesh.bounding_box();
-                list.push_back({{"name", m.name},
-                                {"min", {b.min.x, b.min.y, b.min.z}},
-                                {"max", {b.max.x, b.max.y, b.max.z}},
-                                {"settings", nlohmann::json::parse(m.settings)}});
-            }
-            return list;
-        };
-        const auto finite = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
-        nlohmann::json summary{{"mode", "lightest-infill"},
-                               {"solid", best.solid},
-                               {"found", best.found},
-                               {"density", best.found ? nlohmann::json(best.density) : nlohmann::json(nullptr)},
-                               {"min_safety", finite(best.min_safety)},
-                               {"required_safety", placed.structural.safety_factor},
-                               {"analyses", best.analyses + zoned.analyses + ribbed.analyses}};
-        nlohmann::json result{{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "lightest-infill"},
-                              {"object", index}, {"instance", 0}, {"part", model.name}, {"fingerprint", fingerprint}};
-        if (!no_zones && best.found && !best.solid) {
-            summary["zones"] = {{"found", zoned.found},
-                                {"lighter", zoned.lighter},
-                                {"levels", zoned.zones.density},
-                                {"mass_g", zoned.mass_g},
-                                {"uniform_mass_g", zoned.uniform_mass_g}};
-            if (zoned.lighter)
-                result["zones"] = boxes(zoned.zones.modifiers);
-        }
-        if (ribs && best.found && !best.solid) {
-            summary["ribs"] = {{"found", ribbed.found},
-                               {"lighter", ribbed.lighter},
-                               {"density", ribbed.density},
-                               {"angles", ribbed.ribs.angles}};
-            if (ribbed.lighter)
-                result["ribs"] = boxes(ribbed.ribs.modifiers);
         }
         result["summary"] = summary;
         if (!write_file(a.output, [&](std::ostream& f) { f << result.dump() << "\n"; }))

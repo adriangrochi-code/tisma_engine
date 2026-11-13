@@ -13832,3 +13832,20 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Sin probar:** en un iPhone real; la memoria en iOS no está medida.
 - **Sigue:** la vista previa por capas y el análisis por la API; los ajustes de un proyecto 3MF.
 
+## 2026-11-13 — `analyze <modelo> --mode lightest-infill` (pedido de QA para Android e iPhone)
+
+- **Hecho:**
+  - `analyze <modelo> --config <s.json> --case <case.json> --mode lightest-infill -o <r.json>` busca el relleno mínimo
+    sobre una pieza suelta, igual que con un proyecto (`structural_optimization.md`, reglas 2 a 4).
+  - Hace primero la búsqueda uniforme, después las zonas (salvo con `--no-zones`) y los nervios (con `--ribs`).
+  - Sin proyecto, el factor de seguridad pedido es 2, el mismo que trae un proyecto nuevo; `--safety` lo cambia.
+  - El resultado tiene el mismo formato que con un proyecto: `tisma-engineering-result`, `kind` `lightest-infill`, y el
+    resumen con `found`, `density`, `min_safety`, `required_safety`, `zones` y `ribs`.
+  - La búsqueda se movió a `lightest_infill_search` (`src/cli/node.cpp`), que usan las dos rutas.
+  - `analyze` con `--case` va siempre por la ruta del modelo, aunque lleve `--mode`.
+  - Respuesta al iPhone: el motor no lee STEP en ninguna plataforma.
+- **Pruebas:**
+  - el cubo de 10 mm con un caso «as_printed» y `--safety 3`;
+  - un modo inválido y un factor fuera de rango dan error de uso;
+  - la prueba de la ruta de proyecto sigue pasando.
+
