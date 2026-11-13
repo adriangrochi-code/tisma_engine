@@ -4273,8 +4273,64 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 const double dy = std::max({b[1] - cursor.y, 0.0, cursor.y - b[3]});
                 return std::hypot(dx, dy);
             };
+            // The islands' order (toolpath_time.md, rule 2): nearest neighbour
+            // from the cursor, then improved two at a time (2-opt: a stretch of
+            // the order reversed while that makes the tour shorter), on a point
+            // per island (the middle of its paths' ends). Without object labels,
+            // which keep each object's islands together.
+            std::vector<std::size_t> order;
+            std::size_t order_at = 0;
+            if (labels == Labels::None) {
+                std::vector<std::size_t> todo;
+                for (std::size_t k = 0; k < islands.size(); ++k)
+                    if (!islands[k].ends.empty())
+                        todo.push_back(k);
+                if (todo.size() >= 3) {
+                    const auto middle = [&](std::size_t k) {
+                        const auto& b = end_box[k];
+                        return Point2d{(b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0};
+                    };
+                    std::vector<Point2d> at(islands.size());
+                    for (const std::size_t k : todo)
+                        at[k] = middle(k);
+                    const auto dist = [](const Point2d& p, const Point2d& q) { return std::hypot(p.x - q.x, p.y - q.y); };
+                    Point2d from = cursor;
+                    std::vector<bool> taken(islands.size(), false);
+                    for (std::size_t n = 0; n < todo.size(); ++n) {
+                        std::size_t best = islands.size();
+                        double d = std::numeric_limits<double>::max();
+                        for (const std::size_t k : todo)
+                            if (!taken[k] && dist(from, at[k]) < d)
+                                d = dist(from, at[k]), best = k;
+                        taken[best] = true;
+                        order.push_back(best);
+                        from = at[best];
+                    }
+                    // 2-opt on the open tour from the cursor, a bounded number of passes.
+                    const auto point = [&](std::size_t i) { return i == 0 ? cursor : at[order[i - 1]]; };
+                    bool better = true;
+                    for (int pass = 0; better && pass < 8; ++pass) {
+                        better = false;
+                        for (std::size_t i = 1; i + 1 <= order.size(); ++i)
+                            for (std::size_t j = i + 1; j <= order.size(); ++j) {
+                                // Reverse order[i-1 .. j-1]: edges (i-1, i) and (j, j+1) change.
+                                const double before = dist(point(i - 1), point(i)) +
+                                                      (j < order.size() ? dist(point(j), point(j + 1)) : 0.0);
+                                const double after = dist(point(i - 1), point(j)) +
+                                                     (j < order.size() ? dist(point(i), point(j + 1)) : 0.0);
+                                if (after + 1e-9 < before) {
+                                    std::reverse(order.begin() + std::ptrdiff_t(i - 1), order.begin() + std::ptrdiff_t(j));
+                                    better = true;
+                                }
+                            }
+                    }
+                }
+            }
             for (;;) {
                 std::size_t next = islands.size();
+                if (order_at < order.size()) {
+                    next = order[order_at++];
+                } else {
                 double nearest = std::numeric_limits<double>::max();
                 const auto look = [&](std::size_t k) {
                     for (const Point2d& p : islands[k].ends) {
@@ -4298,6 +4354,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                         look(k);
                 if (next == islands.size())
                     break;
+                }
                 done[next] = true;
                 current = slot(next);
                 --left[current];

@@ -14066,3 +14066,20 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
     piezas que unidas del todo y menos que sueltas;
   - pasa la batería sin interfaz completa: 996 casos.
 
+## 2026-11-13 — toolpath_time.md regla 2: el orden de las islas con mejoras de a dos (bloque de noche)
+
+- **Ya estaba:** vecino más cercano entre islas por la punta más cercana. Las reglas 3 y 6 (cada línea suelta desde
+  su punta más cercana, y la zona siguiente por su punto más cercano) ya las cumple `order_paths`.
+- **Hecho:** con 3 islas o más y sin etiquetas de objeto, el orden se arma antes del bucle.
+  - Primero el vecino más cercano desde el cursor, con un punto por isla (el centro de la caja de sus extremos).
+  - Después, mejoras de a dos (2-opt): se da vuelta un tramo del orden mientras el recorrido se acorte, hasta 8
+    pasadas.
+  - Dentro de cada isla, todo sigue igual.
+- **Medido:**
+  - placa de 30 cubitos de 5 mm al azar: viaje de 23,9 a 21,1 m (−11,7 %), tiempo de 34 min 36 s a 34 min 21 s;
+  - Benchy (pocas islas por capa): sin cambio en el viaje, +2 s.
+- **Pruebas:** pasa la batería sin interfaz (997 casos). No hay una prueba propia del orden: el punto de partida de
+  cada capa depende de dónde terminó la anterior. Queda la medición de arriba.
+- **Sigue:** la regla 9 (ordenar por tiempo y no por distancia) y la regla 8 (retraer mientras viaja, meta RT5 a
+  aprobar).
+
