@@ -1153,3 +1153,25 @@ TEST_CASE("extruders: a tool change's time counts as preparation (print_time.md,
     CHECK_THAT(prep, Catch::Matchers::WithinAbs(moves + 2.0 * double(changes), 1.5));
     CHECK(prep < seconds(text, "printing time"));
 }
+
+TEST_CASE("extruders: a change's purge on the wipe tower counts as preparation (print_time.md, rule 14)", "[extruders][time]") {
+    const auto seconds = [](const std::string& text, const std::string& which) {
+        const std::string key = "; estimated " + which + " = ";
+        const std::size_t at = text.find(key);
+        if (at == std::string::npos)
+            return 0.0;
+        return parse_duration(text.substr(at + key.size(), text.find('\n', at) - at - key.size()));
+    };
+    Settings s = base();
+    s.toolchange_length = {4.0};
+    const std::string plain = gcode_of(two_colours(), s);
+    s.wipe_tower = true;
+    const std::string tower = gcode_of(two_colours(), s);
+    REQUIRE(tower.find(";TYPE:Wipe tower") != std::string::npos);
+    // The purge blocks take time, and it goes to the preparation, inside the total.
+    const double before = seconds(plain, "preparation time"), after = seconds(tower, "preparation time");
+    INFO("preparation " << before << " s without the tower, " << after << " s with it");
+    CHECK(after > before + 10.0);
+    CHECK(after < seconds(tower, "printing time"));
+    CHECK(seconds(tower, "printing time") > seconds(plain, "printing time"));
+}

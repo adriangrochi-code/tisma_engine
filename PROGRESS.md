@@ -13986,6 +13986,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   - con una plantilla que espera 2 s, la preparación es la de los cambios sin plantilla más 2 s por cambio,
     incluida la selección de la primera herramienta;
   - corren también `[gcode]`, `[firmware]`, `[determinism]`, `[color_mix]` y `[mmu]`.
-- **Falta de la regla 14:** la purga en la torre como preparación. Las reglas 11 y 15 (aprender de la impresora)
-  necesitan la impresora.
+- **La purga en la torre (mismo día):** el rammeo y el bloque de purga de cada cambio en la torre llevan la marca
+  `purge` desde el plan. El emisor abre un intervalo de tiempo al primero y lo cierra en el primer camino que no lo
+  es; ese tiempo va a la preparación. El armazón de la torre no cuenta como purga. El cambio de herramienta que cae
+  dentro de una purga no abre un intervalo propio, así que no se cuenta dos veces. Prueba: dos colores con torre, 50
+  cambios; la preparación pasa de 6 s sin torre a 258 s con torre y queda por debajo del total.
+- **Con esto, la regla 14 está completa.** Las reglas 11 y 15 (aprender de la impresora) necesitan la impresora.
 

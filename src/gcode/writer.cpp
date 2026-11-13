@@ -1071,11 +1071,19 @@ public:
         // moves are the time between a mark before it and one after it, once
         // planned (the planner adds waits at the layer's end, not between
         // marks; the change's own waits count through machine_gcode).
-        changes_.push_back({time_.mark(), 0});
+        // On the tower the purge's interval holds the change already.
+        const bool own = !purging_;
+        if (own)
+            changes_.push_back({time_.mark(), 0});
         struct Close {
             Emitter& w;
-            ~Close() { w.changes_.back().after = w.time_.mark(); }
-        } close{*this};
+            std::size_t index;
+            bool own;
+            ~Close() {
+                if (own)
+                    w.changes_[index].after = w.time_.mark();
+            }
+        } close{*this, changes_.size() - 1, own};
         extruder_off();
         wiped_path_.clear();
         if (mmu) {
@@ -1242,10 +1250,24 @@ public:
     }
     // The preparation: waits, heating, homing, levelling, and the tool
     // changes once the time is planned.
+    // From a change's purge on the tower to the next path that is not one:
+    // the time between, preparation (print_time.md, rule 14).
+    void purging(bool on) {
+        if (on == purging_)
+            return;
+        purging_ = on;
+        if (on) {
+            purge_ = changes_.size();
+            changes_.push_back({time_.mark(), 0});
+        } else {
+            changes_[purge_].after = time_.mark();
+        }
+    }
     double preparation_time() const {
         double seconds = preparation_;
         for (const Change& c : changes_)
-            seconds += std::max(0.0, time_.time_at(c.after) - time_.time_at(c.before));
+            if (c.after > c.before)
+                seconds += std::max(0.0, time_.time_at(c.after) - time_.time_at(c.before));
         return seconds;
     }
 
@@ -2353,6 +2375,8 @@ private:
         std::size_t after = 0;
     };
     std::vector<Change> changes_;
+    bool purging_ = false;
+    std::size_t purge_ = 0; // the open purge's entry in changes_
     double travel_accel_, short_travel_accel_; // asked for travels; 0: none
     double retracted_amount_ = 0.0; // the E the last retraction pulled back (none with G10)
     // retraction_travel.md: the push back's feed (0: the retraction's) and
@@ -3666,6 +3690,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // and 4); -1: the layer's.
         double fan = -1.0;
         bool weak_fan = false;
+        // A change's purge on the wipe tower (its ramming and its block):
+        // preparation in the time (print_time.md, rule 14).
+        bool purge = false;
     };
     // The aligned seam's candidates of each wall loop of a layer (by its
     // place in the layer's walls), found for many layers at once ahead of
@@ -3997,13 +4024,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const bool changes = std::any_of(change_from.begin(), change_from.end(), [](int f) { return f > 0; });
         std::size_t next_block = 0;
         bool shell_laid = tower_layer == nullptr;
-        const auto lay_tower = [&](const std::vector<Toolpath>& paths, int tool) {
+        const auto lay_tower = [&](const std::vector<Toolpath>& paths, int tool, bool purge = false) {
             laying_tool = tool;
             const std::size_t first_step = steps.size();
             for (const Toolpath& t : paths)
                 lay(t, "Wipe tower", speed(s.infill_speed));
-            for (std::size_t k = first_step; k < steps.size(); ++k)
+            for (std::size_t k = first_step; k < steps.size(); ++k) {
                 steps[k].drop = tower_layer->drop;
+                steps[k].purge = purge;
+            }
             if (labels != Labels::None && label_now != -1)
                 for (std::size_t k = first_step; k < steps.size(); ++k)
                     if (steps[k].type) {
@@ -4066,8 +4095,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     const std::size_t first_step = steps.size();
                     for (std::size_t k = 0; k < ram.size(); ++k)
                         lay(ram[k], "Wipe tower", tower_layer->ramming_feed[next_block][k]);
-                    for (std::size_t k = first_step; k < steps.size(); ++k)
+                    for (std::size_t k = first_step; k < steps.size(); ++k) {
                         steps[k].drop = tower_layer->drop;
+                        steps[k].purge = true;
+                    }
                     if (labels != Labels::None && label_now != -1)
                         for (std::size_t k = first_step; k < steps.size(); ++k)
                             if (steps[k].type) {
@@ -4075,7 +4106,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                 break;
                             }
                 }
-                lay_tower(tower_layer->blocks[next_block++], tool);
+                lay_tower(tower_layer->blocks[next_block++], tool, true);
                 if (!shell_laid) {
                     lay_tower(tower_layer->shell, tool);
                     shell_laid = true;
@@ -4681,6 +4712,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 label = wanted;
             }
             const Toolpath& t = step.path;
+            g.purging(step.purge); // the purge's time apart (print_time.md, rule 14)
             if (s.gcode_progress && k > 0)
                 g.progress_mark();
             // A vase's turn starts where the one below ended: no travel, unless
