@@ -2286,7 +2286,8 @@ const std::map<T, const char*>& row_keys() {
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
-        {T::RetractLayerChange, "retraction.on_layer_change"}, {T::WipeRow, "retraction.wipe"},
+        {T::RetractLayerChange, "retraction.on_layer_change"}, {T::RetractOnlyCrossingWalls, "retraction.only_crossing_walls"},
+        {T::WipeRow, "retraction.wipe"},
         {T::BeforeWipe, "retraction.before_wipe"}, {T::AfterWipe, "retraction.after_wipe"},
         {T::WipeInward, "retraction.wipe_inward"}, {T::WipeInwardDistance, "retraction.wipe_inward_distance"},
         {T::Coast, "retraction.coast"}, {T::FirmwareRetraction, "retraction.firmware"},
@@ -10272,6 +10273,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
            s.unretract_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
         mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, -50.0, 1000.0, "%.2f mm", 0.01f);
         flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
+        flag(T::RetractOnlyCrossingWalls, "retraction.only_crossing_walls", s.retract_only_crossing_walls);
         flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
     } else if (id == "wipe") {
         flag(T::WipeRow, "retraction.wipe", s.wipe);
