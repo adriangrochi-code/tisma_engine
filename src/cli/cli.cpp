@@ -782,7 +782,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     // machine: said, so that it is not sent to one as it is (QA, 2026-11-16).
     if (settings.bed.empty())
         err << "warning: no printer in the settings (no bed): the part stays round X 0, Y 0, nothing is checked "
-               "against a bed, and the G-code heats only what the settings give; use --printer or a printer's settings\n";
+               "against a bed, and the G-code heats only what the settings give; give a printer's settings with --config\n";
 
     ModelFile stl;
     double seconds = 0.0;

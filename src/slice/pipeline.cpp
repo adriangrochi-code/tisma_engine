@@ -97,11 +97,33 @@ std::vector<Toolpath> boundary_loops(const Polygons& region, double width) {
 // the sheath, a loop around each zone first and the pattern a bead's spacing
 // inside it.
 std::vector<Toolpath> support_base(const Polygons& base, const Settings& settings, double bead, double width,
-                                   std::size_t l) {
+                                   std::size_t l, const Polygons* part = nullptr) {
     std::vector<Toolpath> out;
     Polygons inside = base;
     if (settings.support_sheath) {
-        out = boundary_loops(base, width);
+        // Round each zone's outer edge, and round a hole only where the
+        // part passes through it: a hole left by a blocked patch got a loop
+        // of its own, more support round it than without the block (QA's
+        // G4, 2026-11-16). The lines keep a bead off every edge, as before.
+        Polygons loops;
+        for (Polygon& ring : offset(base, -width / 2.0)) {
+            bool keep = Clipper2Lib::Area(ring) > 0.0;
+            if (!keep && part && !part->empty()) {
+                Polygon filled(ring.rbegin(), ring.rend()); // the hole as an area
+                keep = !Clipper2Lib::Intersect(Polygons{filled}, *part, Clipper2Lib::FillRule::NonZero).empty();
+            }
+            if (keep)
+                loops.push_back(std::move(ring));
+        }
+        for (const Polygon& p : loops) {
+            if (p.size() < 3)
+                continue;
+            Toolpath t;
+            t.closed = true;
+            for (const auto& q : p)
+                t.points.push_back({{to_mm(q.x), to_mm(q.y)}, width});
+            out.push_back(std::move(t));
+        }
         inside = offset(base, -bead);
     }
     const double spacing = settings.support_spacing + bead;
@@ -2933,7 +2955,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           // of free space apart; the interface across them, a
                           // bead's spacing apart (supports_skirt.md, rules 5 and 6).
                           const double bead = loop_spacing(width, h);
-                          out.fills[l].support = support_base(base, settings, bead, width, l);
+                          out.fills[l].support = support_base(base, settings, bead, width, l, &out.regions[l]);
                           // The two top interface layers: the part one or two
                           // layers past the Z gap (supports_more.md, rule 12).
                           Polygons contact;
