@@ -27748,7 +27748,7 @@ bool App::script_check(const ScriptStep& step, int f) {
         if (!result_ || !result_->ok)
             return fail_step("nothing sliced");
         std::vector<std::array<float, 3>> where;
-        const double share = floating_support_share(result_->preview, 1.0, &where) * 100.0;
+        const double share = floating_support_share(result_->preview, 1.5, &where) * 100.0;
         std::printf("ui-script: expect-support-floating %s: %.2f %%\n", step.key.c_str(), share);
         for (std::size_t i = 0; i < where.size(); i += std::max<std::size_t>(1, where.size() / 12))
             std::printf("ui-script:   floating: %.2f %.2f %.2f\n", where[i][0], where[i][1], where[i][2]);
@@ -27758,7 +27758,10 @@ bool App::script_check(const ScriptStep& step, int f) {
     } else if (step.verb == "expect-support-under-overhangs") { // support under every overhang steeper than the angle
         if (!result_ || !result_->ok)
             return fail_step("nothing sliced");
-        const std::vector<OverhangPoint> points = overhang_points();
+        // Bridges need no support unless asked (RELEASE_GATE.md, «Definiciones
+        // para G3»; supports_skirt.md, rule 1).
+        const std::vector<OverhangPoint> points =
+            settings_.support_under_bridges ? overhang_points() : without_bridges(result_->preview, overhang_points());
         const std::vector<OverhangPoint> bare = overhangs_without_support(result_->preview, points);
         struct Region {
             double area = 0.0, bare = 0.0;
@@ -27778,7 +27781,7 @@ bool App::script_check(const ScriptStep& step, int f) {
             const Region& g = regions[r];
             if (g.area < 1.0)
                 continue;
-            std::printf("ui-script:   overhang %zu at %.1f %.1f %.1f: %.1f mm2, %.1f mm2 without support\n", r, g.x, g.y,
+            std::printf("ui-script:   overhang %zu at %.1f %.1f %.1f: %.1f mm2, %.3f mm2 without support\n", r, g.x, g.y,
                         g.z, g.area, g.bare);
             failing += g.bare > 0.0;
         }

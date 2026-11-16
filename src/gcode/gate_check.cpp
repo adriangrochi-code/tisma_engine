@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <unordered_set>
 
 namespace tisma {
@@ -232,6 +233,71 @@ double floating_support_share(const GcodePreview& p, double reach, std::vector<s
         }
     }
     return total > 0.0 ? floating / total : 0.0;
+}
+
+std::vector<OverhangPoint> without_bridges(const GcodePreview& p, const std::vector<OverhangPoint>& points) {
+    constexpr double cell = 0.2, pi = 3.14159265358979;
+    std::vector<std::optional<CellSet>> part(p.layers.size()); // the part's beads per layer, made when needed
+    const auto part_of = [&](std::size_t l) -> const CellSet& {
+        if (!part[l]) {
+            CellSet s{cell, {}};
+            const PreviewLayer& layer = p.layers[l];
+            for (std::size_t e = 0; e < layer.extrusion_count; ++e) {
+                const PreviewMove& m = p.moves[p.extrusions[layer.first_extrusion + e]];
+                if (part_kind(m.kind))
+                    s.add_move(m);
+            }
+            part[l] = std::move(s);
+        }
+        return *part[l];
+    };
+    const auto occupied = [](const CellSet& s, double x, double y) {
+        return s.cells.count(CellSet::key(std::int64_t(std::floor(x / s.cell)), std::int64_t(std::floor(y / s.cell)))) > 0;
+    };
+    std::vector<OverhangPoint> kept;
+    for (const OverhangPoint& q : points) {
+        // The layer right under the point: the highest whose top is below it.
+        std::size_t under = p.layers.size();
+        for (std::size_t l = 0; l < p.layers.size(); ++l)
+            if (p.layers[l].extrusion_count && p.layers[l].z <= q.z + 1e-3)
+                under = l;
+        bool bridge = false;
+        if (under < p.layers.size()) {
+            const CellSet& s = part_of(under);
+            // Walks from the point along (dx, dy) to the first bead; false
+            // if there is none within 300 mm, or it is met at less than 60
+            // degrees to its edge.
+            const auto reaches = [&](double dx, double dy) {
+                for (double t = 0.0; t < 300.0; t += cell * 0.5) {
+                    const double x = q.x + dx * t, y = q.y + dy * t;
+                    if (!occupied(s, x, y))
+                        continue;
+                    // The edge's normal: from the hit to the middle of the
+                    // beads within 1 mm.
+                    double cx = 0.0, cy = 0.0;
+                    int n = 0;
+                    for (double u = -1.0; u <= 1.0; u += cell)
+                        for (double v = -1.0; v <= 1.0; v += cell)
+                            if (u * u + v * v <= 1.0 && occupied(s, x + u, y + v))
+                                cx += u, cy += v, ++n;
+                    const double len = std::hypot(cx, cy);
+                    if (n == 0 || len < 1e-9)
+                        return true; // inside a mass of beads: met head on
+                    // At 60 degrees or more to the edge: within 30 degrees
+                    // of its normal.
+                    return (cx * dx + cy * dy) / len >= std::cos(30.0 * pi / 180.0);
+                }
+                return false;
+            };
+            for (int k = 0; k < 8 && !bridge; ++k) {
+                const double a = k * pi / 8.0, dx = std::cos(a), dy = std::sin(a);
+                bridge = reaches(dx, dy) && reaches(-dx, -dy);
+            }
+        }
+        if (!bridge)
+            kept.push_back(q);
+    }
+    return kept;
 }
 
 std::vector<OverhangPoint> overhangs_without_support(const GcodePreview& p, const std::vector<OverhangPoint>& points,
