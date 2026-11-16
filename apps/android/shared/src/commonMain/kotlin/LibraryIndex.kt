@@ -30,6 +30,11 @@ class LibraryIndex(val sequence: Long, val models: List<Model>) {
         val id: String, val revision: Int, val name: String, val description: String, val tags: List<String>,
         val license: String, val author: String, val authorAccount: String, val size: Long, val files: List<FileRef>,
         val checked: Boolean, val thumbnail: String,
+        /**
+         * Rule 3 ter, `swarm.piece_roots`: per file (by its SHA-256), the SHA-256 of its pieces' hashes in order; what a
+         * piece list from a peer or the seeder must give (rules 8 septies and 8 octies).
+         */
+        val pieceRoots: Map<String, String> = emptyMap(),
     ) {
         /** Rule 3 sexies: never G-code; a model that lists one is not offered. */
         val hasGcode: Boolean get() = files.any { it.role == "gcode" || it.path.substringAfterLast('.').lowercase() in GCODE }
@@ -69,7 +74,9 @@ class LibraryIndex(val sequence: Long, val models: List<Model>) {
                     (m["files"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().map { f ->
                         FileRef(f.s("path"), f.s("role"), (f["size"] as? JsonPrimitive)?.longOrNull ?: 0, f.s("sha256").lowercase())
                     },
-                    (m["checked"] as? JsonPrimitive)?.booleanOrNull ?: false, m.s("thumbnail"))
+                    (m["checked"] as? JsonPrimitive)?.booleanOrNull ?: false, m.s("thumbnail"),
+                    ((m["swarm"] as? JsonObject)?.get("piece_roots") as? JsonObject).orEmpty()
+                        .mapNotNull { (k, v) -> (v as? JsonPrimitive)?.contentOrNull?.let { k.lowercase() to it.lowercase() } }.toMap())
             }
             return LibraryIndex(sequence, models)
         }

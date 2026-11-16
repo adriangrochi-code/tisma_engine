@@ -12419,5 +12419,13 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   /v1/health y nodes_online ≥ 1) y `stop`; salidas url, email, password, token, library_project_key. HTTP plano; desde
   el emulador el host es 10.0.2.2. Registro: el código de 6 cifras queda en el log del servicio sin SMTP. No hay
   paquete para macOS: iOS necesitaría un maestro en otra máquina. Falta que el dueño cargue el PAT como secreto.
+- 16-11 (QA levanta la pausa solo para esto): p2p_library 8 octies y 8 nonies en el código común (Android e iPhone):
+  `SeedClient` (GET `/v1/seed/<sha256>/pieces` y `/piece/<n>`, GET/PUT `/v1/seed/upload/…`, `Bearer` con el ticket),
+  `SeedDownload` (lista contra `piece_roots`, cada pedazo contra su huella con un reintento, archivo entero al final,
+  retoma lo guardado; 404 «todavía no disponible», 403/451 bloqueado, 429 con `Retry-After`, 401 pide ticket nuevo una
+  vez) y `SeedUpload` (retoma desde `have`, 201 completo, 422 con el motivo, 409/413, 429, 507). El índice lee
+  `swarm.piece_roots`; `Sha256.Stream` hashea por partes. Probado contra un sembrador falso (8 pruebas comunes + 1 del
+  índice); falta la pantalla (bajar y publicar) y el servidor real. Supuesto a confirmar con el servidor: la respuesta de
+  `POST /v1/library/relay-ticket` trae el ticket en `ticket`.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.

@@ -151,6 +151,16 @@ class BlockListTest {
     }
 
     @Test
+    fun `rule 3 ter the index gives each file's piece root for the seeder and the peers`() {
+        val sha = "a".repeat(64)
+        val m = model("m1", "Gear box", "acct-1", sha).dropLast(1) +
+            ""","swarm":{"protocol":"libp2p/tisma-library/1","piece_size":1048576,"piece_roots":{"${sha.uppercase()}":"${"B".repeat(64)}"}}}"""
+        val json = index(1, m)
+        val idx = LibraryIndex.read(json, sign(library, json), libraryKey)
+        assertEquals(mapOf(sha to "b".repeat(64)), idx.models.single().pieceRoots)
+    }
+
+    @Test
     fun `rule 3 ter bis an index too large for this version is refused with its notice and the kept one stays`() {
         val dir = tmp.newFolder("p2p")
         val kept = index(1, model("m1", "Gear box", "acct-1", "a".repeat(64)))

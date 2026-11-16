@@ -14,18 +14,49 @@ object Sha256 {
         0x748f82ee, 0x78a5636f, -0x7b3787ec, -0x7338fdf8, -0x6f410006, -0x5baf9315, -0x41065c09, -0x398e870e,
     )
 
-    fun digest(input: ByteArray): ByteArray {
-        val bitLen = input.size.toLong() * 8
-        val padded = ((input.size + 8) / 64 + 1) * 64
-        val m = input.copyOf(padded)
-        m[input.size] = 0x80.toByte()
-        for (i in 0 until 8) m[padded - 1 - i] = (bitLen ushr (8 * i)).toByte()
+    fun digest(input: ByteArray): ByteArray = Stream().apply { update(input) }.finish()
+
+    /**
+     * The same hash fed in parts (§5.1.1 padding at the end), so a file is checked without holding it whole: a
+     * library model's file, piece after piece (p2p_library.md, rule 8 octies).
+     */
+    class Stream {
         // §5.3.3: the initial hash value.
-        val h = intArrayOf(0x6a09e667, -0x4498517b, 0x3c6ef372, -0x5ab00ac6, 0x510e527f, -0x64fa9774, 0x1f83d9ab, 0x5be0cd19)
-        val w = IntArray(64)
-        for (block in 0 until padded / 64) {
+        private val h = intArrayOf(0x6a09e667, -0x4498517b, 0x3c6ef372, -0x5ab00ac6, 0x510e527f, -0x64fa9774, 0x1f83d9ab, 0x5be0cd19)
+        private val w = IntArray(64)
+        private val block = ByteArray(64)
+        private var filled = 0
+        private var total = 0L
+        private var done = false
+
+        fun update(b: ByteArray, off: Int = 0, len: Int = b.size - off) {
+            check(!done) { "already finished" }
+            var i = off
+            val end = off + len
+            total += len
+            while (i < end) {
+                val n = minOf(64 - filled, end - i)
+                b.copyInto(block, filled, i, i + n)
+                filled += n; i += n
+                if (filled == 64) { compress(block, 0); filled = 0 }
+            }
+        }
+
+        fun finish(): ByteArray {
+            check(!done) { "already finished" }
+            done = true
+            val bitLen = total * 8
+            val tail = ByteArray(if (filled < 56) 64 else 128)
+            block.copyInto(tail, 0, 0, filled)
+            tail[filled] = 0x80.toByte()
+            for (i in 0 until 8) tail[tail.size - 1 - i] = (bitLen ushr (8 * i)).toByte()
+            for (o in tail.indices step 64) compress(tail, o)
+            return ByteArray(32) { i -> (h[i / 4] ushr (24 - 8 * (i % 4))).toByte() }
+        }
+
+        private fun compress(m: ByteArray, base: Int) {
             for (t in 0 until 16) {
-                val o = block * 64 + 4 * t
+                val o = base + 4 * t
                 w[t] = ((m[o].toInt() and 0xFF) shl 24) or ((m[o + 1].toInt() and 0xFF) shl 16) or
                     ((m[o + 2].toInt() and 0xFF) shl 8) or (m[o + 3].toInt() and 0xFF)
             }
@@ -42,7 +73,6 @@ object Sha256 {
             }
             h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh
         }
-        return ByteArray(32) { i -> (h[i / 4] ushr (24 - 8 * (i % 4))).toByte() }
     }
 
     /** A certificate's fingerprint as the app shows and saves it: upper-case hex pairs with colons. */

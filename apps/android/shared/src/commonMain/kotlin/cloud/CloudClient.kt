@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import net.tisma.io.ByteInput
@@ -181,6 +182,16 @@ class CloudClient(
         return out.toByteArray()
     }
 
+    /**
+     * p2p_library.md, rule 8 sexies: a ticket (1 h) for the relays and, for now, the seeder's downloads (rule 8 octies).
+     * Read as the `ticket` field of the answer.
+     */
+    fun libraryTicket(): String = postObject("/v1/library/relay-ticket", buildJsonObject {}).text("ticket")
+
+    /** Rule 8 nonies: new upload tickets (24 h) for one's own model's files, by SHA-256. */
+    fun libraryUploadTickets(modelId: String): Map<String, String> =
+        uploadsOf(postObject("/v1/library/models/$modelId/uploads", buildJsonObject {}))
+
     /** Rule 7, «Denunciar»: a model or a file, and why; a person reviews it. Returns the report's id. */
     fun libraryReport(model: String?, sha256: String?, reason: String): String =
         postObject("/v1/library/reports", buildJsonObject {
@@ -331,6 +342,15 @@ class CloudClient(
     }
 
     companion object {
+        /** Rule 8 nonies: the `uploads` of a publish answer, `[{"sha256","ticket"}]`, as SHA-256 to ticket. */
+        fun uploadsOf(o: JsonObject): Map<String, String> =
+            ((o["uploads"] as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { e ->
+                val u = e as? JsonObject ?: return@mapNotNull null
+                val sha = (u["sha256"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+                val t = (u["ticket"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+                sha.lowercase() to t
+            }.toMap()
+
         /** The default server (cloud.md, rule 1). */
         const val DEFAULT_SERVER = "https://tismaservidores.net"
 
