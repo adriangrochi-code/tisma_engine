@@ -28,6 +28,8 @@ android {
         // The stores need a new number for each upload: the release workflow passes its run number.
         versionCode = (project.findProperty("tisma.versionCode") as String?)?.toIntOrNull() ?: 2
         versionName = "0.1.0-beta.1"
+        // The release gate's test on an emulator (docs/spec/RELEASE_GATE.md, G16; src/androidTest).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The project's Ed25519 public key for the updates (app_updates.md, rules 5 and 13), as 64 hex digits:
         // -Ptisma.updatesKey=…; empty until the owner makes the key, and then the updater stays off.
         buildConfigField("String", "UPDATES_KEY", "\"" + (project.findProperty("tisma.updatesKey") as String? ?: "") + "\"")
@@ -38,6 +40,9 @@ android {
     androidResources {
         localeFilters += listOf("en", "es")
     }
+
+    // The release gate's test files (G16): the engine's format samples, in the test APK only.
+    sourceSets["androidTest"].assets.srcDir(rootProject.file("../../tests/data/formats"))
 
     // The upload key for Google Play (apps/android/BETA.md, «Publicar»): only from the environment, never in the
     // repository. Without it, a release build is not signed and cannot go to the store.
@@ -224,4 +229,11 @@ dependencies {
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+    // The release gate on an emulator (G16): the app driven through its screens, the result checked.
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.espresso.intents)
+    androidTestImplementation(libs.kotlin.test)
 }

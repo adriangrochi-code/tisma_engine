@@ -247,7 +247,7 @@ private fun PlateControls(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_preview")) {
                     Text(stringResource(R.string.preview_open))
                 }
-                Button(onClick = { save.launch(r.gcode.name) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                Button(onClick = { save.launch(r.gcode.name) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_save")) {
                     Icon(painterResource(R.drawable.tisma_save), null)
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.plate_save))

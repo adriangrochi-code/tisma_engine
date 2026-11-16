@@ -12433,5 +12433,13 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   Documents/library/files) y lo pone en la placa. Avisos: «todavía no disponible», bloqueado, ocupada, entrar a la
   cuenta, descartado, sin archivo para la placa. Android probado con Robolectric contra un sembrador falso (de la tarjeta
   a la placa); iPhone compilado en su CI, sin prueba de la pantalla. Publicar desde el teléfono queda para después.
+- 16-11, puerta de lanzamiento (decisión del dueño, `RELEASE_GATE.md`, G16): `ReleaseGateTest` en el emulador
+  (src/androidTest) recorre la app por sus pantallas: asistente (catálogo incluido), abrir STL, OBJ, 3MF propio y de
+  otro programa (tamaño en la placa), laminar el cubo de 20 mm y el 3DBenchy (capas, filamento y tiempo > 0; medidas
+  del G-code dentro de 0,1 mm), exportar (el archivo guardado es el G-code entero) y mandar a Moonraker, OctoPrint,
+  PrusaLink y Duet simulados (llega entero y empieza). Workflow «Release gate (phones)»; `stores.yml` depende de él.
+  Encontrado al armarla: las versiones beta y de tienda prohibían HTTP sin cifrar y no podían hablar con impresoras
+  de la red local; ahora solo el dominio de Tisma Cloud exige HTTPS (prueba `NetworkSecurityTest`). Falta: Bambu Lab
+  (MQTT del simulador solo en loopback) y la puerta del iPhone.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.

@@ -22,7 +22,9 @@ class CreditsTest {
         val testOnly = setOf("junit:junit", "org.jetbrains.kotlin:kotlin-test-junit", "org.jetbrains.kotlinx:kotlinx-coroutines-test",
             "org.robolectric:robolectric", "androidx.test:core", "androidx.compose.ui:ui-test-junit4", "androidx.compose.ui:ui-test-manifest",
             // The startup profile's generator (:baselineprofile), on an emulator only.
-            "androidx.benchmark:benchmark-macro-junit4", "androidx.test.ext:junit", "androidx.test.uiautomator:uiautomator")
+            "androidx.benchmark:benchmark-macro-junit4", "androidx.test.ext:junit", "androidx.test.uiautomator:uiautomator",
+            // The release gate's test on an emulator (src/androidTest).
+            "androidx.test:runner", "androidx.test.espresso:espresso-intents")
         val modules = Regex("""module\s*=\s*"([^"]+)"""").findAll(toml).map { it.groupValues[1] }.filter { it !in testOnly }.toList()
         val missing = modules.filter { it !in credited }
         assertTrue(missing.isEmpty(), "no credit for: $missing")

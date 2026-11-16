@@ -17,8 +17,13 @@ permissions:
   actions: read
 
 jobs:
+  # The release gate (docs/spec/RELEASE_GATE.md, G16): nothing goes to a store unless the phone apps pass it.
+  gate:
+    uses: ./.github/workflows/release-gate.yml
+
   play:
     name: Google Play (internal testing)
+    needs: gate
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -68,6 +73,7 @@ jobs:
 
   testflight:
     name: TestFlight
+    needs: gate
     runs-on: macos-15
     env:
       HAS_SECRETS: ${{ secrets.IOS_DIST_CERT_P12_B64 != '' && secrets.IOS_PROFILE_B64 != '' && secrets.ASC_KEY_P8_B64 != '' }}

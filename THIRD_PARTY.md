@@ -105,6 +105,8 @@ en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica
 | AndroidX Benchmark Macro JUnit4 | androidx.benchmark:benchmark-macro-junit4 | 1.4.1 | Apache-2.0 | Genera el perfil de arranque en un emulador (`:baselineprofile`). |
 | AndroidX Test Ext JUnit | androidx.test.ext:junit | 1.2.1 | Apache-2.0 | Ejecutor del generador del perfil. |
 | UI Automator | androidx.test.uiautomator:uiautomator | 2.3.0 | Apache-2.0 | Recorre la app al generar el perfil. |
+| AndroidX Test Runner | androidx.test:runner | 1.6.2 | Apache-2.0 | Corre en el emulador la prueba de la puerta de lanzamiento (G16). |
+| Espresso Intents | androidx.test.espresso:espresso-intents | 3.6.1 | Apache-2.0 | Responde por el selector de archivos del sistema al exportar el G-code en esa prueba. |
 
 | Herramienta de compilación de la app | Versión | Licencia | Uso |
 |---|---|---|---|

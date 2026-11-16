@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tisma Cloud goes over HTTPS only (cloud.md, rule 1). -->
+<!-- Tisma Cloud goes over HTTPS only (cloud.md, rule 1): its domain refuses plain HTTP. Printers on the person's own
+     network speak plain HTTP (Moonraker, OctoPrint, PrusaLink, Duet; printers.md), so the rest allows it: without
+     this the store and beta builds could not send to them (found by the release gate, G16, 16-11-2026). -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
+    <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">tismaservidores.net</domain>
+    </domain-config>
 </network-security-config>

@@ -83,6 +83,27 @@ abstract class SimulatedPrinter(private val port: Int, private val host: String)
     }
 
     private fun handle(ex: HttpExchange) {
+        if (ex.requestURI.rawPath == "/_tisma/received") {
+            // For the release gate (G16, docs/spec/RELEASE_GATE.md) from an emulator: what arrived and whether it prints;
+            // the simulator's own route, outside any printer's API, without a key.
+            val body = synchronized(lock) {
+                buildJsonObject {
+                    put("state", state); put("file", file)
+                    putJsonObject("files") {
+                        files.forEach { (name, data) ->
+                            putJsonObject(name) {
+                                put("size", data.size)
+                                put("sha256", java.security.MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) })
+                            }
+                        }
+                    }
+                }.toString().toByteArray()
+            }
+            ex.responseHeaders.add("Content-Type", "application/json")
+            ex.sendResponseHeaders(200, body.size.toLong())
+            ex.responseBody.use { it.write(body) }
+            return
+        }
         if (ex.requestURI.rawPath == "/snapshot.jpg") {
             // The camera is served apart from the API, without the key (like a camera streamer).
             ex.responseHeaders.add("Content-Type", "image/jpeg")
