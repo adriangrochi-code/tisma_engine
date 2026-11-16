@@ -1,0 +1,13 @@
+# Release gate G1: our own 3MF. The OBJ box, saved as a project and opened
+# again, is on the plate at its size, once.
+expect-on-plate 20 20 10
+save-project gate_g1_own.3mf
+wait 5
+# A second model, so the project's plate shows when it replaces this one.
+add-cylinder
+wait 10
+expect-models 2
+open-project gate_g1_own.3mf
+wait 30
+expect-models 1
+expect-on-plate 20 20 10

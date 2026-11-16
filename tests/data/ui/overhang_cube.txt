@@ -1,0 +1,4 @@
+# A cube has no overhang: the Slice button slices without asking.
+press-slice
+wait 3
+expect-no-control overhang_prompt

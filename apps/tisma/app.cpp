@@ -39,6 +39,7 @@
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
 #include "gcode/dialect.hpp"
+#include "gcode/gate_check.hpp"
 #include "gcode/output.hpp"
 #include "gcode/thumbnail.hpp"
 #include "device/bambu_simulator.hpp"
@@ -1022,6 +1023,11 @@ private:
     void update_color_view();
     bool color_view_wanted() const;
     void supports_for_painting();
+    // The supports never go off without a word (the owner, 2026-11-16): a
+    // profile, a printer, a project or an undo that turns them off says so.
+    void supports_watch();
+    bool support_seen_ = false;
+    int support_by_hand_frame_ = -100;
     // A filament's or blend's colour as 0xRRGGBB (the model's colour for none).
     std::uint32_t extruder_rgb(int extruder) const;
     // The colours the paint holds (color_mixing_plus.md, «Pintar con mezclas»:
@@ -1090,6 +1096,15 @@ private:
     void save_project_to(const std::filesystem::path& path);
     void export_gcode_to(const std::filesystem::path& path);
     void start_slice();
+    // The Slice button, Más › Laminar and Ctrl+R: with the supports off and
+    // overhangs on the plate, it asks first (the owner, 2026-11-16: «no
+    // tener soporte siempre es muy grave»).
+    void slice_asked();
+    double unsupported_overhang_area() const;
+    std::vector<OverhangPoint> overhang_points() const;
+    bool overhang_prompt_ = false;              // the question is open
+    std::uint64_t overhang_answered_ = ~0ull;   // the model revision «Laminar sin soporte» was chosen for
+    void overhang_prompt();
     void poll_jobs();
     void show_preview();
     void upload_preview();
@@ -1806,6 +1821,7 @@ private:
         std::string verb, key, value;
     };
     std::vector<ScriptStep> script_; // --ui-script
+    bool script_check(const ScriptStep& step, int f);
     std::size_t script_at_ = 0;      // the step playing
     int script_frame_ = 0;           // frames into it
 
@@ -7141,6 +7157,135 @@ void App::begin_export() {
     browser_.open(FileBrowser::Mode::Save, tr(T::SaveGcode), {ext}, last_folder_, name);
 }
 
+// The faces that hang over nothing steeper than the support's angle (45°
+// when it is automatic), away from the bed: their area in mm² over the
+// printable models. Own design: a face whose normal points down more than
+// the angle from the vertical is an overhang (the usual rule of slicers).
+double App::unsupported_overhang_area() const {
+    double area = 0.0;
+    for (const OverhangPoint& q : overhang_points())
+        area += q.area;
+    return area;
+}
+
+// Points on the downward faces steeper than the support angle, more than
+// 1 mm above the bed (the release gate's G3): a grid of points about 4 mm
+// apart on each face, with the share of its area each stands for, and the
+// overhang each is on (faces that share a corner are one overhang).
+std::vector<OverhangPoint> App::overhang_points() const {
+    const double angle = (settings_.support_angle > 0.0 ? settings_.support_angle : 45.0) * 3.14159265358979 / 180.0;
+    const double steep = std::sin(std::clamp(angle, 0.05, 1.5));
+    std::vector<OverhangPoint> points;
+    std::vector<std::uint32_t> parent; // union-find over the faces kept
+    const auto root = [&](std::uint32_t f) {
+        while (parent[f] != f)
+            f = parent[f] = parent[parent[f]];
+        return f;
+    };
+    std::map<std::array<std::int64_t, 3>, std::uint32_t> corner_face; // a corner, to a face that has it
+    std::vector<std::uint32_t> point_face;
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        if (!objects_[i].printable)
+            continue;
+        const TriangleMesh& m = placed_meshes_[i];
+        for (std::size_t t = 0; t < m.triangle_count(); ++t) {
+            const Vec3f a = m.corner(t, 0), b = m.corner(t, 1), c = m.corner(t, 2);
+            if (std::max({a.z, b.z, c.z}) < 1.0f)
+                continue;
+            const double ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+            const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+            const double len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (len <= 0.0 || -nz / len <= steep)
+                continue;
+            const std::uint32_t face = std::uint32_t(parent.size());
+            parent.push_back(face);
+            for (const Vec3f& v : {a, b, c}) {
+                const std::array<std::int64_t, 3> k{std::llround(v.x * 1000.0), std::llround(v.y * 1000.0),
+                                                    std::llround(v.z * 1000.0)};
+                const auto [it, added] = corner_face.emplace(k, face);
+                if (!added)
+                    parent[root(face)] = root(it->second);
+            }
+            const double area = 0.5 * len;
+            const int n = std::max(1, int(std::ceil(std::sqrt(area / 16.0))));
+            // n * n small triangles of the face, at their centres.
+            std::vector<std::array<double, 2>> uv;
+            for (int r = 0; r < n; ++r)
+                for (int s = 0; s + r < n; ++s) {
+                    uv.push_back({(r + 1.0 / 3.0) / n, (s + 1.0 / 3.0) / n});
+                    if (r + s + 1 < n)
+                        uv.push_back({(r + 2.0 / 3.0) / n, (s + 2.0 / 3.0) / n});
+                }
+            for (const auto& [p, q] : uv) {
+                const double z = a.z + uz * p + vz * q;
+                if (z < 1.0)
+                    continue;
+                points.push_back({float(a.x + ux * p + vx * q), float(a.y + uy * p + vy * q), float(z),
+                                  float(area / double(uv.size())), 0});
+                point_face.push_back(face);
+            }
+        }
+    }
+    std::map<std::uint32_t, std::uint32_t> number;
+    for (std::size_t i = 0; i < points.size(); ++i)
+        points[i].region = number.emplace(root(point_face[i]), std::uint32_t(number.size())).first->second;
+    return points;
+}
+
+void App::supports_watch() {
+    if (support_seen_ && !settings_.support && ImGui::GetFrameCount() - support_by_hand_frame_ > 2 && frames_ > 3)
+        notify(tr(T::SupportsTurnedOff), true);
+    support_seen_ = settings_.support;
+}
+
+void App::slice_asked() {
+    if (!has_plate_ || slice_job_.running())
+        return;
+    if (!settings_.support && settings_.machine_technology != MachineTechnology::Msla && overhang_answered_ != revision_.model &&
+        unsupported_overhang_area() > 4.0) {
+        overhang_prompt_ = true;
+        return;
+    }
+    start_slice();
+}
+
+// «Esta pieza tiene voladizos sin soporte: ¿activar soportes?» with its two
+// answers; Esc keeps the question for later and slices nothing.
+void App::overhang_prompt() {
+    if (overhang_prompt_) {
+        ImGui::OpenPopup("###overhangs");
+        overhang_prompt_ = false;
+    }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (!ImGui::BeginPopupModal((std::string(tr(T::OverhangTitle)) + "###overhangs").c_str(), nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
+        return;
+    note_rect("overhang_prompt");
+    ImGui::PushTextWrapPos(420.0f * scale_);
+    loc::Text("%s", tr(T::OverhangQuestion));
+    loc::TextDisabled("%s", tr(T::OverhangHint));
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+    if (button("##overhang_enable", "tisma_slice", tr(T::OverhangEnable), true, false, true, nullptr, ImGui::GetFrameHeight() * 1.3f)) {
+        settings_.support = true;
+        settings_.support_automatic = true;
+        settings_changed();
+        ImGui::CloseCurrentPopup();
+        start_slice();
+    }
+    note_rect("overhang_enable");
+    ImGui::SameLine();
+    if (button("##overhang_without", nullptr, tr(T::OverhangWithout), false, false, true, nullptr, ImGui::GetFrameHeight() * 1.3f)) {
+        overhang_answered_ = revision_.model;
+        ImGui::CloseCurrentPopup();
+        start_slice();
+    }
+    note_rect("overhang_without");
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
 void App::start_slice() {
     if (!has_plate_ || slice_job_.running())
         return;
@@ -9971,7 +10116,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
     }
     // Print: Supports and Adhesion.
     else if (id == "support") {
+        const bool support_was = s.support;
         flag(T::Supports, "support.enabled", s.support);
+        if (s.support != support_was) // by hand: no warning (supports_watch)
+            support_by_hand_frame_ = ImGui::GetFrameCount();
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
         flag(T::SupportBuildplateOnly, "support.buildplate_only", s.support_buildplate_only);
         flag(T::SupportUnderBridges, "support.under_bridges", s.support_under_bridges);
@@ -11695,7 +11843,7 @@ void App::slice_panel() {
     if (!can_export || slicing) {
         if (button("##slice", "tisma_slice", slicing ? tr(T::Slicing) : tr(T::Slice), true, false,
                    has_plate_ && !slicing, tr(T::SliceTip), button_h))
-            start_slice();
+            slice_asked();
         g_menu_rects["slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                        ImGui::GetItemRectMax().y);
         anchor("slice_button");
@@ -15106,6 +15254,7 @@ void App::preview_panels() {
                 ImGui::SameLine();
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted(tr(kind_text(LineKind(k))));
+                note_rect("legend_kind_" + std::to_string(k)); // the scripts' expect-control (support is 11)
                 if (!legend_full_) {
                     ImGui::PopID();
                     continue;
@@ -19232,7 +19381,7 @@ void App::aerodynamics_panel() {
     } else if (aero_job_.running()) {
         const int permille = aero_permille_.load();
         ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
-                           format(tr(T::AeroAnalyzing), permille / 10).c_str());
+                           permille == 0 ? tr(T::AeroPreparingGrid) : format(tr(T::AeroAnalyzing), permille / 10).c_str());
         rect_of("aero_progress");
         ImGui::SameLine();
         if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
@@ -20991,7 +21140,7 @@ void App::more_menu() {
             browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToAsciiMenu), {".bgcode"}, last_folder_);
         }
         if (item("slice_now", tr(T::SliceNowMenu), "Ctrl+R", has_plate_))
-            start_slice();
+            slice_asked();
         if (item("gcode_preview", tr(T::GcodePreviewMenu))) {
             purpose_ = Purpose::Open;
             browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"},
@@ -25686,6 +25835,8 @@ void App::layout() {
     config_window();
     cloud_window();
     library_window();
+    overhang_prompt();
+    supports_watch();
     report_window();
     guide_overlay();
     if (!g_clamped.empty()) {
@@ -25808,7 +25959,7 @@ void App::layout() {
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(true);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_R, ImGuiInputFlags_RouteGlobal))
-        start_slice();
+        slice_asked();
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
         new_project();
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_I, ImGuiInputFlags_RouteGlobal)) {
@@ -27491,6 +27642,199 @@ void App::dump_ui() {
     }
 }
 
+// The script's checks of a slice's result and of the plate (the release
+// gate, docs/spec/RELEASE_GATE.md), apart from script_input so its chain of
+// verbs stays within the compilers' nesting limits. True when the step was
+// one of them.
+bool App::script_check(const ScriptStep& step, int f) {
+    const auto next = [&] {
+        ++script_at_;
+        script_frame_ = 0;
+    };
+    const auto fail_step = [&](const std::string& why) {
+        std::fprintf(stderr, "error: ui-script line %zu (%s %s): %s\n", step.line, step.verb.c_str(), step.key.c_str(),
+                     why.c_str());
+        failed_ = true;
+        script_at_ = script_.size();
+        return true;
+    };
+    if (step.verb == "expect-gcode-valid") { // the release gate's G2: checked, with layers, filament and time
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        const GcodePreview& p = result_->preview;
+        std::printf("ui-script: expect-gcode-valid: %zu problems, %zu layers, %.1f mm of filament, %.0f s\n",
+                    result_->check.problems.size(), p.layers.size(), p.filament, p.estimated_seconds);
+        if (!result_->check.ok())
+            return fail_step("the G-code checker found " + std::to_string(result_->check.problems.size()) + " problems");
+        if (p.layers.empty() || p.filament <= 0.0 || p.estimated_seconds <= 0.0)
+            return fail_step("no layers, filament or time");
+        next();
+    } else if (step.verb == "expect-part-size") { // X Y Z: the part's extrusions span this, within 0.1 mm
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        double want[3] = {0, 0, 0};
+        std::istringstream in(step.key + " " + step.value);
+        in >> want[0] >> want[1] >> want[2];
+        const std::array<double, 3> got = part_extent(result_->preview);
+        std::printf("ui-script: expect-part-size %.3f %.3f %.3f: got %.3f %.3f %.3f\n", want[0], want[1], want[2], got[0],
+                    got[1], got[2]);
+        for (int a = 0; a < 3; ++a)
+            if (std::abs(got[a] - want[a]) > 0.1)
+                return fail_step(std::string("the part is ") + format("%.3f", got[a]) + " mm along " + "XYZ"[a] + ", not " +
+                                 format("%.3f", want[a]));
+        next();
+    } else if (step.verb == "expect-first-layer") { // skirt|support GAP_MIN GAP_MAX OUTER_MIN OUTER_MAX: first_layer_ring, mm
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        double g0 = 0, g1 = 0, o0 = 0, o1 = 0;
+        std::istringstream in(step.value);
+        in >> g0 >> g1 >> o0 >> o1;
+        const LineKind kind = step.key == "support" ? LineKind::Support : LineKind::SkirtBrim;
+        const FirstLayerRing ring = first_layer_ring(result_->preview, kind);
+        std::printf("ui-script: expect-first-layer %s %s: gap %.3f, outer %.3f, bead %.3f\n", step.key.c_str(),
+                    step.value.c_str(), ring.gap, ring.outer, ring.width);
+        if (ring.outer < 0.0)
+            return fail_step("the first layer has no " + step.key);
+        if (ring.gap < g0 || ring.gap > g1 || ring.outer < o0 || ring.outer > o1)
+            return fail_step(format("the %s lies from %.3f to %.3f mm off the part", step.key.c_str(), ring.gap, ring.outer));
+        next();
+    } else if (step.verb == "expect-part-bottom") { // MIN MAX: the part's lowest bead starts this high (mm), as on a raft
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        double lo = 1e30;
+        for (std::uint32_t i : result_->preview.extrusions) {
+            const PreviewMove& m = result_->preview.moves[i];
+            if (m.kind != LineKind::Support && m.kind != LineKind::SupportInterface && m.kind != LineKind::SkirtBrim &&
+                m.kind != LineKind::Custom && m.kind != LineKind::WipeTower && m.kind != LineKind::Other)
+                lo = std::min(lo, double(m.z1) - m.height);
+        }
+        std::printf("ui-script: expect-part-bottom %s %s: %.3f\n", step.key.c_str(), step.value.c_str(), lo);
+        if (lo < std::atof(step.key.c_str()) - 1e-6 || lo > std::atof(step.value.c_str()) + 1e-6)
+            return fail_step(format("the part starts at z %.3f", lo));
+        next();
+    } else if (step.verb == "expect-middle-layer") { // WALLS SPARSE_MIN SPARSE_MAX: wall loops and sparse infill density % (middle_layer)
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        int walls = 0;
+        double s0 = 0, s1 = 0;
+        std::istringstream in(step.key + " " + step.value);
+        in >> walls >> s0 >> s1;
+        const MiddleLayer m = middle_layer(result_->preview);
+        std::printf("ui-script: expect-middle-layer %s %s: layer %zu, %d wall loops, sparse infill %.2f %% (%.1f mm)\n",
+                    step.key.c_str(), step.value.c_str(), m.layer, m.wall_loops, m.sparse_density * 100.0, m.sparse_length);
+        if (m.wall_loops != walls)
+            return fail_step("the middle layer has " + std::to_string(m.wall_loops) + " wall loops");
+        if (m.sparse_density * 100.0 < s0 || m.sparse_density * 100.0 > s1)
+            return fail_step(format("the middle layer's sparse infill is %.2f %% dense", m.sparse_density * 100.0));
+        next();
+    } else if (step.verb == "expect-support-floating") { // MAXPCT: at most this % of the support has nothing under it
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        std::vector<std::array<float, 3>> where;
+        const double share = floating_support_share(result_->preview, 1.0, &where) * 100.0;
+        std::printf("ui-script: expect-support-floating %s: %.2f %%\n", step.key.c_str(), share);
+        for (std::size_t i = 0; i < where.size(); i += std::max<std::size_t>(1, where.size() / 12))
+            std::printf("ui-script:   floating: %.2f %.2f %.2f\n", where[i][0], where[i][1], where[i][2]);
+        if (share > std::atof(step.key.c_str()))
+            return fail_step(format("%.2f %% of the support floats", share));
+        next();
+    } else if (step.verb == "expect-support-under-overhangs") { // support under every overhang steeper than the angle
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        const std::vector<OverhangPoint> points = overhang_points();
+        const std::vector<OverhangPoint> bare = overhangs_without_support(result_->preview, points);
+        struct Region {
+            double area = 0.0, bare = 0.0;
+            float x = 0, y = 0, z = 0;
+        };
+        std::vector<Region> regions;
+        for (const OverhangPoint& q : points) {
+            if (regions.size() <= q.region)
+                regions.resize(q.region + 1);
+            regions[q.region].area += q.area;
+            regions[q.region].x = q.x, regions[q.region].y = q.y, regions[q.region].z = q.z;
+        }
+        for (const OverhangPoint& q : bare)
+            regions[q.region].bare += q.area;
+        std::size_t failing = 0;
+        for (std::size_t r = 0; r < regions.size(); ++r) {
+            const Region& g = regions[r];
+            if (g.area < 1.0)
+                continue;
+            std::printf("ui-script:   overhang %zu at %.1f %.1f %.1f: %.1f mm2, %.1f mm2 without support\n", r, g.x, g.y,
+                        g.z, g.area, g.bare);
+            failing += g.bare > 0.0;
+        }
+        std::printf("ui-script: expect-support-under-overhangs: %zu overhangs, %zu without support under part of them\n",
+                    regions.size(), failing);
+        if (points.empty())
+            return fail_step("the model has no overhangs to check");
+        if (failing)
+            return fail_step(std::to_string(failing) + " overhangs lack support under part of them");
+        next();
+    } else if (step.verb == "expect-on-plate") { // X Y Z: the plate's models span this (mm, within 0.01), inside the bed and on it
+        if (objects_.empty() || placed_meshes_.empty()) {
+            if (f > 600)
+                return fail_step("nothing on the plate");
+            return true; // still loading
+        }
+        double want[3] = {0, 0, 0};
+        std::istringstream in(step.key + " " + step.value);
+        in >> want[0] >> want[1] >> want[2];
+        double lo[3] = {1e30, 1e30, 1e30}, hi[3] = {-1e30, -1e30, -1e30};
+        for (const TriangleMesh& m : placed_meshes_) {
+            if (m.triangle_count() == 0)
+                continue;
+            const BoundingBox b = m.bounding_box();
+            const double bl[3] = {b.min.x, b.min.y, b.min.z}, bh[3] = {b.max.x, b.max.y, b.max.z};
+            for (int a = 0; a < 3; ++a)
+                lo[a] = std::min(lo[a], bl[a]), hi[a] = std::max(hi[a], bh[a]);
+        }
+        double bed_lo[2] = {1e30, 1e30}, bed_hi[2] = {-1e30, -1e30};
+        for (const auto& c : settings_.bed)
+            for (int a = 0; a < 2; ++a)
+                bed_lo[a] = std::min(bed_lo[a], c[a]), bed_hi[a] = std::max(bed_hi[a], c[a]);
+        std::printf("ui-script: expect-on-plate %.2f %.2f %.2f: got %.3f %.3f %.3f from %.2f %.2f %.2f\n", want[0], want[1],
+                    want[2], hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], lo[0], lo[1], lo[2]);
+        for (int a = 0; a < 3; ++a)
+            if (std::abs(hi[a] - lo[a] - want[a]) > 0.01)
+                return fail_step(format("the plate's models are %.3f mm along %c, not %.3f", hi[a] - lo[a], "XYZ"[a], want[a]));
+        if (std::abs(lo[2]) > 0.01)
+            return fail_step(format("the models stand at z %.3f, not on the bed", lo[2]));
+        if (!settings_.bed.empty() && (lo[0] < bed_lo[0] || lo[1] < bed_lo[1] || hi[0] > bed_hi[0] || hi[1] > bed_hi[1]))
+            return fail_step("the models are not inside the bed");
+        next();
+    } else if (step.verb == "keep-gcode") { // writes the last slice's G-code to KEY (relative to the working folder)
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        std::ofstream(from_utf8(step.key), std::ios::binary).write(result_->gcode.data(), std::streamsize(result_->gcode.size()));
+        next();
+    } else if (step.verb == "expect-gcode-same") { // the last slice's G-code is the file KEY, byte for byte
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        std::ifstream in(from_utf8(step.key), std::ios::binary);
+        const std::string kept((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        const std::string& now = result_->gcode;
+        std::size_t at = 0, line = 1;
+        while (at < kept.size() && at < now.size() && kept[at] == now[at])
+            line += kept[at++] == '\n';
+        std::printf("ui-script: expect-gcode-same %s: %zu and %zu bytes, %s\n", step.key.c_str(), kept.size(), now.size(),
+                    kept == now ? "the same" : ("first difference on line " + std::to_string(line)).c_str());
+        if (kept.empty() || kept != now) {
+            const auto line_at = [](const std::string& t, std::size_t i) {
+                const std::size_t a = t.rfind('\n', i == 0 ? 0 : i - 1), b = t.find('\n', i);
+                return t.substr(a == std::string::npos ? 0 : a + 1, (b == std::string::npos ? t.size() : b) - (a == std::string::npos ? 0 : a + 1));
+            };
+            std::printf("ui-script:   kept: %s\nui-script:   now:  %s\n", line_at(kept, at).c_str(), line_at(now, at).c_str());
+            return fail_step("the G-code differs from " + step.key + " on line " + std::to_string(line));
+        }
+        next();
+    } else {
+        return false;
+    }
+    return true;
+}
+
 void App::script_input() {
     if (script_at_ >= script_.size() || ImGui::GetFrameCount() < 3)
         return;
@@ -27540,6 +27884,8 @@ void App::script_input() {
                : name == "equal"                                   ? ImGuiKey_Equal
                                                                    : ImGuiKey_None;
     };
+    if (script_check(step, f))
+        return;
     if (step.verb == "click") {
         const std::string key = step.key.substr(0, step.key.find('#'));
         if (f == 0) {
@@ -27812,6 +28158,9 @@ void App::script_input() {
                     same ? "ok" : ("got " + got).c_str());
         if (!same)
             return fail_step("the setting is " + got);
+        next();
+    } else if (step.verb == "press-slice") { // the Slice button as the person presses it (it may ask first)
+        slice_asked();
         next();
     } else if (step.verb == "slice") { // as the Slice button, then the Preview tab
         if (f == 0 && result_ && stale_ && !slice_job_.running()) // a slice out of date: again, as the button does

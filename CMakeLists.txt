@@ -248,6 +248,7 @@ add_library(tisma_core
   src/gcode/binary.cpp
   src/gcode/scarf.cpp
   src/gcode/check.cpp
+  src/gcode/gate_check.cpp
   src/gcode/export.cpp
   src/gcode/preview.cpp
   src/gcode/order.cpp

@@ -3,7 +3,7 @@
 # (external_perimeter_extrusion_width 0.45 → walls.outer_width 0.45, 0 before), the rest named.
 wait 2
 expect-toast Proyecto de PrusaSlicer: 1 pieza.
-expect-toast Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente
+expect-toast Ajustes del proyecto: 7 traducidos, 2 parecidos, 318 sin equivalente
 expect-toast Sin equivalente (
 expect-setting walls.outer_width 0.45
 # The dialog (rule 9): the summary, the detail in three groups, and whose

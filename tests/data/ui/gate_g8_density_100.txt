@@ -1,0 +1,7 @@
+# Release gate G8: infill density 100 % on the 20 mm cube: the middle layer
+# has the default 3 walls and sparse infill at 100 %, within 0.5 % (the share of the volume its lines fill).
+menu tab_prepare
+set infill.density 100
+slice
+expect-gcode-valid
+expect-middle-layer 3 99.5 100.5

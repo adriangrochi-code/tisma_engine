@@ -1,0 +1,74 @@
+name: Puerta de lanzamiento
+
+# The release gate (docs/spec/RELEASE_GATE.md; the owner's decision,
+# 2026-11-16): the critical functions from end to end through the interface,
+# each checked by its result (the G-code, the file, the screen). The tests
+# carry the CTest label "gate" (tests/gate.cmake). They run on Linux, under
+# Xvfb with Mesa's software OpenGL, and on Windows, with Mesa's software
+# OpenGL beside the program, on every push to dev, alpha and main; the
+# nightly and the releases call this workflow and publish nothing unless it
+# passes. No gate test is skipped, marked as known or relaxed.
+on:
+  push:
+    branches:
+      - dev
+      - alpha
+      - main
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Puerta de lanzamiento (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+          - name: Windows
+            os: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja, X11, Xvfb and Mesa (Linux)
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libx11-dev libxrandr-dev
+          libxinerama-dev libxcursor-dev libxi-dev libgl-dev libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers xvfb
+      - name: Configure
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Mesa's software OpenGL beside the program (Windows)
+        # The runner has no OpenGL 3.3 driver. Mesa (MIT), built for
+        # Windows by the mesa-dist-win project, is used only here, to run
+        # the tests; nothing of it is shipped (THIRD_PARTY.md).
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ver = "24.2.7"
+          $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$ver/mesa3d-$ver-release-msvc.7z"
+          Invoke-WebRequest -Uri $url -OutFile mesa.7z
+          7z x mesa.7z -omesa | Out-Null
+          $exe = Get-ChildItem -Path build -Recurse -Filter tisma.exe | Select-Object -First 1
+          Copy-Item mesa\x64\*.dll $exe.DirectoryName
+          "GALLIUM_DRIVER=llvmpipe" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Gate tests
+        run: ctest --test-dir build -C Release -L gate --output-on-failure
+      - name: Screenshots of the gate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-${{ matrix.name }}
+          path: build/tests/gate/*.png
+          if-no-files-found: ignore

@@ -1,0 +1,9 @@
+# The supports never go off without a word (the owner, 2026-11-16): on by
+# hand, then a print profile that has them off: a notice says so. Turning
+# them off by hand says nothing.
+set support.enabled true
+wait 3
+choose-profile print 0.12 mm
+wait 3
+expect-setting support.enabled false
+expect-toast Los soportes quedaron apagados con el cambio

@@ -14534,6 +14534,90 @@ para el LBM D3Q19.
 - **Tiempo:** el Benchy rápido sin verificación de resolución, unos 4 min 30 s en este contenedor.
 - **Lo que sigue:** la interfaz arregla que las líneas no se vean en placas viejas.
 
+## 2026-11-16 — interfaz: aviso de voladizos sin soporte (el dueño: «no tener soporte siempre es muy grave»)
+
+- **Hecho:** con los soportes apagados y más de 4 mm² de caras que cuelgan, «Laminar», Más › Laminar y Ctrl+R
+  preguntan primero «Esta pieza tiene voladizos sin soporte: ¿activar soportes?». Las respuestas son «Activar
+  soportes y laminar» (los prende en automático) o «Laminar sin soporte» (no vuelve a preguntar por el mismo modelo).
+  Cuentan como voladizo las caras más inclinadas que el ángulo del soporte (45° si es automático) y fuera de la
+  cama. Es diseño propio, todavía sin ficha. El guion suma `press-slice`, que lamina como el botón.
+- **Pruebas:** `ui_overhang_prompt` (activa y lamina con soporte), `ui_overhang_without` (lamina sin soporte y no
+  vuelve a preguntar) y `ui_overhang_cube` (sin voladizos no pregunta).
+- **Aerodinámica, Benchy, aire +X, Rápida (QA):** en la interfaz, bajo Xvfb, terminó en 220 s, contra 104 s del
+  mismo caso por la prueba del motor. La interfaz hace además la verificación de resolución (una corrida más
+  gruesa) y, en modo captura, dibuja sin parar con llvmpipe, que se lleva cerca de un núcleo de 4. No queda
+  esperando: el 0 % es el tiempo de armar la grilla, que no informa avance. El guion de QA se cortaba por el tope de
+  6000 cuadros de la captura, no porque la simulación se colgara.
+
+## 2026-11-16 — interfaz: el soporte en la vista previa y nunca apagado sin aviso
+
+- **Vista previa:** el soporte y su interfaz ya se veían con su color y con su fila en la leyenda (tiempo, parte y
+  filamento). Ahora las filas de la leyenda tienen nombre para los guiones (`legend_kind_N`).
+- **Sin aviso, nunca:** si los soportes pasan de prendidos a apagados por algo que no es la casilla (un perfil, una
+  impresora, un proyecto, deshacer), sale el aviso «Los soportes quedaron apagados con el cambio…». Apagarlos a mano
+  no avisa.
+- **Proyectos de otros programas:** si `support_material` llega o no depende de la tabla de traducción del paquete
+  (servidor). El paquete de prueba no la tiene. Se pide la fila al servidor.
+- **Pruebas:**
+  - `ui_overhang_support_preview`: las filas de soporte y su interfaz en la leyenda, y `;TYPE:Support` en el G-code;
+  - `ui_overhang_supports_off_notice`: un perfil de impresión que los apaga da el aviso.
+
+## 2026-11-16 — Puerta de lanzamiento: el trabajo de CI, G2 y G3 a G6 (decisión del dueño)
+
+- **CI:** `.github/workflows/gate.yml`, «Puerta de lanzamiento», corre `ctest -L gate` en Linux (Xvfb y OpenGL de
+  Mesa) y en Windows (Mesa llvmpipe de mesa-dist-win junto al programa, solo en la CI) en cada envío a dev, alpha y
+  main. La nightly y `release.yml` (alpha y release) la llaman y su paso de publicar depende de ella. Las demás
+  corridas de pruebas (`ci.yml`, nightly, release, `tools/ci_linux.sh`) dejan afuera la etiqueta `gate`: la puerta
+  es su propio trabajo.
+- **Pruebas de la puerta** (`tests/gate.cmake`, todas desde la interfaz, con guion):
+  - G2 `gate_g2_cube` y `gate_g2_benchy`: G-code comprobado, capas, filamento y tiempo > 0, tamaño de la pieza
+    dentro de 0,1 mm. Pasan (20,0 × 20,0 × 20,0 y 60,0 × 31,0 × 48,0).
+  - G3 `gate_g3_{tee,ramp,benchy}_{grid,organic,snug}`: soportes prendidos en el panel, soporte bajo cada voladizo
+    y menos de 1 % flotando. Más `ui_supports_slice`.
+  - G4 `ui_paint_support_*`, G5 `ui_overhang_support_preview`, G6 `ui_overhang_supports_off_notice` (y las
+    preguntas de voladizos), ahora con la etiqueta.
+  - Verbos nuevos del guion: `expect-gcode-valid`, `expect-part-size X Y Z`, `expect-support-floating PCT`,
+    `expect-support-under-overhangs`. El Benchy lo descomprime `tisma_unxz` (el lector xz propio) en todos lados.
+- **Arreglado de paso:** la pregunta de voladizos no veía las caras que tocan la cama con una punta (la rampa): ahora
+  cuenta los puntos de las caras a más de 1 mm de altura.
+- **La puerta falla hoy, por el motor (se avisa a la sesión del motor):**
+  - Benchy, techo de la cabina (voladizo de 213 mm² a z 36,6): grilla lo sostiene en 51 mm², árbol y ajustado en
+    nada.
+  - Benchy ajustado: además 7 voladizos con partes sin soporte (z 9,1; 19,8; 23,1; 45,0).
+  - Benchy árbol: 0,2 mm² sin soporte en dos voladizos bajos (z 3,0 y 5,3).
+  - T árbol: 1,63 % del soporte flota, casi todo en la capa de 19,4 (la interfaz entre las puntas de las ramas),
+    y algo en las capas 0,4 y 3,2.
+  - La rampa y la T en grilla y ajustado pasan.
+- **Lo que sigue:** G6 completo (3MF, impresora, deshacer), G1 y G7 a G12, G15; el motor con G13 y G14; las apps con
+  G16. Windows de la puerta sin probar todavía: se ve en la primera corrida de GitHub.
+- **G6, proyecto con soportes (QA):** la tabla de traducción del paquete de prueba suma `support_material` →
+  `support.enabled` y `support_material_auto` → `support.automatic` (como el paquete real desde pack-2026.11.10).
+  `gate_g6_project_support`: un 3MF de PrusaSlicer con `support_material = 1` (`pi4_prusaslicer_support.3mf`) se
+  abre con los soportes prendidos en automático, y siguen prendidos y sin aviso al usar nuestra impresora. Pasa.
+- **G6 completo:** `gate_g6_changes`: soportes prendidos a mano siguen prendidos al cambiar de impresora y de
+  filamento; un perfil de impresión que los tiene apagados los apaga con el aviso; prendidos de nuevo, deshacer (que
+  deshace pasos de la placa, no ajustes) no los toca. Pasa.
+- **G1:** `gate_g1_{stl,obj,own_3mf,other_3mf}`: el cubo STL, la caja OBJ, nuestro 3MF (la caja guardada como
+  proyecto y abierta de nuevo sobre otra placa) y el proyecto de PrusaSlicer quedan en la placa, sobre la cama y
+  dentro de ella, con su tamaño (verbo nuevo `expect-on-plate X Y Z`, ±0,01 mm). Pasan.
+- **QA confirmó las definiciones de G3** (RELEASE_GATE.md, spec/next dd20355). Las 4 de G3 quedan rojas hasta que
+  el motor las arregle. G16 de Android llega como flujo reutilizable `release-gate.yml` (PR #56 de las apps); se
+  suma a gate.yml cuando esté en dev.
+- **G7:** `gate_g7_{skirt,brim,raft}` sobre el cubo de 20 mm, medidos en la primera capa (verbo `expect-first-layer`):
+  falda de 2 vueltas a 6 mm (borde interno a 5,967 mm), borde de 5 mm (llega a 5,02 mm), balsa de 3 capas (la
+  primera llega a 6,16 mm de la pieza, entre el valor exacto 4,5 y el ajustado a la grilla 7,26 que admite
+  `skirt_brim_raft.md`, regla 15, R5; la pieza empieza en z 0,9, como R3). Pasan.
+- **G8:** `gate_g8_density_{0,15,100}` y `gate_g8_walls_{1..4}` (verbo `expect-middle-layer`): vueltas de pared en la
+  capa del medio y densidad del relleno medida por la separación de sus líneas, con el ancho medio del cordón
+  redondeado (ancho menos (1 − π/4) del alto), ±0,5 %. Da 0, 15,00, 99,95 y 20,00 %. Pasan.
+- **G9:** `gate_g9_project`: la T con soporte pintado, un modificador y ajustes propios, laminada, guardada como
+  proyecto y abierta de nuevo sobre otra placa, da el mismo G-code byte a byte (verbos `keep-gcode` y
+  `expect-gcode-same`). Probado al revés: cambiar un ajuste después de abrir hace fallar la comparación. Pasa.
+- **Puerta en Linux:** 39 pruebas, pasan todas menos las 4 de G3 del motor.
+- **Windows:** la primera corrida de la puerta no compilaba en MSVC (C1061: la cadena de `else if` de los verbos del
+  guion pasó el límite de anidamiento). Los verbos de la puerta se movieron a `script_check` (52b65d9). La cadena de
+  `script_input` sigue cerca del límite: los verbos nuevos van en funciones aparte.
+
 ## 2026-11-16 — soporte siempre que haga falta (punto 1 del pedido del dueño por QA)
 
 - **Pedido:** «no tener soporte siempre es muy grave». Barrido de grid, organic y snug sobre piezas difíciles, con una

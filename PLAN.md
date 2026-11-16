@@ -1424,6 +1424,18 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
   G-code) está implementada desde el 2026-11-12 y va en la misma biblioteca (pedido de la sesión del iPhone,
   `mobile_app.md`, reglas 12 y 19). Faltan la vista previa por capas y el análisis.
 
+### Puerta de lanzamiento (`RELEASE_GATE.md`, spec/next; decisión del dueño, 2026-11-16)
+
+- [x] Trabajo de CI «Puerta de lanzamiento» en Linux y Windows (`.github/workflows/gate.yml`, etiqueta `gate`); la
+      nightly y las versiones (alpha y release) no publican sin él.
+- [x] G2: cubo de 20 mm y Benchy, G-code comprobado, capas, filamento y tiempo, tamaño dentro de 0,1 mm.
+- [ ] G3: cada estilo con la T, la rampa a 60° y el Benchy. Arman la prueba; fallan por el motor (ver PROGRESS).
+- [x] G4, G5: soporte pintado y en la vista previa.
+- [x] G6: proyecto con soportes, cambio de impresora, filamento y perfil, deshacer.
+- [x] G1: STL, OBJ, 3MF propio y de otro programa.
+- [x] G7, G8, G9: adhesión, relleno y paredes, guardar y abrir proyecto.
+- [ ] G10 a G12, G15; G13 y G14 con el motor; G16 con las apps (flujo `release-gate.yml`, PR #56).
+
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 
 Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.

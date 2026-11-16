@@ -1,0 +1,2 @@
+# Release gate G1: the 20 mm cube (STL) opens onto the plate at its size.
+expect-on-plate 20 20 20
