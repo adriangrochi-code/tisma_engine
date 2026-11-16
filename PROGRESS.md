@@ -14397,3 +14397,18 @@ para el LBM D3Q19.
   - `navigation.txt` ahora elige Fusion 360 al empezar;
   - `view_bar.txt` sin acercar, encuadrar ni la proyección;
   - pasan las 227 de interfaz antes de mover los paneles, y las 32 de Diseño y de la vista después.
+
+## 2026-11-16 — interfaz: soportes e impresoras en red de punta a punta (errores del probador)
+
+- **Soportes:** la interfaz manda bien `support.enabled` y el estilo. Una T con voladizos de 15 mm (`tests/data/tee.stl`,
+  pieza de prueba propia) da 0 bloques `;TYPE:Support` sin soportes y unos 100 con cada estilo (grilla, árbol y
+  ajustado). No se encontró nada en la interfaz que los pierda. El paquete no tiene ningún `support_material`, y la
+  traducción tampoco lo lee. Quedan por ver el proyecto y el perfil que usó el probador: un objeto con sus propios
+  ajustes, o «support.automatic» apagado (solo pintados). El guion «slice» vuelve a laminar cuando el laminado
+  quedó viejo, como el botón, y se suma `expect-gcode-count`.
+- **Impresoras en red:** prueba de punta a punta por tipo contra un programa falso local (`tisma_fake_print_host`):
+  probar, laminar, mandar e imprimir, y leer el estado. Pasan OctoPrint, AstroBox, Moonraker, PrusaLink (Digest),
+  Duet y Repetier-Server. Bambu ya tenía la suya contra su simulador (`ui_bambu_print`). Los servidores falsos
+  pasaron de `test_print_host.cpp` a `tests/fake_print_hosts.hpp` sin cambios, para usarlos en las dos pruebas. El
+  guion `host` suma key, user, password, printer y send; `expect-host` suma sent y printing. No probado en Windows:
+  firewall, búsqueda en la red y certificados.

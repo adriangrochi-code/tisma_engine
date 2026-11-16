@@ -1,0 +1,18 @@
+# Supports reach the engine from the panel (the tester's report, 2026-11-16:
+# no tree or grid supports in the program): a T with 15 mm overhangs, sliced
+# with no supports, then with each style, has its ;TYPE:Support blocks.
+slice
+expect-gcode-count ;TYPE:Support 0
+menu tab_prepare
+set support.enabled true
+set support.style "grid"
+slice
+expect-gcode-count ;TYPE:Support 20
+menu tab_prepare
+set support.style "organic"
+slice
+expect-gcode-count ;TYPE:Support 20
+menu tab_prepare
+set support.style "snug"
+slice
+expect-gcode-count ;TYPE:Support 20

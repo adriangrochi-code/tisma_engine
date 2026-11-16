@@ -2074,6 +2074,7 @@ private:
     std::array<std::size_t, 4> draw_bytes_{}; // the view's buffers last printed (--draw-stats)
     long long view_calls_ = -1; // the 3D view's draw calls in the last frame (--draw-stats)
     bool quit_ = false;
+    std::optional<bool> host_sent_; // script: how the last send to a network program went
     std::vector<std::future<void>> busy_jobs_; // script: stuck jobs, to time the exit (busy-job)
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
@@ -26005,6 +26006,8 @@ void App::host_poll() {
     }
     if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
         const device::HostResult r = host_job_.get();
+        if (!host_job_what_.empty())
+            host_sent_ = r.ok;
         if (r.ok && !host_job_what_.empty())
             notify(format(tr(T::HostSent), host_job_what_.c_str(), host_.url.c_str()));
         else if (!r.ok)
@@ -27433,6 +27436,8 @@ void App::script_input() {
             return fail_step("the setting is " + got);
         next();
     } else if (step.verb == "slice") { // as the Slice button, then the Preview tab
+        if (f == 0 && result_ && stale_ && !slice_job_.running()) // a slice out of date: again, as the button does
+            return start_slice();
         if (!result_ && !slice_job_.running()) {
             if (!error_title_.empty())
                 return fail_step("the slice failed: " + error_title_);
@@ -27443,6 +27448,23 @@ void App::script_input() {
         if (slice_job_.running())
             return;
         set_tab(Tab::Preview);
+        next();
+    } else if (step.verb == "expect-gcode-count") { // TEXT MIN: the last slice's G-code has at least MIN lines starting with TEXT
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        const long long want = std::atoll(step.value.c_str());
+        long long got = 0;
+        std::size_t at = 0;
+        const std::string& g = result_->gcode;
+        while (at < g.size()) {
+            const std::size_t end = std::min(g.find('\n', at), g.size());
+            if (std::string_view(g).substr(at, end - at).starts_with(step.key))
+                ++got;
+            at = end + 1;
+        }
+        std::printf("ui-script: expect-gcode-count %s %lld: got %lld\n", step.key.c_str(), want, got);
+        if (got < want)
+            return fail_step("the G-code has " + std::to_string(got) + " lines starting with " + step.key);
         next();
     } else if (step.verb == "expect-view-calls") { // the last frame's view drew at most this many (--draw-stats)
         if (view_calls_ < 0)
@@ -27842,8 +27864,25 @@ void App::script_input() {
             host_test();
         else if (step.key == "refresh")
             host_refresh();
-        else if (device::host_kind_from(step.key, host_.kind))
+        else if (step.key == "key") // the program's API key, as typed in its field
+            host_.api_key = step.value;
+        else if (step.key == "user")
+            host_.user = step.value;
+        else if (step.key == "password")
+            host_.password = step.value;
+        else if (step.key == "printer") // Repetier-Server's printer
+            host_.printer = step.value;
+        else if (step.key == "send") { // the last slice, uploaded and printed, as «Send» with «Start printing»
+            if (!device_can_print())
+                return fail_step("nothing sliced to send");
+            host_sent_.reset();
+            host_send(true);
+        } else if (device::host_kind_from(step.key, host_.kind)) {
             host_.url = step.value;
+            // A fake program's address, from tisma_fake_print_host (tests).
+            if (const char* fake = std::getenv("TISMA_TEST_HOST_URL"); fake && host_.url == "{url}")
+                host_.url = fake;
+        }
         else
             return fail_step("unknown host step");
         next();
@@ -27860,6 +27899,10 @@ void App::script_input() {
             got = host_version_.code;
         else if (step.key == "ok")
             got = host_tested_ && host_version_.ok ? "yes" : "no";
+        else if (step.key == "sent") // the last send: yes, no, or none
+            got = !host_sent_ ? "none" : *host_sent_ ? "yes" : "no";
+        else if (step.key == "printing")
+            got = host_status_.ok && host_status_.printing ? "yes" : "no";
         else
             return fail_step("unknown expect-host key");
         if (got == step.value) {

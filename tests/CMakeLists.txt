@@ -128,6 +128,9 @@ add_executable(tisma_fake_secret_tool fake_secret_tool.cpp)
 add_dependencies(tisma_tests tisma_fake_secret_tool)
 target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SECRET_TOOL="$<TARGET_FILE:tisma_fake_secret_tool>")
 # The mock Tisma Cloud server around a program (the interface's cloud tests).
+add_executable(tisma_fake_print_host fake_print_host_main.cpp)
+target_link_libraries(tisma_fake_print_host PRIVATE tisma_core tisma_net tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)
+add_dependencies(tisma_tests tisma_fake_print_host)
 add_executable(tisma_mock_cloud mock_cloud_main.cpp)
 target_link_libraries(tisma_mock_cloud PRIVATE tisma_core tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
@@ -350,6 +353,27 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_print_host_offline PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    # Supports reach the engine from the panel, in each style (the tester's
+    # report, 2026-11-16): ;TYPE:Support in the G-code of a T with overhangs.
+    add_test(NAME ui_supports_slice
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/tee.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/supports_slice.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_supports_slice.png)
+    set_tests_properties(ui_supports_slice PROPERTIES FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # Each kind of network program from end to end against a local fake:
+    # test, send and print, state (the tester's report, 2026-11-16).
+    foreach(kind octoprint astrobox moonraker prusalink duet repetier)
+      add_test(NAME ui_host_e2e_${kind}
+        COMMAND $<TARGET_FILE:tisma_fake_print_host> ${kind} ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/host_e2e_${kind}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_host_e2e_${kind}.png)
+      set_tests_properties(ui_host_e2e_${kind} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
+                           PASS_REGULAR_EXPRESSION "fake host: started=1 name=." ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                           TIMEOUT 300)
+    endforeach()
     # Closing with jobs under way: the process ends in under 3 s.
     add_test(NAME ui_quit_busy
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
