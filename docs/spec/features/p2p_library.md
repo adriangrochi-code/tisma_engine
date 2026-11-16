@@ -176,6 +176,12 @@ desventajas».
    Respuestas: 200 (`pieces`, el JSON de 8 septies; `piece/<n>`, los bytes, `application/octet-stream`), 401 (sin
    ticket o ticket inválido o vencido), 403 (cuenta o par bloqueado), 404 (sin el archivo o pedazo fuera de rango),
    451 (archivo bloqueado) y 429 con `Retry-After` (tope por hora pasado).
+   El ticket se pide con `POST /v1/library/relay-ticket` y la sesión de la cuenta (`Authorization: Bearer tu_…`;
+   sin sesión, la app dice «Entrá a Tisma Cloud para bajar»). Cuerpo: `{"peer_key": "<clave pública Ed25519 del par,
+   base64>"}`, opcional: sin ella, el ticket sale con `"peer_id": ""` y sirve solo por HTTPS en el sembrador (el
+   intermediario lo rechaza); con ella (atada antes con `POST /v1/library/peer-key`), sirve para las dos cosas. 200:
+   `{"ticket","expires","relays":[…]}`; 409 si la clave no es de la cuenta; 403 si la cuenta, la clave o la IP están
+   bloqueadas.
 8 nonies. **Subida al sembrador, provisoria** (16-11-2026, propuesta del servidor; mientras no haya pares, el sembrador
    no tiene de dónde sacar un modelo nuevo):
    - el maestro, al publicar (`POST /v1/library/models` y `.../revisions`), devuelve `uploads`:
