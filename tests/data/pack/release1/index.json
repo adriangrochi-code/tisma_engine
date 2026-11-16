@@ -4,8 +4,8 @@
  },
  "translation_archive": {
   "name": "translation.tar.xz",
-  "size": 576,
-  "sha256": "67ddd7b67032e3e2a5755526835959bea0517132fca18d11a5b4ab5d93d7c6f1"
+  "size": 620,
+  "sha256": "382cbe16c9c5a77a665c4ee6a2d365ae5bf704a741e53be63e6e8a6b29f21747"
  },
  "format": "tisma-profile-pack",
  "version": 2,

@@ -88,3 +88,13 @@ foreach(case prompt:tee without:tee cube:cube_ascii support_preview:tee supports
   endif()
   tisma_gate_test(NAME ui_overhang_${name} MODEL ${TISMA_GATE_DATA}/${model}.stl SCRIPT ${script} LANG es)
 endforeach()
+
+# G6: a PrusaSlicer project with support_material = 1 opens with the supports
+# on (the pack's translation table: support_material → support.enabled), and
+# they stay on with our printer instead of the project's.
+add_test(NAME gate_pack_install
+  COMMAND $<TARGET_FILE:tisma-engine> pack install --data ${TISMA_GATE_OUT}/pack --from ${TISMA_GATE_DATA}/pack/release1)
+set_tests_properties(gate_pack_install PROPERTIES LABELS gate FIXTURES_SETUP gate_pack)
+tisma_gate_test(NAME gate_g6_project_support MODEL ${TISMA_GATE_DATA}/formats/pi4_prusaslicer_support.3mf
+                SCRIPT gate_g6_project_support LANG es ARGS --light --pack ${TISMA_GATE_OUT}/pack/pack
+                PROPERTIES FIXTURES_REQUIRED gate_pack)

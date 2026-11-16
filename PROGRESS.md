@@ -14590,3 +14590,7 @@ para el LBM D3Q19.
   - La rampa y la T en grilla y ajustado pasan.
 - **Lo que sigue:** G6 completo (3MF, impresora, deshacer), G1 y G7 a G12, G15; el motor con G13 y G14; las apps con
   G16. Windows de la puerta sin probar todavía: se ve en la primera corrida de GitHub.
+- **G6, proyecto con soportes (QA):** la tabla de traducción del paquete de prueba suma `support_material` →
+  `support.enabled` y `support_material_auto` → `support.automatic` (como el paquete real desde pack-2026.11.10).
+  `gate_g6_project_support`: un 3MF de PrusaSlicer con `support_material = 1` (`pi4_prusaslicer_support.3mf`) se
+  abre con los soportes prendidos en automático, y siguen prendidos y sin aviso al usar nuestra impresora. Pasa.
