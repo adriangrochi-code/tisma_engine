@@ -1,0 +1,2 @@
+# Release gate G1: a PrusaSlicer project (another program's 3MF) opens onto the plate at its size.
+expect-on-plate 30 10 15

@@ -1431,8 +1431,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 - [x] G2: cubo de 20 mm y Benchy, G-code comprobado, capas, filamento y tiempo, tamaño dentro de 0,1 mm.
 - [ ] G3: cada estilo con la T, la rampa a 60° y el Benchy. Arman la prueba; fallan por el motor (ver PROGRESS).
 - [x] G4, G5: soporte pintado y en la vista previa.
-- [ ] G6: falta abrir un 3MF, cambiar de impresora y deshacer (hoy solo el cambio de perfil).
-- [ ] G1, G7 a G12, G15; G13 y G14 con el motor; G16 con las apps.
+- [x] G6: proyecto con soportes, cambio de impresora, filamento y perfil, deshacer.
+- [x] G1: STL, OBJ, 3MF propio y de otro programa.
+- [ ] G7 a G12, G15; G13 y G14 con el motor; G16 con las apps (flujo `release-gate.yml`, PR #56).
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 

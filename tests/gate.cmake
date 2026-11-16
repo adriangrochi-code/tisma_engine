@@ -98,3 +98,14 @@ set_tests_properties(gate_pack_install PROPERTIES LABELS gate FIXTURES_SETUP gat
 tisma_gate_test(NAME gate_g6_project_support MODEL ${TISMA_GATE_DATA}/formats/pi4_prusaslicer_support.3mf
                 SCRIPT gate_g6_project_support LANG es ARGS --light --pack ${TISMA_GATE_OUT}/pack/pack
                 PROPERTIES FIXTURES_REQUIRED gate_pack)
+# G6: the supports through a change of printer, filament and print profile,
+# and undo: they never go off without the notice.
+tisma_gate_test(NAME gate_g6_changes MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g6_changes LANG es)
+
+# G1, open: an STL, an OBJ, our own 3MF and another program's 3MF are on the
+# plate at their size.
+tisma_gate_test(NAME gate_g1_stl MODEL ${TISMA_GATE_DATA}/cube20.stl SCRIPT gate_g1_stl)
+tisma_gate_test(NAME gate_g1_obj MODEL ${TISMA_GATE_DATA}/formats/box.obj SCRIPT gate_g1_obj)
+tisma_gate_test(NAME gate_g1_own_3mf MODEL ${TISMA_GATE_DATA}/formats/box.obj SCRIPT gate_g1_own_3mf)
+set_tests_properties(gate_g1_own_3mf PROPERTIES WORKING_DIRECTORY ${TISMA_GATE_OUT})
+tisma_gate_test(NAME gate_g1_other_3mf MODEL ${TISMA_GATE_DATA}/formats/pi2_prusaslicer.3mf SCRIPT gate_g1_other_3mf)

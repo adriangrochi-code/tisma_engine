@@ -29063,6 +29063,35 @@ void App::script_input() {
         if (got != want)
             return fail_step(std::to_string(got) + " models are chosen");
         next();
+    } else if (step.verb == "expect-on-plate") { // X Y Z: the plate's models span this (mm, within 0.01), inside the bed and on it
+        if (objects_.empty() || placed_meshes_.empty())
+            return f > 600 ? fail_step("nothing on the plate") : void();
+        double want[3] = {0, 0, 0};
+        std::istringstream in(step.key + " " + step.value);
+        in >> want[0] >> want[1] >> want[2];
+        double lo[3] = {1e30, 1e30, 1e30}, hi[3] = {-1e30, -1e30, -1e30};
+        for (const TriangleMesh& m : placed_meshes_) {
+            if (m.triangle_count() == 0)
+                continue;
+            const BoundingBox b = m.bounding_box();
+            const double bl[3] = {b.min.x, b.min.y, b.min.z}, bh[3] = {b.max.x, b.max.y, b.max.z};
+            for (int a = 0; a < 3; ++a)
+                lo[a] = std::min(lo[a], bl[a]), hi[a] = std::max(hi[a], bh[a]);
+        }
+        double bed_lo[2] = {1e30, 1e30}, bed_hi[2] = {-1e30, -1e30};
+        for (const auto& c : settings_.bed)
+            for (int a = 0; a < 2; ++a)
+                bed_lo[a] = std::min(bed_lo[a], c[a]), bed_hi[a] = std::max(bed_hi[a], c[a]);
+        std::printf("ui-script: expect-on-plate %.2f %.2f %.2f: got %.3f %.3f %.3f from %.2f %.2f %.2f\n", want[0], want[1],
+                    want[2], hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], lo[0], lo[1], lo[2]);
+        for (int a = 0; a < 3; ++a)
+            if (std::abs(hi[a] - lo[a] - want[a]) > 0.01)
+                return fail_step(format("the plate's models are %.3f mm along %c, not %.3f", hi[a] - lo[a], "XYZ"[a], want[a]));
+        if (std::abs(lo[2]) > 0.01)
+            return fail_step(format("the models stand at z %.3f, not on the bed", lo[2]));
+        if (!settings_.bed.empty() && (lo[0] < bed_lo[0] || lo[1] < bed_lo[1] || hi[0] > bed_hi[0] || hi[1] > bed_hi[1]))
+            return fail_step("the models are not inside the bed");
+        next();
     } else if (step.verb == "expect-models") { // how many models the plate has
         const std::size_t want = std::size_t(std::atoi(step.key.c_str()));
         std::printf("ui-script: expect-models %zu: %s%zu\n", want, objects_.size() == want ? "ok, " : "got ", objects_.size());

@@ -14594,3 +14594,12 @@ para el LBM D3Q19.
   `support.enabled` y `support_material_auto` → `support.automatic` (como el paquete real desde pack-2026.11.10).
   `gate_g6_project_support`: un 3MF de PrusaSlicer con `support_material = 1` (`pi4_prusaslicer_support.3mf`) se
   abre con los soportes prendidos en automático, y siguen prendidos y sin aviso al usar nuestra impresora. Pasa.
+- **G6 completo:** `gate_g6_changes`: soportes prendidos a mano siguen prendidos al cambiar de impresora y de
+  filamento; un perfil de impresión que los tiene apagados los apaga con el aviso; prendidos de nuevo, deshacer (que
+  deshace pasos de la placa, no ajustes) no los toca. Pasa.
+- **G1:** `gate_g1_{stl,obj,own_3mf,other_3mf}`: el cubo STL, la caja OBJ, nuestro 3MF (la caja guardada como
+  proyecto y abierta de nuevo sobre otra placa) y el proyecto de PrusaSlicer quedan en la placa, sobre la cama y
+  dentro de ella, con su tamaño (verbo nuevo `expect-on-plate X Y Z`, ±0,01 mm). Pasan.
+- **QA confirmó las definiciones de G3** (RELEASE_GATE.md, spec/next dd20355). Las 4 de G3 quedan rojas hasta que
+  el motor las arregle. G16 de Android llega como flujo reutilizable `release-gate.yml` (PR #56 de las apps); se
+  suma a gate.yml cuando esté en dev.
