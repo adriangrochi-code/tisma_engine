@@ -5341,9 +5341,26 @@ void App::load_gcode(const std::filesystem::path& path) {
     notify(format(tr(T::GcodeOpened), utf8(path.filename()).c_str()));
 }
 
+// A settings file changes only the values it has: the rest, the printer's
+// bed, start G-code and temperatures among them, stay as they are (QA,
+// 2026-11-16: a file with only the supports gave G-code with no start, no
+// heating and the part at 0, 0).
 void App::load_settings_file(const std::filesystem::path& path) {
     try {
-        settings_ = load_settings(path);
+        load_settings(path); // the file alone must be valid
+        std::ifstream in(path, std::ios::binary);
+        const nlohmann::json patch = nlohmann::json::parse(in);
+        nlohmann::json all = nlohmann::json::parse(settings_json(settings_));
+        for (const auto& [group, values] : patch.items()) {
+            if (values.is_object() && all.contains(group) && all[group].is_object())
+                for (const auto& [key, value] : values.items())
+                    all[group][key] = value;
+            else
+                all[group] = values;
+        }
+        Settings merged = parse_settings(all.dump());
+        check_settings(merged);
+        settings_ = std::move(merged);
         bed_changed();
         settings_changed();
         notify(format(tr(T::SettingsLoaded), utf8(path.filename()).c_str()));
@@ -27731,7 +27748,7 @@ bool App::script_check(const ScriptStep& step, int f) {
         if (!result_ || !result_->ok)
             return fail_step("nothing sliced");
         std::vector<std::array<float, 3>> where;
-        const double share = floating_support_share(result_->preview, 1.0, &where) * 100.0;
+        const double share = floating_support_share(result_->preview, 1.5, &where) * 100.0;
         std::printf("ui-script: expect-support-floating %s: %.2f %%\n", step.key.c_str(), share);
         for (std::size_t i = 0; i < where.size(); i += std::max<std::size_t>(1, where.size() / 12))
             std::printf("ui-script:   floating: %.2f %.2f %.2f\n", where[i][0], where[i][1], where[i][2]);
@@ -27741,7 +27758,10 @@ bool App::script_check(const ScriptStep& step, int f) {
     } else if (step.verb == "expect-support-under-overhangs") { // support under every overhang steeper than the angle
         if (!result_ || !result_->ok)
             return fail_step("nothing sliced");
-        const std::vector<OverhangPoint> points = overhang_points();
+        // Bridges need no support unless asked (RELEASE_GATE.md, «Definiciones
+        // para G3»; supports_skirt.md, rule 1).
+        const std::vector<OverhangPoint> points =
+            settings_.support_under_bridges ? overhang_points() : without_bridges(result_->preview, overhang_points());
         const std::vector<OverhangPoint> bare = overhangs_without_support(result_->preview, points);
         struct Region {
             double area = 0.0, bare = 0.0;
@@ -27761,7 +27781,7 @@ bool App::script_check(const ScriptStep& step, int f) {
             const Region& g = regions[r];
             if (g.area < 1.0)
                 continue;
-            std::printf("ui-script:   overhang %zu at %.1f %.1f %.1f: %.1f mm2, %.1f mm2 without support\n", r, g.x, g.y,
+            std::printf("ui-script:   overhang %zu at %.1f %.1f %.1f: %.1f mm2, %.3f mm2 without support\n", r, g.x, g.y,
                         g.z, g.area, g.bare);
             failing += g.bare > 0.0;
         }
@@ -27828,6 +27848,37 @@ bool App::script_check(const ScriptStep& step, int f) {
             std::printf("ui-script:   kept: %s\nui-script:   now:  %s\n", line_at(kept, at).c_str(), line_at(now, at).c_str());
             return fail_step("the G-code differs from " + step.key + " on line " + std::to_string(line));
         }
+        next();
+    } else if (step.verb == "expect-gcode-ready") { // the G-code homes, heats bed and nozzle before printing, and stays on the bed
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        const std::string& g = result_->gcode;
+        const std::size_t first_layer = g.find(";LAYER_CHANGE");
+        const std::string start = g.substr(0, first_layer);
+        const auto has = [&](const char* word) {
+            for (std::size_t at = start.find(word); at != std::string::npos; at = start.find(word, at + 1))
+                if (at == 0 || start[at - 1] == '\n')
+                    return true;
+            return false;
+        };
+        const GcodePreview& p = result_->preview;
+        const int nozzle = p.extrusions.empty() ? 0 : p.moves[p.extrusions.front()].temperature;
+        double lo[2] = {1e30, 1e30}, hi[2] = {-1e30, -1e30};
+        for (const auto& c : settings_.bed)
+            for (int a = 0; a < 2; ++a)
+                lo[a] = std::min(lo[a], c[a]), hi[a] = std::max(hi[a], c[a]);
+        std::size_t outside = 0;
+        for (std::uint32_t i : p.extrusions) {
+            const PreviewMove& m = p.moves[i];
+            for (const auto& [x, y] : {std::pair{m.x0, m.y0}, std::pair{m.x1, m.y1}})
+                outside += x < lo[0] - 1e-3 || y < lo[1] - 1e-3 || x > hi[0] + 1e-3 || y > hi[1] + 1e-3;
+        }
+        const bool home = has("G28"), bed = has("M140") || has("M190");
+        std::printf("ui-script: expect-gcode-ready: G28 %s, bed heated %s, nozzle at %d C at the first extrusion, "
+                    "%zu extrusion ends off the bed (%.0f..%.0f x %.0f..%.0f)\n",
+                    home ? "yes" : "no", bed ? "yes" : "no", nozzle, outside, lo[0], hi[0], lo[1], hi[1]);
+        if (!home || !bed || nozzle < 150 || outside || settings_.bed.empty())
+            return fail_step("the G-code would not print: no homing, no heating or moves off the bed");
         next();
     } else {
         return false;

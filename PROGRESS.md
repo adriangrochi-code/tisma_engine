@@ -14617,6 +14617,15 @@ para el LBM D3Q19.
 - **Windows:** la primera corrida de la puerta no compilaba en MSVC (C1061: la cadena de `else if` de los verbos del
   guion pasó el límite de anidamiento). Los verbos de la puerta se movieron a `script_check` (52b65d9). La cadena de
   `script_input` sigue cerca del límite: los verbos nuevos van en funciones aparte.
+- **G10, archivo de ajustes parcial (QA, GRAVE):** abrir un `.json` con solo los soportes reemplazaba todos los
+  ajustes por los de fábrica: sin G-code de inicio, sin calentar y la pieza en 0, 0. Ahora el archivo cambia solo
+  los valores que trae (se mezcla sobre los actuales, grupo por grupo). `gate_g10_partial_settings`: con
+  `support_only.json`, el G-code hace G28, calienta cama y boquilla (210 °C en la primera extrusión) y no sale de la
+  cama (verbo `expect-gcode-ready`). Sin el arreglo, la prueba falla como lo vio QA. Que el verificador del G-code
+  rechace eso por sí solo es del motor (`src/gcode/check.cpp`): pedido.
+- **Exportar un laminado viejo (QA, a confirmar):** no se puede: `export_gcode_to` se niega con el laminado
+  desactualizado, y el botón, el menú y Ctrl+G están apagados. El `--export` del arnés exporta al terminar el primer
+  laminado, antes de los pasos del guion: por eso salió sin soporte.
 
 ## 2026-11-16 — soporte siempre que haga falta (punto 1 del pedido del dueño por QA)
 
@@ -14644,6 +14653,14 @@ para el LBM D3Q19.
   máximo; `support.under_bridges` lo agrega).
 - **Lo que sigue:** punto 2 (interfaz, separación, que se despegue, base en la cama) y punto 3 (rendimiento del
   orgánico en el Benchy y big.stl).
+- **G3 con la ficha nueva (spec/next 7d6df99 y d44613d) y el motor de 6da0d35:** «flotando» a 1,5 mm; los puentes
+  no cuentan (supports_skirt.md, regla 1: un punto es de puente si en alguna dirección, cada 22,5°, la línea llega
+  a la pieza de la capa de abajo por los dos lados y cruza su borde a 60° o más; el borde sale de los cordones a
+  1 mm del choque), salvo con `support.under_bridges`. El techo de la cabina del Benchy sale como puente. Pasan la
+  T, la rampa y el Benchy en grilla, y la T y la rampa en árbol y ajustado (T árbol: 0 % flotando). Siguen rojas
+  `gate_g3_benchy_organic` y `gate_g3_benchy_snug`: el voladizo de 1,4 mm² cerca de (99,7, 121,2, 5,3) tiene 0,2 y
+  0,036 mm² sin soporte. Del motor.
+
 
 ## 2026-11-16 — calidad del soporte y rendimiento del orgánico (puntos 2 y 3)
 

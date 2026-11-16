@@ -19,11 +19,11 @@ namespace tisma {
 std::array<double, 3> part_extent(const GcodePreview& preview);
 
 // The share, 0 to 1, of the support's extruded length (support and its
-// interface) that has nothing under it: above the first layer, no extrusion
+// interface) that has nothing under it (RELEASE_GATE.md, 1.5 mm): above the first layer, no extrusion
 // of any kind within `reach` mm sideways in the layers it sits on (those
 // whose top reaches its bottom). 0 without support.
 // `where`, when given, gets a point of each floating piece (x, y, z).
-double floating_support_share(const GcodePreview& preview, double reach = 1.0,
+double floating_support_share(const GcodePreview& preview, double reach = 1.5,
                               std::vector<std::array<float, 3>>* where = nullptr);
 
 // How far the extrusions of `kind` in the first layer that extrudes lie from
@@ -56,6 +56,13 @@ struct OverhangPoint {
     float area = 0; // mm2 of the face it stands for
     std::uint32_t region = 0; // the overhang it is on: faces that touch, numbered from 0
 };
+
+// Drops the points that are of a bridge (supports_skirt.md, rule 1): in
+// some direction, every 22.5 degrees, a line through the point reaches the
+// part's extrusions in the layer right under it both ways, and crosses
+// their edge at 60 degrees or more at each end. The edge's direction at a
+// hit is taken from the extrusions within 1 mm of it.
+std::vector<OverhangPoint> without_bridges(const GcodePreview& preview, const std::vector<OverhangPoint>& points);
 
 // The overhang points with no support below them: no support extrusion
 // within `reach` mm sideways in the `depth` mm under the point.
