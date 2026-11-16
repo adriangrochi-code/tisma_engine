@@ -14680,3 +14680,16 @@ para el LBM D3Q19.
   Esfera de 1 001 112 triángulos con orgánico: 0,21 s antes y después. No encontré el big.stl de QA (60 mm,
   319 200 triángulos) en este contenedor: pedido a QA. Lo más caro sigue siendo el eje medio de las paredes y el
   relleno de las ramas; no se tocó.
+
+## 2026-11-16 — verificador del G-code: temperatura; la CLI sin impresora (QA)
+
+- **Verificador:** con el perfil de una impresora (cama y G-code de inicio), extruir antes de fijar una temperatura de
+  boquilla (M104 o M109 con S) es un problema; después de una macro de la impresora (START_PRINT), una nota. Fuera de la
+  cama ya fallaba cuando hay cama. Sin impresora (sin cama) no hay cama contra qué medir: lo dice la CLI.
+- **CLI:** sin cama en los ajustes avisa que no hay impresora: la pieza queda alrededor de X 0, Y 0, no se mide contra
+  una cama y solo calienta lo que den los ajustes (usar `--printer`).
+- **Respuestas a QA:** el «Overhang perimeter» sobre el soporte lleva más filamento por mm a propósito
+  (`supports_skirt.md`, regla 4: la primera capa sobre el soporte es puente, alto una capa más la separación, con el
+  cordón redondo). La puerta G3 del Benchy en orgánico y ajustado marca un labio de la popa de 1,4 mm² que sobresale
+  0,2 mm en una capa, menos de medio cordón: pedido a la interfaz que la puerta use el umbral de la regla 1.
+- **Pendiente:** G13 (Ingeniería) y G14 (Perfiles) de la puerta, con verbos de guion de la interfaz.

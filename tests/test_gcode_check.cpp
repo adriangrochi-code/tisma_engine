@@ -183,10 +183,35 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         CHECK(c.ok());
         REQUIRE(c.notes.size() == 1);
         CHECK_THAT(c.notes[0].message, ContainsSubstring("heater set to 0"));
+
         // Set to 0 after the macro, it is a problem again.
         std::string g = macro.gcode;
         g.insert(g.find(";LAYER_CHANGE\n;Z:1.000"), "M104 S0\n");
         CHECK_THAT(problems_of(check_gcode(g, macro.limits)), ContainsSubstring("heater set to 0"));
+    }
+    {
+        // A printer's profile (a bed and a start G-code) that never sets the
+        // nozzle's temperature: refused (QA, 2026-11-16: a partial settings
+        // file left the print unheated and the check said nothing); after a
+        // printer macro, only a note.
+        Settings h = test_printer();
+        h.start_gcode = "G28\nG1 Z5 F600";
+        h.variables["temperature"] = {"210"};
+        const Output ho = slice_and_write(cube(), h);
+        GcodeLimits heat = ho.limits;
+        heat.require_heat = true;
+        std::string g2 = ho.gcode;
+        for (const char* m : {"M104", "M109"})
+            for (std::size_t at = g2.find(m); at != std::string::npos; at = g2.find(m))
+                g2.replace(at, 4, "M117");
+        CHECK_THAT(problems_of(check_gcode(g2, heat)), ContainsSubstring("before any nozzle temperature"));
+        CHECK(check_gcode(ho.gcode, heat).ok());
+        const std::size_t home = g2.find("G28");
+        REQUIRE(home != std::string::npos);
+        g2.insert(home, "START_PRINT\n");
+        const GcodeCheck noted = check_gcode(g2, heat);
+        CHECK(noted.ok());
+        CHECK(!noted.notes.empty());
     }
 }
 

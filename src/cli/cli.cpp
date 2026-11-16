@@ -778,6 +778,11 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         fallback += (fallback.empty() ? "" : ", ") + key;
     if (!fallback.empty())
         err << "warning: no speed for " << fallback << ": using a stock Ender-3's\n";
+    // Without a printer (no bed in the settings) the G-code is not for a
+    // machine: said, so that it is not sent to one as it is (QA, 2026-11-16).
+    if (settings.bed.empty())
+        err << "warning: no printer in the settings (no bed): the part stays round X 0, Y 0, nothing is checked "
+               "against a bed, and the G-code heats only what the settings give; use --printer or a printer's settings\n";
 
     ModelFile stl;
     double seconds = 0.0;

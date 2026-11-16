@@ -263,6 +263,9 @@ private:
         // is only a note.
         if (custom_ && ((!p.readable && kind != 'G' && kind != 'M' && kind != 'T') ||
                         (p.readable && kind == 'M' && p.code == 98)))
+            macro_seen_ = true;
+        if (custom_ && ((!p.readable && kind != 'G' && kind != 'M' && kind != 'T') ||
+                        (p.readable && kind == 'M' && p.code == 98)))
             for (std::size_t k = 0; k < cold_.size(); ++k)
                 if (cold_[k]) {
                     if (macro_heats_.size() <= k)
@@ -319,6 +322,11 @@ private:
                 if (cold_.size() <= k)
                     cold_.resize(k + 1, false);
                 cold_[k] = *s < 1.0;
+                if (*s >= 1.0) {
+                    if (heated_.size() <= k)
+                        heated_.resize(k + 1, false);
+                    heated_[k] = true;
+                }
                 if (k < macro_heats_.size())
                     macro_heats_[k] = false; // set again after the macro: it holds
             }
@@ -488,6 +496,14 @@ private:
                 retracted_ = 0.0;
                 pieces_ = 0;
             }
+            if (limits_.require_heat && !custom_ && !(tool_ < heated_.size() && heated_[tool_]) &&
+                !(tool_ < cold_.size() && cold_[tool_]) && !unheated_told_) {
+                unheated_told_ = true;
+                if (macro_seen_)
+                    out_.notes.push_back({line_, "extrudes before any nozzle temperature is set (a printer macro may set it)"});
+                else
+                    problem("extrudes before any nozzle temperature is set");
+            }
             if (tool_ < cold_.size() && cold_[tool_]) {
                 if (tool_ < macro_heats_.size() && macro_heats_[tool_]) {
                     if (!cold_noted_)
@@ -650,6 +666,9 @@ private:
     std::size_t tool_ = 0;        // the extruder printing, from 0
     std::vector<bool> cold_;      // each extruder's heater set to 0 (M104 or M109 S0)
     bool cold_told_ = false;      // that problem said once
+    std::vector<bool> heated_;    // each extruder's heater set to a temperature
+    bool macro_seen_ = false;     // a printer macro in the user's G-code
+    bool unheated_told_ = false;  // extruding before any temperature, said once
     bool cold_noted_ = false;     // and that note
     std::vector<bool> macro_heats_; // set to 0 before a printer macro, which may heat it: only a note
     std::vector<double> pulled_;  // each extruder's filament pulled back when it left
@@ -706,6 +725,8 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         limits.belt_angle = s.belt_angle;
         limits.belt_is_z = s.belt_is_z;
     }
+    // A printer's profile (a bed and its start G-code) heats before printing.
+    limits.require_heat = !s.bed.empty() && !s.start_gcode.empty();
     if (!s.bed.empty()) { // and never off the bed
         double bed_lo[2] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
         double bed_hi[2] = {-bed_lo[0], -bed_lo[1]};
