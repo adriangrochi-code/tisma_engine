@@ -14603,3 +14603,14 @@ para el LBM D3Q19.
 - **QA confirmó las definiciones de G3** (RELEASE_GATE.md, spec/next dd20355). Las 4 de G3 quedan rojas hasta que
   el motor las arregle. G16 de Android llega como flujo reutilizable `release-gate.yml` (PR #56 de las apps); se
   suma a gate.yml cuando esté en dev.
+- **G7:** `gate_g7_{skirt,brim,raft}` sobre el cubo de 20 mm, medidos en la primera capa (verbo `expect-first-layer`):
+  falda de 2 vueltas a 6 mm (borde interno a 5,967 mm), borde de 5 mm (llega a 5,02 mm), balsa de 3 capas (la
+  primera llega a 6,16 mm de la pieza, entre el valor exacto 4,5 y el ajustado a la grilla 7,26 que admite
+  `skirt_brim_raft.md`, regla 15, R5; la pieza empieza en z 0,9, como R3). Pasan.
+- **G8:** `gate_g8_density_{0,15,100}` y `gate_g8_walls_{1..4}` (verbo `expect-middle-layer`): vueltas de pared en la
+  capa del medio y densidad del relleno medida por la separación de sus líneas, con el ancho medio del cordón
+  redondeado (ancho menos (1 − π/4) del alto), ±0,5 %. Da 0, 15,00, 99,95 y 20,00 %. Pasan.
+- **G9:** `gate_g9_project`: la T con soporte pintado, un modificador y ajustes propios, laminada, guardada como
+  proyecto y abierta de nuevo sobre otra placa, da el mismo G-code byte a byte (verbos `keep-gcode` y
+  `expect-gcode-same`). Probado al revés: cambiar un ajuste después de abrir hace fallar la comparación. Pasa.
+- **Puerta en Linux:** 39 pruebas, pasan todas menos las 4 de G3 del motor.

@@ -1,0 +1,16 @@
+# Release gate G9: the T with painted support, a modifier and its own
+# settings, sliced; saved as a project and opened again over another plate,
+# it slices to the same G-code, byte for byte.
+slice
+expect-gcode-count ;TYPE:Support 1
+keep-gcode gate_g9_a.gcode
+save-project gate_g9.3mf
+wait 5
+add-cylinder
+wait 10
+expect-models 2
+open-project gate_g9.3mf
+wait 30
+expect-models 1
+slice
+expect-gcode-same gate_g9_a.gcode

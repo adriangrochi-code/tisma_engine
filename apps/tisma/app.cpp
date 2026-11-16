@@ -28022,6 +28022,50 @@ void App::script_input() {
                 return fail_step(std::string("the part is ") + format("%.3f", got[a]) + " mm along " + "XYZ"[a] + ", not " +
                                  format("%.3f", want[a]));
         next();
+    } else if (step.verb == "expect-first-layer") { // skirt|support GAP_MIN GAP_MAX OUTER_MIN OUTER_MAX: first_layer_ring, mm
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        double g0 = 0, g1 = 0, o0 = 0, o1 = 0;
+        std::istringstream in(step.value);
+        in >> g0 >> g1 >> o0 >> o1;
+        const LineKind kind = step.key == "support" ? LineKind::Support : LineKind::SkirtBrim;
+        const FirstLayerRing ring = first_layer_ring(result_->preview, kind);
+        std::printf("ui-script: expect-first-layer %s %s: gap %.3f, outer %.3f, bead %.3f\n", step.key.c_str(),
+                    step.value.c_str(), ring.gap, ring.outer, ring.width);
+        if (ring.outer < 0.0)
+            return fail_step("the first layer has no " + step.key);
+        if (ring.gap < g0 || ring.gap > g1 || ring.outer < o0 || ring.outer > o1)
+            return fail_step(format("the %s lies from %.3f to %.3f mm off the part", step.key.c_str(), ring.gap, ring.outer));
+        next();
+    } else if (step.verb == "expect-part-bottom") { // MIN MAX: the part's lowest bead starts this high (mm), as on a raft
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        double lo = 1e30;
+        for (std::uint32_t i : result_->preview.extrusions) {
+            const PreviewMove& m = result_->preview.moves[i];
+            if (m.kind != LineKind::Support && m.kind != LineKind::SupportInterface && m.kind != LineKind::SkirtBrim &&
+                m.kind != LineKind::Custom && m.kind != LineKind::WipeTower && m.kind != LineKind::Other)
+                lo = std::min(lo, double(m.z1) - m.height);
+        }
+        std::printf("ui-script: expect-part-bottom %s %s: %.3f\n", step.key.c_str(), step.value.c_str(), lo);
+        if (lo < std::atof(step.key.c_str()) - 1e-6 || lo > std::atof(step.value.c_str()) + 1e-6)
+            return fail_step(format("the part starts at z %.3f", lo));
+        next();
+    } else if (step.verb == "expect-middle-layer") { // WALLS SPARSE_MIN SPARSE_MAX: wall loops and sparse infill density % (middle_layer)
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        int walls = 0;
+        double s0 = 0, s1 = 0;
+        std::istringstream in(step.key + " " + step.value);
+        in >> walls >> s0 >> s1;
+        const MiddleLayer m = middle_layer(result_->preview);
+        std::printf("ui-script: expect-middle-layer %s %s: layer %zu, %d wall loops, sparse infill %.2f %% (%.1f mm)\n",
+                    step.key.c_str(), step.value.c_str(), m.layer, m.wall_loops, m.sparse_density * 100.0, m.sparse_length);
+        if (m.wall_loops != walls)
+            return fail_step("the middle layer has " + std::to_string(m.wall_loops) + " wall loops");
+        if (m.sparse_density * 100.0 < s0 || m.sparse_density * 100.0 > s1)
+            return fail_step(format("the middle layer's sparse infill is %.2f %% dense", m.sparse_density * 100.0));
+        next();
     } else if (step.verb == "expect-support-floating") { // MAXPCT: at most this % of the support has nothing under it
         if (!result_ || !result_->ok)
             return fail_step("nothing sliced");
@@ -28722,6 +28766,31 @@ void App::script_input() {
         // "@/name": next to the script (its test data); otherwise from the working folder.
         file_chosen(step.key.starts_with("@/") ? std::filesystem::path(options_.ui_script).parent_path() / step.key.substr(2)
                                                : std::filesystem::absolute(step.key));
+        next();
+    } else if (step.verb == "keep-gcode") { // writes the last slice's G-code to KEY (relative to the working folder)
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        std::ofstream(from_utf8(step.key), std::ios::binary).write(result_->gcode.data(), std::streamsize(result_->gcode.size()));
+        next();
+    } else if (step.verb == "expect-gcode-same") { // the last slice's G-code is the file KEY, byte for byte
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        std::ifstream in(from_utf8(step.key), std::ios::binary);
+        const std::string kept((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        const std::string& now = result_->gcode;
+        std::size_t at = 0, line = 1;
+        while (at < kept.size() && at < now.size() && kept[at] == now[at])
+            line += kept[at++] == '\n';
+        std::printf("ui-script: expect-gcode-same %s: %zu and %zu bytes, %s\n", step.key.c_str(), kept.size(), now.size(),
+                    kept == now ? "the same" : ("first difference on line " + std::to_string(line)).c_str());
+        if (kept.empty() || kept != now) {
+            const auto line_at = [](const std::string& t, std::size_t i) {
+                const std::size_t a = t.rfind('\n', i == 0 ? 0 : i - 1), b = t.find('\n', i);
+                return t.substr(a == std::string::npos ? 0 : a + 1, (b == std::string::npos ? t.size() : b) - (a == std::string::npos ? 0 : a + 1));
+            };
+            std::printf("ui-script:   kept: %s\nui-script:   now:  %s\n", line_at(kept, at).c_str(), line_at(now, at).c_str());
+            return fail_step("the G-code differs from " + step.key + " on line " + std::to_string(line));
+        }
         next();
     } else if (step.verb == "save-project") { // writes the plate as a project to KEY (relative to the working folder)
         save_project_to(step.key);

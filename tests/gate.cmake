@@ -109,3 +109,21 @@ tisma_gate_test(NAME gate_g1_obj MODEL ${TISMA_GATE_DATA}/formats/box.obj SCRIPT
 tisma_gate_test(NAME gate_g1_own_3mf MODEL ${TISMA_GATE_DATA}/formats/box.obj SCRIPT gate_g1_own_3mf)
 set_tests_properties(gate_g1_own_3mf PROPERTIES WORKING_DIRECTORY ${TISMA_GATE_OUT})
 tisma_gate_test(NAME gate_g1_other_3mf MODEL ${TISMA_GATE_DATA}/formats/pi2_prusaslicer.3mf SCRIPT gate_g1_other_3mf)
+
+# G7, adhesion: skirt, brim and raft in the first layer at their size.
+foreach(kind skirt brim raft)
+  tisma_gate_test(NAME gate_g7_${kind} MODEL ${TISMA_GATE_DATA}/cube20.stl SCRIPT gate_g7_${kind})
+endforeach()
+
+# G8, infill and walls: density 0, 15 and 100 %, and 1 to 4 walls, in the
+# G-code.
+foreach(case density_0 density_15 density_100 walls_1 walls_2 walls_3 walls_4)
+  tisma_gate_test(NAME gate_g8_${case} MODEL ${TISMA_GATE_DATA}/cube20.stl SCRIPT gate_g8_${case})
+endforeach()
+
+# G9, save and open a project: painted support, a modifier and the object's
+# own settings come back, and the G-code is the same.
+tisma_gate_test(NAME gate_g9_project MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g9_project
+                ARGS --paint support,enforce,115,128,20,4 --object-add modifier
+                     --object-settings "{\"infill\": {\"density\": 40, \"pattern\": \"grid\"}, \"walls\": {\"count\": 2}}"
+                PROPERTIES WORKING_DIRECTORY ${TISMA_GATE_OUT})

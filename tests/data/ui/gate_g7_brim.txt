@@ -1,0 +1,8 @@
+# Release gate G7: a 5 mm brim on the 20 mm cube with no skirt: from the part
+# out to 5 mm, within one bead.
+menu tab_prepare
+set adhesion.skirt_loops 0
+set adhesion.brim_width 5
+slice
+expect-gcode-valid
+expect-first-layer skirt 0 0.1 4.4 5.1

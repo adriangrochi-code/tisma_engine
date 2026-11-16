@@ -26,6 +26,30 @@ std::array<double, 3> part_extent(const GcodePreview& preview);
 double floating_support_share(const GcodePreview& preview, double reach = 1.0,
                               std::vector<std::array<float, 3>>* where = nullptr);
 
+// How far the extrusions of `kind` in the first layer that extrudes lie from
+// the part's box seen from above (its extrusions in every layer): `gap` from
+// the box to the nearest bead's inner edge, `outer` to the farthest bead's
+// outer edge, mm. Both negative when there are none of that kind.
+struct FirstLayerRing {
+    double gap = -1.0, outer = -1.0;
+    double width = 0.0; // the widest bead of that kind, mm
+};
+FirstLayerRing first_layer_ring(const GcodePreview& preview, LineKind kind);
+
+// The middle layer of the part (by height): how many wall loops it has (runs
+// of wall extrusions with no travel between them), and its sparse infill's
+// density, 0 to 1: the share of the volume it fills, its bead's mean width
+// (the rounded section's: width less (1 - pi/4) of the height) over the spacing of its parallel
+// lines (the median gap between the lines along the longest one's
+// direction; for line patterns such as rectilinear).
+struct MiddleLayer {
+    std::size_t layer = 0;
+    int wall_loops = 0;
+    double sparse_density = 0.0;
+    double sparse_length = 0.0; // mm of sparse infill
+};
+MiddleLayer middle_layer(const GcodePreview& preview);
+
 // A point under an overhang, on the model's downward face, mm.
 struct OverhangPoint {
     float x = 0, y = 0, z = 0;
