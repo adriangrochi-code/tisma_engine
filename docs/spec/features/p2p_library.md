@@ -176,6 +176,23 @@ desventajas».
    Respuestas: 200 (`pieces`, el JSON de 8 septies; `piece/<n>`, los bytes, `application/octet-stream`), 401 (sin
    ticket o ticket inválido o vencido), 403 (cuenta o par bloqueado), 404 (sin el archivo o pedazo fuera de rango),
    451 (archivo bloqueado) y 429 con `Retry-After` (tope por hora pasado).
+8 nonies. **Subida al sembrador, provisoria** (16-11-2026, propuesta del servidor; mientras no haya pares, el sembrador
+   no tiene de dónde sacar un modelo nuevo):
+   - el maestro, al publicar (`POST /v1/library/models` y `.../revisions`), devuelve `uploads`:
+     `[{"sha256","ticket"}]`, un ticket por archivo con la forma de 8 sexies y payload
+     `{"op":"upload","account","sha256","size","expires"}` (24 h); `POST /v1/library/models/<id>/uploads` da tickets
+     nuevos al autor si vencen (solo modelos propios, ni retirados ni bloqueados). Un ticket de subida no sirve para
+     bajar ni al revés;
+   - en el sembrador, con `Authorization: Bearer <ticket de subida>`: `GET /v1/seed/upload/<sha256>` →
+     `{"size","pieces","have":[…],"complete"}` (para retomar); `PUT /v1/seed/upload/<sha256>/<n>` con el pedazo `n`
+     (1 MiB, el último más corto) → 200 `{"have","pieces"}`; con el último, el sembrador comprueba el SHA-256 del
+     archivo y las reglas 3 octies (formato y antivirus): 201 `{"complete":true}` y desde ahí lo sirve (8 octies), o
+     422 con el motivo y lo borra;
+   - errores: 401, 403, 451, 409 (pedazo con largo o número equivocado), 413 (más grande que el `size`), 429 con
+     `Retry-After` (tope de subida por cuenta y por hora, aparte del de bajada), 507 (sin lugar; avisa al dueño); un
+     pedazo repetido o un archivo que ya tiene: 200 sin hacer nada;
+   - la app sube después de publicar y retoma con el `GET` si se corta; hasta que el sembrador lo tiene, bajarlo da 404
+     («Este modelo todavía no está disponible para bajar»).
 8. La app no comparte nada que la persona no haya publicado o bajado de la biblioteca. «Mi biblioteca» local
    (`local_library.md`) no se comparte nunca. Con intermediario, los otros pares no ven la IP; con «Directo» sí, y la pantalla lo dice antes de activarlo.
 
