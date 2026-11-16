@@ -1,5 +1,7 @@
-# The 3D view's navigation by default, as in Fusion 360 (interface.md,
-# «Navegación de la vista 3D», rule 1; the spec team's UI17).
+# The 3D view's navigation as in Fusion 360, a choice in Preferences since
+# the default became Tinkercad's (interface.md, «Navegación de la vista 3D»,
+# rule 1; the spec team's UI17); Tinkercad's is in view_nav_buttons.txt.
+pref navigation fusion
 wait 3
 # Dragging with the wheel pressed moves the view.
 camera-mark
@@ -33,8 +35,8 @@ expect-place scale 99..101
 mouse right 0.5 0.5 0 0
 expect-control add_instance
 key escape
-# «Botón derecho gira»: a right drag turns the view.
-pref navigation right_orbits
+# Tinkercad: a right drag turns the view.
+pref navigation tinkercad
 camera-mark
 mouse right 0.5 0.5 60 0
 expect-camera turned

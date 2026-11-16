@@ -1013,6 +1013,8 @@
     X(RenderTip, "Cómo se dibuja la vista: luz, oclusión ambiental, ray tracing y suavizado de bordes",                \
       "How the view is drawn: light, ambient occlusion, ray tracing and anti-aliasing")                               \
     X(RenderFast, "Rápida", "Fast")                                                                                   \
+    X(ViewHomeTip, "Vista inicial", "Home view") \
+    X(ViewFitSelectedTip, "Encuadrar lo elegido (todo si no hay nada elegido)", "Fit the chosen (everything when nothing is chosen)") \
     X(ViewOrbitTip, "Girar: arrastrar con el botón izquierdo gira la vista (Esc vuelve)", "Orbit: dragging with the left button turns the view (Esc goes back)") \
     X(ViewPanTip, "Desplazar: arrastrar con el botón izquierdo mueve la vista (Esc vuelve)", "Pan: dragging with the left button moves the view (Esc goes back)") \
     X(ViewZoomTip, "Acercar: arrastrar con el botón izquierdo acerca y aleja (Esc vuelve)", "Zoom: dragging with the left button zooms in and out (Esc goes back)") \
@@ -2611,10 +2613,14 @@
     X(ViewHome, "Inicio", "Home") \
     X(NavigationPref, "Navegación", "Navigation") \
     X(NavigationFusion, "Fusion 360", "Fusion 360") \
-    X(NavigationRightOrbits, "Botón derecho gira", "Right button turns") \
+    X(NavigationTinkercad, "Tinkercad", "Tinkercad") \
     X(NavigationClassic, "Clásica", "Classic") \
-    X(NavigationNote, "Rueda: desplaza; Mayús + rueda: gira; doble clic con la rueda: encuadra", \
-      "Wheel: moves; Shift + wheel: turns; double click with the wheel: frames") \
+    X(NavigationNoteTinkercad, "Derecho: gira; Mayús + derecho o rueda apretada: desplaza; rueda: acerca", \
+      "Right button: turns; Shift + right or the wheel pressed: moves; wheel: zooms") \
+    X(NavigationNoteFusion, "Rueda apretada: desplaza; Mayús + rueda apretada: gira; doble clic con la rueda: encuadra", \
+      "Wheel pressed: moves; Shift + wheel pressed: turns; double click with the wheel: frames") \
+    X(NavigationNoteClassic, "Izquierdo: gira; derecho o rueda apretada: desplaza; rueda: acerca", \
+      "Left button: turns; right or the wheel pressed: moves; wheel: zooms") \
     X(MixChangesPlanned, "Con los modelos de la placa: unos %d cambios de filamento", \
       "With the plate's models: about %d filament changes") \
     X(MixPurgeShare, "La purga sería el %.0f %% del filamento. Lo que la baja:", "The purge would be %.0f %% of the filament. What lowers it:") \

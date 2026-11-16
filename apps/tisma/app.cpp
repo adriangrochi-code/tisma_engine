@@ -623,6 +623,7 @@ private:
     int section_axis_ = 2;
     double section_offset_ = 0.0;
     void section_panel();
+    float sketch_palette_bottom_ = 0.0f; // where the sketch's palette ended, last drawn
     int design_tab_ = 0;           // Sólido, Boceto, Inspeccionar, Utilidades
     // The timeline under the view (cad_design.md, rule 11 quater): its
     // marker, how many features count (the rest wait, grey, CD27); the
@@ -1723,7 +1724,9 @@ private:
     int moved_frame_ = -100; // the last frame the camera moved (ImGui::GetFrameCount)
     // ui.navigation: 0 Fusion 360 (default), 1 the right button turns, 2 the
     // classic one (left turns, right and middle move).
-    int navigation_ = 0;
+    // 0 Fusion 360, 1 Tinkercad (the default since 2026-11-16: the right
+    // button turns, Shift + right moves), 2 classic (interface.md, navigation).
+    int navigation_ = 1;
     std::optional<Vec3> orbit_pivot_; // the point the view turns about, while it turns
     bool box_selecting_ = false;      // a left drag from an empty place draws a rectangle
     // A short turn of the view (the view cube): from, to and when it began.
@@ -2074,6 +2077,17 @@ private:
     std::vector<std::future<void>> busy_jobs_; // script: stuck jobs, to time the exit (busy-job)
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
+    std::optional<std::pair<Vec3, Vec3>> frame_only_; // what the next framing fits instead (frame_selected)
+    // The column of round view buttons under the view cube (view_cube), as
+    // (left, top, right, bottom): panels at the right of the view go beside it.
+    ImVec4 view_column() const {
+        const float size = 108.0f * scale_, half = 0.5f * size, d = 34.0f * scale_, gap = 8.0f * scale_;
+        const float cx = view_pos_.x + view_size_.x - half - 18.0f * scale_;
+        const float cy = view_pos_.y + view_top_inset_ + half + 56.0f * scale_;
+        const float top = cy + half + 34.0f * scale_;
+        return ImVec4(cx - 0.5f * d, top, cx + 0.5f * d, top + 5.0f * d + 4.0f * gap);
+    }
+    void frame_selected();
     bool failed_ = false; // the screenshot or its export failed
     bool benched_ = false; // --bench-frames done
     unsigned view_queries_[3] = {}; // timer queries of the 3D view, in turn
@@ -4390,8 +4404,10 @@ void App::load_preferences(const std::filesystem::path& from) {
         if (j.contains("ui") && j.at("ui").is_object()) {
             const nlohmann::json& ui = j.at("ui");
             cad_design_ = ui.value("cad_design", true);
-            const std::string nav = ui.value("navigation", std::string("fusion"));
-            navigation_ = nav == "right_orbits" ? 1 : nav == "classic" ? 2 : 0;
+            // Its own key since the default became Tinkercad (2026-11-16): a
+            // choice saved before, under «navigation», was the old default.
+            const std::string nav = ui.value("navigation_style", std::string("tinkercad"));
+            navigation_ = nav == "fusion" ? 0 : nav == "classic" ? 2 : 1;
             view_level_ = view_level_from(ui.value("level", std::string("normal")));
             // The Custom view: its keys, the level it started from, and the
             // keys there were then (settings_panel.md, rules 15 to 18).
@@ -4490,7 +4506,7 @@ void App::save_preferences(const std::filesystem::path& to) {
         j["ui"]["bed_type"] = bed_type_;
         j["ui"]["orthographic"] = camera_.orthographic;
         j["ui"]["cad_design"] = cad_design_;
-        j["ui"]["navigation"] = navigation_ == 1 ? "right_orbits" : navigation_ == 2 ? "classic" : "fusion";
+        j["ui"]["navigation_style"] = navigation_ == 1 ? "tinkercad" : navigation_ == 2 ? "classic" : "fusion";
         j["ui"]["graphics_api"] = graphics_api_;
         j["ui"]["view_quality"] = view_quality_;
         j["ui"]["max_fps"] = max_fps_;
@@ -5051,6 +5067,10 @@ void App::home_view() {
 // rule 2): its faces, edges and corners turn the view to look at them; a drag
 // on it turns the view; «Inicio» goes back to the starting view. It follows
 // the camera. Own drawing, with the theme's colours.
+namespace {
+void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c); // drawn below, with the Design tools
+}
+
 void App::view_cube() {
     if (view_turn_) { // the animation: an ease over 0.25 s
         const double t = std::clamp((glfwGetTime() - view_turn_->start) / 0.25, 0.0, 1.0);
@@ -5174,6 +5194,54 @@ void App::view_cube() {
     if (ImGui::SmallButton(tr(T::ViewHome)))
         home_view();
     note_rect("view_home");
+    ImGui::End();
+
+    // A column of round buttons under it (interface.md, navigation, rule 2:
+    // as in Tinkercad, with icons of its own): home, frame the chosen, zoom
+    // in, zoom out, perspective or orthographic; each named on hover.
+    const float d = 34.0f * scale_, gap = 8.0f * scale_;
+    const ImVec2 top(centre.x - 0.5f * d, centre.y + half + 34.0f * scale_);
+    ImGui::SetNextWindowPos(ImVec2(top.x - 4.0f * scale_, top.y - 4.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(d + 8.0f * scale_, 5.0f * d + 4.0f * gap + 8.0f * scale_));
+    ImGui::Begin("##view_buttons", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                     ImGuiWindowFlags_NoScrollWithMouse);
+    ImDrawList* bl = ImGui::GetWindowDrawList();
+    struct Round {
+        const char* id;
+        const char* icon;
+        T tip;
+    };
+    const Round rounds[] = {{"view_home_button", "home", T::ViewHomeTip},
+                            {"view_fit_selected", "fit", T::ViewFitSelectedTip},
+                            {"view_zoom_in", "zoom_in", T::ZoomIn},
+                            {"view_zoom_out", "zoom_out", T::ZoomOut},
+                            {"view_projection", camera_.orthographic ? "orthographic" : "perspective",
+                             camera_.orthographic ? T::ViewOrthographicTip : T::ViewPerspectiveTip}};
+    for (int k = 0; k < 5; ++k) {
+        const ImVec2 at(top.x, top.y + float(k) * (d + gap));
+        ImGui::SetCursorScreenPos(at);
+        const bool hit = ImGui::InvisibleButton(rounds[k].id, ImVec2(d, d));
+        const bool hover = ImGui::IsItemHovered();
+        const ImVec2 c(at.x + 0.5f * d, at.y + 0.5f * d);
+        bl->AddCircleFilled(c, 0.5f * d, ImGui::GetColorU32(rgb(hover ? theme_.frame_hover : theme_.panel, 0.95f)), 32);
+        bl->AddCircle(c, 0.5f * d, ImGui::GetColorU32(rgb(theme_.text_dim, 0.35f)), 32, 1.0f);
+        cad_icon(bl, rounds[k].icon, ImVec2(at.x + d * 0.22f, at.y + d * 0.22f), d * 0.56f, ImGui::GetColorU32(rgb(theme_.text)));
+        note_rect(rounds[k].id);
+        if (hover)
+            loc::SetTooltip("%s", tr(rounds[k].tip));
+        if (!hit)
+            continue;
+        switch (k) {
+        case 0: home_view(); break;
+        case 1: frame_selected(); break;
+        case 2: camera_.zoom(1.0f), camera_framed_ = false; break;
+        case 3: camera_.zoom(-1.0f), camera_framed_ = false; break;
+        default: camera_.orthographic = !camera_.orthographic, camera_framed_ = false; break;
+        }
+        moved_frame_ = ImGui::GetFrameCount();
+    }
     ImGui::End();
 }
 
@@ -7225,6 +7293,27 @@ void App::bed_changed() {
 // waits.
 void App::frame_all() { frame_pending_ = true; }
 
+// «Encuadrar lo elegido» (interface.md, navigation, rule 2): the chosen
+// models framed; with none chosen, everything.
+void App::frame_selected() {
+    BoundingBox box;
+    if (tab_ == Tab::Prepare && !viewer_)
+        for (const int i : all_selected())
+            if (i >= 0 && std::size_t(i) < placed_meshes_.size()) {
+                const BoundingBox b = placed_meshes_[std::size_t(i)].bounding_box();
+                if (b.empty)
+                    continue;
+                if (box.empty)
+                    box = b;
+                else
+                    box.min = {std::min(box.min.x, b.min.x), std::min(box.min.y, b.min.y), std::min(box.min.z, b.min.z)},
+                    box.max = {std::max(box.max.x, b.max.x), std::max(box.max.y, b.max.y), std::max(box.max.z, b.max.z)};
+            }
+    if (!box.empty)
+        frame_only_ = std::pair<Vec3, Vec3>{{box.min.x, box.min.y, 0.0f}, {box.max.x, box.max.y, box.max.z}};
+    frame_all();
+}
+
 void App::frame_now() {
     frame_pending_ = false;
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
@@ -7251,6 +7340,8 @@ void App::frame_now() {
     } else if (has_plate_ && !placed_.empty) {
         part = {{placed_.min.x, placed_.min.y, 0.0f}, {placed_.max.x, placed_.max.y, placed_.max.z}};
     }
+    if (frame_only_) // «Encuadrar lo elegido»: those, once
+        part = *frame_only_, frame_only_.reset();
     if (part) {
         const Vec3 centre = (part->first + part->second) * 0.5f;
         const Vec3 half = (part->second - part->first) * 0.5f;
@@ -11255,11 +11346,14 @@ void App::viewport() {
             return ImGui::IsMouseDragging(b, b == ImGuiMouseButton_Right && navigation_ == 1 ? 4.0f : 0.0f) &&
                    !ImGui::IsMouseClicked(b);
         };
+        // Tinkercad: the right button turns, with Shift it moves; the wheel
+        // pressed moves too.
         const bool turn = navigation_ == 0   ? dragging(ImGuiMouseButton_Middle) && io.KeyShift
-                          : navigation_ == 1 ? dragging(ImGuiMouseButton_Right)
+                          : navigation_ == 1 ? dragging(ImGuiMouseButton_Right) && !io.KeyShift
                                              : false;
-        const bool move = navigation_ == 2 ? dragging(ImGuiMouseButton_Right) || dragging(ImGuiMouseButton_Middle)
-                                           : dragging(ImGuiMouseButton_Middle) && !turn;
+        const bool move = navigation_ == 2   ? dragging(ImGuiMouseButton_Right) || dragging(ImGuiMouseButton_Middle)
+                          : navigation_ == 1 ? dragging(ImGuiMouseButton_Middle) || (dragging(ImGuiMouseButton_Right) && io.KeyShift)
+                                             : dragging(ImGuiMouseButton_Middle) && !turn;
         if (turn) {
             if (!orbit_pivot_)
                 orbit_pivot_ = orbit_pivot_at(io.MouseClickedPos[navigation_ == 1 ? ImGuiMouseButton_Right : ImGuiMouseButton_Middle]);
@@ -11350,11 +11444,11 @@ void App::viewport() {
     // design, the owner's request).
     // In Design, the radial menu (cad_design.md, rule 11 septies).
     if (tab_ == Tab::Design && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
-        io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f && !sketch_edit_)
+        io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 16.0f && !sketch_edit_)
         design_radial_ = io.MousePos;
     if (tab_ == Tab::Prepare && !calibration_ && !viewer_ && ImGui::IsItemHovered() &&
         !(tool_ == PlateTool::Cut && cut_connector_ != 0) &&
-        ImGui::IsMouseReleased(ImGuiMouseButton_Right) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f) {
+        ImGui::IsMouseReleased(ImGuiMouseButton_Right) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 16.0f) {
         const auto hit = editing ? pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()) : std::nullopt;
         if (hit) {
             selected_ = int(hit->object);
@@ -11392,9 +11486,6 @@ void App::viewport() {
 }
 
 // The camera's buttons, a row at the top of the view.
-namespace {
-void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c); // drawn below, with the Design tools
-}
 
 void App::view_tools() {
     // The view bar, at the bottom in the middle (interface.md, «Navegación de
@@ -11434,22 +11525,18 @@ void App::view_tools() {
         ImGui::SameLine();
         return hit;
     };
-    const int drags[] = {1, 2, 3};
-    const char* drag_ids[] = {"view_orbit", "view_pan", "view_zoom"};
-    const char* drag_icons[] = {"rotate", "pan", "zoom"};
-    const T drag_tips[] = {T::ViewOrbitTip, T::ViewPanTip, T::ViewZoomTip};
-    for (int k = 0; k < 3; ++k)
+    // Turn and move (the round buttons under the view cube zoom, frame and
+    // swap the projection: interface.md, navigation, rule 2).
+    const int drags[] = {1, 2};
+    const char* drag_ids[] = {"view_orbit", "view_pan"};
+    const char* drag_icons[] = {"rotate", "pan"};
+    const T drag_tips[] = {T::ViewOrbitTip, T::ViewPanTip};
+    for (int k = 0; k < 2; ++k)
         if (tool(drag_ids[k], drag_icons[k], drag_tips[k], view_drag_ == drags[k]))
             view_drag_ = view_drag_ == drags[k] ? 0 : drags[k];
     // Esc leaves the mode, as any tool.
     if (view_drag_ != 0 && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         view_drag_ = 0;
-    ImGui::SameLine(0, 8.0f * scale_);
-    if (tool("view_fit", "fit", T::ZoomFit, false))
-        frame_all();
-    if (tool("view_projection", camera_.orthographic ? "orthographic" : "perspective",
-             camera_.orthographic ? T::ViewOrthographicTip : T::ViewPerspectiveTip, false))
-        camera_.orthographic = !camera_.orthographic, camera_framed_ = false;
     // How the view is drawn.
     ImGui::SameLine(0, 10.0f * scale_);
     const T modes[] = {T::RenderFast, T::RenderAmbient, T::RenderRay};
@@ -11458,7 +11545,7 @@ void App::view_tools() {
     // view's edge, so the button keeps only its icon and names the mode in its
     // tooltip, as the top bar's tabs do.
     const float label_w = ImGui::CalcTextSize(tr(modes[int(render_mode_)])).x + 2.0f * ImGui::GetStyle().FramePadding.x;
-    const float bar_w = 5.0f * (size + 4.0f * scale_) + 20.0f * scale_ + 12.0f * scale_;
+    const float bar_w = 2.0f * (size + 4.0f * scale_) + 20.0f * scale_ + 12.0f * scale_;
     const bool narrow = bar_w + label_w > view_size_.x - 24.0f * scale_;
     const std::string render_tip = narrow ? std::string(tr(modes[int(render_mode_)])) + ": " + tr(T::RenderTip)
                                           : std::string(tr(T::RenderTip));
@@ -15725,6 +15812,18 @@ void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c) {
         line(0.5f, 0.12f, 0.5f, 0.88f), line(0.12f, 0.5f, 0.88f, 0.5f);
         line(0.5f, 0.12f, 0.4f, 0.24f), line(0.5f, 0.12f, 0.6f, 0.24f), line(0.5f, 0.88f, 0.4f, 0.76f), line(0.5f, 0.88f, 0.6f, 0.76f);
         line(0.12f, 0.5f, 0.24f, 0.4f), line(0.12f, 0.5f, 0.24f, 0.6f), line(0.88f, 0.5f, 0.76f, 0.4f), line(0.88f, 0.5f, 0.76f, 0.6f);
+    } else if (id == "home") { // a house
+        const ImVec2 roof[3] = {p(0.12f, 0.5f), p(0.5f, 0.14f), p(0.88f, 0.5f)};
+        dl->AddPolyline(roof, 3, c, t, 0);
+        const ImVec2 walls[4] = {p(0.24f, 0.42f), p(0.24f, 0.86f), p(0.76f, 0.86f), p(0.76f, 0.42f)};
+        dl->AddPolyline(walls, 4, c, t, 0);
+        box(0.42f, 0.6f, 0.58f, 0.86f);
+    } else if (id == "zoom_in" || id == "zoom_out") { // a magnifier with + or -
+        dl->AddCircle(p(0.42f, 0.42f), 0.27f * w, c, 20, t);
+        line(0.62f, 0.62f, 0.88f, 0.88f);
+        line(0.3f, 0.42f, 0.54f, 0.42f);
+        if (id == "zoom_in")
+            line(0.42f, 0.3f, 0.42f, 0.54f);
     } else if (id == "zoom") { // a magnifier
         dl->AddCircle(p(0.42f, 0.42f), 0.25f * w, c, 20, t);
         line(0.6f, 0.6f, 0.86f, 0.86f);
@@ -22095,14 +22194,14 @@ void App::config_window() {
     });
     row(1, T::PanelFolded, "ui.panel_folded", toggle(panel_folded_), tr(T::PanelFoldedNote));
     row(1, T::NavigationPref, "ui.navigation", [&] {
-        const T names[] = {T::NavigationFusion, T::NavigationRightOrbits, T::NavigationClassic};
+        const T names[] = {T::NavigationFusion, T::NavigationTinkercad, T::NavigationClassic};
         if (ImGui::BeginCombo("##v", tr(names[std::clamp(navigation_, 0, 2)]))) {
-            for (int k = 0; k < 3; ++k)
+            for (const int k : {1, 0, 2}) // the default first
                 if (ImGui::Selectable(tr(names[k]), k == navigation_))
                     navigation_ = k;
             ImGui::EndCombo();
         }
-    }, tr(T::NavigationNote));
+    }, tr(navigation_ == 0 ? T::NavigationNoteFusion : navigation_ == 2 ? T::NavigationNoteClassic : T::NavigationNoteTinkercad));
     row(1, T::DesignPref, "ui.cad_design", [&] {
         if (ImGui::Checkbox("##v", &cad_design_) && !cad_design_ && engineering_tab(tab_))
             set_tab(Tab::Prepare);
@@ -24003,14 +24102,15 @@ void App::section_panel() {
     if (!design_section_)
         return;
     const float w = 240.0f * scale_;
-    // Under the view cube and its «Inicio», and under the sketch's palette when there is one.
-    float y = view_pos_.y + 260.0f * scale_;
-    if (const auto home = g_menu_rects.find("view_home"); home != g_menu_rects.end())
-        y = std::max(y, home->second.w + 28.0f * scale_);
-    if (const auto palette = g_menu_rects.find("sketch_palette"); sketch_edit_ && palette != g_menu_rects.end())
-        y = std::max(y, palette->second.w + 12.0f * scale_);
+    // Beside the column under the view cube, and under the sketch's palette
+    // when there is one (its bottom kept from the last frame it was drawn).
+    float y = view_column().y;
+    if (sketch_edit_ && sketch_palette_bottom_ > 0.0f)
+        y = std::max(y, sketch_palette_bottom_ + 12.0f * scale_);
     y -= view_pos_.y;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 12.0f * scale_, view_pos_.y + y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    // Left of the column of round view buttons under the cube.
+    const float right = view_column().x - 12.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(right, view_pos_.y + y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.92f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
@@ -24019,7 +24119,6 @@ void App::section_panel() {
     ImGui::Begin("##section_panel", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    note_rect("section_panel");
     loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::DesignSectionTool));
     ImGui::Separator();
     loc::TextDisabled("%s", tr(T::SectionAxis));
@@ -24046,6 +24145,8 @@ void App::section_panel() {
     if (ImGui::Button((std::string(tr(T::Close)) + "##section_close").c_str()))
         design_section_ = false;
     note_rect("section_close");
+    g_menu_rects["section_panel"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
@@ -24079,7 +24180,10 @@ void App::sketch_palette() {
     ImGui::PopStyleVar();
 
     const float w = 220.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 12.0f * scale_, view_pos_.y + 190.0f * scale_), ImGuiCond_Always,
+    // Left of the view cube, from its top: the column of round buttons under
+    // the cube stays free, and the palette ends higher over the drawing.
+    const float cube_left = view_pos_.x + view_size_.x - 18.0f * scale_ - 108.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(cube_left - 12.0f * scale_, view_pos_.y + view_top_inset_ + 2.0f * scale_), ImGuiCond_Always,
                             ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.92f);
@@ -24117,6 +24221,7 @@ void App::sketch_palette() {
     note_rect("sketch_section");
     g_menu_rects["sketch_palette"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
                                             ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    sketch_palette_bottom_ = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
@@ -27889,8 +27994,8 @@ void App::script_input() {
                 set_tab(Tab::Prepare);
         } else if (step.key == "level") { // basic | normal | advanced, as the panel's chip sets it
             choose_level(view_level_from(step.value));
-        } else if (step.key == "navigation") { // fusion | right_orbits | classic
-            navigation_ = step.value == "right_orbits" ? 1 : step.value == "classic" ? 2 : 0;
+        } else if (step.key == "navigation") { // tinkercad | fusion | classic
+            navigation_ = step.value == "fusion" ? 0 : step.value == "classic" ? 2 : 1;
         } else if (step.key == "view_quality") { // as chosen in Configuración › Video
             apply_quality(step.value);
         } else {

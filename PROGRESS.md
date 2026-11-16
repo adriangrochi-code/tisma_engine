@@ -14372,3 +14372,28 @@ para el LBM D3Q19.
   escalada a 150 %; las pruebas de navegación y de la barra de vista pasan en las dos vistas a 100 % y a 150 %. Se
   suma `TISMA_SCALE` (la escala de la interfaz en las capturas, que antes era siempre 1) para probar pantallas
   escaladas como las de Windows. Se esperan capturas del probador.
+
+## 2026-11-16 — interfaz: navegación de Tinkercad por defecto y botones redondos (decisión del dueño)
+
+- **Hecho:**
+  - **Navegación por defecto, Tinkercad** (interface.md en spec/next, «Navegación de la vista 3D», reglas 1 y 2):
+    - arrastrar con el derecho gira alrededor del punto bajo el mouse;
+    - Mayús + derecho, o la rueda apretada, desplaza;
+    - la rueda acerca y aleja;
+    - un clic derecho que se mueve menos de 4 px abre el menú (antes, menos de 3 px).
+  - **Preferencias › Navegación:** Tinkercad, Fusion 360 y Clásica, cada una con su nota. La elección se guarda en
+    `ui.navigation_style`: lo guardado antes en `ui.navigation` era el viejo valor por defecto y no se lee.
+  - **Columna de botones redondos debajo del cubo de vistas**, con íconos propios y su nombre al pasar el mouse:
+    - Vista inicial;
+    - Encuadrar lo elegido (todo si no hay nada elegido);
+    - Acercar y Alejar;
+    - Perspectiva / ortogonal.
+  - **Barra de abajo:** queda con Girar, Desplazar y el estilo.
+  - **Paneles al lado del cubo:** la paleta del boceto pasa a la izquierda del cubo y el panel de Sección a la
+    izquierda de la columna, para no taparla.
+- **Pruebas:**
+  - `view_nav_buttons.txt`: el menú con clic derecho, girar con el derecho, desplazar con Mayús + derecho y con la
+    rueda, y los cinco botones;
+  - `navigation.txt` ahora elige Fusion 360 al empezar;
+  - `view_bar.txt` sin acercar, encuadrar ni la proyección;
+  - pasan las 227 de interfaz antes de mover los paneles, y las 32 de Diseño y de la vista después.
