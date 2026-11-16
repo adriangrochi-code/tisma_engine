@@ -66,6 +66,9 @@ jobs:
           adb install -r app/build/outputs/apk/debug/app-x86_64-debug.apk
           adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           adb shell pm clear net.tismaservidores.tisma
+          # The Printer screen asks for notifications (print progress); the system's dialog would pause the app, so
+          # it is granted beforehand, as a person tapping «Allow».
+          adb shell pm grant net.tismaservidores.tisma android.permission.POST_NOTIFICATIONS
           adb push "$RUNNER_TEMP/3DBenchy.stl" /data/local/tmp/3DBenchy.stl
           adb shell chmod 644 /data/local/tmp/3DBenchy.stl
           adb shell am instrument -w -e class net.tisma.app.ReleaseGateTest -e benchy /data/local/tmp/3DBenchy.stl \
