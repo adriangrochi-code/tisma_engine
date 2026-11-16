@@ -13,6 +13,8 @@ menu aero_quality_friction
 menu aero_analyze
 expect-aero 0
 expect-control aero_drag
+# The pressure scale, cold below 0 and warm above, with the 0 marked.
+expect-control aero_cp_scale
 expect-control aero_map_ra
 menu aero_map_ra
 wait 5

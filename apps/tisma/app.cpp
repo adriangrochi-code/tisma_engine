@@ -18931,7 +18931,13 @@ namespace {
 constexpr std::uint32_t kCpBands[6] = {0x2B59C3, 0x4C9BFF, 0x8FD3FF, 0xF5C524, 0xF59E0B, 0xE5484D};
 constexpr std::uint32_t kRaBands[4] = {0x4C9BFF, 0x3FBF7F, 0xF5C524, 0xE5484D};
 
-int cp_band(float cp) { return cp < -1.0f ? 0 : cp < -0.5f ? 1 : cp < 0.0f ? 2 : cp < 0.33f ? 3 : cp < 0.66f ? 4 : 5; }
+// A face without a value (NaN, from a cell the solver did not reach) takes
+// the band of 0 rather than the last one: no face is left out of the scale.
+int cp_band(float cp) {
+    if (!std::isfinite(cp))
+        cp = 0.0f;
+    return cp < -1.0f ? 0 : cp < -0.5f ? 1 : cp < 0.0f ? 2 : cp < 0.33f ? 3 : cp < 0.66f ? 4 : 5;
+}
 int ra_band(float ra) { return ra < 12.0f ? 0 : ra < 20.0f ? 1 : ra < 28.0f ? 2 : 3; }
 
 } // namespace
@@ -19055,10 +19061,35 @@ void App::aerodynamics_panel() {
                     ImGui::ColorButton("##band", rgb(colours[k]), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f * scale_, 10.0f * scale_));
                 }
             };
-            if (aero_map_kind_ == 0)
-                swatches(kCpBands, 6);
-            else
+            if (aero_map_kind_ == 0) {
+                // The scale from -1.5 (suction, cold) to 1 (stagnation, warm),
+                // each band's edge written under it and the 0 marked
+                // (aerodynamics.md, «Resultados»).
+                const float bw = std::min(44.0f * scale_, ImGui::GetContentRegionAvail().x / 6.0f), bh = 12.0f * scale_;
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                for (int k = 0; k < 6; ++k)
+                    dl->AddRectFilled(ImVec2(at.x + float(k) * bw, at.y), ImVec2(at.x + float(k + 1) * bw, at.y + bh),
+                                      ImGui::GetColorU32(rgb(kCpBands[k])));
+                const bool comma = language() == Language::Spanish;
+                const char* edges[] = {comma ? "-1,5" : "-1.5", "-1", comma ? "-0,5" : "-0.5", "0",
+                                       comma ? "0,33" : "0.33", comma ? "0,66" : "0.66", "1"};
+                for (int k = 0; k <= 6; ++k) {
+                    const char* e = edges[k];
+                    const float w = ImGui::CalcTextSize(e).x;
+                    const bool zero = k == 3;
+                    const float x = at.x + float(k) * bw;
+                    if (zero)
+                        dl->AddLine(ImVec2(x, at.y - 3.0f * scale_), ImVec2(x, at.y + bh + 3.0f * scale_),
+                                    ImGui::GetColorU32(rgb(theme_.text)), 2.0f * scale_);
+                    dl->AddText(ImVec2(std::clamp(x - 0.5f * w, at.x, at.x + 6.0f * bw - w), at.y + bh + 4.0f * scale_),
+                                ImGui::GetColorU32(rgb(zero ? theme_.text : theme_.text_dim)), e);
+                }
+                ImGui::Dummy(ImVec2(6.0f * bw, bh + ImGui::GetTextLineHeight() + 6.0f * scale_));
+                rect_of("aero_cp_scale");
+            } else {
                 swatches(kRaBands, 4);
+            }
             loc::TextDisabled("%s", tr(aero_map_kind_ == 0 ? T::AeroLegendCp : T::AeroLegendRa));
             if (j.value("simulated", false)) {
                 ImGui::Checkbox(tr(T::AeroLines), &aero_lines_);

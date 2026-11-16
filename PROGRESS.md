@@ -14488,3 +14488,13 @@ para el LBM D3Q19.
   - `ui_paint_support_none_blocked`: bloqueado bajo los dos voladizos con los automáticos prendidos, sin soporte;
   - la orden de QA con `--export` da 102 bloques `;TYPE:Support`.
 - **Sin revisar:** que el pintado se guarde en el 3MF (el proyecto ya lleva la pintura).
+
+## 2026-11-16 — interfaz: escala de presión de Aerodinámica (aerodynamics.md en spec/next, «Resultados»)
+
+- **Hecho:**
+  - La escala del Cp pasa a ser una barra con el borde de cada banda escrito debajo (−1,5 … 1) y el 0 marcado con
+    una línea. Las bandas negativas siguen en tonos fríos y las positivas en cálidos.
+  - Una cara sin valor (NaN) toma la banda del 0 en vez de la última, así ninguna queda fuera de la escala.
+  - La vista dibuja todos los puntos de las líneas de corriente que da el motor, sin recortarlos a la caja de la
+    pieza. Sembrarlas en todo el plano de entrada y seguirlas hasta la salida es del motor.
+- **Pruebas:** `aerodynamics.txt` comprueba la barra (`aero_cp_scale`).
