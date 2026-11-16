@@ -118,3 +118,10 @@ podamos conseguir buen rendimiento, pero que el equipo no esté muy cargado». L
 | AQ7 | Carga artificial del procesador al 95 % durante 10 s | Tope 30 a los 3 s; vuelve a 60 dentro de los 2 s de liberarse, sin parpadear entre calidades |
 | AQ8 | Cambiar el modo de imagen a mano a Ray tracing | La calidad pasa a `custom` y la automática no la cambia más |
 | AQ9 | Mismo proyecto laminado con `high` y con `light` | G-code idéntico |
+
+## Después de la beta
+
+- **Trazado de rayos por hardware** (pedido del dueño, 16-11-2026, probado en una RTX 4060): el modo Ray tracing
+  usa hoy un recorrido propio dentro de un shader normal. Cuando el dispositivo ofrezca `VK_KHR_ray_query` (con
+  `VK_KHR_acceleration_structure`), usarlo; el recorrido actual queda como camino por software y da la misma imagen.
+  El panel dice «Trazado de rayos: por hardware» o «por software».
