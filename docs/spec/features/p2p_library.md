@@ -164,6 +164,13 @@ desventajas».
      en el índice firmado y no en la lista de bloqueo; uno bloqueado responde `blocked`. Con el tope de subida
      alcanzado responde `busy`. Un pedido mal formado: `bad_request` y se cierra el stream.
    - El sembrador de Tisma Cloud (regla 3) habla este mismo protocolo, igual que las apps.
+8 octies. **Bajada por HTTPS desde el sembrador, provisoria** (16-11-2026, hasta que el motor y las apps hablen la red
+   de pares): el sembrador de Tisma Cloud (regla 3), no el maestro, sirve `GET /v1/seed/<sha256>/pieces` (la lista de
+   la regla 8 septies) y `GET /v1/seed/<sha256>/piece/<n>` (los bytes del pedazo), con un ticket de la regla 8 sexies
+   en `Authorization` y el mismo tope por cuenta y por hora. La app comprueba cada pedazo y la lista contra
+   `piece_roots` del índice firmado, igual que por la red de pares; un archivo que el sembrador no tiene da 404 y la app
+   dice «Este modelo todavía no está disponible para bajar». Cuando haya red de pares, la app la prueba primero y usa
+   esto solo si no encuentra pares.
 8. La app no comparte nada que la persona no haya publicado o bajado de la biblioteca. «Mi biblioteca» local
    (`local_library.md`) no se comparte nunca. Con intermediario, los otros pares no ven la IP; con «Directo» sí, y la pantalla lo dice antes de activarlo.
 
