@@ -111,6 +111,7 @@ El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija 
              "loose": 0, "analysed": 618028},
   "solver": {"preconditioner": "multigrid", "levels": 6, "iterations": 54, "residual": 6.99e-09,
              "tolerance": 1e-08, "converged": true, "prepare_seconds": 0.025, "solve_seconds": 29.3},
+  "devices": {"slicing": "NVIDIA GeForce RTX 4060", "solver": "CPU"},
   "result": {"max_displacement_mm": 0.1024, "max_von_mises_mpa": 27.12, "min_safety": 1.983,
              "weakest": {"x": 9.95, "y": 9.85, "z": 0.05, "layer": 0, "mode": "between_layers"},
              "min_peak_safety": 1.283, "voxels_below_1": 0, "voxels_below_1_5": 0, "voxels_below_2": 4},

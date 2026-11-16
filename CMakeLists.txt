@@ -333,6 +333,7 @@ add_library(tisma_core
   src/cli/design_cli.cpp
   src/cli/library_cli.cpp
 )
+target_sources(tisma_core PRIVATE src/gpu/choose.cpp)
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)
   target_link_libraries(tisma_core PRIVATE volk::volk)

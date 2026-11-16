@@ -14319,3 +14319,43 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - El dueño pausó el trabajo (2026-11-13, 09:20 UTC, por QA). Presionar/Tirar no había empezado: no queda nada a
   medio hacer. Lo que sigue cuando se retome: Presionar/Tirar, Medir entre caras, Apariencia, el estilo con aristas o
   en alambre, mover varios modelos juntos, arrastrar las esferas del degradé y fijar herramientas a la barra.
+
+## 2026-11-16 — Error de GPU de un probador (única excepción a la pausa)
+
+Informe (QA, 2026-11-14): en Windows 10 con una RTX 4060 la GPU no se usaba en FEA ni en CFD, y el programa no
+cerraba con un análisis en curso.
+
+**Causas:**
+- La interfaz llamaba al análisis estructural sin contexto de GPU (`nullptr`): el laminado de la pieza «como
+  impresa» corría siempre en la CPU. La línea de comandos sí lo pasaba.
+- El cálculo en sí (el solver de elasticidad y el LBM aerodinámico) no tiene versión en GPU todavía: corre en la
+  CPU en todos los casos. Hacerlos en GPU es trabajo nuevo y espera a que el dueño levante la pausa.
+- Al cerrar, la ventana esperaba a que terminaran los análisis (sin cancelarlos): minutos en una pieza grande.
+- Un fallo de Vulkan no decía por qué: `Context::create` devolvía nulo sin motivo.
+
+**Hecho:**
+- `gpu::choose_device` (`src/gpu/choose.cpp`): discreta > integrada > virtual, entre iguales la de más memoria
+  local; llvmpipe, lavapipe, SwiftShader y el «Microsoft Basic Render Driver» se descartan también por su nombre.
+  La elección de antes ya prefería la discreta; ahora está separada de Vulkan y probada con la lista de una
+  laptop con Intel + RTX 4060 + llvmpipe.
+- `Context::create(options, &why)`: el motivo en palabras (sin driver de Vulkan, driver sin dispositivos, solo
+  dispositivos por software, `vkCreateDevice` falló con su código, `TISMA_GPU=0`, compilado sin GPU).
+- Análisis estructural en la interfaz: crea el contexto y lo pasa; el informe trae `devices` (`slicing`,
+  `solver`) y, si quedó en la CPU, el aviso `gpu_unavailable` o `gpu_fallback` con el motivo. Si la GPU falla al
+  laminar, se lamina de nuevo en la CPU en vez de abortar el análisis.
+- Aerodinámico: el informe trae `devices.solver` («CPU»).
+- El panel muestra «Calculado en: laminado X · cálculo CPU» y «Se quedó en la CPU: …»; el de aerodinámica,
+  «Calculado en: CPU». La línea de comandos imprime `devices:` y, al laminar, el motivo de no usar la GPU.
+- Al cerrar, la ventana cancela el análisis estructural, la optimización y el aerodinámico y los espera antes de
+  destruir nada.
+- Tests: `choose_device` y el motivo con `TISMA_GPU=0` ([gpu]); script `shutdown_during_analysis` (arranca un
+  aerodinámico simulado y uno estructural y cierra con los dos en curso; nuevo verbo `expect-running`): pasa en
+  2,5 s, y sin el cambio se cuelga hasta el timeout de 60 s (comprobado); `structural_analyze` comprueba la línea
+  de dispositivos.
+
+**Medido:** no hay GPU en el contenedor; la elección se probó con listas de dispositivos. **Sin probar en
+hardware:** la RTX 4060 real.
+
+**Sigue:** en pausa. Pendiente de decisión del dueño: kernels de GPU para el solver de elasticidad (multigrid) y
+para el LBM D3Q19.
+

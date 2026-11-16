@@ -101,6 +101,7 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, const 
           {"converged", e.converged},
           {"prepare_seconds", r.prepare_seconds},
           {"solve_seconds", r.solve_seconds}}},
+        {"devices", {{"slicing", r.slicing_device}, {"solver", r.solver_device}}},
         {"result", result},
         {"resolution", resolution},
         {"layers", layers},

@@ -558,6 +558,7 @@ std::string result_json(const AeroResult& r, const AeroInput& in) {
                      {"reynolds", finite(r.reynolds)},
                      {"reynolds_simulated", finite(r.reynolds_simulated)},
                      {"simulated", r.simulated},
+                     {"devices", {{"solver", r.solver_device}}},
                      {"ra_mean_um", finite(r.ra_mean_um)},
                      {"roughness_share", finite(r.roughness_share)},
                      {"cells", {r.cells_x, r.cells_y, r.cells_z}},

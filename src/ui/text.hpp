@@ -34,6 +34,9 @@
     X(AeroArea, "Área frontal: %.0f mm²", "Frontal area: %.0f mm²") \
     X(AeroReynolds, "Reynolds %.3g (simulado %.3g)", "Reynolds %.3g (simulated %.3g)") \
     X(AeroRoughness, "Rugosidad media %.1f µm · %.0f %% del rozamiento", "Mean roughness %.1f µm · %.0f %% of the friction") \
+    X(EngDevices, "Calculado en: laminado %s · cálculo %s", "Computed on: slicing %s · solver %s") \
+    X(EngSolverDevice, "Calculado en: %s", "Computed on: %s") \
+    X(EngCpuWhy, "Se quedó en la CPU: %s", "Stayed on the CPU: %s") \
     X(AeroMap, "Mapa", "Map") \
     X(AeroLines, "Líneas de corriente (color: presión)", "Streamlines (colour: pressure)") \
     X(AeroMapCp, "Coeficiente de presión", "Pressure coefficient") \

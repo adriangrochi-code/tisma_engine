@@ -21,6 +21,10 @@ menu structural_analyze
 expect-structural-verdict holds
 expect-control structural_verdict
 expect-control structural_show_map
+# Where it ran (the tester's report, 2026-11-14): the slicing's device and
+# the solver's.
+expect-control structural_devices
+expect-text Calculado en: laminado
 # The adhesion it was given and the safety factor's likely range (the
 # owner's request, 2026-11-03).
 expect-text Adherencia a

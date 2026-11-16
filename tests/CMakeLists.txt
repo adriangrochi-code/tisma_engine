@@ -512,6 +512,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # The analysis takes every core and, under ASan, about 160 s alone: more
     # time, and not beside the full drag test.
     set_tests_properties(ui_script_structural_analyze PROPERTIES TIMEOUT 900 RESOURCE_LOCK all_cores)
+    # Closing during an analysis stops it (the tester's report, 2026-11-14):
+    # far less than the analysis alone (about 160 s under ASan).
+    add_test(NAME ui_script_shutdown_during_analysis
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/shutdown_during_analysis.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_shutdown_during_analysis.png)
+    set_tests_properties(ui_script_shutdown_during_analysis PROPERTIES
+      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 60 RESOURCE_LOCK all_cores)
     # The timeline (rule 8): the stand-in refuses the body «Caja 2».
     add_test(NAME ui_script_design_timeline
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

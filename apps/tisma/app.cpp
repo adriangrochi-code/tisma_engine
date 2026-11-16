@@ -50,6 +50,7 @@
 #include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
+#include "gpu/compute.hpp"
 #include "fea/analysis.hpp"
 #include "gcode/binary.hpp"
 #include "gcode/export.hpp"
@@ -4191,6 +4192,17 @@ void App::drop_texture(ImTextureID id) {
 }
 
 void App::shutdown() {
+    // The analyses stop at their next step instead of running to the end:
+    // closing the window during one made the program wait for it, minutes on
+    // a large part (the tester's report, 2026-11-14). They read members of
+    // this window, so they end here, before anything is torn down.
+    structural_cancel_ = true;
+    optimize_cancel_ = true;
+    aero_cancel_ = true;
+    structural_job_.wait();
+    optimize_job_.wait();
+    aero_job_.wait();
+    structural_estimate_job_.wait();
     slice_job_.wait();
     device_disconnect();
     bambu_camera_off();
@@ -18002,6 +18014,18 @@ void App::structural_panel() {
                 for (const nlohmann::json& w : j.value("warnings", nlohmann::json::array()))
                     loc::TextDisabled("· %s", w.value("message", std::string()).c_str());
             }
+            // Where it ran, and why not on the GPU when it stayed on the CPU.
+            if (const nlohmann::json& d = j.value("devices", nlohmann::json::object()); d.is_object() && d.contains("solver")) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextDisabled("%s", format(tr(T::EngDevices), d.value("slicing", std::string("CPU")).c_str(),
+                                               d.value("solver", std::string("CPU")).c_str())
+                                            .c_str());
+                for (const nlohmann::json& w : j.value("warnings", nlohmann::json::array()))
+                    if (const std::string code = w.value("code", std::string()); code == "gpu_unavailable" || code == "gpu_fallback")
+                        loc::TextDisabled("%s", format(tr(T::EngCpuWhy), w.value("message", std::string()).c_str()).c_str());
+                ImGui::PopTextWrapPos();
+                rect_of("structural_devices");
+            }
             if (structural_map_ && structural_map_->part == std::size_t(structural_part_) && !stale) {
                 ImGui::Checkbox(tr(T::StructShowMap), &structural_show_map_);
                 rect_of("structural_show_map");
@@ -18835,6 +18859,10 @@ void App::aerodynamics_panel() {
             ImGui::TextUnformatted(format(tr(T::AeroArea), num("frontal_area_mm2")).c_str());
             ImGui::TextUnformatted(format(tr(T::AeroReynolds), num("reynolds"), num("reynolds_simulated")).c_str());
             ImGui::TextUnformatted(format(tr(T::AeroRoughness), num("ra_mean_um"), 100.0 * num("roughness_share")).c_str());
+            if (const nlohmann::json& d = j.value("devices", nlohmann::json::object()); d.is_object() && d.contains("solver")) {
+                loc::TextDisabled("%s", format(tr(T::EngSolverDevice), d.value("solver", std::string("CPU")).c_str()).c_str());
+                rect_of("aero_devices");
+            }
             // The map: the pressure coefficient or the roughness.
             ImGui::TextUnformatted(tr(T::AeroMap));
             ImGui::SameLine();
@@ -19639,11 +19667,19 @@ void App::start_structural() {
             const IndexedMesh mesh = weld_exact(placed);
             // A quality finer than the part allows: the finest voxels that fit (BH24).
             fit_voxel_limit(c, mesh, settings);
-            const AnalysisReport r = run_analysis(mesh, settings, c, nullptr, [this](std::string_view, double done) {
+            // The part as printed is sliced on the GPU when there is one
+            // (the tester's report, 2026-11-14: the interface passed none).
+            std::unique_ptr<gpu::Context> gpu;
+            std::string no_gpu = "turned off in the settings (gpu = off)";
+            if (settings.gpu == GpuMode::Auto && c.model == AnalysisModel::AsPrinted)
+                gpu = gpu::Context::create({}, &no_gpu);
+            AnalysisReport r = run_analysis(mesh, settings, c, gpu.get(), [this](std::string_view, double done) {
                 structural_permille_ = int(done * 1000.0);
                 if (structural_cancel_)
                     throw Cancelled{};
             });
+            if (!gpu && c.model == AnalysisModel::AsPrinted)
+                r.warnings.push_back({"gpu_unavailable", "the part was sliced on the CPU: " + no_gpu});
             run.report = structural_report_json(r, c, moved, to_part, &placed);
             // The map's data: the voxels' outside with each triangle's
             // values and each corner's displacement; the view paints it by
@@ -27227,6 +27263,12 @@ void App::script_input() {
     } else if (step.verb == "wait") {
         if (f >= std::atoi(step.key.c_str()))
             next();
+    } else if (step.verb == "expect-running") { // an analysis still running: structural or aero
+        const bool running = step.key == "aero" ? aero_job_.running() : structural_job_.running();
+        if (running)
+            next();
+        else if (f > 600)
+            return fail_step(step.key + " analysis is not running");
     } else if (step.verb == "expect-structural") { // what keeps Analyze off: material, fixed, force or none
         if (objects_.empty())
             return fail_step("no part on the plate");

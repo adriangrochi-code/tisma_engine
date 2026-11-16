@@ -877,9 +877,10 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         return kExitModel;
     }
     std::unique_ptr<gpu::Context> gpu;
+    std::string no_gpu = "turned off in the settings (gpu = off)";
     if (settings.gpu == GpuMode::Auto)
-        gpu = gpu::Context::create();
-    out << "gpu: " << (gpu ? gpu->device_name() : std::string("none, using the CPU")) << "\n";
+        gpu = gpu::Context::create({}, &no_gpu);
+    out << "gpu: " << (gpu ? gpu->device_name() : "none, using the CPU: " + no_gpu) << "\n";
     // Stress-guided infill (docs/INFILL.md): the part analysed under the load
     // case first, to know where it works hardest.
     StressField stress;
@@ -1216,8 +1217,9 @@ int cmd_analyze(std::span<const std::string_view> all_args, std::ostream& out, s
         return kExitModel;
     }
     std::unique_ptr<gpu::Context> gpu;
+    std::string no_gpu = "turned off in the settings (gpu = off)";
     if (settings.gpu == GpuMode::Auto && analysis.model == AnalysisModel::AsPrinted)
-        gpu = gpu::Context::create();
+        gpu = gpu::Context::create({}, &no_gpu);
     if (mode == "lightest-infill") {
         if (analysis.fixtures.empty() || analysis.loads.empty()) {
             err << "error: the case needs a fixed zone and a force\n";
@@ -1285,7 +1287,10 @@ int cmd_analyze(std::span<const std::string_view> all_args, std::ostream& out, s
         err << "error: " << e.what() << "\n";
         return kExitAnalysis;
     }
+    if (!gpu && analysis.model == AnalysisModel::AsPrinted)
+        report.warnings.push_back({"gpu_unavailable", "the part was sliced on the CPU: " + no_gpu});
     const ElasticityResult& e = report.result.elasticity;
+    out << "devices: slicing " << report.slicing_device << ", solver " << report.solver_device << "\n";
     out << "voxels: " << report.grid.count() << " of " << report.grid.solid.size() << " (" << report.grid.hx
         << " mm, " << report.rows_per_layer << " rows per layer)\n";
     out << "solver: " << e.levels << " levels, " << e.iterations << " iterations, residual " << e.residual
