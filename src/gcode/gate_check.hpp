@@ -50,6 +50,10 @@ struct MiddleLayer {
 };
 MiddleLayer middle_layer(const GcodePreview& preview);
 
+// mm of support (and its interface) laid inside the circle of radius r
+// around (x, y) seen from above, above the first layer.
+double support_in_circle(const GcodePreview& preview, double x, double y, double r);
+
 // A point under an overhang, on the model's downward face, mm.
 struct OverhangPoint {
     float x = 0, y = 0, z = 0;

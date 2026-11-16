@@ -184,6 +184,32 @@ MiddleLayer middle_layer(const GcodePreview& p) {
     return out;
 }
 
+double support_in_circle(const GcodePreview& p, double cx, double cy, double r) {
+    double inside = 0.0;
+    bool first = true;
+    for (const PreviewLayer& layer : p.layers) {
+        if (!layer.extrusion_count)
+            continue;
+        if (first) { // the first layer sits on the bed, wherever it is
+            first = false;
+            continue;
+        }
+        for (std::size_t e = 0; e < layer.extrusion_count; ++e) {
+            const PreviewMove& m = p.moves[p.extrusions[layer.first_extrusion + e]];
+            if (!support_kind(m.kind))
+                continue;
+            const double len = std::hypot(m.x1 - m.x0, m.y1 - m.y0);
+            const int n = std::max(1, int(std::ceil(len / 0.1)));
+            for (int s = 0; s < n; ++s) {
+                const double t = (s + 0.5) / n;
+                if (std::hypot(m.x0 + (m.x1 - m.x0) * t - cx, m.y0 + (m.y1 - m.y0) * t - cy) < r)
+                    inside += len / n;
+            }
+        }
+    }
+    return inside;
+}
+
 double floating_support_share(const GcodePreview& p, double reach, std::vector<std::array<float, 3>>* where) {
     // The first layer that extrudes sits on the bed.
     std::size_t first = p.layers.size();

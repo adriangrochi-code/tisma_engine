@@ -14687,3 +14687,10 @@ para el LBM D3Q19.
 - **CI completa de Linux:** gcc y clang, 1364 de 1364; la de ASan no terminó (se cortó el tiempo de la tarea).
 - **Windows:** la puerta corre entera en GitHub (b402f68, Mesa llvmpipe junto al programa): 38 de 40, las mismas 2 de
   G3 que Linux en ese commit, que 0af3602 ya resuelve.
+- **G4, bloquear una parte (QA, GRAVE):** reproducido con la T (círculo de 4 mm bloqueado en (115, 128, 20), soportes
+  automáticos). Bajo el círculo no queda soporte (0 mm), pero alrededor aparece más: dentro de 6 mm, 5129 mm de
+  soporte contra 4497 sin pintar; en la franja de X 108–112, 2205 mm contra 295. El bloqueo llega como bloqueo
+  (`kPaintBlock`); el agregado es del motor: pasado. La prueba vieja (`ui_paint_support_none_blocked`) bloqueaba
+  todo y solo contaba que no hubiera soporte. Nuevas: `gate_g4_auto` guarda el G-code del automático y
+  `gate_g4_block_part` exige 0 bajo el círculo y menos soporte que el automático a 6 mm (verbo
+  `expect-support-in-circle`). Hoy falla, como corresponde.
