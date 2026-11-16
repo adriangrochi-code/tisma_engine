@@ -800,6 +800,7 @@
     X(HostKindRow, "Programa", "Program") \
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
+    X(SupportsForPainting, "Se activaron los soportes, solo donde pintaste «forzar».", "Supports are on, only where you painted «enforce».") \
     X(LibraryMenu, "Biblioteca de modelos…", "Model library…") \
     X(LibraryButton, "Biblioteca", "Library") \
     X(LibraryTip, "Los modelos de la biblioteca de Tisma", "The models of Tisma's library") \

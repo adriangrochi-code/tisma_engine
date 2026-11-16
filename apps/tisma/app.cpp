@@ -1009,6 +1009,7 @@ private:
     // the view's paint now (empty: something else, as the brush's marks).
     void update_color_view();
     bool color_view_wanted() const;
+    void supports_for_painting();
     // A filament's or blend's colour as 0xRRGGBB (the model's colour for none).
     std::uint32_t extruder_rgb(int extruder) const;
     // The colours the paint holds (color_mixing_plus.md, «Pintar con mezclas»:
@@ -4126,9 +4127,11 @@ bool App::init(std::string& error) {
             brush.centre = {b.x, b.y, b.z};
             brush.radius = b.radius;
             brush.detail = std::max(0.05, b.radius / 6.0);
-            brush.mark = b.color > 0 ? std::uint8_t(b.color) : b.block ? kPaintBlock : kPaintEnforce;
+            brush.mark = b.color > 0 ? std::uint8_t(b.color) : b.erase ? kPaintNone : b.block ? kPaintBlock : kPaintEnforce;
             paint(objects_[i].painting, channel, placed_meshes_[i], brush);
         }
+        if (channel == PaintChannel::Support && !b.block && !b.erase)
+            supports_for_painting();
         paint_channel_ = channel;
         paint_dirty_ = true;
         ++revision_.model;
@@ -14283,7 +14286,22 @@ void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
         painted_ = true;
         paint_cache_.touch(object, touched);
         paint_stroked_ = true;
+        if (paint_channel_ == PaintChannel::Support && brush.mark == kPaintEnforce)
+            supports_for_painting();
     }
+}
+
+// Forced support painted with the supports off did nothing (the engine needs
+// support.enabled; QA, 2026-11-16): the supports go on, only under what is
+// painted («Solo pintados»), and the person is told. Supports already on
+// stay as they are.
+void App::supports_for_painting() {
+    if (settings_.support)
+        return;
+    settings_.support = true;
+    settings_.support_automatic = false;
+    settings_changed();
+    notify(tr(T::SupportsForPainting));
 }
 
 // The colours are worth showing with more than one filament or with blends.

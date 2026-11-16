@@ -57,6 +57,7 @@ struct AppOptions {
     struct Stroke {
         std::string channel; // support, seam, fuzzy or color
         bool block = false;  // the mark: block, else enforce
+        bool erase = false;  // the mark taken off (support,erase,...)
         int color = 0;       // color: the filament or blend number (1 to 16) the faces print with
         float x = 0, y = 0, z = 0, radius = 1;
     };

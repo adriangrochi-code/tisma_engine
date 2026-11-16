@@ -1,0 +1,4 @@
+# Blocked under every overhang, with the automatic supports on: none.
+set support.enabled true
+slice
+expect-gcode-count ;TYPE:Support 0

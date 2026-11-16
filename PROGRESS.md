@@ -14473,3 +14473,18 @@ para el LBM D3Q19.
   - `library.txt` abre la biblioteca con el botón y ve la miniatura de la ficha;
   - `library_no_key.txt` comprueba el aviso sin clave;
   - pasan las de la barra de arriba, la nube y los créditos, y `check_licenses`.
+
+## 2026-11-16 — interfaz: pintar «forzar soporte» con los soportes apagados (QA)
+
+- **Causa:** el motor necesita `support.enabled` (PAINTING.md). Al pintar «forzar» con los soportes apagados, que
+  es lo que viene por defecto, no salía nada. Las coordenadas de `--paint` son las de la cama, y el pintado sí llegaba
+  al motor.
+- **Arreglo:** pintar «forzar» con los soportes apagados los prende en «Solo pintados» (`support.automatic` en
+  false) y lo avisa. Si ya estaban prendidos, no cambia nada. Vale para el pincel y para `--paint`. Se suma
+  `--paint support,erase,…` para borrar.
+- **Pruebas:**
+  - `ui_paint_support_on`: forzado con los soportes apagados da soporte, y quedan prendidos solo pintados;
+  - `ui_paint_support_none_erased`: forzado y después borrado, sin soporte;
+  - `ui_paint_support_none_blocked`: bloqueado bajo los dos voladizos con los automáticos prendidos, sin soporte;
+  - la orden de QA con `--export` da 102 bloques `;TYPE:Support`.
+- **Sin revisar:** que el pintado se guarde en el 3MF (el proyecto ya lleva la pintura).
