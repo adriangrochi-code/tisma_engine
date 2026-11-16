@@ -107,7 +107,8 @@ class ReleaseGateTest {
             .setDataAndType(uri, "application/octet-stream").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         scenario = ActivityScenario.launch(intent)
         // The plate names this file (a new start first restores the last model), then its size is read.
-        runCatching { compose.waitUntil(60_000) { text("plate_model")?.contains(file.name) == true && has("plate_info") } }
+        // The name shows first; a large model's mesh (and so its size) comes a moment later: wait for this file's size.
+        runCatching { compose.waitUntil(60_000) { text("plate_model")?.contains(file.name) == true && text("plate_info")?.startsWith(size) == true } }
         assertTrue(text("plate_model")?.contains(file.name) == true, "${file.name} is on the plate (it shows «${text("plate_model")}»)")
         // «20.0 × 20.0 × 20.0 mm · 12 triangles», for a model and for a project.
         assertEquals(size, text("plate_info")?.substringBefore(" ·"), "the size of ${file.name} on the plate")
