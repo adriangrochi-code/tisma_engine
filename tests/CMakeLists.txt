@@ -157,6 +157,19 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   # It takes every core for minutes: the simulated print, whose window
   # renders in software, does not run beside it (it starved past its timeout).
   set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores)
+  # AE8: the Benchy (bench/3DBenchy.stl.xz, CC0), unpacked with xz where
+  # there is one.
+  find_program(TISMA_XZ xz)
+  if(TISMA_XZ)
+    set(benchy_stl ${CMAKE_CURRENT_BINARY_DIR}/ae8_benchy.stl)
+    add_test(NAME aero_benchy_unpack
+             COMMAND ${CMAKE_COMMAND} -DXZ=${TISMA_XZ} -DIN=${PROJECT_SOURCE_DIR}/bench/3DBenchy.stl.xz -DOUT=${benchy_stl}
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/unxz.cmake)
+    set_tests_properties(aero_benchy_unpack PROPERTIES FIXTURES_SETUP benchy_stl)
+    add_test(NAME aero_benchy_ae8 COMMAND tisma_tests "[.aero-benchy]")
+    set_tests_properties(aero_benchy_ae8 PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores FIXTURES_REQUIRED benchy_stl
+                         ENVIRONMENT TISMA_BENCHY_STL=${benchy_stl})
+  endif()
 endif()
 
 # The random search for G-code the checker rejects (tests/fuzz_gcode.cpp); a

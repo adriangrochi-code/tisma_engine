@@ -14443,3 +14443,22 @@ para el LBM D3Q19.
   El servidor falso de la nube sirve la biblioteca con `TISMA_MOCK_LIBRARY_DIR`.
 - **Pruebas:** `library.txt`: dos modelos ofrecidos (quedan afuera el bloqueado y el que trae G-code), «TELEFONO»
   encuentra «Soporte de teléfono», y se abre la ficha. Pasa con las de la nube.
+
+## 2026-11-16 — aerodinámica detrás de la pieza (AE8, pedido del dueño)
+
+- **Pedido:** «no se genera aerodinámica de atrás»: en el Benchy la popa quedaba sin simular (QA; ficha nueva en
+  `spec/next`, `aerodynamics.md`, `check_spec.py` limpio). La pausa sigue para todo lo demás.
+- **Lo que se midió antes del cambio** (Benchy, calidad rápida, aire de proa a popa): el dominio ya cubría la pieza
+  entera (3 tamaños frontales detrás de la popa) y la voxelización no recortaba nada; pero unas 3 500 caras de 225 000
+  (rendijas y huecos más chicos que una celda) quedaban con Cp 0, y las líneas nacían solo frente a la pieza.
+- **Hecho:**
+  - dominio: detrás de la pieza, su largo más 3 tamaños frontales (el Benchy pasa de 93 a 113 celdas de largo);
+  - Cp en todas las caras: si no hay aire a 3 celdas por la normal, el fluido más cercano a 3 celdas; si tampoco, el
+    valor de la cara más cercana (solo color: no empuja);
+  - líneas de corriente: una grilla de 15 × 15 sobre todo el plano de entrada y otra de 11 × 11 frente a la pieza;
+    siguen hasta la salida. El formato de las líneas no cambió (puntos y Cp).
+- **Pruebas:** AE8 nueva (`aero_benchy_ae8`, CTest descomprime `bench/3DBenchy.stl.xz` con `xz` donde lo hay): 11 952
+  caras de popa, ninguna sin Cp, Cp medio −0,26; 336 de 346 líneas pasan la popa y llegan a la salida, 13 por la
+  estela. AE1 a AE4 siguen pasando (8 min 36 s). `[aero]` pasa.
+- **Tiempo:** el Benchy rápido sin verificación de resolución, unos 4 min 30 s en este contenedor.
+- **Lo que sigue:** la interfaz arregla que las líneas no se vean en placas viejas.
