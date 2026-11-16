@@ -31,7 +31,12 @@ Sirve para comparar diseños y orientaciones. No reemplaza un túnel de viento n
 - Arrastre (N) y coeficiente Cd, separado en presión y rozamiento.
 - Fuerza transversal, área frontal, Reynolds real y Reynolds simulado.
 - Rugosidad media y su parte en el rozamiento.
-- Mapa del coeficiente de presión por cara, de −1,5 (succión) a 1 (estancamiento), o de la rugosidad.
+- Mapa del coeficiente de presión por cara, de −1,5 (succión) a 1 (estancamiento), o de la rugosidad: todas las caras
+  de la pieza llevan valor, también las de atrás y las de la estela (presión negativa en los tonos fríos, con la
+  leyenda marcando el 0); ninguna cara queda sin color.
+- Líneas de corriente sembradas en una grilla sobre todo el plano de entrada (no solo frente a la pieza) y seguidas
+  hasta la salida del dominio: pasan por los costados, por arriba y por detrás de la pieza, y muestran la estela y las
+  zonas de recirculación, coloreadas por velocidad o por presión.
 
 ## Método
 
@@ -40,7 +45,9 @@ El arrastre se separa en dos partes, porque la grilla no puede resolver la capa 
 1. **Presión (forma):**
    - **simulación:** lattice Boltzmann D3Q19 con BGK y submalla de Smagorinsky, sobre la pieza en vóxeles, girada para
      que el aire vaya en +X;
-   - **dominio:** 1,5 tamaños frontales delante, 3 detrás y 1,5 a los lados; laterales periódicos, entrada a
+   - **dominio:** 1,5 tamaños frontales delante; detrás, el largo de la pieza en el sentido del aire más 3 tamaños
+     frontales (la pieza entera queda adentro, también su parte de atrás, y la estela tiene lugar: pedido del dueño,
+     16-11-2026, con el Benchy, cuya popa quedaba sin simular); 1,5 a los lados; laterales periódicos, entrada a
      velocidad fija, salida con gradiente nulo;
    - **presión:** el promedio del último tercio de la simulación se integra sobre las caras de la pieza;
    - **Reynolds:** el simulado queda limitado por la resolución, a 40 × las celdas del tamaño frontal. El arrastre de
@@ -63,6 +70,7 @@ El arrastre se separa en dos partes, porque la grilla no puede resolver la capa 
 |---|---|---|---|
 | AE1 | Placa cuadrada de frente | Cd 1,16 | 1,17 a 1,2 (Hoerner) |
 | AE2 | Cubo de frente | Cd 1,13 | 1,05 (Hoerner); +8 % por el bloqueo del dominio |
+| AE8 | Benchy con el aire de proa a popa | Las caras de la popa tienen Cp (negativo detrás de la cabina); al menos el 30 % de las líneas de corriente pasan detrás de la popa y llegan a la salida; el dominio cubre la pieza entera (16-11-2026) |
 | AE3 | El mismo cubo con el aire en otra dirección | Igual que AE2 | Simetría |
 | AE4 | Prisma 3:1 de punta roma, y con nariz piramidal | Cd 1,06 y 0,34 | La nariz baja el arrastre |
 | AE5 | Rozamiento laminar de un prisma 6:1 | A menos de 5 % de Blasius | `1,328 / √Re_L` |
