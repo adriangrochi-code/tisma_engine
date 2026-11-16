@@ -14741,4 +14741,9 @@ para el LBM D3Q19.
     máquina (profile_pack_format.md, `source_values`).
 - **Pendiente:** medir el estructural y la aerodinámica del Benchy solos (con la CI y la compilación en paralelo el
   estructural pasó los 900 s); ajustar el tiempo límite o la calidad según lo medido.
+- **Puerta en macOS (QA por el dueño):** `gate_macos.yml`, arm64 (macos-15) e Intel (macos-15-intel), la misma
+  etiqueta `gate`, en la pantalla del runner. Flujo aparte para no frenar a Linux y Windows: en `release.yml` una
+  compilación de macOS que falla no bloquea (`continue-on-error`), `publish` sube sin macOS y `publish_macos` agrega
+  los paquetes de macOS a la versión solo si pasa su puerta. Con la clave del proyecto, el `updates.json` de esa
+  versión no lista macOS (se arma antes). La app de macOS sigue sin firmar ni notarizar (para el dueño).
 

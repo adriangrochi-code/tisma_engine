@@ -69,8 +69,11 @@ jobs:
     needs: version
     if: needs.version.outputs.release == 'true'
     runs-on: ${{ matrix.os }}
+    # A macOS build that fails leaves its packages out, never Linux and Windows
+    # (QA for the owner, 2026-11-16).
+    continue-on-error: ${{ startsWith(matrix.name, 'macos') }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: windows-2022
@@ -236,6 +239,14 @@ jobs:
     if: needs.version.outputs.release == 'true'
     uses: ./.github/workflows/gate.yml
 
+  # macOS has a gate of its own (QA for the owner, 2026-11-16): its packages
+  # go up only when it passes, after the release, so it never holds back
+  # Linux and Windows.
+  gate_macos:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    uses: ./.github/workflows/gate_macos.yml
+
   publish:
     name: Leave the release as a draft for the owner to sign (published as it is without the key)
     needs: [version, build, android, gate]
@@ -253,6 +264,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.version.outputs.tag }}
         run: |
+          # macOS goes up in publish_macos, once its own gate passes.
+          rm -f packages/*-macos-*
           python3 tools/release_notes.py "$TAG" > notes.md
           version="$(cat VERSION)"
           prerelease=""
@@ -283,3 +296,27 @@ jobs:
           gh release create "$TAG" packages/* updates.json --draft --title "Tisma engine $version" \
             --notes-file notes.md $where $prerelease
           echo "::notice::$TAG is a draft: sign it and publish it with tools/sign_release.py (docs/FIRMAR_VERSIONES.md)"
+
+  publish_macos:
+    name: Add the macOS packages once the macOS gate passes
+    needs: [version, publish, gate_macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-*
+          path: packages
+          merge-multiple: true
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          ls packages
+          gh release upload "$TAG" packages/* --repo "$GITHUB_REPOSITORY" --clobber
+          # With the project's key the release is a draft whose updates.json
+          # was made before macOS went up: the macOS packages are there to
+          # download, but the updater does not offer them in this release.
+          echo "::notice::macOS packages added to $TAG (not in updates.json)"
