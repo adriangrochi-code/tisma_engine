@@ -47,7 +47,11 @@ public:
             server_.Post("/v1/library/relay-ticket", [](const httplib::Request& req, httplib::Response& res) {
                 if (!authorized(req, res))
                     return;
-                res.set_content(R"({"ticket": "K1", "expires": 4102444800})", "application/json");
+                if (req.body != "{}") { // rule 8 octies: an empty object over HTTPS
+                    res.status = 400;
+                    return;
+                }
+                res.set_content(R"({"ticket": "K1", "expires": 4102444800, "relays": []})", "application/json");
             });
             const auto seeded = [folder](const std::string& sha, const std::string& name, std::string& out) {
                 std::ifstream in(folder + "/seed/" + sha + "/" + name, std::ios::binary);

@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <optional>
 #include <fstream>
 
 namespace tisma::library {
@@ -51,30 +52,49 @@ FetchResult fetch_shared_file(const std::string& server, const std::string& sess
     const auto root = model.piece_roots.find(file.sha256);
     if (root == model.piece_roots.end())
         return failed("bad", "the index has no piece root for " + file.sha256);
-    // The ticket (rule 8 sexies), with the account's session.
-    net::Request t;
-    t.method = "POST";
-    t.url = server + "/v1/library/relay-ticket";
-    t.headers = {{"Authorization", "Bearer " + session}, {"Content-Type", "application/json"}};
-    t.body = nlohmann::json{{"sha256", file.sha256}, {"model", model.id}}.dump();
-    t.max_bytes = 64 * 1024;
-    const net::Response tr = net::perform(t);
-    if (!tr.ok())
-        return from_status(tr, "ticket");
+    // The ticket (rules 8 sexies and 8 octies): POST with the account's
+    // session and an empty body; the answer's «ticket» (with «expires» and
+    // «relays», not needed over HTTPS).
     std::string ticket;
-    try {
-        ticket = nlohmann::json::parse(tr.body).value("ticket", std::string());
-    } catch (const std::exception&) {
-    }
-    if (ticket.empty())
-        return failed("failed", "ticket: no ticket in the answer");
+    const auto new_ticket = [&]() -> std::optional<FetchResult> {
+        net::Request t;
+        t.method = "POST";
+        t.url = server + "/v1/library/relay-ticket";
+        t.headers = {{"Authorization", "Bearer " + session}, {"Content-Type", "application/json"}};
+        t.body = "{}";
+        t.max_bytes = 64 * 1024;
+        const net::Response tr = net::perform(t);
+        if (!tr.ok())
+            return from_status(tr, "ticket");
+        try {
+            ticket = nlohmann::json::parse(tr.body).value("ticket", std::string());
+        } catch (const std::exception&) {
+        }
+        if (ticket.empty())
+            return failed("failed", "ticket: no ticket in the answer");
+        return std::nullopt;
+    };
+    if (const auto no = new_ticket())
+        return *no;
+    // A 401 from the seeder (the ticket expired meanwhile): one new ticket,
+    // then the same request again (as the phone apps do).
+    bool renewed = false;
     const auto get = [&](const std::string& path, std::size_t most) {
-        net::Request q;
-        q.url = server + "/v1/seed/" + file.sha256 + path;
-        q.headers = {{"Authorization", "Bearer " + ticket}};
-        q.max_bytes = most;
-        q.timeout_s = 120;
-        return net::perform(q);
+        const auto once = [&] {
+            net::Request q;
+            q.url = server + "/v1/seed/" + file.sha256 + path;
+            q.headers = {{"Authorization", "Bearer " + ticket}};
+            q.max_bytes = most;
+            q.timeout_s = 120;
+            return net::perform(q);
+        };
+        net::Response r = once();
+        if (r.status == 401 && !renewed) {
+            renewed = true;
+            if (!new_ticket())
+                r = once();
+        }
+        return r;
     };
     // The list of pieces, checked against the signed root.
     const net::Response lr = get("/pieces", 4u << 20);
@@ -112,17 +132,25 @@ FetchResult fetch_shared_file(const std::string& server, const std::string& sess
         for (std::size_t n = 0; n < hashes.size(); ++n) {
             if (cancel && *cancel)
                 return failed("failed", "cancelled");
-            const net::Response pr = get("/piece/" + std::to_string(n), std::size_t(kPiece));
-            if (!pr.ok()) {
-                f.close();
-                std::filesystem::remove(partial);
-                return from_status(pr, "piece " + std::to_string(n));
+            // Each piece its length (1 MiB, the last shorter) and its hash; a
+            // bad one is asked again once, then everything is dropped.
+            const std::size_t want = n + 1 < hashes.size() ? std::size_t(kPiece) : std::size_t(size - kPiece * (long long)n);
+            net::Response pr;
+            bool good = false;
+            for (int attempt = 0; attempt < 2 && !good; ++attempt) {
+                pr = get("/piece/" + std::to_string(n), std::size_t(kPiece));
+                if (!pr.ok()) {
+                    f.close();
+                    std::filesystem::remove(partial);
+                    return from_status(pr, "piece " + std::to_string(n));
+                }
+                const auto h = sha256(pr.body);
+                good = pr.body.size() == want && hex(h.data(), h.size()) == hashes[n];
             }
-            const auto h = sha256(pr.body);
-            if (hex(h.data(), h.size()) != hashes[n]) {
+            if (!good) {
                 f.close();
                 std::filesystem::remove(partial);
-                return failed("bad", "piece " + std::to_string(n) + " does not match its hash");
+                return failed("bad", "piece " + std::to_string(n) + " does not match its length or hash");
             }
             f.write(pr.body.data(), std::streamsize(pr.body.size()));
             if (progress)

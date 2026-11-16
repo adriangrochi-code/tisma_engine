@@ -14513,4 +14513,4 @@ para el LBM D3Q19.
 - **Pruebas:** `library_open.txt` contra el servidor falso (que ahora sirve el ticket y los pedazos de
   `tests/data/library/seed`): sin sesión pide entrar; el modelo que el sembrador no tiene lo avisa; el engranaje baja,
   se comprueba y abre en la placa.
-- **Falta:** confirmar con el servidor el cuerpo del pedido de `relay-ticket` (hoy `sha256` y `model`).
+- **Ticket:** `POST /v1/library/relay-ticket` con `{}` y la sesión (ficha d0e8604). Un 401 del sembrador pide un ticket nuevo una vez; un pedazo malo se pide otra vez una vez. No retoma una bajada cortada (las apps sí): el archivo es chico.
