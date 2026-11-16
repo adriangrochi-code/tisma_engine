@@ -1,0 +1,21 @@
+# The library of Tisma's models (p2p_library.md, rules 3 bis to 4; the
+# tester's request, 2026-11-16: as in the phone apps): Más › Biblioteca takes
+# the signed key, block list and index from the mock server (made by
+# tests/data/library/make.sh), shows the two models offered (the blocked
+# file's and the one with G-code are left out), searches without accents and
+# opens a model's card.
+menu more
+menu library
+wait 20
+expect-text 2 modelos
+menu library_search
+type TELEFONO
+wait 3
+expect-text 1 modelo
+menu library_model_m2
+wait 3
+expect-control library_card
+expect-text De Bruno
+expect-text soporte.3mf
+menu library_close
+expect-no-control library_card

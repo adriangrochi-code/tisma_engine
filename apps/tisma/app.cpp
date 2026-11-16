@@ -71,6 +71,9 @@
 #include "fea/verdict.hpp"
 #include "ui/camera.hpp"
 #include "device/camera_frame.hpp"
+#include "library/shared_index.hpp"
+#include "net/ed25519.hpp"
+#include "net/http.hpp"
 #include "device/usb_camera.hpp"
 #include "ui/credits.hpp"
 #include "ui/files.hpp"
@@ -713,6 +716,23 @@ private:
     };
     void config_window();
     void cloud_window();
+    // The library of Tisma's models (p2p_library.md, rules 3 bis to 4; the
+    // same as the phone apps): the signed index, searched here.
+    struct LibraryReply {
+        bool ok = false;
+        std::string error;
+        library::SharedIndex index;
+        std::optional<library::BlockList> list;
+    };
+    void library_window();
+    void library_refresh();
+    bool library_open_ = false;
+    std::future<LibraryReply> library_job_;
+    std::optional<library::SharedIndex> library_index_;
+    std::optional<library::BlockList> library_list_;
+    std::string library_error_, library_query_;
+    long long library_index_seen_ = -1, library_list_seen_ = -1; // the newest sequences taken (rule 3 ter)
+    int library_pick_ = -1; // the model whose card is open, by its place in the index
     void cloud_start(CloudReply::Kind kind);
     void cloud_finished(CloudReply reply);
     void report_window();
@@ -20784,6 +20804,8 @@ void App::more_menu() {
         // 1. Tisma.
         // No other sites of models: the Tisma library only (owner, 2026-11-13).
         card(tr(T::MoreTisma));
+        if (item("library", tr(T::LibraryMenu)))
+            library_open_ = true;
         if (item("cloud", tr(T::CloudMenu)))
             cloud_open_ = true;
         if (item("config", tr(T::ConfigMenu), "Ctrl+,"))
@@ -21339,6 +21361,14 @@ std::string cloud_address(std::string text) {
     return text;
 }
 
+// The project's key, which certifies the library's (p2p_library.md, rule 3
+// quinquies): the build's updates key, or for the tests TISMA_LIBRARY_PROJECT_KEY.
+std::vector<std::uint8_t> project_key() {
+    if (const char* forced = std::getenv("TISMA_LIBRARY_PROJECT_KEY"); forced && *forced)
+        return net::key_bytes(forced);
+    return net::key_bytes(TISMA_UPDATES_KEY);
+}
+
 // This computer's name, sent as the session's device (cloud.md, rule 2).
 std::string device_name() {
     for (const char* name : {"COMPUTERNAME", "HOSTNAME"})
@@ -21567,6 +21597,160 @@ void App::cloud_slice_step() {
 // the server, the e-mail and the password; with a session, the account and
 // its hours; always, the public plans, the current one marked, and the way
 // to the account's page for paying.
+// Takes the library's key, block list and index from Tisma Cloud, each
+// checked (p2p_library.md, rules 3 bis to 3 quinquies): a key the project
+// did not certify, a signature that does not match or an older sequence
+// refuses the whole answer.
+void App::library_refresh() {
+    if (library_job_.valid())
+        return;
+    const std::string server = cloud_address(cloud_server_.empty() ? std::string("https://cloud.tisma.app") : cloud_server_);
+    library_job_ = std::async(std::launch::async, [server, seen_index = library_index_seen_, seen_list = library_list_seen_] {
+        LibraryReply r;
+        const auto get = [&](const std::string& path, std::size_t most) {
+            net::Request q;
+            q.url = server + "/v1/library/" + path;
+            q.max_bytes = most;
+            q.timeout_s = 60;
+            net::Response a = net::perform(q);
+            if (!a.ok())
+                throw library::SharedError("GET " + path + ": " + (a.error.empty() ? "HTTP " + std::to_string(a.status) : a.error),
+                                           "No se pudo bajar la biblioteca de Tisma Cloud (" +
+                                               (a.error.empty() ? "HTTP " + std::to_string(a.status) : a.error) + ")");
+            return a.body;
+        };
+        const auto raw = [](const std::string& s) { return std::vector<std::uint8_t>(s.begin(), s.end()); };
+        try {
+            const std::vector<std::uint8_t> key = library::read_library_key(get("key", 1 << 16), project_key());
+            r.list = library::read_block_list(get("blocklist.json", 64u << 20), raw(get("blocklist.json.sig", 1024)), key, seen_list);
+            r.index = library::read_index(get("index.json", library::kMaxIndexBytes), raw(get("index.json.sig", 1024)), key, seen_index);
+            r.ok = true;
+        } catch (const library::SharedError& e) {
+            r.error = language() == Language::Spanish ? e.spanish() : e.what();
+        }
+        return r;
+    });
+}
+
+// The library's window (Más › Tisma › Biblioteca): the search over the
+// signed index, without accents, and each model's card.
+void App::library_window() {
+    if (library_job_.valid() && library_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        LibraryReply r = library_job_.get();
+        if (r.ok) {
+            library_index_seen_ = r.index.sequence;
+            library_index_ = std::move(r.index);
+            if (r.list) {
+                library_list_seen_ = r.list->sequence;
+                library_list_ = std::move(r.list);
+            }
+            library_error_.clear();
+        } else {
+            library_error_ = r.error;
+        }
+    }
+    if (library_job_.valid())
+        frame_pending_ = true;
+    if (library_open_) {
+        ImGui::OpenPopup("###library");
+        library_open_ = false;
+        library_pick_ = -1;
+        library_refresh(); // asked again each time it opens (rule 6)
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(760.0f * scale_, vp->Size.x * 0.9f), std::min(560.0f * scale_, vp->Size.y * 0.85f)),
+                             ImGuiCond_Appearing);
+    bool open = true;
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.panel));
+    if (!ImGui::BeginPopupModal((std::string(tr(T::LibraryTitle)) + "###library").c_str(), &open)) {
+        ImGui::PopStyleColor();
+        return;
+    }
+    g_menu_rects["library_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                            ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                            ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##library_search", tr(T::LibrarySearch), &library_query_);
+    note_rect("library_search");
+    if (library_job_.valid())
+        loc::TextDisabled("%s", tr(T::CloudWorking));
+    if (!library_error_.empty()) {
+        loc::TextColored(rgb(0xE5484D), "%s", library_error_.c_str());
+        note_rect("library_error");
+    }
+    if (library_index_) {
+        const std::vector<std::size_t> found = library_index_->search(library_query_, library_list_ ? &*library_list_ : nullptr);
+        if (found.size() == 1)
+            loc::TextDisabled("%s", tr(T::LibraryCountOne));
+        else
+            loc::TextDisabled(tr(T::LibraryCount), int(found.size()));
+        note_rect("library_count");
+        const float list_w = ImGui::GetContentRegionAvail().x * 0.45f;
+        ImGui::BeginChild("##library_list", ImVec2(list_w, -ImGui::GetFrameHeightWithSpacing() - 4.0f * scale_), ImGuiChildFlags_Borders);
+        for (const std::size_t i : found) {
+            const library::SharedModel& m = library_index_->models[i];
+            ImGui::PushID(int(i));
+            if (ImGui::Selectable("##model", library_pick_ == int(i), 0, ImVec2(0, 2.0f * ImGui::GetTextLineHeightWithSpacing()))) 
+                library_pick_ = int(i);
+            note_rect("library_model_" + m.id);
+            const ImVec2 at = ImGui::GetItemRectMin();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddText(ImVec2(at.x + 4.0f * scale_, at.y + 2.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), m.name.c_str());
+            const std::string sub = m.author + "  ·  " + m.license + (m.checked ? std::string("  ·  ") + tr(T::LibraryChecked) : "");
+            dl->AddText(ImVec2(at.x + 4.0f * scale_, at.y + 2.0f * scale_ + ImGui::GetTextLineHeightWithSpacing()),
+                        ImGui::GetColorU32(rgb(theme_.text_dim)), sub.c_str());
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        ImGui::BeginChild("##library_card", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 4.0f * scale_), ImGuiChildFlags_Borders);
+        if (library_pick_ >= 0 && std::size_t(library_pick_) < library_index_->models.size()) {
+            const library::SharedModel& m = library_index_->models[std::size_t(library_pick_)];
+            ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+            loc::TextColored(rgb(theme_.accent_hover), "%s", m.name.c_str());
+            ImGui::PopFont();
+            note_rect("library_card");
+            loc::Text(tr(T::LibraryBy), m.author.c_str());
+            loc::TextDisabled("%s  ·  %s", m.license.c_str(), m.published.c_str());
+            if (!m.description.empty()) {
+                ImGui::Spacing();
+                loc::Text("%s", m.description.c_str());
+            }
+            if (!m.tags.empty()) {
+                std::string tags;
+                for (const std::string& t : m.tags)
+                    tags += (tags.empty() ? "" : ", ") + t;
+                loc::TextDisabled("%s", tags.c_str());
+            }
+            ImGui::SeparatorText(tr(T::LibraryFiles));
+            for (const library::SharedFile& f : m.files)
+                loc::Text("%s  (%s, %s)", f.path.c_str(), f.role.c_str(), bytes_text(std::uint64_t(std::max<long long>(f.size, 0))).c_str());
+            ImGui::Spacing();
+            // The files come from other people's computers (rule 2): not yet
+            // in this program.
+            ImGui::BeginDisabled();
+            ImGui::Button(tr(T::LibraryOpenOnPlate));
+            ImGui::EndDisabled();
+            note_rect("library_open");
+            loc::TextDisabled("%s", tr(T::LibraryDownloadSoon));
+        } else {
+            loc::TextDisabled("%s", tr(T::LibraryPick));
+        }
+        ImGui::EndChild();
+    }
+    if (ImGui::Button(tr(T::LibraryRefresh)))
+        library_refresh();
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::Close)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    note_rect("library_close");
+    ImGui::PopTextWrapPos();
+    ImGui::EndPopup();
+    ImGui::PopStyleColor();
+}
+
 void App::cloud_window() {
     cloud_slice_step();
     cloud_engineering_step();
@@ -25308,6 +25492,7 @@ void App::layout() {
     help_windows();
     config_window();
     cloud_window();
+    library_window();
     report_window();
     guide_overlay();
     if (!g_clamped.empty()) {

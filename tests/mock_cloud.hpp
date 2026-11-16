@@ -8,7 +8,9 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
+#include <fstream>
 #include <mutex>
+#include <sstream>
 #include <cstdlib>
 #include <string>
 #include <thread>
@@ -23,6 +25,28 @@ public:
     MockCloud() {
         if (std::getenv("TISMA_MOCK_CLOUD_DOWN")) // a UI test of the notice (CC21)
             service_ = "down";
+        // The shared library's signed files (p2p_library.md, rule 3 bis),
+        // from a folder such as tests/data/library, without a session.
+        if (const char* dir = std::getenv("TISMA_MOCK_LIBRARY_DIR")) {
+            const std::string folder = dir;
+            const auto serve = [folder](const std::string& name, const char* type) {
+                return [folder, name, type](const httplib::Request&, httplib::Response& res) {
+                    std::ifstream in(folder + "/" + name, std::ios::binary);
+                    if (!in) {
+                        res.status = 404;
+                        return;
+                    }
+                    std::stringstream s;
+                    s << in.rdbuf();
+                    res.set_content(s.str(), type);
+                };
+            };
+            server_.Get("/v1/library/key", serve("key.json", "application/json"));
+            for (const char* name : {"index.json", "blocklist.json"}) {
+                server_.Get(std::string("/v1/library/") + name, serve(name, "application/json"));
+                server_.Get(std::string("/v1/library/") + name + ".sig", serve(std::string(name) + ".sig", "application/octet-stream"));
+            }
+        }
         // cloud.md, rule 4a: no session; with no node, "down".
         server_.Get("/v1/status", [this](const httplib::Request&, httplib::Response& res) {
             std::lock_guard lock(mutex_);

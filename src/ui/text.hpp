@@ -800,6 +800,18 @@
     X(HostKindRow, "Programa", "Program") \
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
+    X(LibraryMenu, "Biblioteca de modelos…", "Model library…") \
+    X(LibraryTitle, "Biblioteca de Tisma", "Tisma library") \
+    X(LibrarySearch, "Buscar por nombre, etiqueta, autor o licencia", "Search by name, tag, author or licence") \
+    X(LibraryCount, "%d modelos", "%d models") \
+    X(LibraryCountOne, "1 modelo", "1 model") \
+    X(LibraryChecked, "revisado", "checked") \
+    X(LibraryBy, "De %s", "By %s") \
+    X(LibraryFiles, "Archivos", "Files") \
+    X(LibraryOpenOnPlate, "Abrir en la placa", "Open on the plate") \
+    X(LibraryDownloadSoon, "La descarga de los archivos llega pronto a la computadora.", "Downloading the files comes to the computer soon.") \
+    X(LibraryPick, "Elegí un modelo para ver su ficha.", "Pick a model to see its card.") \
+    X(LibraryRefresh, "Actualizar", "Refresh") \
     X(CameraRow, "Cámara", "Camera") \
     X(CameraOwn, "La cámara de la impresora", "The printer's camera") \
     X(CameraNone, "Sin cámara", "No camera") \

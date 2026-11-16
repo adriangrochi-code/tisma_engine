@@ -14428,3 +14428,18 @@ para el LBM D3Q19.
   - `[library]`: con `tests/data/library`, firmados por su `make.sh`.
 - **Lo que sigue:** el panel «Biblioteca» (lista, búsqueda, ficha y «Abrir en la placa») y la descarga, por el mismo
   camino que las apps (preguntado a su sesión).
+
+## 2026-11-16 — biblioteca de modelos en la computadora: la ventana
+
+- **Hecho:** Más › Tisma › «Biblioteca de modelos…» abre la ventana de la biblioteca:
+  - baja de Tisma Cloud la clave, la lista de bloqueo y el índice (`/v1/library/…`, sin sesión) y los verifica con
+    la clave del proyecto (`TISMA_UPDATES_KEY` de la compilación; en las pruebas, `TISMA_LIBRARY_PROJECT_KEY`);
+  - recuerda la secuencia más nueva para no aceptar una vieja;
+  - busca sin tildes y muestra cada modelo con autor, licencia y «revisado»;
+  - abre la ficha (descripción, etiquetas y archivos);
+  - se actualiza cada vez que se abre.
+  «Abrir en la placa» queda gris, con «La descarga de los archivos llega pronto», hasta saber cómo bajan los archivos
+  las apps (preguntado a su sesión). Las miniaturas son WebP: faltan, porque la interfaz todavía no lee ese formato.
+  El servidor falso de la nube sirve la biblioteca con `TISMA_MOCK_LIBRARY_DIR`.
+- **Pruebas:** `library.txt`: dos modelos ofrecidos (quedan afuera el bloqueado y el que trae G-code), «TELEFONO»
+  encuentra «Soporte de teléfono», y se abre la ficha. Pasa con las de la nube.
