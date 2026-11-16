@@ -89,13 +89,13 @@ class ReleaseGateTest {
     private fun assistant() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         waitTag("pack_wizard", 60_000)
-        compose.onNodeWithTag("pack_builtin").performScrollTo().performClick()
+        tap("pack_builtin")
         waitTag("profile_search")
         val printer = firstTagStarting("profile_printer_")
-        compose.onNodeWithTag(printer).performScrollTo().performClick()
+        tap(printer)
         val filament = firstTagStarting("profile_filament_")
-        compose.onNodeWithTag(filament).performScrollTo().performClick()
-        compose.onNodeWithTag("profile_save").performScrollTo().performClick()
+        tap(filament)
+        tap("profile_save")
         waitTag("plate_slice")
     }
 
@@ -115,7 +115,7 @@ class ReleaseGateTest {
 
     /** Slices on the phone from the plate's button; the G-code it made. */
     private fun slice(name: String): File {
-        compose.onNodeWithTag("plate_slice").performScrollTo().performClick()
+        tap("plate_slice")
         compose.waitUntil(15 * 60_000) { has("plate_result") || has("plate_error") }
         if (has("plate_error")) fail("slicing $name: ${text("plate_error")}")
         assertTrue(!has("profile_not_used"), "the chosen profile was used for $name")
@@ -157,7 +157,7 @@ class ReleaseGateTest {
         Intents.intending(hasAction(Intent.ACTION_CREATE_DOCUMENT))
             .respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(uri)
                 .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)))
-        compose.onNodeWithTag("plate_save").performScrollTo().performClick()
+        tap("plate_save")
         compose.waitUntil(30_000) { target.length() == gcode.length() }
         assertTrue(sha(target.readBytes()) == sha(gcode.readBytes()), "the exported G-code is the sliced one, whole")
     }
@@ -179,15 +179,15 @@ class ReleaseGateTest {
             compose.onNodeWithTag("printer_name").performTextInput("gate-$kind")
             compose.onNodeWithTag("printer_address").performTextInput(url)
             if (key.isNotEmpty()) compose.onNodeWithTag("printer_key").performTextInput(key)
-            compose.onNodeWithTag("printer_save").performScrollTo().performClick()
+            tap("printer_save")
             compose.waitUntil(60_000) { !has("printer_save") }
         }
         val want = sha(gcode.readBytes())
         for ((kind, url, _) in printers) {
             compose.onNodeWithTag("section_plate").performClick()
             waitTag("send_to_gate-$kind")
-            compose.onNodeWithTag("send_to_gate-$kind").performScrollTo().performClick()
-            compose.onNodeWithTag("plate_send").performScrollTo().performClick()
+            tap("send_to_gate-$kind")
+            tap("plate_send")
             compose.waitUntil(120_000) { received(url, want) }
         }
     }
@@ -243,6 +243,13 @@ class ReleaseGateTest {
     private fun sizeText(b: FloatArray) = String.format(java.util.Locale.getDefault(), "%.1f × %.1f × %.1f mm", b[3] - b[0], b[4] - b[1], b[5] - b[2])
 
     private fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+
+    /** Taps [tag]; scrolled into view first when it sits in a scrolling screen (not every screen scrolls). */
+    private fun tap(tag: String) {
+        val node = compose.onNodeWithTag(tag)
+        runCatching { node.performScrollTo() }
+        node.performClick()
+    }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
