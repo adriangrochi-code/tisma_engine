@@ -118,13 +118,20 @@ fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navig
             }
             Spacer(Modifier.height(72.dp))
         }
-        ExtendedFloatingActionButton(
-            onClick = { nav.open(Screen.AddPrinter(null)) },
-            icon = { Icon(painterResource(R.drawable.tisma_printer), null) },
-            text = { Text(stringResource(R.string.printer_add)) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("add_printer").named(stringResource(R.string.printer_add)),
-        )
+        // «Add a printer» is the screen's floating button in TismaApp's Scaffold ([AddPrinterButton]), which lifts it
+        // above a notice: placed here it lay under the notices, which stay until closed (release gate G16, 16-11-2026).
     }
+}
+
+/** The Printer screen's «Add a printer», in the Scaffold's floating-button place. */
+@Composable
+fun AddPrinterButton(nav: Navigator) {
+    ExtendedFloatingActionButton(
+        onClick = { nav.open(Screen.AddPrinter(null)) },
+        icon = { Icon(painterResource(R.drawable.tisma_printer), null) },
+        text = { Text(stringResource(R.string.printer_add)) },
+        modifier = Modifier.testTag("add_printer").named(stringResource(R.string.printer_add)),
+    )
 }
 
 @Composable

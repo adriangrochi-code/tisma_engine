@@ -274,6 +274,8 @@ fun TismaApp(
                 }
             },
             snackbarHost = { SnackbarHost(snackbar) },
+            // Placed by the Scaffold, a floating button moves up above a notice instead of lying under it.
+            floatingActionButton = { if (nav.section == Section.PRINTER && top == null) AddPrinterButton(nav) },
             containerColor = MaterialTheme.colorScheme.background,
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {

@@ -12441,5 +12441,8 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   Encontrado al armarla: las versiones beta y de tienda prohibían HTTP sin cifrar y no podían hablar con impresoras
   de la red local; ahora solo el dominio de Tisma Cloud exige HTTPS (prueba `NetworkSecurityTest`). Falta: Bambu Lab
   (MQTT del simulador solo en loopback) y la puerta del iPhone.
+  Corridas en el emulador: pasan asistente, abrir (G1), laminar el cubo y el Benchy con medidas dentro de 0,1 mm (G2) y
+  exportar. Segundo error real encontrado: el aviso que queda hasta cerrarlo («Guardado exported.gcode») tapaba el botón
+  «Agregar una impresora»; el botón pasa al lugar de botón flotante del Scaffold, que lo sube sobre el aviso.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
