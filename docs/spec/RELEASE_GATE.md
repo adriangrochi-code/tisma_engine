@@ -37,3 +37,10 @@ lanzamiento.
 | G14 | Perfiles | Elegir 5 impresoras del paquete (Prusa, Bambu, Creality, Klipper, Marlin) | Laminan con su G-code de inicio |
 | G15 | Cerrar | Cerrar con un laminado, la nube y un análisis en marcha | El proceso sale en menos de 3 s |
 | G16 | Apps del teléfono | Asistente, abrir, laminar, mandar | Igual que G1, G2 y G10 en el emulador |
+
+## Definiciones para G3
+
+- **Voladizo:** caras conectadas, más inclinadas que el ángulo de soporte, a más de 1 mm de la cama.
+- **Tiene soporte:** hay extrusión de soporte a menos de 2,5 mm de costado, en los 3 mm de abajo del voladizo.
+- **Flotando:** una línea de soporte sin extrusión (pieza o soporte) a menos de 1 mm de costado en la capa de abajo.
+  El porcentaje es la longitud flotante sobre la longitud total de soporte.
