@@ -14746,4 +14746,15 @@ para el LBM D3Q19.
   compilación de macOS que falla no bloquea (`continue-on-error`), `publish` sube sin macOS y `publish_macos` agrega
   los paquetes de macOS a la versión solo si pasa su puerta. Con la clave del proyecto, el `updates.json` de esa
   versión no lista macOS (se arma antes). La app de macOS sigue sin firmar ni notarizar (para el dueño).
+- **Primera corrida de la puerta en macOS (4059e8a):** todas sus pruebas fallan al abrir la ventana: «NSGL: Failed to
+  find a suitable pixel format» (los runners de macOS de GitHub no tienen GPU y GLFW pide OpenGL acelerado). La
+  interfaz subió en 22e1382 el renderizador por software de Apple con `TISMA_SOFTWARE_GL`; corrida a mano lanzada.
+- **CI en Windows y macOS:** fallaba la prueba de `source_values` del paquete: una referencia a
+  `machine.variables` usada después de agregar `extrusion` al JSON ordenado (su vector se reubica). Arreglado.
+- **G13 estructural:** con la calidad por defecto el Benchy pasa los 30 min (el multigrid calcula, 4,7 GB); la puerta
+  usa la calidad rápida (ids `structural_quality_<calidad>` en el combo, como Aerodinámica). La aerodinámica del
+  Benchy pasa en 195 s.
+- **G13 completo pasa en Linux:** estructural cubo 4 s y Benchy 29 s (calidad rápida); aerodinámica cubo y Benchy
+  (195 s). En el Benchy, 914 de 6904 caras del mapa tienen factor de seguridad infinito (sin tensión, la banda más
+  segura): `expect-structural-map` lo cuenta como valor y sigue rechazando NaN o tensión/desplazamiento no finitos.
 

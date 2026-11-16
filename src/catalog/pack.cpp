@@ -446,12 +446,14 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                 place[name] = value.get<bool>() ? "true" : "false";
             }
         }
-        if (!source.empty())
-            profile["settings"]["extrusion"]["source_values"] = std::move(source);
+        // Before anything is added to the settings: a reference into them
+        // does not outlive an insertion (the vector of an ordered object).
         if (variables.empty())
             profile["settings"]["machine"].erase("variables");
         if (profile["settings"]["machine"].empty())
             profile["settings"].erase("machine");
+        if (!source.empty())
+            profile["settings"]["extrusion"]["source_values"] = std::move(source);
     }
     if (kind == "resin" || kind == "resin_print") {
         profile["kind"] = kind == "resin" ? "filament" : "print";

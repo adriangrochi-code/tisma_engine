@@ -18908,11 +18908,13 @@ void App::structural_panel() {
                 q = k;
         ImGui::SetNextItemWidth(-1.0f);
         if (ImGui::BeginCombo("##structural_quality", tr(kQualityLabels[q]))) {
-            for (int k = 0; k < 4; ++k)
+            for (int k = 0; k < 4; ++k) {
                 if (ImGui::Selectable(tr(kQualityLabels[k]), k == q) && k != q) {
                     remember_engineering(std::size_t(structural_part_));
                     objects_[std::size_t(structural_part_)].engineering.structural.quality = kQualities[k];
                 }
+                rect_of(std::string("structural_quality_") + kQualities[k]); // for the scripted tests, as Aerodynamics'
+            }
             ImGui::EndCombo();
         }
         rect_of("structural_quality");
@@ -28001,11 +28003,19 @@ bool App::script_check(const ScriptStep& step, int f) {
             return f >= 600 ? fail_step("no structural map") : true;
         const StructuralRun& m = *structural_map_;
         const std::size_t n = m.corners.size() / 3;
-        std::size_t bad = 0;
-        for (std::size_t t = 0; t < n; ++t)
-            bad += t >= m.safety.size() || t >= m.stress.size() || t >= m.motion.size() || !std::isfinite(m.safety[t]) ||
-                   !std::isfinite(m.stress[t]) || !std::isfinite(m.motion[t]);
-        std::printf("ui-script: expect-structural-map: %zu faces, %zu without a value\n", n, bad);
+        // A face with no stress has an infinite safety factor (strength over
+        // zero, painted in the safest band): a value. Not a number, or a
+        // stress or displacement that is not finite, is none.
+        std::size_t bad = 0, unloaded = 0;
+        for (std::size_t t = 0; t < n; ++t) {
+            const bool known = t < m.safety.size() && t < m.stress.size() && t < m.motion.size();
+            const bool ok = known && !std::isnan(m.safety[t]) && m.safety[t] >= 0.0f && std::isfinite(m.stress[t]) &&
+                            std::isfinite(m.motion[t]);
+            bad += !ok;
+            unloaded += ok && std::isinf(m.safety[t]);
+        }
+        std::printf("ui-script: expect-structural-map: %zu faces, %zu without a value, %zu without stress\n", n, bad,
+                    unloaded);
         if (n == 0 || bad)
             return fail_step("a face of the structural map has no value");
         next();
