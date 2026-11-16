@@ -40,6 +40,11 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
       - name: Gate tests
+        # The runners have no GPU: the window's OpenGL context uses Apple's
+        # software renderer (tools/patch_glfw.cmake). Only here; a Mac run
+        # by a person never has it set.
+        env:
+          TISMA_SOFTWARE_GL: "1"
         run: ctest --test-dir build -L gate --output-on-failure
       - name: Screenshots of the gate
         if: always()

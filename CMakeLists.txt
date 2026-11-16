@@ -133,6 +133,9 @@ if(TISMA_BUILD_UI)
     glfw
     GIT_REPOSITORY https://github.com/glfw/glfw.git
     GIT_TAG 7b6aead9fb88b3623e3b3725ebb42670cbe4c579 # 3.4
+    # macOS: Apple's software renderer when TISMA_SOFTWARE_GL is set (tests
+    # on runners without a GPU); tools/patch_glfw.cmake.
+    PATCH_COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=<SOURCE_DIR> -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/patch_glfw.cmake
     SYSTEM
   )
   FetchContent_Declare(

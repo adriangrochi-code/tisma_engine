@@ -14747,3 +14747,8 @@ para el LBM D3Q19.
   los paquetes de macOS a la versión solo si pasa su puerta. Con la clave del proyecto, el `updates.json` de esa
   versión no lista macOS (se arma antes). La app de macOS sigue sin firmar ni notarizar (para el dueño).
 
+- **Puerta de macOS sin GPU (QA):** los runners de GitHub no abren una ventana con OpenGL 3.3 porque GLFW siempre pide
+  un renderizador acelerado. `tools/patch_glfw.cmake` (paso de FetchContent) cambia `nsgl_context.m` de GLFW: con
+  `TISMA_SOFTWARE_GL` pide el renderizador por software de Apple (`kCGLRendererGenericFloatID`) en lugar de
+  `NSOpenGLPFAAccelerated`. Solo `gate_macos.yml` la pone; un Mac de verdad no cambia. Sin probar en macOS: se ve en
+  la próxima corrida de `gate_macos.yml`.
