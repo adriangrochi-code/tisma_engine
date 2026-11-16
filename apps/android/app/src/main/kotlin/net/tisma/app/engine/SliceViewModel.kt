@@ -369,11 +369,16 @@ class SliceViewModel(
         val t = transform()
         val mesh = withContext(io) {
             runCatching {
-                val o = original?.takeIf { originalFile == f } ?: MeshFile.read(f).also { original = it; originalFile = f }
-                (if (t.contentEquals(MeshFile.identity3())) o else o.transformed(t)).onBed(bed[0] / 2, bed[1] / 2)
+                val o = original?.takeIf { originalFile == f } ?: MeshFile.read(f)
+                (if (t.contentEquals(MeshFile.identity3())) o else o.transformed(t)).onBed(bed[0] / 2, bed[1] / 2) to o
             }.getOrNull()
         }
-        _state.update { it.copy(mesh = mesh, bed = bed, case = it.case.copy(conditions = emptyList()), stressMap = null, showStress = false) }
+        // Another model may have come onto the plate while this one was read (the last model restored at a start, then
+        // a file «Opened with» Tisma): a mesh is shown only while its file is still the plate's model (release gate,
+        // G16, 16-11-2026: the cube's name showed with the Benchy's mesh).
+        if (model != f) return@launch
+        mesh?.second?.let { original = it; originalFile = f }
+        _state.update { it.copy(mesh = mesh?.first, bed = bed, case = it.case.copy(conditions = emptyList()), stressMap = null, showStress = false) }
     }
 
     /** Picks the printer, nozzle and filament (the printer card). */

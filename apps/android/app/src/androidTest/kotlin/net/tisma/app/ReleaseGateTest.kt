@@ -276,7 +276,7 @@ class ReleaseGateTest {
             val tag = n.config.getOrNull(SemanticsProperties.TestTag)
             val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
             listOfNotNull(tag?.let { "#$it" }, text?.take(40)).joinToString(" ").ifBlank { null }
-        }.distinct().take(60).joinToString(" | ")
+        }.distinct().take(400).joinToString(" | ")
     }.getOrElse { "(no screen: ${it.message})" }
 
     private fun firstTagStarting(prefix: String): String {
