@@ -1,0 +1,11 @@
+# Release gate G3: automatic supports turned on in the panel, in the
+# snug style: checked G-code, support under every overhang steeper than
+# the angle, and less than 1 % of the support floating.
+menu tab_prepare
+set support.enabled true
+set support.style "snug"
+slice
+expect-gcode-valid
+expect-gcode-count ;TYPE:Support 1
+expect-support-under-overhangs
+expect-support-floating 1

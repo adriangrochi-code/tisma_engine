@@ -101,7 +101,7 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: ctest --test-dir build -C Release -LE gate --output-on-failure
       - name: Package
         run: |
           package="tisma-engine-nightly-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)-${{ matrix.name }}"
@@ -135,9 +135,16 @@ jobs:
           path: tisma-engine-nightly-*.zip
           if-no-files-found: error
 
+  # The release gate (docs/spec/RELEASE_GATE.md): nothing is published
+  # unless every critical function passes, on Linux and Windows.
+  gate:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    uses: ./.github/workflows/gate.yml
+
   publish:
     name: Publish the nightly
-    needs: [check, build]
+    needs: [check, build, gate]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

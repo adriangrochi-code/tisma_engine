@@ -39,6 +39,7 @@
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
 #include "gcode/dialect.hpp"
+#include "gcode/gate_check.hpp"
 #include "gcode/output.hpp"
 #include "gcode/thumbnail.hpp"
 #include "device/bambu_simulator.hpp"
@@ -1100,6 +1101,7 @@ private:
     // tener soporte siempre es muy grave»).
     void slice_asked();
     double unsupported_overhang_area() const;
+    std::vector<OverhangPoint> overhang_points() const;
     bool overhang_prompt_ = false;              // the question is open
     std::uint64_t overhang_answered_ = ~0ull;   // the model revision «Laminar sin soporte» was chosen for
     void overhang_prompt();
@@ -7159,25 +7161,74 @@ void App::begin_export() {
 // printable models. Own design: a face whose normal points down more than
 // the angle from the vertical is an overhang (the usual rule of slicers).
 double App::unsupported_overhang_area() const {
+    double area = 0.0;
+    for (const OverhangPoint& q : overhang_points())
+        area += q.area;
+    return area;
+}
+
+// Points on the downward faces steeper than the support angle, more than
+// 1 mm above the bed (the release gate's G3): a grid of points about 4 mm
+// apart on each face, with the share of its area each stands for, and the
+// overhang each is on (faces that share a corner are one overhang).
+std::vector<OverhangPoint> App::overhang_points() const {
     const double angle = (settings_.support_angle > 0.0 ? settings_.support_angle : 45.0) * 3.14159265358979 / 180.0;
     const double steep = std::sin(std::clamp(angle, 0.05, 1.5));
-    double area = 0.0;
+    std::vector<OverhangPoint> points;
+    std::vector<std::uint32_t> parent; // union-find over the faces kept
+    const auto root = [&](std::uint32_t f) {
+        while (parent[f] != f)
+            f = parent[f] = parent[parent[f]];
+        return f;
+    };
+    std::map<std::array<std::int64_t, 3>, std::uint32_t> corner_face; // a corner, to a face that has it
+    std::vector<std::uint32_t> point_face;
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         if (!objects_[i].printable)
             continue;
         const TriangleMesh& m = placed_meshes_[i];
         for (std::size_t t = 0; t < m.triangle_count(); ++t) {
             const Vec3f a = m.corner(t, 0), b = m.corner(t, 1), c = m.corner(t, 2);
-            if (std::min({a.z, b.z, c.z}) < 0.3f) // on the bed
+            if (std::max({a.z, b.z, c.z}) < 1.0f)
                 continue;
             const double ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
             const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
             const double len = std::sqrt(nx * nx + ny * ny + nz * nz);
-            if (len > 0.0 && -nz / len > steep)
-                area += 0.5 * len;
+            if (len <= 0.0 || -nz / len <= steep)
+                continue;
+            const std::uint32_t face = std::uint32_t(parent.size());
+            parent.push_back(face);
+            for (const Vec3f& v : {a, b, c}) {
+                const std::array<std::int64_t, 3> k{std::llround(v.x * 1000.0), std::llround(v.y * 1000.0),
+                                                    std::llround(v.z * 1000.0)};
+                const auto [it, added] = corner_face.emplace(k, face);
+                if (!added)
+                    parent[root(face)] = root(it->second);
+            }
+            const double area = 0.5 * len;
+            const int n = std::max(1, int(std::ceil(std::sqrt(area / 16.0))));
+            // n * n small triangles of the face, at their centres.
+            std::vector<std::array<double, 2>> uv;
+            for (int r = 0; r < n; ++r)
+                for (int s = 0; s + r < n; ++s) {
+                    uv.push_back({(r + 1.0 / 3.0) / n, (s + 1.0 / 3.0) / n});
+                    if (r + s + 1 < n)
+                        uv.push_back({(r + 2.0 / 3.0) / n, (s + 2.0 / 3.0) / n});
+                }
+            for (const auto& [p, q] : uv) {
+                const double z = a.z + uz * p + vz * q;
+                if (z < 1.0)
+                    continue;
+                points.push_back({float(a.x + ux * p + vx * q), float(a.y + uy * p + vy * q), float(z),
+                                  float(area / double(uv.size())), 0});
+                point_face.push_back(face);
+            }
         }
     }
-    return area;
+    std::map<std::uint32_t, std::uint32_t> number;
+    for (std::size_t i = 0; i < points.size(); ++i)
+        points[i].region = number.emplace(root(point_face[i]), std::uint32_t(number.size())).first->second;
+    return points;
 }
 
 void App::supports_watch() {
@@ -27945,6 +27996,76 @@ void App::script_input() {
         std::printf("ui-script: expect-gcode-count %s %lld: got %lld\n", step.key.c_str(), want, got);
         if (got < want)
             return fail_step("the G-code has " + std::to_string(got) + " lines starting with " + step.key);
+        next();
+    } else if (step.verb == "expect-gcode-valid") { // the release gate's G2: checked, with layers, filament and time
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        const GcodePreview& p = result_->preview;
+        std::printf("ui-script: expect-gcode-valid: %zu problems, %zu layers, %.1f mm of filament, %.0f s\n",
+                    result_->check.problems.size(), p.layers.size(), p.filament, p.estimated_seconds);
+        if (!result_->check.ok())
+            return fail_step("the G-code checker found " + std::to_string(result_->check.problems.size()) + " problems");
+        if (p.layers.empty() || p.filament <= 0.0 || p.estimated_seconds <= 0.0)
+            return fail_step("no layers, filament or time");
+        next();
+    } else if (step.verb == "expect-part-size") { // X Y Z: the part's extrusions span this, within 0.1 mm
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        double want[3] = {0, 0, 0};
+        std::istringstream in(step.key + " " + step.value);
+        in >> want[0] >> want[1] >> want[2];
+        const std::array<double, 3> got = part_extent(result_->preview);
+        std::printf("ui-script: expect-part-size %.3f %.3f %.3f: got %.3f %.3f %.3f\n", want[0], want[1], want[2], got[0],
+                    got[1], got[2]);
+        for (int a = 0; a < 3; ++a)
+            if (std::abs(got[a] - want[a]) > 0.1)
+                return fail_step(std::string("the part is ") + format("%.3f", got[a]) + " mm along " + "XYZ"[a] + ", not " +
+                                 format("%.3f", want[a]));
+        next();
+    } else if (step.verb == "expect-support-floating") { // MAXPCT: at most this % of the support has nothing under it
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        std::vector<std::array<float, 3>> where;
+        const double share = floating_support_share(result_->preview, 1.0, &where) * 100.0;
+        std::printf("ui-script: expect-support-floating %s: %.2f %%\n", step.key.c_str(), share);
+        for (std::size_t i = 0; i < where.size(); i += std::max<std::size_t>(1, where.size() / 12))
+            std::printf("ui-script:   floating: %.2f %.2f %.2f\n", where[i][0], where[i][1], where[i][2]);
+        if (share > std::atof(step.key.c_str()))
+            return fail_step(format("%.2f %% of the support floats", share));
+        next();
+    } else if (step.verb == "expect-support-under-overhangs") { // support under every overhang steeper than the angle
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        const std::vector<OverhangPoint> points = overhang_points();
+        const std::vector<OverhangPoint> bare = overhangs_without_support(result_->preview, points);
+        struct Region {
+            double area = 0.0, bare = 0.0;
+            float x = 0, y = 0, z = 0;
+        };
+        std::vector<Region> regions;
+        for (const OverhangPoint& q : points) {
+            if (regions.size() <= q.region)
+                regions.resize(q.region + 1);
+            regions[q.region].area += q.area;
+            regions[q.region].x = q.x, regions[q.region].y = q.y, regions[q.region].z = q.z;
+        }
+        for (const OverhangPoint& q : bare)
+            regions[q.region].bare += q.area;
+        std::size_t failing = 0;
+        for (std::size_t r = 0; r < regions.size(); ++r) {
+            const Region& g = regions[r];
+            if (g.area < 1.0)
+                continue;
+            std::printf("ui-script:   overhang %zu at %.1f %.1f %.1f: %.1f mm2, %.1f mm2 without support\n", r, g.x, g.y,
+                        g.z, g.area, g.bare);
+            failing += g.bare > 0.0;
+        }
+        std::printf("ui-script: expect-support-under-overhangs: %zu overhangs, %zu without support under part of them\n",
+                    regions.size(), failing);
+        if (points.empty())
+            return fail_step("the model has no overhangs to check");
+        if (failing)
+            return fail_step(std::to_string(failing) + " overhangs lack support under part of them");
         next();
     } else if (step.verb == "expect-view-calls") { // the last frame's view drew at most this many (--draw-stats)
         if (view_calls_ < 0)

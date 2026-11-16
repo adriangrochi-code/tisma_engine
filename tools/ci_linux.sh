@@ -24,6 +24,6 @@ configure build-asan -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_CXX_FLAGS=-fsanitize=addr
 for dir in build build-clang build-asan; do
     echo "== $dir"
     cmake --build "$dir"
-    ctest --test-dir "$dir" --output-on-failure -j "$(nproc)"
+    ctest --test-dir "$dir" -LE gate --output-on-failure -j "$(nproc)"
 done
 echo "Linux checks passed"

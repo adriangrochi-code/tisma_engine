@@ -14561,3 +14561,32 @@ para el LBM D3Q19.
 - **Pruebas:**
   - `ui_overhang_support_preview`: las filas de soporte y su interfaz en la leyenda, y `;TYPE:Support` en el G-code;
   - `ui_overhang_supports_off_notice`: un perfil de impresión que los apaga da el aviso.
+
+## 2026-11-16 — Puerta de lanzamiento: el trabajo de CI, G2 y G3 a G6 (decisión del dueño)
+
+- **CI:** `.github/workflows/gate.yml`, «Puerta de lanzamiento», corre `ctest -L gate` en Linux (Xvfb y OpenGL de
+  Mesa) y en Windows (Mesa llvmpipe de mesa-dist-win junto al programa, solo en la CI) en cada envío a dev, alpha y
+  main. La nightly y `release.yml` (alpha y release) la llaman y su paso de publicar depende de ella. Las demás
+  corridas de pruebas (`ci.yml`, nightly, release, `tools/ci_linux.sh`) dejan afuera la etiqueta `gate`: la puerta
+  es su propio trabajo.
+- **Pruebas de la puerta** (`tests/gate.cmake`, todas desde la interfaz, con guion):
+  - G2 `gate_g2_cube` y `gate_g2_benchy`: G-code comprobado, capas, filamento y tiempo > 0, tamaño de la pieza
+    dentro de 0,1 mm. Pasan (20,0 × 20,0 × 20,0 y 60,0 × 31,0 × 48,0).
+  - G3 `gate_g3_{tee,ramp,benchy}_{grid,organic,snug}`: soportes prendidos en el panel, soporte bajo cada voladizo
+    y menos de 1 % flotando. Más `ui_supports_slice`.
+  - G4 `ui_paint_support_*`, G5 `ui_overhang_support_preview`, G6 `ui_overhang_supports_off_notice` (y las
+    preguntas de voladizos), ahora con la etiqueta.
+  - Verbos nuevos del guion: `expect-gcode-valid`, `expect-part-size X Y Z`, `expect-support-floating PCT`,
+    `expect-support-under-overhangs`. El Benchy lo descomprime `tisma_unxz` (el lector xz propio) en todos lados.
+- **Arreglado de paso:** la pregunta de voladizos no veía las caras que tocan la cama con una punta (la rampa): ahora
+  cuenta los puntos de las caras a más de 1 mm de altura.
+- **La puerta falla hoy, por el motor (se avisa a la sesión del motor):**
+  - Benchy, techo de la cabina (voladizo de 213 mm² a z 36,6): grilla lo sostiene en 51 mm², árbol y ajustado en
+    nada.
+  - Benchy ajustado: además 7 voladizos con partes sin soporte (z 9,1; 19,8; 23,1; 45,0).
+  - Benchy árbol: 0,2 mm² sin soporte en dos voladizos bajos (z 3,0 y 5,3).
+  - T árbol: 1,63 % del soporte flota, casi todo en la capa de 19,4 (la interfaz entre las puntas de las ramas),
+    y algo en las capas 0,4 y 3,2.
+  - La rampa y la T en grilla y ajustado pasan.
+- **Lo que sigue:** G6 completo (3MF, impresora, deshacer), G1 y G7 a G12, G15; el motor con G13 y G14; las apps con
+  G16. Windows de la puerta sin probar todavía: se ve en la primera corrida de GitHub.
