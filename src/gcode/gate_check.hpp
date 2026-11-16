@@ -57,6 +57,12 @@ struct OverhangPoint {
     std::uint32_t region = 0; // the overhang it is on: faces that touch, numbered from 0
 };
 
+// Keeps the overhangs (by region) that stick out past the layer under them
+// by more than half a bead somewhere (supports_skirt.md, rule 1): a point
+// sticks out by its distance to the nearest bead of the part in the layer
+// right under it, less that bead's half width.
+std::vector<OverhangPoint> sticking_out(const GcodePreview& preview, const std::vector<OverhangPoint>& points);
+
 // Drops the points that are of a bridge (supports_skirt.md, rule 1): in
 // some direction, every 22.5 degrees, a line through the point reaches the
 // part's extrusions in the layer right under it both ways, and crosses

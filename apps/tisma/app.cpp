@@ -27760,8 +27760,11 @@ bool App::script_check(const ScriptStep& step, int f) {
             return fail_step("nothing sliced");
         // Bridges need no support unless asked (RELEASE_GATE.md, «Definiciones
         // para G3»; supports_skirt.md, rule 1).
+        // Only what sticks out more than half a bead past the layer under it
+        // is an overhang (the same, rule 1).
+        const std::vector<OverhangPoint> faces = sticking_out(result_->preview, overhang_points());
         const std::vector<OverhangPoint> points =
-            settings_.support_under_bridges ? overhang_points() : without_bridges(result_->preview, overhang_points());
+            settings_.support_under_bridges ? faces : without_bridges(result_->preview, faces);
         const std::vector<OverhangPoint> bare = overhangs_without_support(result_->preview, points);
         struct Region {
             double area = 0.0, bare = 0.0;

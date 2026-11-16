@@ -14680,3 +14680,8 @@ para el LBM D3Q19.
   Esfera de 1 001 112 triángulos con orgánico: 0,21 s antes y después. No encontré el big.stl de QA (60 mm,
   319 200 triángulos) en este contenedor: pedido a QA. Lo más caro sigue siendo el eje medio de las paredes y el
   relleno de las ramas; no se tocó.
+- **G3, labios (spec/next de877a4):** un voladizo cuenta solo si en algún punto sobresale de la capa de abajo más de
+  medio cordón (distancia al cordón más cercano de la pieza en la capa de abajo, menos su medio ancho). El labio de la
+  popa del Benchy (z 5,3) queda afuera. Con el motor 7a23fd6 la puerta pasa entera en Linux: 40 de 40 (Benchy en
+  árbol: 44 voladizos, todos con soporte, 0,22 % flotando).
+- **CI completa de Linux:** gcc y clang, 1364 de 1364; la de ASan no terminó (se cortó el tiempo de la tarea).

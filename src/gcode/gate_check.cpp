@@ -235,6 +235,42 @@ double floating_support_share(const GcodePreview& p, double reach, std::vector<s
     return total > 0.0 ? floating / total : 0.0;
 }
 
+std::vector<OverhangPoint> sticking_out(const GcodePreview& p, const std::vector<OverhangPoint>& points) {
+    std::vector<char> keep; // by region
+    for (const OverhangPoint& q : points) {
+        if (keep.size() <= q.region)
+            keep.resize(q.region + 1, 0);
+        if (keep[q.region])
+            continue;
+        std::size_t under = p.layers.size();
+        for (std::size_t l = 0; l < p.layers.size(); ++l)
+            if (p.layers[l].extrusion_count && p.layers[l].z <= q.z + 1e-3)
+                under = l;
+        if (under == p.layers.size()) {
+            keep[q.region] = 1;
+            continue;
+        }
+        const PreviewLayer& layer = p.layers[under];
+        double out = 1e30, width = 0.0;
+        for (std::size_t e = 0; e < layer.extrusion_count; ++e) {
+            const PreviewMove& m = p.moves[p.extrusions[layer.first_extrusion + e]];
+            if (!part_kind(m.kind))
+                continue;
+            const double dx = m.x1 - m.x0, dy = m.y1 - m.y0, l2 = dx * dx + dy * dy;
+            const double t = l2 > 0.0 ? std::clamp(((q.x - m.x0) * dx + (q.y - m.y0) * dy) / l2, 0.0, 1.0) : 0.0;
+            const double d = std::hypot(m.x0 + dx * t - q.x, m.y0 + dy * t - q.y) - m.width * 0.5;
+            if (d < out)
+                out = d, width = m.width;
+        }
+        keep[q.region] = out > width * 0.5;
+    }
+    std::vector<OverhangPoint> kept;
+    for (const OverhangPoint& q : points)
+        if (keep[q.region])
+            kept.push_back(q);
+    return kept;
+}
+
 std::vector<OverhangPoint> without_bridges(const GcodePreview& p, const std::vector<OverhangPoint>& points) {
     constexpr double cell = 0.2, pi = 3.14159265358979;
     std::vector<std::optional<CellSet>> part(p.layers.size()); // the part's beads per layer, made when needed
