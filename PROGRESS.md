@@ -14694,6 +14694,11 @@ para el LBM D3Q19.
   todo y solo contaba que no hubiera soporte. Nuevas: `gate_g4_auto` guarda el G-code del automático y
   `gate_g4_block_part` exige 0 bajo el círculo y menos soporte que el automático a 6 mm (verbo
   `expect-support-in-circle`). Hoy falla, como corresponde.
+- **Para G13 y G14 (pedido del motor):** verbos `expect-aero-faces` (el informe tiene un Cp finito por triángulo de la
+  pieza: el cubo, 12 de 12), `expect-structural-map` (cada cara del mapa con factor de seguridad, tensión y
+  desplazamiento finitos: el cubo, 37 556 caras) y `pick-pack-printer REF` (agrega y elige una impresora del paquete,
+  como `--pick-pack-printer`). `choose-profile printer` ya existía para las impresoras de la lista. Las pruebas
+  gate_g13 y gate_g14 las arma el motor.
 
 
 ## 2026-11-16 — verificador del G-code: temperatura; la CLI sin impresora (QA)
