@@ -170,7 +170,12 @@ desventajas».
    en `Authorization` y el mismo tope por cuenta y por hora. La app comprueba cada pedazo y la lista contra
    `piece_roots` del índice firmado, igual que por la red de pares; un archivo que el sembrador no tiene da 404 y la app
    dice «Este modelo todavía no está disponible para bajar». Cuando haya red de pares, la app la prueba primero y usa
-   esto solo si no encuentra pares.
+   esto solo si no encuentra pares. Detalles (16-11-2026): el ticket va como `Authorization: Bearer <ticket>` y vale
+   mientras no venza (1 h) sin atarse al par; firma, vencimiento y lista de bloqueo se comprueban. Se sirve en la
+   misma dirección pública del maestro, con `/v1/seed/` mandado al sembrador por el túnel (`OPERACION.md`).
+   Respuestas: 200 (`pieces`, el JSON de 8 septies; `piece/<n>`, los bytes, `application/octet-stream`), 401 (sin
+   ticket o ticket inválido o vencido), 403 (cuenta o par bloqueado), 404 (sin el archivo o pedazo fuera de rango),
+   451 (archivo bloqueado) y 429 con `Retry-After` (tope por hora pasado).
 8. La app no comparte nada que la persona no haya publicado o bajado de la biblioteca. «Mi biblioteca» local
    (`local_library.md`) no se comparte nunca. Con intermediario, los otros pares no ven la IP; con «Directo» sí, y la pantalla lo dice antes de activarlo.
 
