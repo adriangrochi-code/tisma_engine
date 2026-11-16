@@ -111,6 +111,8 @@ add_executable(tisma_tests
   test_xz.cpp
   test_pack_fetch.cpp
   test_print_host.cpp
+  test_ed25519.cpp
+  test_shared_library.cpp
 )
 # The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
 # tests drive it instead of the real tool.

@@ -420,7 +420,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(mbedtls)
 add_library(tisma_bambu STATIC src/net/tls.cpp src/device/mqtt.cpp src/device/ftps.cpp src/device/bambu.cpp
-  src/device/ssdp.cpp src/device/mdns.cpp)
+  src/device/ssdp.cpp src/device/mdns.cpp
+  # The shared library's signed files (p2p_library.md): Ed25519 with Mbed TLS's numbers.
+  src/net/ed25519.cpp src/library/shared_index.cpp)
 target_include_directories(tisma_bambu PUBLIC src)
 target_link_libraries(tisma_bambu PUBLIC tisma_core tisma_net PRIVATE mbedtls mbedx509 mbedcrypto nlohmann_json::nlohmann_json
   tisma_warnings Threads::Threads)

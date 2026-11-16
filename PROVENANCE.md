@@ -390,3 +390,6 @@ Lo que sale de una ficha se anota así: «ficha `docs/spec/features/<nombre>.md`
 Ficha `infill_patterns.md`, regla 11 y prueba P8. Diseño propio: filas a la separación de la densidad en la dirección
 de la capa (0° y 90° alternadas), cada una con tramos rectos unidos por tramos a 45°; la parte inclinada sigue una onda
 triangular en Z de período dos separaciones, y las filas vecinas son simétricas para cerrar celdas. Sin código ajeno.
+| `src/net/ed25519.*` — verificación de firmas Ed25519 (2026-11-16) | RFC 8032 (secciones 5.1.2 a 5.1.4 y 5.1.7: codificar y decodificar puntos, suma en coordenadas extendidas, verificación); los números grandes y SHA-512 de Mbed TLS. Probado con los vectores 1 y 2 de la sección 7.1 y una firma hecha con OpenSSL 3. Diseño propio: la comparación codificada de [S]B − [k]A con R. |
+| `src/library/shared_index.*` — clave, lista de bloqueo e índice firmados de la biblioteca compartida, y su búsqueda (2026-11-16) | Comportamiento de `p2p_library.md`, reglas 3 bis a 4 (en spec/next). Diseño propio: la búsqueda sin tildes (letras latinas de dos bytes de UTF-8 a su letra simple). Datos de prueba en `tests/data/library`, hechos con su `make.sh` (claves de prueba). |
+

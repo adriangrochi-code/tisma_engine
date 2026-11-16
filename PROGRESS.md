@@ -14412,3 +14412,19 @@ para el LBM D3Q19.
   pasaron de `test_print_host.cpp` a `tests/fake_print_hosts.hpp` sin cambios, para usarlos en las dos pruebas. El
   guion `host` suma key, user, password, printer y send; `expect-host` suma sent y printing. No probado en Windows:
   firewall, búsqueda en la red y certificados.
+
+## 2026-11-16 — biblioteca de modelos en la computadora, primer paso: firmas e índice
+
+- **Hecho:**
+  - `src/net/ed25519.*`: verificación Ed25519 (RFC 8032) con los números y el SHA-512 de Mbed TLS, que ya estaba en
+    el proyecto.
+  - `src/library/shared_index.*`: la clave de la biblioteca con su certificado de la clave del proyecto, la lista de
+    bloqueo y el índice firmados. No se aceptan secuencias más viejas, claves revocadas ni modelos con G-code, y hay
+    un tope de 256 MB.
+  - La búsqueda pide todas las palabras en el nombre, las etiquetas, el autor o la licencia, sin distinguir tildes
+    ni mayúsculas.
+- **Pruebas:**
+  - `[ed25519]`: los vectores del RFC, una firma de OpenSSL y lo que se rechaza;
+  - `[library]`: con `tests/data/library`, firmados por su `make.sh`.
+- **Lo que sigue:** el panel «Biblioteca» (lista, búsqueda, ficha y «Abrir en la placa») y la descarga, por el mismo
+  camino que las apps (preguntado a su sesión).
