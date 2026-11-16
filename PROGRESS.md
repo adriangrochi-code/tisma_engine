@@ -14758,3 +14758,8 @@ para el LBM D3Q19.
   (195 s). En el Benchy, 914 de 6904 caras del mapa tienen factor de seguridad infinito (sin tensión, la banda más
   segura): `expect-structural-map` lo cuenta como valor y sigue rechazando NaN o tensión/desplazamiento no finitos.
 
+- **Puerta de macOS sin GPU (QA):** los runners de GitHub no abren una ventana con OpenGL 3.3 porque GLFW siempre pide
+  un renderizador acelerado. `tools/patch_glfw.cmake` (paso de FetchContent) cambia `nsgl_context.m` de GLFW: con
+  `TISMA_SOFTWARE_GL` pide el renderizador por software de Apple (`kCGLRendererGenericFloatID`) en lugar de
+  `NSOpenGLPFAAccelerated`. Solo `gate_macos.yml` la pone; un Mac de verdad no cambia. Sin probar en macOS: se ve en
+  la próxima corrida de `gate_macos.yml`.
