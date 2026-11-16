@@ -14685,3 +14685,5 @@ para el LBM D3Q19.
   popa del Benchy (z 5,3) queda afuera. Con el motor 7a23fd6 la puerta pasa entera en Linux: 40 de 40 (Benchy en
   árbol: 44 voladizos, todos con soporte, 0,22 % flotando).
 - **CI completa de Linux:** gcc y clang, 1364 de 1364; la de ASan no terminó (se cortó el tiempo de la tarea).
+- **Windows:** la puerta corre entera en GitHub (b402f68, Mesa llvmpipe junto al programa): 38 de 40, las mismas 2 de
+  G3 que Linux en ese commit, que 0af3602 ya resuelve.
