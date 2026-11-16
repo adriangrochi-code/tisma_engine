@@ -428,6 +428,15 @@
       "notices": [
         "stb.txt"
       ]
+    },
+    {
+      "name": "libwebp",
+      "version": "1.5.0",
+      "license": "BSD-3-Clause",
+      "url": "https://chromium.googlesource.com/webm/libwebp",
+      "notices": [
+        "libwebp.txt"
+      ]
     }
   ]
 }

@@ -14456,3 +14456,20 @@ para el LBM D3Q19.
   opción nueva `--expect-color RRGGBB:N` (1123 píxeles en las dos). Pasan las 48 de Vulkan, boceto, Estructural y
   Aerodinámica. Las líneas de corriente usan el mismo camino que la flecha; no se probaron con una simulación (tarda
   un minuto).
+
+## 2026-11-16 — biblioteca: botón en la barra, miniaturas WebP y sin clave (QA)
+
+- **Hecho:**
+  - **Botón «Biblioteca»** en la barra de arriba, junto a Abrir, con un ícono propio (`assets/icons/library.svg`).
+    En ventanas más angostas queda solo el ícono, y si no entra no se muestra, para que la ayuda siga en su lugar.
+    Más › Tisma también abre la biblioteca.
+  - **Miniaturas:** libwebp 1.5.0 (BSD-3-Clause, solo el decodificador; THIRD_PARTY.md, créditos y licencia en
+    `resources/licenses/`). `decode_image` lee WebP. Cada miniatura se pide a `/v1/library/thumbs/<nombre>.webp`
+    cuando su fila se ve, cuatro a la vez y hasta 64 KB, y se muestra en la lista y grande en la ficha.
+  - **Sin clave del proyecto** en la compilación, la biblioteca dice «No disponible en esta versión» sin preguntar
+    al servidor.
+  - **La compilación nightly** toma `TISMA_UPDATES_KEY` de la variable del repositorio, como la release.
+- **Pruebas:**
+  - `library.txt` abre la biblioteca con el botón y ve la miniatura de la ficha;
+  - `library_no_key.txt` comprueba el aviso sin clave;
+  - pasan las de la barra de arriba, la nube y los créditos, y `check_licenses`.

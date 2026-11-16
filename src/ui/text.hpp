@@ -801,6 +801,9 @@
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
     X(LibraryMenu, "Biblioteca de modelos…", "Model library…") \
+    X(LibraryButton, "Biblioteca", "Library") \
+    X(LibraryTip, "Los modelos de la biblioteca de Tisma", "The models of Tisma's library") \
+    X(LibraryNoKey, "No disponible en esta versión", "Not available in this version") \
     X(LibraryTitle, "Biblioteca de Tisma", "Tisma library") \
     X(LibrarySearch, "Buscar por nombre, etiqueta, autor o licencia", "Search by name, tag, author or licence") \
     X(LibraryCount, "%d modelos", "%d models") \

@@ -205,7 +205,7 @@ constexpr const char* kIcons[] = {
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
-    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help", "account",
+    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help", "account", "library",
 };
 
 const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
@@ -733,6 +733,12 @@ private:
     std::string library_error_, library_query_;
     long long library_index_seen_ = -1, library_list_seen_ = -1; // the newest sequences taken (rule 3 ter)
     int library_pick_ = -1; // the model whose card is open, by its place in the index
+    // Each model's thumbnail (WebP, /v1/library/thumbs/…): asked for when its
+    // row shows, a few at a time; empty when it did not come.
+    std::string library_server_;
+    std::map<std::string, ImTextureID> library_thumbs_;
+    std::map<std::string, std::future<std::string>> library_thumb_jobs_;
+    ImTextureID library_thumb(const std::string& name);
     void cloud_start(CloudReply::Kind kind);
     void cloud_finished(CloudReply reply);
     void report_window();
@@ -7580,6 +7586,15 @@ void App::top_bar() {
     const float more_w = button_h;
     const float gap = 8.0f * scale_;
     float right = width_of(tr(T::Open)) + more_w + gap;
+    // The library of models (the owner, 2026-11-16: as on the phone, in
+    // sight): beside Open, with its name when there is room.
+    // Narrower, only its icon; narrower still, none (Más has it), so the
+    // help keeps its place.
+    const float library_room = ImGui::GetWindowWidth() - right - ImGui::GetCursorPosX() - 40.0f * scale_;
+    const bool library_text = library_room >= width_of(tr(T::LibraryButton)) + width_of("Tisma Cloud") + 3.0f * gap + 2.0f * button_h;
+    const bool library_shown = library_text || library_room >= 3.0f * button_h + 3.0f * gap;
+    if (library_shown)
+        right += (library_text ? width_of(tr(T::LibraryButton)) : button_h) + gap;
     const char* const chip_label = "Tisma Cloud";
     const float spare = ImGui::GetWindowWidth() - right - 12.0f * scale_ - ImGui::GetCursorPosX() - 10.0f * scale_;
     const bool chip_text = spare >= width_of(chip_label) + 2.0f * gap + button_h;
@@ -7649,6 +7664,14 @@ void App::top_bar() {
                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (chip)
             cloud_open_ = true;
+        ImGui::SameLine(0, gap);
+        ImGui::SetCursorPosY(top);
+    }
+    if (library_shown) {
+        if (library_text ? button("##library", "library", tr(T::LibraryButton), false, false, true, tr(T::LibraryTip), button_h)
+                         : icon_button("##library", "library", tr(T::LibraryTip), button_h))
+            library_open_ = true;
+        note_rect("library_button");
         ImGui::SameLine(0, gap);
         ImGui::SetCursorPosY(top);
     }
@@ -21604,7 +21627,14 @@ void App::cloud_slice_step() {
 void App::library_refresh() {
     if (library_job_.valid())
         return;
+    // A build without the project's key cannot check anything: it says so,
+    // without asking the server (QA, 2026-11-16).
+    if (project_key().size() != 32) {
+        library_error_ = tr(T::LibraryNoKey);
+        return;
+    }
     const std::string server = cloud_address(cloud_server_.empty() ? std::string("https://cloud.tisma.app") : cloud_server_);
+    library_server_ = server;
     library_job_ = std::async(std::launch::async, [server, seen_index = library_index_seen_, seen_list = library_list_seen_] {
         LibraryReply r;
         const auto get = [&](const std::string& path, std::size_t most) {
@@ -21630,6 +21660,35 @@ void App::library_refresh() {
         }
         return r;
     });
+}
+
+// A model's thumbnail as a texture, asked for the first time it is wanted
+// (at most four at once); 0 until it comes, or when it cannot be read.
+ImTextureID App::library_thumb(const std::string& name) {
+    if (name.empty() || library_server_.empty())
+        return 0;
+    if (const auto it = library_thumbs_.find(name); it != library_thumbs_.end())
+        return it->second;
+    if (const auto job = library_thumb_jobs_.find(name); job != library_thumb_jobs_.end()) {
+        if (job->second.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return 0;
+        const Image image = decode_image(job->second.get());
+        library_thumb_jobs_.erase(job);
+        library_thumbs_[name] = image.rgba.empty() ? ImTextureID(0) : upload_texture(image, true);
+        return library_thumbs_[name];
+    }
+    if (library_thumb_jobs_.size() >= 4)
+        return 0;
+    const std::string file = name.ends_with(".webp") ? name : name + ".webp";
+    library_thumb_jobs_[name] = std::async(std::launch::async, [url = library_server_ + "/v1/library/thumbs/" + file] {
+        net::Request q;
+        q.url = url;
+        q.max_bytes = 64 * 1024; // rule 3 ter: up to 64 KB
+        q.timeout_s = 20;
+        const net::Response a = net::perform(q);
+        return a.ok() ? a.body : std::string();
+    });
+    return 0;
 }
 
 // The library's window (Más › Tisma › Biblioteca): the search over the
@@ -21692,14 +21751,23 @@ void App::library_window() {
         for (const std::size_t i : found) {
             const library::SharedModel& m = library_index_->models[i];
             ImGui::PushID(int(i));
-            if (ImGui::Selectable("##model", library_pick_ == int(i), 0, ImVec2(0, 2.0f * ImGui::GetTextLineHeightWithSpacing()))) 
+            const float row_h = 2.0f * ImGui::GetTextLineHeightWithSpacing() + 4.0f * scale_;
+            if (ImGui::Selectable("##model", library_pick_ == int(i), 0, ImVec2(0, row_h)))
                 library_pick_ = int(i);
             note_rect("library_model_" + m.id);
             const ImVec2 at = ImGui::GetItemRectMin();
             ImDrawList* dl = ImGui::GetWindowDrawList();
-            dl->AddText(ImVec2(at.x + 4.0f * scale_, at.y + 2.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), m.name.c_str());
+            // The thumbnail, square, at the left; a plain square until it comes.
+            const float side = row_h - 4.0f * scale_;
+            const ImVec2 t0(at.x + 2.0f * scale_, at.y + 2.0f * scale_), t1(t0.x + side, t0.y + side);
+            if (const ImTextureID thumb = ImGui::IsItemVisible() ? library_thumb(m.thumbnail) : ImTextureID(0))
+                dl->AddImageRounded(ImTextureRef(thumb), t0, t1, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, 4.0f * scale_);
+            else
+                dl->AddRectFilled(t0, t1, ImGui::GetColorU32(rgb(theme_.frame)), 4.0f * scale_);
+            const float tx = t1.x + 8.0f * scale_;
+            dl->AddText(ImVec2(tx, at.y + 2.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), m.name.c_str());
             const std::string sub = m.author + "  ·  " + m.license + (m.checked ? std::string("  ·  ") + tr(T::LibraryChecked) : "");
-            dl->AddText(ImVec2(at.x + 4.0f * scale_, at.y + 2.0f * scale_ + ImGui::GetTextLineHeightWithSpacing()),
+            dl->AddText(ImVec2(tx, at.y + 2.0f * scale_ + ImGui::GetTextLineHeightWithSpacing()),
                         ImGui::GetColorU32(rgb(theme_.text_dim)), sub.c_str());
             ImGui::PopID();
         }
@@ -21712,6 +21780,11 @@ void App::library_window() {
             loc::TextColored(rgb(theme_.accent_hover), "%s", m.name.c_str());
             ImGui::PopFont();
             note_rect("library_card");
+            if (const ImTextureID thumb = library_thumb(m.thumbnail)) {
+                const float side = std::min(ImGui::GetContentRegionAvail().x, 180.0f * scale_);
+                ImGui::Image(ImTextureRef(thumb), ImVec2(side, side));
+                note_rect("library_thumb");
+            }
             loc::Text(tr(T::LibraryBy), m.author.c_str());
             loc::TextDisabled("%s  ·  %s", m.license.c_str(), m.published.c_str());
             if (!m.description.empty()) {

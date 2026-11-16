@@ -42,6 +42,16 @@ public:
                 };
             };
             server_.Get("/v1/library/key", serve("key.json", "application/json"));
+            server_.Get(R"(/v1/library/thumbs/([A-Za-z0-9._-]+))", [folder](const httplib::Request& req, httplib::Response& res) {
+                std::ifstream in(folder + "/thumbs/" + req.matches[1].str(), std::ios::binary);
+                if (!in) {
+                    res.status = 404;
+                    return;
+                }
+                std::stringstream s;
+                s << in.rdbuf();
+                res.set_content(s.str(), "image/webp");
+            });
             for (const char* name : {"index.json", "blocklist.json"}) {
                 server_.Get(std::string("/v1/library/") + name, serve(name, "application/json"));
                 server_.Get(std::string("/v1/library/") + name + ".sig", serve(std::string(name) + ".sig", "application/octet-stream"));
