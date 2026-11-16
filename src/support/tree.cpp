@@ -446,10 +446,18 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
                                          const std::vector<Polygons>& overhangs, const TreeParams& params) {
     std::vector<Polygons> out(nodes.size());
     std::vector<Polygons> branch(nodes.size()); // the branches alone, without the interface
+    // Each layer's overhang widened by half a bead into its own part (see
+    // below), once: the interface of `interface_layers` layers takes it.
+    std::vector<Polygons> widened(overhangs.size());
+    tbb::parallel_for(std::size_t(0), overhangs.size(), [&](std::size_t a) {
+        if (!overhangs[a].empty() && a < regions.size())
+            widened[a] = Clipper2Lib::Intersect(offset(overhangs[a], 0.5 * params.bead), regions[a], Clipper2Lib::FillRule::NonZero);
+    });
     tbb::parallel_for(std::size_t(0), nodes.size(), [&](std::size_t l) {
         const std::size_t gap = std::size_t(
             std::max(params.gap_above && l < params.gap_above->size() ? (*params.gap_above)[l] : params.z_gap_layers, 0));
-        Polygons discs;
+        Polygons iface;
+        bool joined = false;
         // The interface: what hangs in the layers it holds. On a slope each
         // layer's overhang is a strip thinner than a bead (a 60 degree face
         // steps 0.35 mm a layer, half a bead of it held by the layer below):
@@ -460,16 +468,22 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
         for (int k = 1; k <= params.interface_layers; ++k)
             if (const std::size_t a = l + gap + std::size_t(k); a < overhangs.size() && !overhangs[a].empty()) {
                 for (const Polygon& p : overhangs[a])
-                    discs.push_back(p);
-                if (a < regions.size())
-                    for (const Polygon& p : Clipper2Lib::Intersect(offset(overhangs[a], 0.5 * params.bead), regions[a],
-                                                                   Clipper2Lib::FillRule::NonZero))
-                        discs.push_back(p);
+                    iface.push_back(p);
+                for (const Polygon& p : widened[a])
+                    iface.push_back(p), joined = true;
             }
-        if (nodes[l].empty() && discs.empty())
+        if (nodes[l].empty() && iface.empty())
             return;
+        if (!iface.empty()) {
+            iface = Clipper2Lib::Union(iface, Clipper2Lib::FillRule::NonZero);
+            // Strips that only touch (cut from layers whose outlines differ
+            // by a hair) stay apart in a union, each too thin for a line: a
+            // closing by a sixteenth of a bead joins them.
+            if (joined)
+                iface = offset(offset(iface, params.bead / 16.0), -params.bead / 16.0);
+        }
         const auto disc_of = [](const TreeNode& t) {
-            const int sides = std::clamp(int(std::ceil(2.0 * std::numbers::pi * t.r / 0.4)), 12, 64);
+            const int sides = std::clamp(int(std::ceil(2.0 * std::numbers::pi * t.r / 0.8)), 12, 48);
             Polygon disc;
             for (int k = 0; k < sides; ++k) {
                 const double a = 2.0 * std::numbers::pi * k / sides;
@@ -477,7 +491,7 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
             }
             return disc;
         };
-        const std::size_t interface_discs = discs.size();
+        Polygons discs;
         for (const TreeNode& t : nodes[l]) {
             discs.push_back(disc_of(t));
             // Linked branches: the hull of the two, the support between them.
@@ -488,22 +502,32 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
                 discs.push_back(convex_hull(std::move(both)));
             }
         }
-        Polygons area = Clipper2Lib::Union(discs, Clipper2Lib::FillRule::NonZero);
-        // Pieces that only touch (the strips of a slope, cut from layers whose
-        // outlines differ by a hair) stay apart in a union, each too thin for
-        // a line: a closing by a sixteenth of a bead joins them.
-        area = offset(offset(area, params.bead / 16.0), -params.bead / 16.0);
+        Polygons own = discs.empty() ? Polygons{} : Clipper2Lib::Union(discs, Clipper2Lib::FillRule::NonZero);
+        Polygons area = iface.empty() ? own : own.empty() ? iface : Clipper2Lib::Union(iface, own, Clipper2Lib::FillRule::NonZero);
+        // Off the part, xy_gap at this layer; and not right under it within
+        // the z gap (under a slope the interface reached under the next
+        // layer's part, fused to it), half of xy_gap clear. Only the part near
+        // the support is grown: the offsets of the whole layer cost more than
+        // the rest.
+        Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(area);
+        const std::int64_t room = to_units(params.xy_gap + params.bead);
+        box.left -= room, box.top -= room, box.right += room, box.bottom += room;
+        Polygons keep_off;
         if (l < regions.size() && !regions[l].empty())
-            area = Clipper2Lib::Difference(area, offset(regions[l], params.xy_gap), Clipper2Lib::FillRule::NonZero);
+            keep_off = offset(Clipper2Lib::RectClip(box, regions[l]), params.xy_gap);
+        for (std::size_t g = 1; g <= gap && l + g < regions.size(); ++g)
+            if (!regions[l + g].empty())
+                for (const Polygon& p : offset(Clipper2Lib::RectClip(box, regions[l + g]), params.xy_gap / 2.0))
+                    keep_off.push_back(p);
+        if (!keep_off.empty()) {
+            area = Clipper2Lib::Difference(area, keep_off, Clipper2Lib::FillRule::NonZero);
+            if (!own.empty())
+                own = Clipper2Lib::Difference(own, keep_off, Clipper2Lib::FillRule::NonZero);
+        }
         // An eighth of a bead is finer than any line of it: fewer points for
         // every offset of the fill, and in the G-code.
         out[l] = Clipper2Lib::Union(simplify(area, params.bead / 8.0), Clipper2Lib::FillRule::NonZero);
-        if (discs.size() > interface_discs) {
-            Polygons own(discs.begin() + long(interface_discs), discs.end());
-            branch[l] = Clipper2Lib::Union(own, Clipper2Lib::FillRule::NonZero);
-            if (l < regions.size() && !regions[l].empty())
-                branch[l] = Clipper2Lib::Difference(branch[l], offset(regions[l], params.xy_gap), Clipper2Lib::FillRule::NonZero);
-        }
+        branch[l] = std::move(own);
     });
     // Nothing stands on air: from the top down, what of a layer's branches
     // lies farther than 1.5 mm from the layer below goes down into it too,
@@ -514,25 +538,57 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
     // G-code, up to 0.9 % of the support).
     constexpr double kHeld = 1.5; // mm a layer may stand past the one below (QA's limit)
     const std::size_t bottom_gap = std::size_t(std::max(params.z_gap_layers, 0));
+    // What each layer's branches leave loose, in parallel from the areas as
+    // they are; a layer whose branches grow on the way down is looked at again.
+    // Specks under a bead's square (where a disc rounds off past the one
+    // below) are left: each would start a column of its own for nothing.
+    const double speck = params.bead * params.bead * kUnitsPerMm * kUnitsPerMm;
+    const auto loose_of = [&](std::size_t l) {
+        // Only the layer below near the branches is grown.
+        Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(branch[l]);
+        const std::int64_t room = to_units(kHeld + params.bead);
+        box.left -= room, box.top -= room, box.right += room, box.bottom += room;
+        Polygons loose = Clipper2Lib::Difference(branch[l], offset(Clipper2Lib::RectClip(box, out[l - 1]), kHeld),
+                                                 Clipper2Lib::FillRule::NonZero);
+        std::erase_if(loose, [&](const Polygon& p) { return std::abs(Clipper2Lib::Area(p)) < speck; });
+        return loose;
+    };
+    std::vector<Polygons> loose_at(out.size());
+    tbb::parallel_for(std::size_t(1), std::max<std::size_t>(out.size(), 1), [&](std::size_t l) {
+        if (!branch[l].empty())
+            loose_at[l] = loose_of(l);
+    });
+    std::vector<char> grown(out.size(), 0);
     for (std::size_t l = out.size(); l-- > 1;) {
         if (branch[l].empty())
             continue;
-        const Polygons loose = Clipper2Lib::Difference(branch[l], offset(out[l - 1], kHeld), Clipper2Lib::FillRule::NonZero);
+        const Polygons loose = grown[l] ? loose_of(l) : std::move(loose_at[l]);
         if (loose.empty())
             continue;
         Polygons add = Clipper2Lib::Intersect(branch[l], offset(loose, kHeld), Clipper2Lib::FillRule::NonZero);
-        if (l - 1 < regions.size() && !regions[l - 1].empty())
-            add = Clipper2Lib::Difference(add, offset(regions[l - 1], params.xy_gap), Clipper2Lib::FillRule::NonZero);
+        // The part near what is added, grown: the whole layer's offsets cost
+        // more than the rest.
+        Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(add);
+        const std::int64_t room = to_units(params.xy_gap + params.bead);
+        box.left -= room, box.top -= room, box.right += room, box.bottom += room;
+        const auto part_near = [&](std::size_t k, double grow) {
+            return k < regions.size() && !regions[k].empty() ? offset(Clipper2Lib::RectClip(box, regions[k]), grow) : Polygons{};
+        };
+        if (!add.empty())
+            add = Clipper2Lib::Difference(add, part_near(l - 1, params.xy_gap), Clipper2Lib::FillRule::NonZero);
+        // Nor under the part within the z gap above it.
+        for (std::size_t g = 1; g <= bottom_gap && !add.empty(); ++g)
+            add = Clipper2Lib::Difference(add, part_near(l - 1 + g, params.xy_gap / 2.0), Clipper2Lib::FillRule::NonZero);
         // Where it stands on the part, its gap layers stay empty.
         for (std::size_t g = 1; g <= bottom_gap && g < l && !add.empty(); ++g)
-            if (l - 1 - g < regions.size() && !regions[l - 1 - g].empty())
-                add = Clipper2Lib::Difference(add, offset(regions[l - 1 - g], params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
+            add = Clipper2Lib::Difference(add, part_near(l - 1 - g, params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
         // Simplified to a quarter of a bead: carried down layer by layer, the
         // offsets' corners piled up into outlines too detailed to clip fast.
         if (!add.empty()) {
             add = simplify(add, params.bead / 4.0);
             out[l - 1] = simplify(Clipper2Lib::Union(out[l - 1], add, Clipper2Lib::FillRule::NonZero), params.bead / 8.0);
             branch[l - 1] = Clipper2Lib::Union(branch[l - 1], add, Clipper2Lib::FillRule::NonZero);
+            grown[l - 1] = 1;
         }
     }
     return out;

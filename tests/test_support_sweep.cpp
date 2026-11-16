@@ -174,6 +174,7 @@ support_check::Report run(const TriangleMesh& mesh, const Settings& s, const std
     }
     support_check::Options o;
     o.z_gap = s.support_z_gap;
+    o.xy_gap = s.support_xy_gap.of(s.outer_wall_width > 0.0 ? s.outer_wall_width : 1.125 * s.nozzle_diameter);
     return support_check::check(read_gcode_preview(out.str()), o);
 }
 
@@ -209,6 +210,9 @@ TEST_CASE("support sweep: hard parts in the three styles", "[.support-sweep]") {
                         c.name.c_str(), style_name(style), r.part_area, r.unsupported_area,
                         support_check::describe(r.worst_unsupported).c_str(), r.support_area, r.floating_area,
                         support_check::describe(r.worst_floating).c_str());
+            std::printf("%-28s %-8s fused side %.2f top %.2f bottom %.2f (worst %s), on interface %.1f base %.1f\n", c.name.c_str(),
+                        style_name(style), r.fused_side, r.fused_top, r.fused_bottom, support_check::describe(r.worst_fused).c_str(),
+                        r.on_interface, r.on_base);
             INFO(c.name << ", " << style_name(style));
             INFO("unsupported: " << support_check::describe(r.worst_unsupported));
             INFO("floating: " << support_check::describe(r.worst_floating));
@@ -216,6 +220,39 @@ TEST_CASE("support sweep: hard parts in the three styles", "[.support-sweep]") {
                 CHECK(r.support_moves > 0);
             CHECK(r.worst_unsupported.area < 1.0);
             CHECK(r.worst_floating.area < 1.0);
+            // Quality (point 2): the gaps kept, so it comes off; the part on interface.
+            INFO("fused: " << support_check::describe(r.worst_fused));
+            CHECK(r.fused_side < 1.0);
+            CHECK(r.fused_top < 1.0);
+            CHECK(r.fused_bottom < 1.0);
+            CHECK(r.on_base <= 0.02 * r.on_interface + 1.0);
         }
 }
 
+
+TEST_CASE("walls: the stem of a T keeps its wall from the inner corner up", "[support-check]") {
+    // A bar along X and a stem on it, as a layer of QA's T turned 30 degrees
+    // cuts them: the variable walls left the stem's face bare from the inner
+    // corner (2.2 mm with a 3 mm bar, 9.5 mm with 1.64).
+    for (double bar : {1.64, 3.0}) {
+        Settings s = test_printer();
+        TriangleMesh m = box(80, 92.51, 0, 120, 92.51 + bar, 2);
+        append(m, box(95, 92.51 + bar, 0, 105, 104.06, 2));
+        const SlicedModel sliced = slice_model(weld_exact(m), s);
+        for (std::size_t l = 1; l < sliced.walls.size(); ++l) {
+            // Along the stem's left face, the outer bead's line, every 0.25 mm.
+            for (double y = 92.51 + bar + 0.6; y < 103.5; y += 0.25) {
+                double best = 1e9;
+                for (const Toolpath& t : sliced.walls[l].toolpaths)
+                    for (std::size_t i = 0; i + 1 < t.points.size() + (t.closed ? 1 : 0); ++i) {
+                        const Point2d a = t.points[i].p, b = t.points[(i + 1) % t.points.size()].p;
+                        const double dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+                        const double u = len2 > 0 ? std::clamp(((95.225 - a.x) * dx + (y - a.y) * dy) / len2, 0.0, 1.0) : 0.0;
+                        best = std::min(best, std::hypot(a.x + u * dx - 95.225, a.y + u * dy - y));
+                    }
+                INFO("bar " << bar << ", layer " << l << ", y " << y);
+                REQUIRE(best < 0.1);
+            }
+        }
+    }
+}

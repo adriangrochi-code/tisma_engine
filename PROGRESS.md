@@ -14644,3 +14644,22 @@ para el LBM D3Q19.
   máximo; `support.under_bridges` lo agrega).
 - **Lo que sigue:** punto 2 (interfaz, separación, que se despegue, base en la cama) y punto 3 (rendimiento del
   orgánico en el Benchy y big.stl).
+
+## 2026-11-16 — calidad del soporte y rendimiento del orgánico (puntos 2 y 3)
+
+- **Punto 2, calidad:** la verificación suma lo que pega el soporte a la pieza (más cerca que `support.xy_gap` de
+  costado, o sin la separación en Z arriba o abajo) y sobre qué se apoya la pieza (interfaz o base). Salió que bajo una
+  pendiente el soporte de cada capa llegaba hasta debajo de la pieza de la capa siguiente, sin separación: grid 84 mm²
+  bajo el brazo a 75°, 95 en la esfera; snug y organic en menos. Ahora el soporte también queda a medio `xy_gap` de la
+  pieza de las capas de la separación de arriba (grid, árbol y las columnas del árbol). Queda: 0,6 mm² en el agujero
+  orgánico y 0,06 en el Benchy orgánico; la pieza se apoya en interfaz (en base, a lo sumo 1 mm²). El barrido lo pide.
+  «Que no se caiga»: base en la cama y ramas que no quedan en el aire es la verificación de flotantes del punto 1.
+- **Punto 3, rendimiento** (Benchy con soporte orgánico, `tests/data/settings.json`, 5 corridas, este contenedor):
+  antes de los arreglos 0,91 s (2,6 s de CPU); con los arreglos del punto 1, 1,17 s; después de optimizarlos, 0,99 s
+  (2,77 s de CPU), +8 % por soportar lo que antes quedaba sin soporte. Lo que se optimizó (callgrind, 16,4 → 15,2 mil
+  millones de instrucciones; antes de los arreglos 14,0): el ensanche de la interfaz una vez por capa, el cierre solo
+  en la interfaz, la pieza recortada a la caja del soporte antes de agrandarla, el paso hacia abajo en paralelo y sin
+  motas, discos de las ramas con lados de 0,8 mm, y la verificación de paredes solo con un lazo exterior abierto.
+  Esfera de 1 001 112 triángulos con orgánico: 0,21 s antes y después. No encontré el big.stl de QA (60 mm,
+  319 200 triángulos) en este contenedor: pedido a QA. Lo más caro sigue siendo el eje medio de las paredes y el
+  relleno de las ramas; no se tocó.

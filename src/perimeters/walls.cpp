@@ -71,7 +71,14 @@ LayerWalls layer_walls(const Polygons& input, const BeadingParams& given) {
 bool walls_leave_gap(const Polygons& region, const std::vector<Toolpath>& toolpaths, double outer, double width) {
     if (region.empty() || !(width > 0.0))
         return false;
-    const Polygons line = offset(offset(region, -(outer / 2.0 + width / 2.0)), width / 2.0);
+    // Every outer bead a closed loop: nothing was dropped (a lost stretch
+    // leaves the outer loop open), and the check is skipped.
+    if (std::all_of(toolpaths.begin(), toolpaths.end(), [](const Toolpath& t) { return t.closed || t.index > 0; }))
+        return false;
+    // Half a bead inside the outer bead's line (no opening: one offset is
+    // most of the cost): sharp tips drop out, and a stretch that lost its
+    // beads is still farther than three quarters of a bead from any.
+    const Polygons line = offset(region, -(outer / 2.0 + width / 2.0));
     if (line.empty())
         return false;
     // The toolpaths' segments in square cells of two beads.
@@ -115,7 +122,7 @@ bool walls_leave_gap(const Polygons& region, const std::vector<Toolpath>& toolpa
             }
         return false;
     };
-    const double step = width / 2.0;
+    const double step = width; // a lost stretch is millimetres long
     for (const Polygon& ring : line) {
         const std::size_t n = ring.size();
         for (std::size_t i = 0; i < n; ++i) {

@@ -35,6 +35,13 @@ struct Report {
     double floating_area = 0.0;    // mm2 of them far from anything under them
     Spot worst_floating;
     std::size_t support_moves = 0;
+    // Quality (point 2 of the owner's request): support fused to the part.
+    double fused_side = 0.0;   // mm2 of support beads nearer the part in their layer than the xy gap allows
+    double fused_top = 0.0;    // mm2 of support under part that starts less than the z gap above it
+    double fused_bottom = 0.0; // mm2 of support on part that ends less than the gap below it
+    Spot worst_fused;          // the support layer with the most fused area, and a cell of it
+    // Of the part's cells resting on support, the share that rests on interface.
+    double on_interface = 0.0, on_base = 0.0; // mm2
 };
 
 struct Options {
@@ -43,6 +50,8 @@ struct Options {
     double z_gap = 0.2;         // the support's gap under the part (support.z_gap)
     double float_limit = 1.5;   // mm a support bead may stand past what is under it (QA's check, 2026-11-16)
     bool bridges = true;        // a bridge's part needs nothing under it
+    double xy_gap = 0.225;      // the support's gap beside the part (support.xy_gap)
+    double tolerance = 0.1;     // mm the gaps may come short (the raster, rounding)
 };
 
 namespace detail {
@@ -156,6 +165,8 @@ inline Report check(const GcodePreview& p, const Options& opt = {}) {
                 bits |= 4;
             if (mv.kind == LineKind::OverhangWall)
                 bits |= 8;
+            if (mv.kind == LineKind::SupportInterface)
+                bits |= 64;
             if (bits & 1)
                 wsum += mv.width, wn += 1.0;
             // The bead: a capsule round the move, half its width wide.
@@ -340,6 +351,63 @@ inline Report check(const GcodePreview& p, const Options& opt = {}) {
         r.floating_area += double(flagged) * area;
         if (flagged)
             largest(li, r.worst_floating);
+    }
+    // Quality: the gaps between support and part, and what the part rests on.
+    // A part layer over the support is a layer and the gap high
+    // (supports_skirt.md, rule 4): its bottom, for the gap, is a common
+    // layer's height under its top.
+    std::vector<double> hs;
+    for (const PreviewLayer& L : p.layers)
+        hs.push_back(L.height);
+    std::sort(hs.begin(), hs.end());
+    const double common = hs[hs.size() / 2];
+    std::vector<std::uint8_t> part_mask(cells);
+    for (std::size_t li = 0; li < p.layers.size(); ++li) {
+        const std::vector<std::uint8_t>& m = layers[li];
+        bool any = false;
+        for (std::size_t s = 0; s < cells && !any; ++s)
+            any = (m[s] & 2) != 0;
+        if (!any)
+            continue;
+        const double top = p.layers[li].z, bottom = top - p.layers[li].height;
+        for (std::size_t s = 0; s < cells; ++s)
+            part_mask[s] = m[s] & 1;
+        const std::vector<float> d2 = detail::squared_distance(part_mask, nx, ny);
+        const double side = std::max(0.0, opt.xy_gap - opt.tolerance) / c;
+        for (std::size_t s = 0; s < cells; ++s)
+            if ((m[s] & 2) && double(d2[s]) < side * side)
+                r.fused_side += area;
+        for (std::size_t lj = 0; lj < p.layers.size(); ++lj) {
+            if (lj == li)
+                continue;
+            const double pt = p.layers[lj].z, pb = pt - std::min(p.layers[lj].height, common);
+            const bool over = lj > li && pb > top - 0.01 && pb < top + opt.z_gap - opt.tolerance;
+            const bool under = lj < li && pt < bottom + 0.01 && pt > bottom - opt.z_gap + opt.tolerance;
+            if (!over && !under)
+                continue;
+            double here = 0.0;
+            std::size_t at = 0;
+            for (std::size_t s = 0; s < cells; ++s)
+                if ((m[s] & 2) && (layers[lj][s] & 1))
+                    (over ? r.fused_top : r.fused_bottom) += area, here += area, at = s;
+            if (here > r.worst_fused.area)
+                r.worst_fused = {li, top, x0 + (double(at % std::size_t(nx)) + 0.5) * c, y0 + (double(at / std::size_t(nx)) + 0.5) * c, here};
+        }
+    }
+    // The part's cells over support: the support layer right under the gap.
+    for (std::size_t lj = 1; lj < p.layers.size(); ++lj) {
+        const double pb = p.layers[lj].z - std::min(p.layers[lj].height, common);
+        for (std::size_t li = lj; li-- > 0;) {
+            const double top = p.layers[li].z;
+            if (top > pb - opt.z_gap + opt.tolerance)
+                continue;
+            if (top < pb - opt.z_gap - p.layers[li].height)
+                break;
+            for (std::size_t s = 0; s < cells; ++s)
+                if ((layers[lj][s] & 1) && (layers[li][s] & 2))
+                    ((layers[li][s] & 64) ? r.on_interface : r.on_base) += area;
+            break;
+        }
     }
     return r;
 }
