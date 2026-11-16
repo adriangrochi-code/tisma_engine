@@ -1090,6 +1090,14 @@ private:
     void save_project_to(const std::filesystem::path& path);
     void export_gcode_to(const std::filesystem::path& path);
     void start_slice();
+    // The Slice button, Más › Laminar and Ctrl+R: with the supports off and
+    // overhangs on the plate, it asks first (the owner, 2026-11-16: «no
+    // tener soporte siempre es muy grave»).
+    void slice_asked();
+    double unsupported_overhang_area() const;
+    bool overhang_prompt_ = false;              // the question is open
+    std::uint64_t overhang_answered_ = ~0ull;   // the model revision «Laminar sin soporte» was chosen for
+    void overhang_prompt();
     void poll_jobs();
     void show_preview();
     void upload_preview();
@@ -7141,6 +7149,80 @@ void App::begin_export() {
     browser_.open(FileBrowser::Mode::Save, tr(T::SaveGcode), {ext}, last_folder_, name);
 }
 
+// The faces that hang over nothing steeper than the support's angle (45°
+// when it is automatic), away from the bed: their area in mm² over the
+// printable models. Own design: a face whose normal points down more than
+// the angle from the vertical is an overhang (the usual rule of slicers).
+double App::unsupported_overhang_area() const {
+    const double angle = (settings_.support_angle > 0.0 ? settings_.support_angle : 45.0) * 3.14159265358979 / 180.0;
+    const double steep = std::sin(std::clamp(angle, 0.05, 1.5));
+    double area = 0.0;
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        if (!objects_[i].printable)
+            continue;
+        const TriangleMesh& m = placed_meshes_[i];
+        for (std::size_t t = 0; t < m.triangle_count(); ++t) {
+            const Vec3f a = m.corner(t, 0), b = m.corner(t, 1), c = m.corner(t, 2);
+            if (std::min({a.z, b.z, c.z}) < 0.3f) // on the bed
+                continue;
+            const double ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+            const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+            const double len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (len > 0.0 && -nz / len > steep)
+                area += 0.5 * len;
+        }
+    }
+    return area;
+}
+
+void App::slice_asked() {
+    if (!has_plate_ || slice_job_.running())
+        return;
+    if (!settings_.support && settings_.machine_technology != MachineTechnology::Msla && overhang_answered_ != revision_.model &&
+        unsupported_overhang_area() > 4.0) {
+        overhang_prompt_ = true;
+        return;
+    }
+    start_slice();
+}
+
+// «Esta pieza tiene voladizos sin soporte: ¿activar soportes?» with its two
+// answers; Esc keeps the question for later and slices nothing.
+void App::overhang_prompt() {
+    if (overhang_prompt_) {
+        ImGui::OpenPopup("###overhangs");
+        overhang_prompt_ = false;
+    }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (!ImGui::BeginPopupModal((std::string(tr(T::OverhangTitle)) + "###overhangs").c_str(), nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
+        return;
+    note_rect("overhang_prompt");
+    ImGui::PushTextWrapPos(420.0f * scale_);
+    loc::Text("%s", tr(T::OverhangQuestion));
+    loc::TextDisabled("%s", tr(T::OverhangHint));
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+    if (button("##overhang_enable", "tisma_slice", tr(T::OverhangEnable), true, false, true, nullptr, ImGui::GetFrameHeight() * 1.3f)) {
+        settings_.support = true;
+        settings_.support_automatic = true;
+        settings_changed();
+        ImGui::CloseCurrentPopup();
+        start_slice();
+    }
+    note_rect("overhang_enable");
+    ImGui::SameLine();
+    if (button("##overhang_without", nullptr, tr(T::OverhangWithout), false, false, true, nullptr, ImGui::GetFrameHeight() * 1.3f)) {
+        overhang_answered_ = revision_.model;
+        ImGui::CloseCurrentPopup();
+        start_slice();
+    }
+    note_rect("overhang_without");
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
 void App::start_slice() {
     if (!has_plate_ || slice_job_.running())
         return;
@@ -11695,7 +11777,7 @@ void App::slice_panel() {
     if (!can_export || slicing) {
         if (button("##slice", "tisma_slice", slicing ? tr(T::Slicing) : tr(T::Slice), true, false,
                    has_plate_ && !slicing, tr(T::SliceTip), button_h))
-            start_slice();
+            slice_asked();
         g_menu_rects["slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                        ImGui::GetItemRectMax().y);
         anchor("slice_button");
@@ -20991,7 +21073,7 @@ void App::more_menu() {
             browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToAsciiMenu), {".bgcode"}, last_folder_);
         }
         if (item("slice_now", tr(T::SliceNowMenu), "Ctrl+R", has_plate_))
-            start_slice();
+            slice_asked();
         if (item("gcode_preview", tr(T::GcodePreviewMenu))) {
             purpose_ = Purpose::Open;
             browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"},
@@ -25686,6 +25768,7 @@ void App::layout() {
     config_window();
     cloud_window();
     library_window();
+    overhang_prompt();
     report_window();
     guide_overlay();
     if (!g_clamped.empty()) {
@@ -25808,7 +25891,7 @@ void App::layout() {
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(true);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_R, ImGuiInputFlags_RouteGlobal))
-        start_slice();
+        slice_asked();
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
         new_project();
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_I, ImGuiInputFlags_RouteGlobal)) {
@@ -27812,6 +27895,9 @@ void App::script_input() {
                     same ? "ok" : ("got " + got).c_str());
         if (!same)
             return fail_step("the setting is " + got);
+        next();
+    } else if (step.verb == "press-slice") { // the Slice button as the person presses it (it may ask first)
+        slice_asked();
         next();
     } else if (step.verb == "slice") { // as the Slice button, then the Preview tab
         if (f == 0 && result_ && stale_ && !slice_job_.running()) // a slice out of date: again, as the button does

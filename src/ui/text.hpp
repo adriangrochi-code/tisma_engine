@@ -800,6 +800,11 @@
     X(HostKindRow, "Programa", "Program") \
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
+    X(OverhangTitle, "Voladizos sin soporte", "Overhangs without support") \
+    X(OverhangQuestion, "Esta pieza tiene voladizos sin soporte: ¿activar soportes?", "This part has overhangs without support: turn supports on?") \
+    X(OverhangHint, "Sin soporte, lo que cuelga se imprime en el aire y suele caerse o deformarse.", "Without support, what hangs is printed in the air and usually falls or warps.") \
+    X(OverhangEnable, "Activar soportes y laminar", "Turn supports on and slice") \
+    X(OverhangWithout, "Laminar sin soporte", "Slice without support") \
     X(SupportsForPainting, "Se activaron los soportes, solo donde pintaste «forzar».", "Supports are on, only where you painted «enforce».") \
     X(LibraryMenu, "Biblioteca de modelos…", "Model library…") \
     X(LibraryButton, "Biblioteca", "Library") \

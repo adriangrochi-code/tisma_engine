@@ -397,6 +397,20 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       set_tests_properties(ui_paint_support_${case} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
                            ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
+    # Overhangs with the supports off: the Slice button asks first (the
+    # owner, 2026-11-16).
+    foreach(case prompt:tee without:tee cube:cube_ascii)
+      string(REPLACE ":" ";" parts ${case})
+      list(GET parts 0 name)
+      list(GET parts 1 model)
+      add_test(NAME ui_overhang_${name}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/${model}.stl --lang es --size 1200x760
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/overhang_${name}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_overhang_${name}.png)
+      set_tests_properties(ui_overhang_${name} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
+                           ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     # Each kind of network program from end to end against a local fake:
     # test, send and print, state (the tester's report, 2026-11-16).
     foreach(kind octoprint astrobox moonraker prusalink duet repetier)

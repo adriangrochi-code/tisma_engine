@@ -14533,3 +14533,18 @@ para el LBM D3Q19.
   estela. AE1 a AE4 siguen pasando (8 min 36 s). `[aero]` pasa.
 - **Tiempo:** el Benchy rápido sin verificación de resolución, unos 4 min 30 s en este contenedor.
 - **Lo que sigue:** la interfaz arregla que las líneas no se vean en placas viejas.
+
+## 2026-11-16 — interfaz: aviso de voladizos sin soporte (el dueño: «no tener soporte siempre es muy grave»)
+
+- **Hecho:** con los soportes apagados y más de 4 mm² de caras que cuelgan, «Laminar», Más › Laminar y Ctrl+R
+  preguntan primero «Esta pieza tiene voladizos sin soporte: ¿activar soportes?». Las respuestas son «Activar
+  soportes y laminar» (los prende en automático) o «Laminar sin soporte» (no vuelve a preguntar por el mismo modelo).
+  Cuentan como voladizo las caras más inclinadas que el ángulo del soporte (45° si es automático) y fuera de la
+  cama. Es diseño propio, todavía sin ficha. El guion suma `press-slice`, que lamina como el botón.
+- **Pruebas:** `ui_overhang_prompt` (activa y lamina con soporte), `ui_overhang_without` (lamina sin soporte y no
+  vuelve a preguntar) y `ui_overhang_cube` (sin voladizos no pregunta).
+- **Aerodinámica, Benchy, aire +X, Rápida (QA):** en la interfaz, bajo Xvfb, terminó en 220 s, contra 104 s del
+  mismo caso por la prueba del motor. La interfaz hace además la verificación de resolución (una corrida más
+  gruesa) y, en modo captura, dibuja sin parar con llvmpipe, que se lleva cerca de un núcleo de 4. No queda
+  esperando: el 0 % es el tiempo de armar la grilla, que no informa avance. El guion de QA se cortaba por el tope de
+  6000 cuadros de la captura, no porque la simulación se colgara.
