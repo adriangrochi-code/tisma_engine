@@ -1,0 +1,14 @@
+# Release gate G13 (docs/spec/RELEASE_GATE.md): Structural on the part, held
+# and pushed where the view's middle meets it, gives a result whose map has a
+# value on every face.
+menu mode_engineering
+expect-control tab_structural
+menu tab_structural
+expect-control structural_tool_fixed_zone
+menu structural_tool_fixed_zone
+click-model
+menu structural_tool_force_point
+click-model
+key escape
+menu structural_analyze
+expect-structural-map

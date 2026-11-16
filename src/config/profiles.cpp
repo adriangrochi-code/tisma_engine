@@ -201,6 +201,7 @@ std::string profile_settings_json(ProfileKind kind, const Settings& settings) {
 Settings with_profile(const Settings& settings, ProfileKind kind, const Settings& from) {
     ordered_json out = settings_object(settings);
     const ordered_json source = settings_object(from);
+    std::vector<std::pair<std::string, std::string>> gone;
     for (auto& [group, keys] : out.items()) {
         if (!keys.is_object())
             continue;
@@ -215,9 +216,25 @@ Settings with_profile(const Settings& settings, ProfileKind kind, const Settings
                         variables[name] = v;
                 value = std::move(variables);
             } else if (setting_kind(group, key) == kind) {
-                value = source.at(group).at(key);
+                // A key the source writes only when given (machine.macros)
+                // goes when the source leaves it out.
+                if (source.contains(group) && source.at(group).contains(key))
+                    value = source.at(group).at(key);
+                else
+                    gone.emplace_back(group, key);
             }
         }
+    }
+    for (const auto& [group, key] : gone)
+        out.at(group).erase(key);
+    // And one the settings leave out but the source gives: the pack printer's
+    // own start G-code in machine.macros was lost here (the release gate's G14).
+    for (const auto& [group, keys] : source.items()) {
+        if (!keys.is_object())
+            continue;
+        for (const auto& [key, value] : keys.items())
+            if (!(out.contains(group) && out.at(group).contains(key)) && setting_kind(group, key) == kind)
+                out[group][key] = value;
     }
     Settings result = parse_settings(out.dump());
     result.ignored_groups = settings.ignored_groups;

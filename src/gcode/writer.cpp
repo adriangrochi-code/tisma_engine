@@ -2857,15 +2857,18 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     // names the engine cannot.
     if (s.machine_macros.dialect == "cura")
         c.braces_only = true;
-    for (const auto& [name, values] : s.machine_macros.values) {
-        if (c.variables.contains(name) && !c.unfilled.contains(name))
-            continue;
-        std::vector<TemplateValue> items;
-        for (const std::string& v : values)
-            items.push_back(TemplateValue::parse(v));
-        c.variables[name] = items.size() == 1 ? items.front() : TemplateValue::of(std::move(items));
-        c.unfilled.erase(name);
-    }
+    // The filament's values in the program its profile comes from
+    // (profile_pack_format.md, source_values) fill names the same way.
+    for (const auto* given : {&s.machine_macros.values, &s.source_values})
+        for (const auto& [name, values] : *given) {
+            if (c.variables.contains(name) && !c.unfilled.contains(name))
+                continue;
+            std::vector<TemplateValue> items;
+            for (const std::string& v : values)
+                items.push_back(TemplateValue::parse(v));
+            c.variables[name] = items.size() == 1 ? items.front() : TemplateValue::of(std::move(items));
+            c.unfilled.erase(name);
+        }
     return c;
 }
 

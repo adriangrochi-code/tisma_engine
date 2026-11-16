@@ -387,6 +387,10 @@ struct Settings {
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;
+    // extrusion.source_values: the filament's values in the program its pack
+    // profile comes from, by that program's names (profile_pack_format.md,
+    // source_values); the machine G-code's variables under machine.variables.
+    std::map<std::string, std::vector<std::string>> source_values;
     // Own parameters for the G-code templates (gcode_templates.md; presets.md,
     // rules 21 and 22), flat name: value (a number, a text or true/false):
     // machine.custom_parameters, extrusion.custom_parameters (the material's)

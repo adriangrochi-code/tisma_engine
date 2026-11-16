@@ -140,3 +140,40 @@ tisma_gate_test(NAME gate_g4_auto MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g
 tisma_gate_test(NAME gate_g4_block_part MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g4_block_part
                 ARGS --paint support,block,115,128,20,4
                 PROPERTIES WORKING_DIRECTORY ${TISMA_GATE_OUT} FIXTURES_REQUIRED gate_g4_auto)
+
+# G13, engineering: Structural and Aerodynamics on the cube and the Benchy;
+# each gives a result with a value on every face.
+foreach(kind structural aero)
+  tisma_gate_test(NAME gate_g13_${kind}_cube MODEL ${TISMA_GATE_DATA}/cube20.stl SCRIPT gate_g13_${kind} LANG es
+                  PROPERTIES RESOURCE_LOCK all_cores TIMEOUT 1800)
+  tisma_gate_test(NAME gate_g13_${kind}_benchy MODEL ${TISMA_GATE_BENCHY} SCRIPT gate_g13_${kind} LANG es
+                  PROPERTIES FIXTURES_REQUIRED gate_benchy RESOURCE_LOCK all_cores TIMEOUT 1800)
+endforeach()
+
+# G14, profiles: five printers of the published pack (Prusa, Bambu,
+# Creality, a Klipper Voron and a Marlin Anycubic), each picked as the
+# interface does it, slice to checked G-code headed by its start G-code. The
+# pack is downloaded into the build folder, only these vendors; each test has
+# a home of its own for the profiles it adds.
+add_test(NAME gate_g14_pack_download
+  COMMAND ${CMAKE_COMMAND} -DENGINE=$<TARGET_FILE:tisma-engine> -DDATA=${TISMA_GATE_OUT}/real_pack
+          -DVENDORS=PrusaResearch,Orca_BBL,Creality,Voron,Anycubic -P ${CMAKE_CURRENT_SOURCE_DIR}/gate_pack.cmake)
+set_tests_properties(gate_g14_pack_download PROPERTIES LABELS gate FIXTURES_SETUP gate_real_pack TIMEOUT 600
+                     FAIL_REGULAR_EXPRESSION "error: ")
+foreach(case prusa:PrusaResearch/models/Original_Prusa_MK4.json
+             bambu:Orca_BBL/models/Bambu_Lab_X1.json
+             creality:Creality/models/Creality_Ender-3_V2.json
+             klipper:Voron/models/VORON2_250mm.json
+             marlin:Anycubic/models/Anycubic_i3_Mega.json)
+  string(REPLACE ":" ";" parts ${case})
+  list(GET parts 0 name)
+  list(GET parts 1 model)
+  set(home ${TISMA_GATE_OUT}/home_g14_${name})
+  file(REMOVE_RECURSE ${home})
+  file(MAKE_DIRECTORY ${home})
+  tisma_gate_test(NAME gate_g14_${name} MODEL ${TISMA_GATE_DATA}/cube20.stl SCRIPT gate_g14_printer
+                  ARGS --pack ${TISMA_GATE_OUT}/real_pack/pack --pick-pack-printer "vendors/${model}#0.4"
+                  PROPERTIES FIXTURES_REQUIRED gate_real_pack)
+  set_tests_properties(gate_g14_${name} PROPERTIES
+                       ENVIRONMENT "HOME=${home};XDG_CONFIG_HOME=;APPDATA=${home};ASAN_OPTIONS=detect_leaks=0")
+endforeach()

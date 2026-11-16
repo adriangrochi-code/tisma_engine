@@ -67,6 +67,7 @@ const std::set<std::string>& known_keys() {
         // The firmwares a printer may run (PF15), written only when given.
         k.insert("machine.flavor_choices");
         k.insert("machine.macros");
+        k.insert("extrusion.source_values");
         return k;
     }();
     return keys;
@@ -416,15 +417,20 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     // names (profile_pack_format.md, source_values): the variables of a
     // machine's own G-code that the engine has no setting for
     // (temperature_vitrification...), as machine.variables, under any the
-    // profile already sets.
+    // profile already sets. Those a filament profile does not keep there (a
+    // name without «temperature», such as activate_air_filtration) go to
+    // extrusion.source_values: dropped with the profile before, so the Bambu
+    // Lab X1's filament G-code could not run (the release gate's G14).
     if (kind == "filament" && j.contains("source_values") && j.at("source_values").is_object() &&
         j.at("source_values").contains("values") && j.at("source_values").at("values").is_object()) {
         json& variables = profile["settings"]["machine"]["variables"];
         if (!variables.is_object())
             variables = json::object();
+        json source = json::object();
         for (const auto& [name, value] : j.at("source_values").at("values").items()) {
             if (variables.contains(name) || name.empty() || name.find_first_of("[]\n") != std::string::npos)
                 continue;
+            json& place = setting_kind("machine", "variables", name) == ProfileKind::Filament ? variables : source;
             if (value.is_array()) {
                 json list = json::array();
                 for (const json& item : value)
@@ -433,13 +439,15 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                     else if (item.is_boolean())
                         list.push_back(item.get<bool>() ? "true" : "false");
                 if (!list.empty())
-                    variables[name] = list;
+                    place[name] = list;
             } else if (value.is_number() || value.is_string()) {
-                variables[name] = value;
+                place[name] = value;
             } else if (value.is_boolean()) {
-                variables[name] = value.get<bool>() ? "true" : "false";
+                place[name] = value.get<bool>() ? "true" : "false";
             }
         }
+        if (!source.empty())
+            profile["settings"]["extrusion"]["source_values"] = std::move(source);
         if (variables.empty())
             profile["settings"]["machine"].erase("variables");
         if (profile["settings"]["machine"].empty())

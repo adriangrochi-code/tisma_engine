@@ -14707,9 +14707,38 @@ para el LBM D3Q19.
   boquilla (M104 o M109 con S) es un problema; después de una macro de la impresora (START_PRINT), una nota. Fuera de la
   cama ya fallaba cuando hay cama. Sin impresora (sin cama) no hay cama contra qué medir: lo dice la CLI.
 - **CLI:** sin cama en los ajustes avisa que no hay impresora: la pieza queda alrededor de X 0, Y 0, no se mide contra
-  una cama y solo calienta lo que den los ajustes (usar `--printer`).
+  una cama y solo calienta lo que den los ajustes (usar `--config` con los ajustes de una impresora).
 - **Respuestas a QA:** el «Overhang perimeter» sobre el soporte lleva más filamento por mm a propósito
   (`supports_skirt.md`, regla 4: la primera capa sobre el soporte es puente, alto una capa más la separación, con el
   cordón redondo). La puerta G3 del Benchy en orgánico y ajustado marca un labio de la popa de 1,4 mm² que sobresale
   0,2 mm en una capa, menos de medio cordón: pedido a la interfaz que la puerta use el umbral de la regla 1.
 - **Pendiente:** G13 (Ingeniería) y G14 (Perfiles) de la puerta, con verbos de guion de la interfaz.
+
+## 2026-11-16 — G4 arreglado; G13 y G14 de la puerta; el G-code de inicio de las impresoras del paquete
+
+- **G4 (QA, GRAVE), arreglado:** el soporte de más alrededor del círculo bloqueado era el lazo de la vaina
+  (`support.sheath`) alrededor del agujero que deja el bloqueo (unos 28 mm por capa). Ahora la vaina rodea el borde de
+  cada zona y solo los agujeros por donde pasa la pieza; las líneas siguen a un cordón de todo borde. `gate_g4_*` y
+  `gate_g3_*` pasan; el barrido de soporte también (un primer intento, llenar los agujeros y rodear el contorno, ponía
+  un lazo de base alrededor de la interfaz de la isla ajustada: descartado).
+- **G13 (Ingeniería):** `gate_g13_structural_{cube,benchy}` y `gate_g13_aero_{cube,benchy}` con los verbos
+  `expect-structural-map` y `expect-aero-faces` de la interfaz; aerodinámica simulada en una grilla de 16 celdas para
+  que sea corta (48 pasaban los 900 s). El cubo pasa: estructural 76 s, aerodinámica 7 min con la CI al lado; tiempo
+  límite 1800 s. La captura cortaba a los 6000 cuadros mientras corría la
+  aerodinámica: el contador ahora espera también a ese análisis, como al estructural.
+- **G14 (Perfiles):** el paquete publicado se baja en la prueba (`tests/gate_pack.cmake`, solo PrusaResearch, Orca_BBL,
+  Creality, Voron y Anycubic, unos 7 s) a la carpeta de compilación; nada entra al repositorio. Cinco impresoras
+  (Original Prusa MK4, Bambu Lab X1, Ender-3 V2, VORON2 250, Anycubic i3 Mega, boquilla 0,4) eligen como la interfaz,
+  laminan el cubo a G-code verificado y el verbo nuevo `expect-start-gcode` comprueba que cada línea del G-code de
+  inicio de la impresora (hasta su primera variable, fuera de bloques condicionales) encabeza el archivo, en orden.
+- **Lo que encontró G14, arreglado:**
+  - el G-code de inicio de la máquina (`machine.macros`) se perdía al elegir la impresora: `with_profile` solo copiaba
+    las claves que ya tenían los ajustes, y `machine.macros` solo se escribe cuando hay. La MK4 y la Ender-3 V2
+    laminaban sin su inicio (sin G28). Ahora toma también las claves que trae el perfil y quita las que no trae;
+  - el filamento de la Bambu Lab X1 no laminaba («unknown variable 'activate_air_filtration'»): los `source_values` del
+    paquete con nombres que no son del filamento se perdían al elegirlo y al guardarlo. Van a un ajuste nuevo del
+    filamento, `extrusion.source_values`, que el escritor suma a las variables del G-code como los `values` de la
+    máquina (profile_pack_format.md, `source_values`).
+- **Pendiente:** medir el estructural y la aerodinámica del Benchy solos (con la CI y la compilación en paralelo el
+  estructural pasó los 900 s); ajustar el tiempo límite o la calidad según lo medido.
+

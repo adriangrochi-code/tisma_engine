@@ -3000,7 +3000,7 @@ Settings parse_checked(std::string_view text) {
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
                 "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section", "feedstock",
-                "transmission_distance"},
+                "transmission_distance", "source_values"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "feedstock") { // pellets.md, rule 1
             s.material_feedstock = choice<Feedstock>(g, n, k, {{"filament", Feedstock::Filament}, {"pellet", Feedstock::Pellet}});
@@ -3031,6 +3031,32 @@ Settings parse_checked(std::string_view text) {
         }
         if (n == "custom_parameters") {
             s.filament_parameters = flat_parameters(g.at(n), k);
+            return;
+        }
+        if (n == "source_values") {
+            const json& v = g.at(n);
+            if (!v.is_object())
+                fail(k, "must be an object of name: value or [values]");
+            const auto as_text = [&](const json& x, const std::string& key) {
+                if (x.is_string())
+                    return x.get<std::string>();
+                if (x.is_number() || x.is_boolean())
+                    return x.dump();
+                fail(key, "values must be strings, numbers or booleans");
+            };
+            for (const auto& [name, value] : v.items()) {
+                if (name.empty() || std::any_of(name.begin(), name.end(), [](char c) {
+                        return static_cast<unsigned char>(c) < 0x20 || c == '[' || c == ']';
+                    }))
+                    fail(k + "." + name, "names must be text without line breaks or brackets");
+                std::vector<std::string> list;
+                if (value.is_array())
+                    for (const json& item : value)
+                        list.push_back(as_text(item, k + "." + name));
+                else
+                    list.push_back(as_text(value, k + "." + name));
+                s.source_values[name] = std::move(list);
+            }
             return;
         }
         if (n == "type") {
@@ -4511,6 +4537,12 @@ std::string settings_json(const Settings& s) {
     };
     if (!s.machine_macros.empty())
         root["machine"]["macros"] = machine_macros_json(s.machine_macros);
+    if (!s.source_values.empty()) {
+        ordered_json values = ordered_json::object();
+        for (const auto& [name, items] : s.source_values)
+            values[name] = items.size() == 1 ? ordered_json(items.front()) : ordered_json(items);
+        root["extrusion"]["source_values"] = std::move(values);
+    }
     if (!s.flavor_choices.empty()) {
         ordered_json choices = ordered_json::array();
         for (const GcodeFlavor f : s.flavor_choices)

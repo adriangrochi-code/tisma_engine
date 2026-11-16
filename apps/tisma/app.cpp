@@ -27686,6 +27686,64 @@ bool App::script_check(const ScriptStep& step, int f) {
         if (p.layers.empty() || p.filament <= 0.0 || p.estimated_seconds <= 0.0)
             return fail_step("no layers, filament or time");
         next();
+    } else if (step.verb == "expect-start-gcode") { // the release gate's G14: the printer's start G-code heads the file
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        // Each line of the start G-code outside conditional blocks, up to its
+        // first placeholder, starts a line of the file before the first layer,
+        // in order.
+        const std::string& g = result_->gcode;
+        const std::size_t head_end = std::min(g.find(";LAYER_CHANGE"), g.size());
+        std::vector<std::string_view> head;
+        for (std::size_t at = 0; at < head_end;) {
+            const std::size_t end = std::min(g.find('\n', at), head_end);
+            head.push_back(std::string_view(g).substr(at, end - at));
+            at = end + 1;
+        }
+        auto trim = [](std::string_view v) {
+            while (!v.empty() && std::isspace(static_cast<unsigned char>(v.front())))
+                v.remove_prefix(1);
+            while (!v.empty() && std::isspace(static_cast<unsigned char>(v.back())))
+                v.remove_suffix(1);
+            return v;
+        };
+        std::size_t lines = 0, found = 0, from = 0, depth = 0;
+        std::string missing;
+        // The machine's own start from the pack takes the simple one's place
+        // (gcode_macros.md, rule 10 bis), as the writer does.
+        const auto own = settings_.machine_macros.templates.find("start");
+        const std::string& start =
+            own != settings_.machine_macros.templates.end() ? own->second : settings_.start_gcode;
+        for (std::size_t at = 0; at < start.size();) {
+            const std::size_t end = std::min(start.find('\n', at), start.size());
+            std::string_view line = trim(std::string_view(start).substr(at, end - at));
+            at = end + 1;
+            if (line.starts_with("{if") || line.starts_with("{ if"))
+                ++depth;
+            if (line.find("endif") != std::string_view::npos && depth > 0) {
+                --depth;
+                continue;
+            }
+            if (depth > 0 || line.empty() || line.front() == ';')
+                continue;
+            line = trim(line.substr(0, std::min(line.find_first_of("{[;"), line.size())));
+            if (line.empty())
+                continue;
+            ++lines;
+            std::size_t i = from;
+            while (i < head.size() && !trim(head[i]).starts_with(line))
+                ++i;
+            if (i < head.size())
+                ++found, from = i + 1;
+            else if (missing.empty())
+                missing = std::string(line);
+        }
+        std::printf("ui-script: expect-start-gcode: %zu of %zu lines of the start G-code head the file\n", found, lines);
+        if (lines == 0)
+            return fail_step("the printer has no start G-code");
+        if (found != lines)
+            return fail_step("the start G-code line \"" + missing + "\" is not in the file");
+        next();
     } else if (step.verb == "expect-part-size") { // X Y Z: the part's extrusions span this, within 0.1 mm
         if (!result_ || !result_->ok)
             return fail_step("nothing sliced");
@@ -29604,7 +29662,8 @@ void App::frame() {
         // An analysis, a slice or a print on the printer is waited for by its
         // own step (and by the test's timeout), not by the frame count: under
         // the sanitizers or a loaded machine they take far more frames.
-        if (!structural_job_.running() && !slice_job_.running() && !(options_.device_print && !device_print_done_))
+        if (!structural_job_.running() && !aero_job_.running() && !slice_job_.running() &&
+            !(options_.device_print && !device_print_done_))
             ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
         const bool slice_pending =

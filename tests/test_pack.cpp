@@ -2,6 +2,7 @@
 // small pack of invented data that follows the format.
 #include "catalog/pack.hpp"
 #include "cli/cli.hpp"
+#include "config/profiles.hpp"
 #include "config/settings.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -621,9 +622,19 @@ TEST_CASE("pack: a filament's values in the program it comes from fill the machi
     const auto& v = pla.profile.settings.variables;
     REQUIRE(v.contains("temperature_vitrification"));
     CHECK(v.at("temperature_vitrification") == std::vector<std::string>{"55"});
-    CHECK(v.at("required_nozzle_HRC") == std::vector<std::string>{"3"});
     CHECK(v.at("temperature") == std::vector<std::string>{"215"}); // the profile's own wins
-    CHECK(v.at("hold") == std::vector<std::string>{"true"});
+    // Names a filament profile does not keep in machine.variables are its
+    // extrusion.source_values, kept when the filament is chosen and saved
+    // (the Bambu Lab X1's activate_air_filtration, release gate G14).
+    const auto& sv = pla.profile.settings.source_values;
+    CHECK_FALSE(v.contains("required_nozzle_HRC"));
+    CHECK(sv.at("required_nozzle_HRC") == std::vector<std::string>{"3"});
+    CHECK(sv.at("hold") == std::vector<std::string>{"true"});
+    const Settings chosen = with_profile(Settings{}, ProfileKind::Filament, pla.profile.settings);
+    CHECK(chosen.source_values == sv);
+    const Settings saved = parse_profile(profile_file_json(pla.profile)).settings;
+    CHECK(saved.source_values == sv);
+    CHECK(with_profile(chosen, ProfileKind::Filament, Settings{}).source_values.empty());
 }
 
 TEST_CASE("pack: the translation table's archive is named, planned and unpacked under translation/ (project_import.md, "
