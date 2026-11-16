@@ -217,6 +217,15 @@ se copian íconos ni imágenes de otro programa). Vale igual en Impresión 3D, e
 
 Pruebas: UI17 (navegación) y UI18 (cubo de vistas).
 
+### Aviso de voladizos sin soporte
+
+(16-11-2026, pedido del dueño: «no tener soporte siempre es muy grave»; diseño de la interfaz.) Con los soportes
+apagados, si una pieza tiene voladizos (caras más inclinadas que el ángulo de soporte, 45° en automático, fuera de la
+cama) que suman más de 4 mm², Laminar (botón, menú y Ctrl+R) pregunta «Esta pieza tiene voladizos sin soporte:
+¿activar soportes?» con «Activar soportes y laminar» y «Laminar sin soporte». La segunda respuesta vale para ese
+modelo hasta cerrarlo. Los soportes nunca se apagan solos: al abrir un 3MF que los trae apagados, al cambiar de perfil
+o de impresora, o al deshacer, la interfaz lo dice en una línea. Prueba UI-OV1.
+
 ### Vista previa (después de laminar)
 
 Captura: `30_preview.png`.
