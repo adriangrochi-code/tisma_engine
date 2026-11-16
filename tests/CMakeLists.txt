@@ -788,6 +788,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     string(STRIP "${TISMA_LIBRARY_TEST_KEY}" TISMA_LIBRARY_TEST_KEY)
     set_tests_properties(ui_script_library PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_LIBRARY_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data/library;TISMA_LIBRARY_PROJECT_KEY=${TISMA_LIBRARY_TEST_KEY}")
+    add_test(NAME ui_script_library_open
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/library_open.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_library_open.png)
+    set_tests_properties(ui_script_library_open PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_LIBRARY_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data/library;TISMA_LIBRARY_PROJECT_KEY=${TISMA_LIBRARY_TEST_KEY};TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_library_open_secrets.txt")
     add_test(NAME ui_script_library_no_key
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760

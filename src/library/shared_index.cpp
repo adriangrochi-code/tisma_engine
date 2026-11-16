@@ -238,6 +238,11 @@ SharedIndex read_index(const std::string& text, const std::vector<std::uint8_t>&
                     if (file.is_object())
                         model.files.push_back({str(file, "path"), str(file, "role"), lower(str(file, "sha256")),
                                                number(file, "size", 0)});
+            if (const auto sw = m.find("swarm"); sw != m.end() && sw->is_object())
+                if (const auto roots = sw->find("piece_roots"); roots != sw->end() && roots->is_object())
+                    for (const auto& [file, root] : roots->items())
+                        if (root.is_string())
+                            model.piece_roots[lower(file)] = lower(root.get<std::string>());
             index.models.push_back(std::move(model));
         }
     return index;

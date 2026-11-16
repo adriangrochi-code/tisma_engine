@@ -71,6 +71,7 @@
 #include "fea/verdict.hpp"
 #include "ui/camera.hpp"
 #include "device/camera_frame.hpp"
+#include "library/shared_fetch.hpp"
 #include "library/shared_index.hpp"
 #include "net/ed25519.hpp"
 #include "net/http.hpp"
@@ -739,6 +740,17 @@ private:
     std::map<std::string, ImTextureID> library_thumbs_;
     std::map<std::string, std::future<std::string>> library_thumb_jobs_;
     ImTextureID library_thumb(const std::string& name);
+    // «Abrir en la placa» (rule 8 octies): the project brought from the
+    // seeder, checked, then opened.
+    struct LibraryFetch {
+        std::atomic<double> progress{0.0};
+        std::atomic<bool> cancel{false};
+    };
+    std::shared_ptr<LibraryFetch> library_fetch_state_;
+    std::future<std::pair<library::FetchResult, std::filesystem::path>> library_fetch_;
+    std::string library_fetch_message_;
+    bool library_close_ = false; // the model opened: the window closes
+    void library_open_model(const library::SharedModel& model);
     void cloud_start(CloudReply::Kind kind);
     void cloud_finished(CloudReply reply);
     void report_window();
@@ -21740,6 +21752,30 @@ ImTextureID App::library_thumb(const std::string& name) {
     return 0;
 }
 
+// Brings the model's project from the seeder into a folder of the program's
+// own (a copy kept by its SHA-256: a second open needs no download), then
+// opens it on the plate (p2p_library.md, rule 8 octies).
+void App::library_open_model(const library::SharedModel& model) {
+    const library::SharedFile* project = model.project();
+    if (!project || library_fetch_.valid())
+        return;
+    library_fetch_message_.clear();
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / "tisma-library";
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path out = dir / (project->sha256 + ".3mf");
+    library_fetch_state_ = std::make_shared<LibraryFetch>();
+    library_fetch_ = std::async(std::launch::async, [server = library_server_, token = cloud_token_, model, file = *project, out,
+                                                     state = library_fetch_state_] {
+        std::error_code e;
+        if (std::filesystem::exists(out, e))
+            return std::pair<library::FetchResult, std::filesystem::path>{{true, "", ""}, out};
+        const library::FetchResult r = library::fetch_shared_file(
+            server, token, model, file, out, [state](double p) { state->progress = p; }, &state->cancel);
+        return std::pair<library::FetchResult, std::filesystem::path>{r, out};
+    });
+}
+
 // The library's window (Más › Tisma › Biblioteca): the search over the
 // signed index, without accents, and each model's card.
 void App::library_window() {
@@ -21759,6 +21795,27 @@ void App::library_window() {
     }
     if (library_job_.valid())
         frame_pending_ = true;
+    if (library_fetch_.valid()) {
+        frame_pending_ = true;
+        if (library_fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            const auto [r, path] = library_fetch_.get();
+            library_fetch_state_.reset();
+            if (r.ok) {
+                log_line("library: opened " + utf8(path.filename()));
+                library_close_ = true; // the window closes, the plate shows it
+                open_path(path);
+            } else {
+                log_line("library: " + r.error);
+                const T why = r.code == "login"           ? T::LibraryLogin
+                              : r.code == "not_available" ? T::LibraryNotAvailable
+                              : r.code == "blocked"       ? T::LibraryBlocked
+                              : r.code == "busy"          ? T::LibraryBusy
+                              : r.code == "bad"           ? T::LibraryBadFile
+                                                          : T::LibraryFetchFailed;
+                library_fetch_message_ = why == T::LibraryFetchFailed ? format(tr(why), r.error.c_str()) : std::string(tr(why));
+            }
+        }
+    }
     if (library_open_) {
         ImGui::OpenPopup("###library");
         library_open_ = false;
@@ -21850,13 +21907,27 @@ void App::library_window() {
             for (const library::SharedFile& f : m.files)
                 loc::Text("%s  (%s, %s)", f.path.c_str(), f.role.c_str(), bytes_text(std::uint64_t(std::max<long long>(f.size, 0))).c_str());
             ImGui::Spacing();
-            // The files come from other people's computers (rule 2): not yet
-            // in this program.
-            ImGui::BeginDisabled();
-            ImGui::Button(tr(T::LibraryOpenOnPlate));
-            ImGui::EndDisabled();
-            note_rect("library_open");
-            loc::TextDisabled("%s", tr(T::LibraryDownloadSoon));
+            // The project, from the seeder with the account (rule 8 octies).
+            if (cloud_token_.empty()) {
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::LibraryLogin));
+                if (ImGui::Button(tr(T::CloudLogIn)))
+                    cloud_open_ = true, ImGui::CloseCurrentPopup();
+                note_rect("library_login");
+            } else if (library_fetch_.valid()) {
+                ImGui::ProgressBar(library_fetch_state_ ? float(library_fetch_state_->progress.load()) : 0.0f, ImVec2(-FLT_MIN, 0.0f),
+                                   tr(T::LibraryDownloading));
+                note_rect("library_progress");
+            } else {
+                ImGui::BeginDisabled(m.project() == nullptr);
+                if (ImGui::Button(tr(T::LibraryOpenOnPlate)))
+                    library_open_model(m);
+                ImGui::EndDisabled();
+                note_rect("library_open");
+            }
+            if (!library_fetch_message_.empty()) {
+                loc::TextColored(rgb(0xE5484D), "%s", library_fetch_message_.c_str());
+                note_rect("library_fetch_message");
+            }
         } else {
             loc::TextDisabled("%s", tr(T::LibraryPick));
         }
@@ -21865,8 +21936,8 @@ void App::library_window() {
     if (ImGui::Button(tr(T::LibraryRefresh)))
         library_refresh();
     ImGui::SameLine();
-    if (ImGui::Button(tr(T::Close)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
-        ImGui::CloseCurrentPopup();
+    if (ImGui::Button(tr(T::Close)) || ImGui::IsKeyPressed(ImGuiKey_Escape) || library_close_)
+        ImGui::CloseCurrentPopup(), library_close_ = false;
     note_rect("library_close");
     ImGui::PopTextWrapPos();
     ImGui::EndPopup();

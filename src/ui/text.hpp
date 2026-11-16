@@ -813,7 +813,13 @@
     X(LibraryBy, "De %s", "By %s") \
     X(LibraryFiles, "Archivos", "Files") \
     X(LibraryOpenOnPlate, "Abrir en la placa", "Open on the plate") \
-    X(LibraryDownloadSoon, "La descarga de los archivos llega pronto a la computadora.", "Downloading the files comes to the computer soon.") \
+    X(LibraryLogin, "Entrá a Tisma Cloud para bajar", "Log in to Tisma Cloud to download") \
+    X(LibraryDownloading, "Bajando…", "Downloading…") \
+    X(LibraryNotAvailable, "Este modelo todavía no está disponible para bajar", "This model is not available for download yet") \
+    X(LibraryBlocked, "Este modelo fue retirado de la biblioteca", "This model was withdrawn from the library") \
+    X(LibraryBusy, "Bajaste muchos modelos en la última hora; probá más tarde", "You downloaded many models in the last hour; try later") \
+    X(LibraryBadFile, "Lo bajado no coincide con la biblioteca; no se abrió", "What came does not match the library; it was not opened") \
+    X(LibraryFetchFailed, "No se pudo bajar: %s", "Could not download: %s") \
     X(LibraryPick, "Elegí un modelo para ver su ficha.", "Pick a model to see its card.") \
     X(LibraryRefresh, "Actualizar", "Refresh") \
     X(CameraRow, "Cámara", "Camera") \

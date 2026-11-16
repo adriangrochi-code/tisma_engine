@@ -14498,3 +14498,19 @@ para el LBM D3Q19.
   - La vista dibuja todos los puntos de las líneas de corriente que da el motor, sin recortarlos a la caja de la
     pieza. Sembrarlas en todo el plano de entrada y seguirlas hasta la salida es del motor.
 - **Pruebas:** `aerodynamics.txt` comprueba la barra (`aero_cp_scale`).
+
+## 2026-11-16 — biblioteca: «Abrir en la placa» desde el sembrador (p2p_library.md, regla 8 octies)
+
+- **Hecho:**
+  - `src/library/shared_fetch.*` pide el ticket con la sesión de la cuenta y la lista de pedazos al sembrador
+    (`/v1/seed/<sha256>/pieces`), y la comprueba contra `piece_roots` del índice firmado. Después baja cada pedazo
+    (`/piece/<n>`) y lo compara con la lista, y compara el archivo entero con su SHA-256. Solo deja el archivo si
+    todo coincide. Los errores 401, 404, 403/451 y 429 tienen su código. El índice ya lee `swarm.piece_roots`.
+  - **Interfaz:** sin sesión, la ficha dice «Entrá a Tisma Cloud para bajar», con el botón Entrar. Con sesión,
+    «Abrir en la placa» baja con una barra de progreso, guarda una copia por SHA-256 (la segunda vez no baja), cierra
+    la ventana y abre el proyecto en la placa. Cada error tiene su línea («Este modelo todavía no está disponible para
+    bajar», «fue retirado», «probá más tarde», «no coincide»).
+- **Pruebas:** `library_open.txt` contra el servidor falso (que ahora sirve el ticket y los pedazos de
+  `tests/data/library/seed`): sin sesión pide entrar; el modelo que el sembrador no tiene lo avisa; el engranaje baja,
+  se comprueba y abre en la placa.
+- **Falta:** confirmar con el servidor el cuerpo del pedido de `relay-ticket` (hoy `sha256` y `model`).
