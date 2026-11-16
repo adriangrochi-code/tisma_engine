@@ -57,6 +57,7 @@ struct AppOptions {
     struct Stroke {
         std::string channel; // support, seam, fuzzy or color
         bool block = false;  // the mark: block, else enforce
+        bool erase = false;  // the mark taken off (support,erase,...)
         int color = 0;       // color: the filament or blend number (1 to 16) the faces print with
         float x = 0, y = 0, z = 0, radius = 1;
     };
@@ -96,6 +97,7 @@ struct AppOptions {
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel
     bool term_while_starting = false; // a SIGTERM to itself before the window opens, for its test (UI21)
+    std::string expect_color;       // with screenshot: "RRGGBB:N", at least N pixels of that colour in it
     std::string compare_view;       // with screenshot: compare the 3D view with this screenshot's (the other graphics')
     std::string device;             // connect at start: a serial port, or "sim" for the simulated printer
     bool device_print = false;      // with screenshot and device: print what is sliced and wait for it to finish

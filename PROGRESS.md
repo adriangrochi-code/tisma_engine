@@ -14444,6 +14444,77 @@ para el LBM D3Q19.
 - **Pruebas:** `library.txt`: dos modelos ofrecidos (quedan afuera el bloqueado y el que trae G-code), «TELEFONO»
   encuentra «Soporte de teléfono», y se abre la ficha. Pasa con las de la nube.
 
+## 2026-11-16 — interfaz: lo dibujado sobre la vista no se veía con Vulkan (error del dueño)
+
+- **Causa:** con Vulkan, la vista 3D es una imagen en la lista de fondo de ImGui, y se agregaba al final, encima de
+  lo que se dibuja sobre la vista en esa misma lista: la flecha del viento y las líneas de corriente de
+  Aerodinámica, el boceto, las medidas y las marcas de Estructural. Por eso no se veían en una GTX 1060 ni en una
+  Radeon Vega 8 (que usan Vulkan), y sí con OpenGL. No era un tema de líneas anchas: las líneas son triángulos de
+  ImGui.
+- **Arreglo:** la imagen va en el primer canal de la lista de fondo, debajo de todo lo demás.
+- **Pruebas:** `ui_aero_arrow_opengl` y `ui_aero_arrow_vulkan` cuentan el azul de la flecha en la captura con la
+  opción nueva `--expect-color RRGGBB:N` (1123 píxeles en las dos). Pasan las 48 de Vulkan, boceto, Estructural y
+  Aerodinámica. Las líneas de corriente usan el mismo camino que la flecha; no se probaron con una simulación (tarda
+  un minuto).
+
+## 2026-11-16 — biblioteca: botón en la barra, miniaturas WebP y sin clave (QA)
+
+- **Hecho:**
+  - **Botón «Biblioteca»** en la barra de arriba, junto a Abrir, con un ícono propio (`assets/icons/library.svg`).
+    En ventanas más angostas queda solo el ícono, y si no entra no se muestra, para que la ayuda siga en su lugar.
+    Más › Tisma también abre la biblioteca.
+  - **Miniaturas:** libwebp 1.5.0 (BSD-3-Clause, solo el decodificador; THIRD_PARTY.md, créditos y licencia en
+    `resources/licenses/`). `decode_image` lee WebP. Cada miniatura se pide a `/v1/library/thumbs/<nombre>.webp`
+    cuando su fila se ve, cuatro a la vez y hasta 64 KB, y se muestra en la lista y grande en la ficha.
+  - **Sin clave del proyecto** en la compilación, la biblioteca dice «No disponible en esta versión» sin preguntar
+    al servidor.
+  - **La compilación nightly** toma `TISMA_UPDATES_KEY` de la variable del repositorio, como la release.
+- **Pruebas:**
+  - `library.txt` abre la biblioteca con el botón y ve la miniatura de la ficha;
+  - `library_no_key.txt` comprueba el aviso sin clave;
+  - pasan las de la barra de arriba, la nube y los créditos, y `check_licenses`.
+
+## 2026-11-16 — interfaz: pintar «forzar soporte» con los soportes apagados (QA)
+
+- **Causa:** el motor necesita `support.enabled` (PAINTING.md). Al pintar «forzar» con los soportes apagados, que
+  es lo que viene por defecto, no salía nada. Las coordenadas de `--paint` son las de la cama, y el pintado sí llegaba
+  al motor.
+- **Arreglo:** pintar «forzar» con los soportes apagados los prende en «Solo pintados» (`support.automatic` en
+  false) y lo avisa. Si ya estaban prendidos, no cambia nada. Vale para el pincel y para `--paint`. Se suma
+  `--paint support,erase,…` para borrar.
+- **Pruebas:**
+  - `ui_paint_support_on`: forzado con los soportes apagados da soporte, y quedan prendidos solo pintados;
+  - `ui_paint_support_none_erased`: forzado y después borrado, sin soporte;
+  - `ui_paint_support_none_blocked`: bloqueado bajo los dos voladizos con los automáticos prendidos, sin soporte;
+  - la orden de QA con `--export` da 102 bloques `;TYPE:Support`.
+- **Sin revisar:** que el pintado se guarde en el 3MF (el proyecto ya lleva la pintura).
+
+## 2026-11-16 — interfaz: escala de presión de Aerodinámica (aerodynamics.md en spec/next, «Resultados»)
+
+- **Hecho:**
+  - La escala del Cp pasa a ser una barra con el borde de cada banda escrito debajo (−1,5 … 1) y el 0 marcado con
+    una línea. Las bandas negativas siguen en tonos fríos y las positivas en cálidos.
+  - Una cara sin valor (NaN) toma la banda del 0 en vez de la última, así ninguna queda fuera de la escala.
+  - La vista dibuja todos los puntos de las líneas de corriente que da el motor, sin recortarlos a la caja de la
+    pieza. Sembrarlas en todo el plano de entrada y seguirlas hasta la salida es del motor.
+- **Pruebas:** `aerodynamics.txt` comprueba la barra (`aero_cp_scale`).
+
+## 2026-11-16 — biblioteca: «Abrir en la placa» desde el sembrador (p2p_library.md, regla 8 octies)
+
+- **Hecho:**
+  - `src/library/shared_fetch.*` pide el ticket con la sesión de la cuenta y la lista de pedazos al sembrador
+    (`/v1/seed/<sha256>/pieces`), y la comprueba contra `piece_roots` del índice firmado. Después baja cada pedazo
+    (`/piece/<n>`) y lo compara con la lista, y compara el archivo entero con su SHA-256. Solo deja el archivo si
+    todo coincide. Los errores 401, 404, 403/451 y 429 tienen su código. El índice ya lee `swarm.piece_roots`.
+  - **Interfaz:** sin sesión, la ficha dice «Entrá a Tisma Cloud para bajar», con el botón Entrar. Con sesión,
+    «Abrir en la placa» baja con una barra de progreso, guarda una copia por SHA-256 (la segunda vez no baja), cierra
+    la ventana y abre el proyecto en la placa. Cada error tiene su línea («Este modelo todavía no está disponible para
+    bajar», «fue retirado», «probá más tarde», «no coincide»).
+- **Pruebas:** `library_open.txt` contra el servidor falso (que ahora sirve el ticket y los pedazos de
+  `tests/data/library/seed`): sin sesión pide entrar; el modelo que el sembrador no tiene lo avisa; el engranaje baja,
+  se comprueba y abre en la placa.
+- **Ticket:** `POST /v1/library/relay-ticket` con `{}` y la sesión (ficha d0e8604). Un 401 del sembrador pide un ticket nuevo una vez; un pedazo malo se pide otra vez una vez. No retoma una bajada cortada (las apps sí): el archivo es chico.
+
 ## 2026-11-16 — aerodinámica detrás de la pieza (AE8, pedido del dueño)
 
 - **Pedido:** «no se genera aerodinámica de atrás»: en el Benchy la popa quedaba sin simular (QA; ficha nueva en

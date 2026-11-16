@@ -47,7 +47,8 @@ TEST_CASE("shared library: the key, the block list and the index, signed and che
     REQUIRE(index.models.size() == 4);
     CHECK(index.models[0].author == "Ana");
     REQUIRE(index.models[0].project() != nullptr);
-    CHECK(index.models[0].project()->sha256 == "aa11");
+    CHECK(index.models[0].project()->sha256.size() == 64);
+    CHECK(index.models[0].piece_roots.count(index.models[0].project()->sha256) == 1);
     CHECK(index.models[3].has_gcode());
     CHECK_THROWS_AS(read_index(file("index.json"), raw(file("index.json.sig")), key, 8), SharedError);
     CHECK_THROWS_AS(read_index(file("index.json"), raw(file("blocklist.json.sig")), key), SharedError);

@@ -155,7 +155,19 @@ if(TISMA_BUILD_UI)
     URL_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
     DOWNLOAD_NO_EXTRACT TRUE
   )
-  FetchContent_MakeAvailable(glfw imgui nanosvg stb)
+  # libwebp 1.5.0 (BSD-3-Clause, with Google's patent grant): only its
+  # decoder, for the thumbnails of the library of models (p2p_library.md,
+  # rule 3 ter: WebP); its tools and the encoder are not built.
+  foreach(_webp_option ANIM_UTILS CWEBP DWEBP GIF2WEBP IMG2WEBP VWEBP WEBPINFO LIBWEBPMUX WEBPMUX EXTRAS WEBP_JS FUZZTEST)
+    set(WEBP_BUILD_${_webp_option} OFF CACHE BOOL "" FORCE)
+  endforeach()
+  FetchContent_Declare(
+    libwebp
+    URL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.5.0.tar.gz
+    URL_HASH SHA256=7d6fab70cf844bf6769077bd5d7a74893f8ffd4dfb42861745750c63c2a5c92c
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_MakeAvailable(glfw imgui nanosvg stb libwebp)
 endif()
 set(BUILD_SHARED_LIBS ${_tisma_shared})
 
@@ -422,7 +434,7 @@ FetchContent_MakeAvailable(mbedtls)
 add_library(tisma_bambu STATIC src/net/tls.cpp src/device/mqtt.cpp src/device/ftps.cpp src/device/bambu.cpp
   src/device/ssdp.cpp src/device/mdns.cpp
   # The shared library's signed files (p2p_library.md): Ed25519 with Mbed TLS's numbers.
-  src/net/ed25519.cpp src/library/shared_index.cpp)
+  src/net/ed25519.cpp src/library/shared_index.cpp src/library/shared_fetch.cpp)
 target_include_directories(tisma_bambu PUBLIC src)
 target_link_libraries(tisma_bambu PUBLIC tisma_core tisma_net PRIVATE mbedtls mbedx509 mbedcrypto nlohmann_json::nlohmann_json
   tisma_warnings Threads::Threads)
@@ -470,8 +482,8 @@ if(TISMA_BUILD_UI)
     src/ui/session_marks.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
-  target_include_directories(tisma_ui SYSTEM PRIVATE ${stb_SOURCE_DIR})
-  target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
+  target_include_directories(tisma_ui SYSTEM PRIVATE ${stb_SOURCE_DIR} ${libwebp_SOURCE_DIR}/src)
+  target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings webpdecoder)
   target_compile_definitions(tisma_ui PUBLIC TISMA_UPDATES_KEY="${TISMA_UPDATES_KEY}")
   if(WIN32)
     target_link_libraries(tisma_ui PRIVATE shell32) # ShellExecuteW (ui/links)

@@ -55,6 +55,9 @@ struct SharedModel {
     std::vector<std::string> tags;
     long long size = 0;
     std::vector<SharedFile> files;
+    // swarm.piece_roots: each file's SHA-256 to the SHA-256 of its pieces'
+    // hashes (rule 3 ter), what its pieces are checked against.
+    std::map<std::string, std::string> piece_roots;
     bool checked = false;
     // Rule 3 sexies: never G-code; a model that lists one is not offered.
     bool has_gcode() const;

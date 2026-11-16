@@ -42,6 +42,61 @@ public:
                 };
             };
             server_.Get("/v1/library/key", serve("key.json", "application/json"));
+            // The provisional download (rule 8 octies): a ticket for a
+            // session, then the seeder's pieces under seed/<sha256>/.
+            server_.Post("/v1/library/relay-ticket", [](const httplib::Request& req, httplib::Response& res) {
+                if (!authorized(req, res))
+                    return;
+                if (req.body != "{}") { // rule 8 octies: an empty object over HTTPS
+                    res.status = 400;
+                    return;
+                }
+                res.set_content(R"({"ticket": "K1", "expires": 4102444800, "relays": []})", "application/json");
+            });
+            const auto seeded = [folder](const std::string& sha, const std::string& name, std::string& out) {
+                std::ifstream in(folder + "/seed/" + sha + "/" + name, std::ios::binary);
+                if (!in)
+                    return false;
+                std::stringstream s;
+                s << in.rdbuf();
+                out = s.str();
+                return true;
+            };
+            server_.Get(R"(/v1/seed/([0-9a-f]{64})/pieces)", [seeded](const httplib::Request& req, httplib::Response& res) {
+                if (req.get_header_value("Authorization") != "Bearer K1") {
+                    res.status = 401;
+                    return;
+                }
+                std::string body;
+                if (!seeded(req.matches[1].str(), "pieces.json", body)) {
+                    res.status = 404;
+                    return;
+                }
+                res.set_content(body, "application/json");
+            });
+            server_.Get(R"(/v1/seed/([0-9a-f]{64})/piece/([0-9]+))", [seeded](const httplib::Request& req, httplib::Response& res) {
+                if (req.get_header_value("Authorization") != "Bearer K1") {
+                    res.status = 401;
+                    return;
+                }
+                std::string data;
+                const std::size_t n = std::stoul(req.matches[2].str()), piece = 1048576;
+                if (!seeded(req.matches[1].str(), "data", data) || n * piece >= data.size()) {
+                    res.status = 404;
+                    return;
+                }
+                res.set_content(data.substr(n * piece, piece), "application/octet-stream");
+            });
+            server_.Get(R"(/v1/library/thumbs/([A-Za-z0-9._-]+))", [folder](const httplib::Request& req, httplib::Response& res) {
+                std::ifstream in(folder + "/thumbs/" + req.matches[1].str(), std::ios::binary);
+                if (!in) {
+                    res.status = 404;
+                    return;
+                }
+                std::stringstream s;
+                s << in.rdbuf();
+                res.set_content(s.str(), "image/webp");
+            });
             for (const char* name : {"index.json", "blocklist.json"}) {
                 server_.Get(std::string("/v1/library/") + name, serve(name, "application/json"));
                 server_.Get(std::string("/v1/library/") + name + ".sig", serve(std::string(name) + ".sig", "application/octet-stream"));

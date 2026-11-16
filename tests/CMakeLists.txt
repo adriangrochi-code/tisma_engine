@@ -377,6 +377,26 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_supports_slice.png)
     set_tests_properties(ui_supports_slice PROPERTIES FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    # Painted supports (QA, 2026-11-16): forced with the supports off turns
+    # them on «only painted»; erased, none; blocked under every overhang with
+    # the automatic ones on, none. The T's overhangs are at z = 20, from x =
+    # 108 to 123 and 133 to 148 on the bed.
+    set(TISMA_PAINT_CASES on none_erased none_blocked)
+    set(TISMA_PAINT_on --paint support,enforce,115,128,20,4)
+    set(TISMA_PAINT_SCRIPT_on paint_support_on)
+    set(TISMA_PAINT_none_erased --paint support,enforce,115,128,20,4 --paint support,erase,115,128,20,6)
+    set(TISMA_PAINT_SCRIPT_none_erased paint_support_none)
+    set(TISMA_PAINT_none_blocked --paint support,block,115,128,20,14 --paint support,block,141,128,20,14)
+    set(TISMA_PAINT_SCRIPT_none_blocked paint_support_blocked)
+    foreach(case ${TISMA_PAINT_CASES})
+      add_test(NAME ui_paint_support_${case}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/tee.stl --lang en --size 1200x760 ${TISMA_PAINT_${case}}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${TISMA_PAINT_SCRIPT_${case}}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_support_${case}.png)
+      set_tests_properties(ui_paint_support_${case} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
+                           ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     # Each kind of network program from end to end against a local fake:
     # test, send and print, state (the tester's report, 2026-11-16).
     foreach(kind octoprint astrobox moonraker prusalink duet repetier)
@@ -388,6 +408,17 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       set_tests_properties(ui_host_e2e_${kind} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
                            PASS_REGULAR_EXPRESSION "fake host: started=1 name=." ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
                            TIMEOUT 300)
+    endforeach()
+    # The overlays over the view (the wind's arrow, the streamlines, the
+    # sketch) show with OpenGL and with Vulkan.
+    foreach(graphics opengl vulkan)
+      add_test(NAME ui_aero_arrow_${graphics}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --graphics ${graphics}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/aero_arrow.txt --expect-color 4C9BFF:400
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_aero_arrow_${graphics}.png)
+      set_tests_properties(ui_aero_arrow_${graphics} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
+                           ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
     # Closing with jobs under way: the process ends in under 3 s.
     add_test(NAME ui_quit_busy
@@ -770,6 +801,20 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     string(STRIP "${TISMA_LIBRARY_TEST_KEY}" TISMA_LIBRARY_TEST_KEY)
     set_tests_properties(ui_script_library PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_LIBRARY_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data/library;TISMA_LIBRARY_PROJECT_KEY=${TISMA_LIBRARY_TEST_KEY}")
+    add_test(NAME ui_script_library_open
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/library_open.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_library_open.png)
+    set_tests_properties(ui_script_library_open PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_LIBRARY_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data/library;TISMA_LIBRARY_PROJECT_KEY=${TISMA_LIBRARY_TEST_KEY};TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_library_open_secrets.txt")
+    add_test(NAME ui_script_library_no_key
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/library_no_key.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_library_no_key.png)
+    set_tests_properties(ui_script_library_no_key PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_LIBRARY_PROJECT_KEY=")
     add_test(NAME ui_script_cloud_default
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760

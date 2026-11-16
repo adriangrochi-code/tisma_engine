@@ -90,10 +90,13 @@ jobs:
           libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
       - name: Configure
         run: |
+          # The project's public key (a repository variable, not a secret):
+          # the library of models checks its index with it (p2p_library.md).
+          key="-DTISMA_UPDATES_KEY=${{ vars.TISMA_UPDATES_KEY }}"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "$key"
           else
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "$key"
           fi
       - name: Build
         run: cmake --build build --config Release --parallel

@@ -71,6 +71,7 @@
 #include "fea/verdict.hpp"
 #include "ui/camera.hpp"
 #include "device/camera_frame.hpp"
+#include "library/shared_fetch.hpp"
 #include "library/shared_index.hpp"
 #include "net/ed25519.hpp"
 #include "net/http.hpp"
@@ -205,7 +206,7 @@ constexpr const char* kIcons[] = {
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
-    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help", "account",
+    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help", "account", "library",
 };
 
 const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
@@ -733,6 +734,23 @@ private:
     std::string library_error_, library_query_;
     long long library_index_seen_ = -1, library_list_seen_ = -1; // the newest sequences taken (rule 3 ter)
     int library_pick_ = -1; // the model whose card is open, by its place in the index
+    // Each model's thumbnail (WebP, /v1/library/thumbs/…): asked for when its
+    // row shows, a few at a time; empty when it did not come.
+    std::string library_server_;
+    std::map<std::string, ImTextureID> library_thumbs_;
+    std::map<std::string, std::future<std::string>> library_thumb_jobs_;
+    ImTextureID library_thumb(const std::string& name);
+    // «Abrir en la placa» (rule 8 octies): the project brought from the
+    // seeder, checked, then opened.
+    struct LibraryFetch {
+        std::atomic<double> progress{0.0};
+        std::atomic<bool> cancel{false};
+    };
+    std::shared_ptr<LibraryFetch> library_fetch_state_;
+    std::future<std::pair<library::FetchResult, std::filesystem::path>> library_fetch_;
+    std::string library_fetch_message_;
+    bool library_close_ = false; // the model opened: the window closes
+    void library_open_model(const library::SharedModel& model);
     void cloud_start(CloudReply::Kind kind);
     void cloud_finished(CloudReply reply);
     void report_window();
@@ -1003,6 +1021,7 @@ private:
     // the view's paint now (empty: something else, as the brush's marks).
     void update_color_view();
     bool color_view_wanted() const;
+    void supports_for_painting();
     // A filament's or blend's colour as 0xRRGGBB (the model's colour for none).
     std::uint32_t extruder_rgb(int extruder) const;
     // The colours the paint holds (color_mixing_plus.md, «Pintar con mezclas»:
@@ -4120,9 +4139,11 @@ bool App::init(std::string& error) {
             brush.centre = {b.x, b.y, b.z};
             brush.radius = b.radius;
             brush.detail = std::max(0.05, b.radius / 6.0);
-            brush.mark = b.color > 0 ? std::uint8_t(b.color) : b.block ? kPaintBlock : kPaintEnforce;
+            brush.mark = b.color > 0 ? std::uint8_t(b.color) : b.erase ? kPaintNone : b.block ? kPaintBlock : kPaintEnforce;
             paint(objects_[i].painting, channel, placed_meshes_[i], brush);
         }
+        if (channel == PaintChannel::Support && !b.block && !b.erase)
+            supports_for_painting();
         paint_channel_ = channel;
         paint_dirty_ = true;
         ++revision_.model;
@@ -7580,6 +7601,15 @@ void App::top_bar() {
     const float more_w = button_h;
     const float gap = 8.0f * scale_;
     float right = width_of(tr(T::Open)) + more_w + gap;
+    // The library of models (the owner, 2026-11-16: as on the phone, in
+    // sight): beside Open, with its name when there is room.
+    // Narrower, only its icon; narrower still, none (Más has it), so the
+    // help keeps its place.
+    const float library_room = ImGui::GetWindowWidth() - right - ImGui::GetCursorPosX() - 40.0f * scale_;
+    const bool library_text = library_room >= width_of(tr(T::LibraryButton)) + width_of("Tisma Cloud") + 3.0f * gap + 2.0f * button_h;
+    const bool library_shown = library_text || library_room >= 3.0f * button_h + 3.0f * gap;
+    if (library_shown)
+        right += (library_text ? width_of(tr(T::LibraryButton)) : button_h) + gap;
     const char* const chip_label = "Tisma Cloud";
     const float spare = ImGui::GetWindowWidth() - right - 12.0f * scale_ - ImGui::GetCursorPosX() - 10.0f * scale_;
     const bool chip_text = spare >= width_of(chip_label) + 2.0f * gap + button_h;
@@ -7649,6 +7679,14 @@ void App::top_bar() {
                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (chip)
             cloud_open_ = true;
+        ImGui::SameLine(0, gap);
+        ImGui::SetCursorPosY(top);
+    }
+    if (library_shown) {
+        if (library_text ? button("##library", "library", tr(T::LibraryButton), false, false, true, tr(T::LibraryTip), button_h)
+                         : icon_button("##library", "library", tr(T::LibraryTip), button_h))
+            library_open_ = true;
+        note_rect("library_button");
         ImGui::SameLine(0, gap);
         ImGui::SetCursorPosY(top);
     }
@@ -14260,7 +14298,22 @@ void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
         painted_ = true;
         paint_cache_.touch(object, touched);
         paint_stroked_ = true;
+        if (paint_channel_ == PaintChannel::Support && brush.mark == kPaintEnforce)
+            supports_for_painting();
     }
+}
+
+// Forced support painted with the supports off did nothing (the engine needs
+// support.enabled; QA, 2026-11-16): the supports go on, only under what is
+// painted («Solo pintados»), and the person is told. Supports already on
+// stay as they are.
+void App::supports_for_painting() {
+    if (settings_.support)
+        return;
+    settings_.support = true;
+    settings_.support_automatic = false;
+    settings_changed();
+    notify(tr(T::SupportsForPainting));
 }
 
 // The colours are worth showing with more than one filament or with blends.
@@ -18890,7 +18943,13 @@ namespace {
 constexpr std::uint32_t kCpBands[6] = {0x2B59C3, 0x4C9BFF, 0x8FD3FF, 0xF5C524, 0xF59E0B, 0xE5484D};
 constexpr std::uint32_t kRaBands[4] = {0x4C9BFF, 0x3FBF7F, 0xF5C524, 0xE5484D};
 
-int cp_band(float cp) { return cp < -1.0f ? 0 : cp < -0.5f ? 1 : cp < 0.0f ? 2 : cp < 0.33f ? 3 : cp < 0.66f ? 4 : 5; }
+// A face without a value (NaN, from a cell the solver did not reach) takes
+// the band of 0 rather than the last one: no face is left out of the scale.
+int cp_band(float cp) {
+    if (!std::isfinite(cp))
+        cp = 0.0f;
+    return cp < -1.0f ? 0 : cp < -0.5f ? 1 : cp < 0.0f ? 2 : cp < 0.33f ? 3 : cp < 0.66f ? 4 : 5;
+}
 int ra_band(float ra) { return ra < 12.0f ? 0 : ra < 20.0f ? 1 : ra < 28.0f ? 2 : 3; }
 
 } // namespace
@@ -19014,10 +19073,35 @@ void App::aerodynamics_panel() {
                     ImGui::ColorButton("##band", rgb(colours[k]), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f * scale_, 10.0f * scale_));
                 }
             };
-            if (aero_map_kind_ == 0)
-                swatches(kCpBands, 6);
-            else
+            if (aero_map_kind_ == 0) {
+                // The scale from -1.5 (suction, cold) to 1 (stagnation, warm),
+                // each band's edge written under it and the 0 marked
+                // (aerodynamics.md, «Resultados»).
+                const float bw = std::min(44.0f * scale_, ImGui::GetContentRegionAvail().x / 6.0f), bh = 12.0f * scale_;
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                for (int k = 0; k < 6; ++k)
+                    dl->AddRectFilled(ImVec2(at.x + float(k) * bw, at.y), ImVec2(at.x + float(k + 1) * bw, at.y + bh),
+                                      ImGui::GetColorU32(rgb(kCpBands[k])));
+                const bool comma = language() == Language::Spanish;
+                const char* edges[] = {comma ? "-1,5" : "-1.5", "-1", comma ? "-0,5" : "-0.5", "0",
+                                       comma ? "0,33" : "0.33", comma ? "0,66" : "0.66", "1"};
+                for (int k = 0; k <= 6; ++k) {
+                    const char* e = edges[k];
+                    const float w = ImGui::CalcTextSize(e).x;
+                    const bool zero = k == 3;
+                    const float x = at.x + float(k) * bw;
+                    if (zero)
+                        dl->AddLine(ImVec2(x, at.y - 3.0f * scale_), ImVec2(x, at.y + bh + 3.0f * scale_),
+                                    ImGui::GetColorU32(rgb(theme_.text)), 2.0f * scale_);
+                    dl->AddText(ImVec2(std::clamp(x - 0.5f * w, at.x, at.x + 6.0f * bw - w), at.y + bh + 4.0f * scale_),
+                                ImGui::GetColorU32(rgb(zero ? theme_.text : theme_.text_dim)), e);
+                }
+                ImGui::Dummy(ImVec2(6.0f * bw, bh + ImGui::GetTextLineHeight() + 6.0f * scale_));
+                rect_of("aero_cp_scale");
+            } else {
                 swatches(kRaBands, 4);
+            }
             loc::TextDisabled("%s", tr(aero_map_kind_ == 0 ? T::AeroLegendCp : T::AeroLegendRa));
             if (j.value("simulated", false)) {
                 ImGui::Checkbox(tr(T::AeroLines), &aero_lines_);
@@ -21604,7 +21688,14 @@ void App::cloud_slice_step() {
 void App::library_refresh() {
     if (library_job_.valid())
         return;
+    // A build without the project's key cannot check anything: it says so,
+    // without asking the server (QA, 2026-11-16).
+    if (project_key().size() != 32) {
+        library_error_ = tr(T::LibraryNoKey);
+        return;
+    }
     const std::string server = cloud_address(cloud_server_.empty() ? std::string("https://cloud.tisma.app") : cloud_server_);
+    library_server_ = server;
     library_job_ = std::async(std::launch::async, [server, seen_index = library_index_seen_, seen_list = library_list_seen_] {
         LibraryReply r;
         const auto get = [&](const std::string& path, std::size_t most) {
@@ -21632,6 +21723,59 @@ void App::library_refresh() {
     });
 }
 
+// A model's thumbnail as a texture, asked for the first time it is wanted
+// (at most four at once); 0 until it comes, or when it cannot be read.
+ImTextureID App::library_thumb(const std::string& name) {
+    if (name.empty() || library_server_.empty())
+        return 0;
+    if (const auto it = library_thumbs_.find(name); it != library_thumbs_.end())
+        return it->second;
+    if (const auto job = library_thumb_jobs_.find(name); job != library_thumb_jobs_.end()) {
+        if (job->second.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return 0;
+        const Image image = decode_image(job->second.get());
+        library_thumb_jobs_.erase(job);
+        library_thumbs_[name] = image.rgba.empty() ? ImTextureID(0) : upload_texture(image, true);
+        return library_thumbs_[name];
+    }
+    if (library_thumb_jobs_.size() >= 4)
+        return 0;
+    const std::string file = name.ends_with(".webp") ? name : name + ".webp";
+    library_thumb_jobs_[name] = std::async(std::launch::async, [url = library_server_ + "/v1/library/thumbs/" + file] {
+        net::Request q;
+        q.url = url;
+        q.max_bytes = 64 * 1024; // rule 3 ter: up to 64 KB
+        q.timeout_s = 20;
+        const net::Response a = net::perform(q);
+        return a.ok() ? a.body : std::string();
+    });
+    return 0;
+}
+
+// Brings the model's project from the seeder into a folder of the program's
+// own (a copy kept by its SHA-256: a second open needs no download), then
+// opens it on the plate (p2p_library.md, rule 8 octies).
+void App::library_open_model(const library::SharedModel& model) {
+    const library::SharedFile* project = model.project();
+    if (!project || library_fetch_.valid())
+        return;
+    library_fetch_message_.clear();
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / "tisma-library";
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path out = dir / (project->sha256 + ".3mf");
+    library_fetch_state_ = std::make_shared<LibraryFetch>();
+    library_fetch_ = std::async(std::launch::async, [server = library_server_, token = cloud_token_, model, file = *project, out,
+                                                     state = library_fetch_state_] {
+        std::error_code e;
+        if (std::filesystem::exists(out, e))
+            return std::pair<library::FetchResult, std::filesystem::path>{{true, "", ""}, out};
+        const library::FetchResult r = library::fetch_shared_file(
+            server, token, model, file, out, [state](double p) { state->progress = p; }, &state->cancel);
+        return std::pair<library::FetchResult, std::filesystem::path>{r, out};
+    });
+}
+
 // The library's window (Más › Tisma › Biblioteca): the search over the
 // signed index, without accents, and each model's card.
 void App::library_window() {
@@ -21651,6 +21795,27 @@ void App::library_window() {
     }
     if (library_job_.valid())
         frame_pending_ = true;
+    if (library_fetch_.valid()) {
+        frame_pending_ = true;
+        if (library_fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            const auto [r, path] = library_fetch_.get();
+            library_fetch_state_.reset();
+            if (r.ok) {
+                log_line("library: opened " + utf8(path.filename()));
+                library_close_ = true; // the window closes, the plate shows it
+                open_path(path);
+            } else {
+                log_line("library: " + r.error);
+                const T why = r.code == "login"           ? T::LibraryLogin
+                              : r.code == "not_available" ? T::LibraryNotAvailable
+                              : r.code == "blocked"       ? T::LibraryBlocked
+                              : r.code == "busy"          ? T::LibraryBusy
+                              : r.code == "bad"           ? T::LibraryBadFile
+                                                          : T::LibraryFetchFailed;
+                library_fetch_message_ = why == T::LibraryFetchFailed ? format(tr(why), r.error.c_str()) : std::string(tr(why));
+            }
+        }
+    }
     if (library_open_) {
         ImGui::OpenPopup("###library");
         library_open_ = false;
@@ -21692,14 +21857,23 @@ void App::library_window() {
         for (const std::size_t i : found) {
             const library::SharedModel& m = library_index_->models[i];
             ImGui::PushID(int(i));
-            if (ImGui::Selectable("##model", library_pick_ == int(i), 0, ImVec2(0, 2.0f * ImGui::GetTextLineHeightWithSpacing()))) 
+            const float row_h = 2.0f * ImGui::GetTextLineHeightWithSpacing() + 4.0f * scale_;
+            if (ImGui::Selectable("##model", library_pick_ == int(i), 0, ImVec2(0, row_h)))
                 library_pick_ = int(i);
             note_rect("library_model_" + m.id);
             const ImVec2 at = ImGui::GetItemRectMin();
             ImDrawList* dl = ImGui::GetWindowDrawList();
-            dl->AddText(ImVec2(at.x + 4.0f * scale_, at.y + 2.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), m.name.c_str());
+            // The thumbnail, square, at the left; a plain square until it comes.
+            const float side = row_h - 4.0f * scale_;
+            const ImVec2 t0(at.x + 2.0f * scale_, at.y + 2.0f * scale_), t1(t0.x + side, t0.y + side);
+            if (const ImTextureID thumb = ImGui::IsItemVisible() ? library_thumb(m.thumbnail) : ImTextureID(0))
+                dl->AddImageRounded(ImTextureRef(thumb), t0, t1, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, 4.0f * scale_);
+            else
+                dl->AddRectFilled(t0, t1, ImGui::GetColorU32(rgb(theme_.frame)), 4.0f * scale_);
+            const float tx = t1.x + 8.0f * scale_;
+            dl->AddText(ImVec2(tx, at.y + 2.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), m.name.c_str());
             const std::string sub = m.author + "  ·  " + m.license + (m.checked ? std::string("  ·  ") + tr(T::LibraryChecked) : "");
-            dl->AddText(ImVec2(at.x + 4.0f * scale_, at.y + 2.0f * scale_ + ImGui::GetTextLineHeightWithSpacing()),
+            dl->AddText(ImVec2(tx, at.y + 2.0f * scale_ + ImGui::GetTextLineHeightWithSpacing()),
                         ImGui::GetColorU32(rgb(theme_.text_dim)), sub.c_str());
             ImGui::PopID();
         }
@@ -21712,6 +21886,11 @@ void App::library_window() {
             loc::TextColored(rgb(theme_.accent_hover), "%s", m.name.c_str());
             ImGui::PopFont();
             note_rect("library_card");
+            if (const ImTextureID thumb = library_thumb(m.thumbnail)) {
+                const float side = std::min(ImGui::GetContentRegionAvail().x, 180.0f * scale_);
+                ImGui::Image(ImTextureRef(thumb), ImVec2(side, side));
+                note_rect("library_thumb");
+            }
             loc::Text(tr(T::LibraryBy), m.author.c_str());
             loc::TextDisabled("%s  ·  %s", m.license.c_str(), m.published.c_str());
             if (!m.description.empty()) {
@@ -21728,13 +21907,27 @@ void App::library_window() {
             for (const library::SharedFile& f : m.files)
                 loc::Text("%s  (%s, %s)", f.path.c_str(), f.role.c_str(), bytes_text(std::uint64_t(std::max<long long>(f.size, 0))).c_str());
             ImGui::Spacing();
-            // The files come from other people's computers (rule 2): not yet
-            // in this program.
-            ImGui::BeginDisabled();
-            ImGui::Button(tr(T::LibraryOpenOnPlate));
-            ImGui::EndDisabled();
-            note_rect("library_open");
-            loc::TextDisabled("%s", tr(T::LibraryDownloadSoon));
+            // The project, from the seeder with the account (rule 8 octies).
+            if (cloud_token_.empty()) {
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::LibraryLogin));
+                if (ImGui::Button(tr(T::CloudLogIn)))
+                    cloud_open_ = true, ImGui::CloseCurrentPopup();
+                note_rect("library_login");
+            } else if (library_fetch_.valid()) {
+                ImGui::ProgressBar(library_fetch_state_ ? float(library_fetch_state_->progress.load()) : 0.0f, ImVec2(-FLT_MIN, 0.0f),
+                                   tr(T::LibraryDownloading));
+                note_rect("library_progress");
+            } else {
+                ImGui::BeginDisabled(m.project() == nullptr);
+                if (ImGui::Button(tr(T::LibraryOpenOnPlate)))
+                    library_open_model(m);
+                ImGui::EndDisabled();
+                note_rect("library_open");
+            }
+            if (!library_fetch_message_.empty()) {
+                loc::TextColored(rgb(0xE5484D), "%s", library_fetch_message_.c_str());
+                note_rect("library_fetch_message");
+            }
         } else {
             loc::TextDisabled("%s", tr(T::LibraryPick));
         }
@@ -21743,8 +21936,8 @@ void App::library_window() {
     if (ImGui::Button(tr(T::LibraryRefresh)))
         library_refresh();
     ImGui::SameLine();
-    if (ImGui::Button(tr(T::Close)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
-        ImGui::CloseCurrentPopup();
+    if (ImGui::Button(tr(T::Close)) || ImGui::IsKeyPressed(ImGuiKey_Escape) || library_close_)
+        ImGui::CloseCurrentPopup(), library_close_ = false;
     note_rect("library_close");
     ImGui::PopTextWrapPos();
     ImGui::EndPopup();
@@ -28809,12 +29002,24 @@ void App::frame() {
     ImGui::LocalizeRegisterEntries(words, IM_ARRAYSIZE(words));
     if (GImGui->InputEventsTrail.Size > 0) // this frame took input
         last_input_ = glfwGetTime();
+    // With Vulkan the 3D view is a picture under the panels (vk_view.*). The
+    // overlays drawn over the view in the background list (the wind's arrow
+    // and the streamlines, the sketch, the measures, the structural marks)
+    // go above it: the picture takes the list's first channel, added after
+    // the layout knows the view's place. It was added last, over them: they
+    // did not show with Vulkan (the tester's report, 2026-11-16, Aerodinámica).
+    ImDrawList* background = ImGui::GetBackgroundDrawList();
+    const bool picture = vulkan_ && vk_view_.texture();
+    if (picture) {
+        background->ChannelsSplit(2);
+        background->ChannelsSetCurrent(1);
+    }
     layout();
-    // With Vulkan the 3D view is a picture under the panels, drawn below
-    // (vk_view.*) before them.
-    if (vulkan_ && vk_view_.texture())
-        ImGui::GetBackgroundDrawList()->AddImage(vk_view_.texture(), view_pos_,
-                                                 ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
+    if (picture) {
+        background->ChannelsSetCurrent(0);
+        background->AddImage(vk_view_.texture(), view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
+        background->ChannelsMerge();
+    }
     ImGui::Render();
     // In the preview, framing waits for the legend to have its size (an
     // auto-sized window takes two frames, the fold one more): it leaves it out.
@@ -29011,6 +29216,19 @@ void App::frame() {
                 dump_ui();
             if (!options_.compare_view.empty())
                 compare_view(flipped, fb_w, fb_h);
+            if (!options_.expect_color.empty()) { // an overlay that must show (the wind's arrow with Vulkan)
+                const unsigned rgb = unsigned(std::strtoul(options_.expect_color.substr(0, 6).c_str(), nullptr, 16));
+                const long long want = std::atoll(options_.expect_color.substr(options_.expect_color.find(':') + 1).c_str());
+                const int cr = int(rgb >> 16) & 255, cg = int(rgb >> 8) & 255, cb = int(rgb) & 255;
+                long long got = 0;
+                for (std::size_t i = 0; i + 3 < flipped.size(); i += 4)
+                    got += std::abs(flipped[i] - cr) <= 12 && std::abs(flipped[i + 1] - cg) <= 12 && std::abs(flipped[i + 2] - cb) <= 12;
+                std::printf("expect-color %s: %lld pixels\n", options_.expect_color.c_str(), got);
+                if (got < want) {
+                    std::fprintf(stderr, "error: only %lld pixels of %06X, not %lld\n", got, rgb, want);
+                    failed_ = true;
+                }
+            }
             if (options_.view_check && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
                 check_view(fb_w, fb_h);
             if (!error_title_.empty())
