@@ -41,6 +41,8 @@ lanzamiento.
 ## Definiciones para G3
 
 - **Voladizo:** caras conectadas, más inclinadas que el ángulo de soporte, a más de 1 mm de la cama.
+  Los puentes no cuentan: con `support.under_bridges` apagado no llevan soporte (`supports_skirt.md`, regla 1). El
+  techo de la cabina del Benchy es un puente.
 - **Tiene soporte:** hay extrusión de soporte a menos de 2,5 mm de costado, en los 3 mm de abajo del voladizo.
 - **Flotando:** una línea de soporte sin extrusión (pieza o soporte) a menos de 1,5 mm de costado en la capa de abajo.
   Con 1 mm, la capa de interfaz que cruza entre las líneas de la base (separadas unos 2,5 mm) contaría como flotante,
