@@ -27906,6 +27906,51 @@ bool App::script_check(const ScriptStep& step, int f) {
         if (before >= 0.0 && now >= before && before > 0.0)
             return fail_step(format("%.1f mm of support there, not less than the %.1f mm without the paint", now, before));
         next();
+    } else if (step.verb == "pick-pack-printer") { // REF ("vendors/v/models/M.json#variant"): that pack printer added and chosen
+        add_pack_printer(step.key);
+        const std::string& now = chosen_profile_[std::size_t(ProfileKind::Printer)];
+        std::printf("ui-script: pick-pack-printer %s: %s · %s · %s\n", step.key.c_str(), now.c_str(),
+                    chosen_profile_[std::size_t(ProfileKind::Filament)].c_str(),
+                    chosen_profile_[std::size_t(ProfileKind::Print)].c_str());
+        if (now.empty() || !find_profile(ProfileKind::Printer, now))
+            return fail_step("the pack printer was not chosen");
+        next();
+    } else if (step.verb == "expect-aero-faces") { // the Aerodynamics report has a finite Cp for every triangle of the part
+        if (aero_job_.running() || cloud_eng_.valid())
+            return f >= 120000 ? fail_step("the analysis is still running") : true;
+        const std::size_t part = std::size_t(std::clamp(structural_part_, 0, std::max(0, int(objects_.size()) - 1)));
+        nlohmann::json j;
+        if (part < objects_.size())
+            for (const EngineeringResult& r : objects_[part].engineering.results)
+                if (r.kind == "aerodynamics")
+                    j = nlohmann::json::parse(r.report, nullptr, false);
+        const std::size_t triangles = part < placed_meshes_.size() ? placed_meshes_[part].triangle_count() : 0;
+        const nlohmann::json cp = j.is_object() ? j.value("cp", nlohmann::json::array()) : nlohmann::json::array();
+        std::size_t bad = 0;
+        for (const nlohmann::json& v : cp)
+            bad += !v.is_number() || !std::isfinite(v.get<double>());
+        std::printf("ui-script: expect-aero-faces: %zu values of Cp for %zu triangles, %zu without a value\n", cp.size(),
+                    triangles, bad);
+        if (!j.is_object())
+            return fail_step("no aerodynamics result");
+        if (cp.size() != triangles || bad || triangles == 0)
+            return fail_step("a face of the part has no Cp");
+        next();
+    } else if (step.verb == "expect-structural-map") { // the structural map has a finite value on every face it shows
+        if (structural_job_.running() || cloud_eng_.valid())
+            return f >= 120000 ? fail_step("the analysis is still running") : true;
+        if (!structural_map_)
+            return f >= 600 ? fail_step("no structural map") : true;
+        const StructuralRun& m = *structural_map_;
+        const std::size_t n = m.corners.size() / 3;
+        std::size_t bad = 0;
+        for (std::size_t t = 0; t < n; ++t)
+            bad += t >= m.safety.size() || t >= m.stress.size() || t >= m.motion.size() || !std::isfinite(m.safety[t]) ||
+                   !std::isfinite(m.stress[t]) || !std::isfinite(m.motion[t]);
+        std::printf("ui-script: expect-structural-map: %zu faces, %zu without a value\n", n, bad);
+        if (n == 0 || bad)
+            return fail_step("a face of the structural map has no value");
+        next();
     } else {
         return false;
     }
