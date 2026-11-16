@@ -192,16 +192,21 @@ se copian íconos ni imágenes de otro programa). Vale igual en Impresión 3D, e
      Fusion 360, según su ayuda pública); con la placa en modo de un solo modelo, elige el que más se acerque al punto
      donde empezó, entre los que entran según el sentido; donde no hay nada que elegir (Vista previa), arrastrar con
      el izquierdo desde vacío no hace nada: no gira ni desplaza;
-   - **rueda apretada y arrastrar:** desplaza la vista;
-   - **Mayús + rueda apretada y arrastrar:** gira la vista alrededor del punto de la pieza bajo el mouse (sin pieza
-     bajo el mouse, alrededor del centro de lo elegido o de la cama);
+   - **botón derecho y arrastrar** (por defecto desde el 16-11-2026, pedido del dueño: «que use los botones del menú
+     de Tinkercad», según la ayuda pública de Tinkercad): gira la vista alrededor del punto de la pieza bajo el mouse
+     (sin pieza bajo el mouse, alrededor del centro de lo elegido o de la cama); un clic derecho sin mover (menos de
+     4 px) abre el menú;
+   - **rueda apretada y arrastrar, o Mayús + botón derecho y arrastrar:** desplaza la vista;
    - **girar la rueda:** acerca y aleja hacia donde apunta el mouse, en el mismo sentido que Fusion 360;
    - **doble clic con la rueda:** encuadra todo;
-   - **clic derecho:** abre el menú de la pieza o de la cama (reglas de «Menús»), como el menú del botón derecho de
-     Fusion 360.
-   Preferencia «Navegación»: «Fusion 360» (por defecto), «Botón derecho gira» (arrastrar con el derecho gira; un clic
-   derecho sin mover, menos de 4 px, abre el menú) y «Clásica» (la de antes).
-2. **Cubo de vistas** arriba a la derecha de la vista 3D: un cubo con las caras Frente, Atrás, Izquierda, Derecha,
+   - **clic derecho sin mover:** abre el menú de la pieza o de la cama (reglas de «Menús»).
+   Preferencia «Navegación»: «Tinkercad» (por defecto, la de arriba), «Fusion 360» (Mayús + rueda apretada gira; el
+   derecho solo abre el menú) y «Clásica» (la de antes).
+2. **Botones de vista al estilo de Tinkercad** (16-11-2026): una columna de botones redondos debajo del cubo de
+   vistas, de arriba abajo: «Vista inicial», «Encuadrar lo elegido» (todo si no hay nada elegido), «Acercar»,
+   «Alejar» y «Perspectiva / ortogonal», cada uno con su nombre al pasar el mouse. Los íconos son propios (no se copia
+   el arte de Tinkercad). La barra de vista de abajo (regla 3) sigue con girar, desplazar y el estilo.
+2 bis. **Cubo de vistas** arriba a la derecha de la vista 3D: un cubo con las caras Frente, Atrás, Izquierda, Derecha,
    Arriba y Abajo; tocar una cara, una arista o una esquina lleva a esa vista con una animación corta; arrastrarlo
    gira la vista; al lado, «Inicio» vuelve a la vista inicial. Sigue el giro de la vista.
 3. **Barra de vista** abajo al centro: girar, desplazar, acercar, encuadrar todo, vista en perspectiva u ortogonal y
