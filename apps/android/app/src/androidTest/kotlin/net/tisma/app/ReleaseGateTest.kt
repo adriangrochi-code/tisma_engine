@@ -261,7 +261,18 @@ class ReleaseGateTest {
     private fun text(tag: String): String? = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
         .firstOrNull()?.config?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
 
-    private fun waitTag(tag: String, ms: Long = 30_000) = compose.waitUntil(ms) { has(tag) }
+    private fun waitTag(tag: String, ms: Long = 30_000) {
+        try { compose.waitUntil(ms) { has(tag) } } catch (e: Throwable) { fail("«$tag» not shown after $ms ms; on screen: ${screen()}") }
+    }
+
+    /** What the screen holds now (tags and texts), for a failure's message. */
+    private fun screen(): String = runCatching {
+        compose.onAllNodes(SemanticsMatcher("any") { true }, useUnmergedTree = true).fetchSemanticsNodes().mapNotNull { n ->
+            val tag = n.config.getOrNull(SemanticsProperties.TestTag)
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            listOfNotNull(tag?.let { "#$it" }, text?.take(40)).joinToString(" ").ifBlank { null }
+        }.distinct().take(60).joinToString(" | ")
+    }.getOrElse { "(no screen: ${it.message})" }
 
     private fun firstTagStarting(prefix: String): String {
         val m = SemanticsMatcher("tag starts with $prefix") { (it.config.getOrNull(SemanticsProperties.TestTag) ?: "").startsWith(prefix) }
