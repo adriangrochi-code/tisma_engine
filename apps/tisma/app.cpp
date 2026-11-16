@@ -27760,8 +27760,11 @@ bool App::script_check(const ScriptStep& step, int f) {
             return fail_step("nothing sliced");
         // Bridges need no support unless asked (RELEASE_GATE.md, «Definiciones
         // para G3»; supports_skirt.md, rule 1).
+        // Only what sticks out more than half a bead past the layer under it
+        // is an overhang (the same, rule 1).
+        const std::vector<OverhangPoint> faces = sticking_out(result_->preview, overhang_points());
         const std::vector<OverhangPoint> points =
-            settings_.support_under_bridges ? overhang_points() : without_bridges(result_->preview, overhang_points());
+            settings_.support_under_bridges ? faces : without_bridges(result_->preview, faces);
         const std::vector<OverhangPoint> bare = overhangs_without_support(result_->preview, points);
         struct Region {
             double area = 0.0, bare = 0.0;
@@ -27879,6 +27882,29 @@ bool App::script_check(const ScriptStep& step, int f) {
                     home ? "yes" : "no", bed ? "yes" : "no", nozzle, outside, lo[0], hi[0], lo[1], hi[1]);
         if (!home || !bed || nozzle < 150 || outside || settings_.bed.empty())
             return fail_step("the G-code would not print: no homing, no heating or moves off the bed");
+        next();
+    } else if (step.verb == "expect-support-in-circle") { // X Y R MAX_MM [FILE]: support there at most MAX mm, and less than in FILE's G-code
+        if (!result_ || !result_->ok)
+            return fail_step("nothing sliced");
+        double x = 0, y = 0, r = 0, most = 0;
+        std::string file;
+        std::istringstream in(step.key + " " + step.value);
+        in >> x >> y >> r >> most >> file;
+        const double now = support_in_circle(result_->preview, x, y, r);
+        double before = -1.0;
+        if (!file.empty()) {
+            std::ifstream kept(from_utf8(file), std::ios::binary);
+            const std::string text((std::istreambuf_iterator<char>(kept)), std::istreambuf_iterator<char>());
+            if (text.empty())
+                return fail_step("no G-code in " + file);
+            before = support_in_circle(read_gcode_preview(text), x, y, r);
+        }
+        std::printf("ui-script: expect-support-in-circle %s %s: %.1f mm of support%s\n", step.key.c_str(), step.value.c_str(),
+                    now, before >= 0.0 ? format(", %.1f mm in %s", before, file.c_str()).c_str() : "");
+        if (now > most + 1e-6)
+            return fail_step(format("%.1f mm of support within %.1f mm of %.1f, %.1f", now, r, x, y));
+        if (before >= 0.0 && now >= before && before > 0.0)
+            return fail_step(format("%.1f mm of support there, not less than the %.1f mm without the paint", now, before));
         next();
     } else {
         return false;

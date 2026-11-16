@@ -14680,6 +14680,21 @@ para el LBM D3Q19.
   Esfera de 1 001 112 triángulos con orgánico: 0,21 s antes y después. No encontré el big.stl de QA (60 mm,
   319 200 triángulos) en este contenedor: pedido a QA. Lo más caro sigue siendo el eje medio de las paredes y el
   relleno de las ramas; no se tocó.
+- **G3, labios (spec/next de877a4):** un voladizo cuenta solo si en algún punto sobresale de la capa de abajo más de
+  medio cordón (distancia al cordón más cercano de la pieza en la capa de abajo, menos su medio ancho). El labio de la
+  popa del Benchy (z 5,3) queda afuera. Con el motor 7a23fd6 la puerta pasa entera en Linux: 40 de 40 (Benchy en
+  árbol: 44 voladizos, todos con soporte, 0,22 % flotando).
+- **CI completa de Linux:** gcc y clang, 1364 de 1364; la de ASan no terminó (se cortó el tiempo de la tarea).
+- **Windows:** la puerta corre entera en GitHub (b402f68, Mesa llvmpipe junto al programa): 38 de 40, las mismas 2 de
+  G3 que Linux en ese commit, que 0af3602 ya resuelve.
+- **G4, bloquear una parte (QA, GRAVE):** reproducido con la T (círculo de 4 mm bloqueado en (115, 128, 20), soportes
+  automáticos). Bajo el círculo no queda soporte (0 mm), pero alrededor aparece más: dentro de 6 mm, 5129 mm de
+  soporte contra 4497 sin pintar; en la franja de X 108–112, 2205 mm contra 295. El bloqueo llega como bloqueo
+  (`kPaintBlock`); el agregado es del motor: pasado. La prueba vieja (`ui_paint_support_none_blocked`) bloqueaba
+  todo y solo contaba que no hubiera soporte. Nuevas: `gate_g4_auto` guarda el G-code del automático y
+  `gate_g4_block_part` exige 0 bajo el círculo y menos soporte que el automático a 6 mm (verbo
+  `expect-support-in-circle`). Hoy falla, como corresponde.
+
 
 ## 2026-11-16 — verificador del G-code: temperatura; la CLI sin impresora (QA)
 

@@ -1,0 +1,6 @@
+# Release gate G4: the T's automatic supports, kept for gate_g4_block_part.
+set support.enabled true
+set support.automatic true
+slice
+expect-gcode-count ;TYPE:Support 1
+keep-gcode gate_g4_auto.gcode

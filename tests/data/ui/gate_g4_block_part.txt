@@ -1,0 +1,8 @@
+# Release gate G4 (QA, 2026-11-16): a circle of 4 mm blocked under one arm
+# of the T with the automatic supports on: no support under it, and less
+# around it (within 6 mm) than the automatic supports alone put there.
+set support.enabled true
+set support.automatic true
+slice
+expect-support-in-circle 115 128 4 0
+expect-support-in-circle 115 128 6 1e9 gate_g4_auto.gcode

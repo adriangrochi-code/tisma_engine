@@ -132,3 +132,11 @@ tisma_gate_test(NAME gate_g9_project MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gat
 # printer's start, heating and bed (QA, 2026-11-16).
 tisma_gate_test(NAME gate_g10_partial_settings MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g10_partial_settings
                 ARGS ${TISMA_GATE_DATA}/support_only.json)
+
+# G4, part of an overhang blocked (QA, 2026-11-16): nothing under the
+# blocked circle, and less support around it than without the paint.
+tisma_gate_test(NAME gate_g4_auto MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g4_auto
+                PROPERTIES WORKING_DIRECTORY ${TISMA_GATE_OUT} FIXTURES_SETUP gate_g4_auto)
+tisma_gate_test(NAME gate_g4_block_part MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g4_block_part
+                ARGS --paint support,block,115,128,20,4
+                PROPERTIES WORKING_DIRECTORY ${TISMA_GATE_OUT} FIXTURES_REQUIRED gate_g4_auto)
