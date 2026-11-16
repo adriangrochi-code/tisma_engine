@@ -800,6 +800,7 @@
     X(HostKindRow, "Programa", "Program") \
     X(HostUrl, "Dirección", "Address") \
     X(HostApiKey, "Clave de API", "API key") \
+    X(SupportsTurnedOff, "Los soportes quedaron apagados con el cambio. Si la pieza tiene voladizos, volvé a activarlos en Soportes.", "The change turned the supports off. If the part has overhangs, turn them on again in Supports.") \
     X(OverhangTitle, "Voladizos sin soporte", "Overhangs without support") \
     X(OverhangQuestion, "Esta pieza tiene voladizos sin soporte: ¿activar soportes?", "This part has overhangs without support: turn supports on?") \
     X(OverhangHint, "Sin soporte, lo que cuelga se imprime en el aire y suele caerse o deformarse.", "Without support, what hangs is printed in the air and usually falls or warps.") \

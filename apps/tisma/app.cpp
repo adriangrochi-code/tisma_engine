@@ -1022,6 +1022,11 @@ private:
     void update_color_view();
     bool color_view_wanted() const;
     void supports_for_painting();
+    // The supports never go off without a word (the owner, 2026-11-16): a
+    // profile, a printer, a project or an undo that turns them off says so.
+    void supports_watch();
+    bool support_seen_ = false;
+    int support_by_hand_frame_ = -100;
     // A filament's or blend's colour as 0xRRGGBB (the model's colour for none).
     std::uint32_t extruder_rgb(int extruder) const;
     // The colours the paint holds (color_mixing_plus.md, «Pintar con mezclas»:
@@ -7175,6 +7180,12 @@ double App::unsupported_overhang_area() const {
     return area;
 }
 
+void App::supports_watch() {
+    if (support_seen_ && !settings_.support && ImGui::GetFrameCount() - support_by_hand_frame_ > 2 && frames_ > 3)
+        notify(tr(T::SupportsTurnedOff), true);
+    support_seen_ = settings_.support;
+}
+
 void App::slice_asked() {
     if (!has_plate_ || slice_job_.running())
         return;
@@ -10053,7 +10064,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
     }
     // Print: Supports and Adhesion.
     else if (id == "support") {
+        const bool support_was = s.support;
         flag(T::Supports, "support.enabled", s.support);
+        if (s.support != support_was) // by hand: no warning (supports_watch)
+            support_by_hand_frame_ = ImGui::GetFrameCount();
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
         flag(T::SupportBuildplateOnly, "support.buildplate_only", s.support_buildplate_only);
         flag(T::SupportUnderBridges, "support.under_bridges", s.support_under_bridges);
@@ -15188,6 +15202,7 @@ void App::preview_panels() {
                 ImGui::SameLine();
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted(tr(kind_text(LineKind(k))));
+                note_rect("legend_kind_" + std::to_string(k)); // the scripts' expect-control (support is 11)
                 if (!legend_full_) {
                     ImGui::PopID();
                     continue;
@@ -25769,6 +25784,7 @@ void App::layout() {
     cloud_window();
     library_window();
     overhang_prompt();
+    supports_watch();
     report_window();
     guide_overlay();
     if (!g_clamped.empty()) {

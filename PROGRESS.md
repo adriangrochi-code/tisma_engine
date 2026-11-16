@@ -14548,3 +14548,16 @@ para el LBM D3Q19.
   gruesa) y, en modo captura, dibuja sin parar con llvmpipe, que se lleva cerca de un núcleo de 4. No queda
   esperando: el 0 % es el tiempo de armar la grilla, que no informa avance. El guion de QA se cortaba por el tope de
   6000 cuadros de la captura, no porque la simulación se colgara.
+
+## 2026-11-16 — interfaz: el soporte en la vista previa y nunca apagado sin aviso
+
+- **Vista previa:** el soporte y su interfaz ya se veían con su color y con su fila en la leyenda (tiempo, parte y
+  filamento). Ahora las filas de la leyenda tienen nombre para los guiones (`legend_kind_N`).
+- **Sin aviso, nunca:** si los soportes pasan de prendidos a apagados por algo que no es la casilla (un perfil, una
+  impresora, un proyecto, deshacer), sale el aviso «Los soportes quedaron apagados con el cambio…». Apagarlos a mano
+  no avisa.
+- **Proyectos de otros programas:** si `support_material` llega o no depende de la tabla de traducción del paquete
+  (servidor). El paquete de prueba no la tiene. Se pide la fila al servidor.
+- **Pruebas:**
+  - `ui_overhang_support_preview`: las filas de soporte y su interfaz en la leyenda, y `;TYPE:Support` en el G-code;
+  - `ui_overhang_supports_off_notice`: un perfil de impresión que los apaga da el aviso.

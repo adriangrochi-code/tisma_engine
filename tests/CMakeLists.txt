@@ -399,14 +399,18 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     endforeach()
     # Overhangs with the supports off: the Slice button asks first (the
     # owner, 2026-11-16).
-    foreach(case prompt:tee without:tee cube:cube_ascii)
+    foreach(case prompt:tee without:tee cube:cube_ascii support_preview:tee supports_off_notice:tee)
       string(REPLACE ":" ";" parts ${case})
       list(GET parts 0 name)
       list(GET parts 1 model)
+      set(script_${name} overhang_${name})
+      if(name STREQUAL "support_preview" OR name STREQUAL "supports_off_notice")
+        set(script_${name} ${name})
+      endif()
       add_test(NAME ui_overhang_${name}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/${model}.stl --lang es --size 1200x760
-                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/overhang_${name}.txt
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${script_${name}}.txt
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_overhang_${name}.png)
       set_tests_properties(ui_overhang_${name} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
                            ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
