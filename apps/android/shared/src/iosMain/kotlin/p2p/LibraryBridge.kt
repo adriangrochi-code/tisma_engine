@@ -8,12 +8,14 @@ import net.tisma.app.updates.Ed25519
 import net.tisma.cloud.CloudClient
 import platform.Foundation.NSData
 import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSFileHandle
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfFile
+import platform.Foundation.fileHandleForWritingAtPath
 import platform.Foundation.writeToFile
 import platform.posix.memcpy
 
@@ -116,9 +118,12 @@ object LibraryBridge {
             val folder = out.substringBeforeLast('/')
             fm.createDirectoryAtPath(folder, true, null, null)
             if (!fm.createFileAtPath(out, null, null)) return false
-            val h = platform.Foundation.NSFileHandle.fileHandleForWritingAtPath(out) ?: return false
-            for (n in 0 until count) h.writeData(NSData.dataWithContentsOfFile("$dir/$n") ?: run { h.closeFile(); return false })
-            h.closeFile()
+            val h = NSFileHandle.fileHandleForWritingAtPath(out) ?: return false
+            for (n in 0 until count) {
+                val piece = NSData.dataWithContentsOfFile("$dir/$n") ?: run { h.closeAndReturnError(null); return false }
+                if (!h.writeData(piece, null)) { h.closeAndReturnError(null); return false }
+            }
+            h.closeAndReturnError(null)
             clear()
             return true
         }
