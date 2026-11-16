@@ -318,6 +318,8 @@ int main(int argc, char** argv) {
             options.view_check = false;
         } else if (arg == "--compare-view") {
             options.compare_view = value();
+        } else if (arg == "--expect-color") { // RRGGBB:N, with --screenshot: at least N pixels of that colour (±12)
+            options.expect_color = value();
         } else if (arg == "--ray-check") {
             options.ray_check = true;
         } else if (arg == "--moire-check") {

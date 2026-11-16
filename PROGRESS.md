@@ -14443,3 +14443,16 @@ para el LBM D3Q19.
   El servidor falso de la nube sirve la biblioteca con `TISMA_MOCK_LIBRARY_DIR`.
 - **Pruebas:** `library.txt`: dos modelos ofrecidos (quedan afuera el bloqueado y el que trae G-code), «TELEFONO»
   encuentra «Soporte de teléfono», y se abre la ficha. Pasa con las de la nube.
+
+## 2026-11-16 — interfaz: lo dibujado sobre la vista no se veía con Vulkan (error del dueño)
+
+- **Causa:** con Vulkan, la vista 3D es una imagen en la lista de fondo de ImGui, y se agregaba al final, encima de
+  lo que se dibuja sobre la vista en esa misma lista: la flecha del viento y las líneas de corriente de
+  Aerodinámica, el boceto, las medidas y las marcas de Estructural. Por eso no se veían en una GTX 1060 ni en una
+  Radeon Vega 8 (que usan Vulkan), y sí con OpenGL. No era un tema de líneas anchas: las líneas son triángulos de
+  ImGui.
+- **Arreglo:** la imagen va en el primer canal de la lista de fondo, debajo de todo lo demás.
+- **Pruebas:** `ui_aero_arrow_opengl` y `ui_aero_arrow_vulkan` cuentan el azul de la flecha en la captura con la
+  opción nueva `--expect-color RRGGBB:N` (1123 píxeles en las dos). Pasan las 48 de Vulkan, boceto, Estructural y
+  Aerodinámica. Las líneas de corriente usan el mismo camino que la flecha; no se probaron con una simulación (tarda
+  un minuto).

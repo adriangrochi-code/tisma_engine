@@ -376,6 +376,17 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                            PASS_REGULAR_EXPRESSION "fake host: started=1 name=." ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
                            TIMEOUT 300)
     endforeach()
+    # The overlays over the view (the wind's arrow, the streamlines, the
+    # sketch) show with OpenGL and with Vulkan.
+    foreach(graphics opengl vulkan)
+      add_test(NAME ui_aero_arrow_${graphics}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --graphics ${graphics}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/aero_arrow.txt --expect-color 4C9BFF:400
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_aero_arrow_${graphics}.png)
+      set_tests_properties(ui_aero_arrow_${graphics} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
+                           ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     # Closing with jobs under way: the process ends in under 3 s.
     add_test(NAME ui_quit_busy
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

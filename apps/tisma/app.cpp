@@ -28809,12 +28809,24 @@ void App::frame() {
     ImGui::LocalizeRegisterEntries(words, IM_ARRAYSIZE(words));
     if (GImGui->InputEventsTrail.Size > 0) // this frame took input
         last_input_ = glfwGetTime();
+    // With Vulkan the 3D view is a picture under the panels (vk_view.*). The
+    // overlays drawn over the view in the background list (the wind's arrow
+    // and the streamlines, the sketch, the measures, the structural marks)
+    // go above it: the picture takes the list's first channel, added after
+    // the layout knows the view's place. It was added last, over them: they
+    // did not show with Vulkan (the tester's report, 2026-11-16, Aerodinámica).
+    ImDrawList* background = ImGui::GetBackgroundDrawList();
+    const bool picture = vulkan_ && vk_view_.texture();
+    if (picture) {
+        background->ChannelsSplit(2);
+        background->ChannelsSetCurrent(1);
+    }
     layout();
-    // With Vulkan the 3D view is a picture under the panels, drawn below
-    // (vk_view.*) before them.
-    if (vulkan_ && vk_view_.texture())
-        ImGui::GetBackgroundDrawList()->AddImage(vk_view_.texture(), view_pos_,
-                                                 ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
+    if (picture) {
+        background->ChannelsSetCurrent(0);
+        background->AddImage(vk_view_.texture(), view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
+        background->ChannelsMerge();
+    }
     ImGui::Render();
     // In the preview, framing waits for the legend to have its size (an
     // auto-sized window takes two frames, the fold one more): it leaves it out.
@@ -29011,6 +29023,19 @@ void App::frame() {
                 dump_ui();
             if (!options_.compare_view.empty())
                 compare_view(flipped, fb_w, fb_h);
+            if (!options_.expect_color.empty()) { // an overlay that must show (the wind's arrow with Vulkan)
+                const unsigned rgb = unsigned(std::strtoul(options_.expect_color.substr(0, 6).c_str(), nullptr, 16));
+                const long long want = std::atoll(options_.expect_color.substr(options_.expect_color.find(':') + 1).c_str());
+                const int cr = int(rgb >> 16) & 255, cg = int(rgb >> 8) & 255, cb = int(rgb) & 255;
+                long long got = 0;
+                for (std::size_t i = 0; i + 3 < flipped.size(); i += 4)
+                    got += std::abs(flipped[i] - cr) <= 12 && std::abs(flipped[i + 1] - cg) <= 12 && std::abs(flipped[i + 2] - cb) <= 12;
+                std::printf("expect-color %s: %lld pixels\n", options_.expect_color.c_str(), got);
+                if (got < want) {
+                    std::fprintf(stderr, "error: only %lld pixels of %06X, not %lld\n", got, rgb, want);
+                    failed_ = true;
+                }
+            }
             if (options_.view_check && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
                 check_view(fb_w, fb_h);
             if (!error_title_.empty())
