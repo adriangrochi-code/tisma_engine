@@ -14617,6 +14617,15 @@ para el LBM D3Q19.
 - **Windows:** la primera corrida de la puerta no compilaba en MSVC (C1061: la cadena de `else if` de los verbos del
   guion pasó el límite de anidamiento). Los verbos de la puerta se movieron a `script_check` (52b65d9). La cadena de
   `script_input` sigue cerca del límite: los verbos nuevos van en funciones aparte.
+- **G10, archivo de ajustes parcial (QA, GRAVE):** abrir un `.json` con solo los soportes reemplazaba todos los
+  ajustes por los de fábrica: sin G-code de inicio, sin calentar y la pieza en 0, 0. Ahora el archivo cambia solo
+  los valores que trae (se mezcla sobre los actuales, grupo por grupo). `gate_g10_partial_settings`: con
+  `support_only.json`, el G-code hace G28, calienta cama y boquilla (210 °C en la primera extrusión) y no sale de la
+  cama (verbo `expect-gcode-ready`). Sin el arreglo, la prueba falla como lo vio QA. Que el verificador del G-code
+  rechace eso por sí solo es del motor (`src/gcode/check.cpp`): pedido.
+- **Exportar un laminado viejo (QA, a confirmar):** no se puede: `export_gcode_to` se niega con el laminado
+  desactualizado, y el botón, el menú y Ctrl+G están apagados. El `--export` del arnés exporta al terminar el primer
+  laminado, antes de los pasos del guion: por eso salió sin soporte.
 
 ## 2026-11-16 — soporte siempre que haga falta (punto 1 del pedido del dueño por QA)
 

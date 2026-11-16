@@ -127,3 +127,8 @@ tisma_gate_test(NAME gate_g9_project MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gat
                 ARGS --paint support,enforce,115,128,20,4 --object-add modifier
                      --object-settings "{\"infill\": {\"density\": 40, \"pattern\": \"grid\"}, \"walls\": {\"count\": 2}}"
                 PROPERTIES WORKING_DIRECTORY ${TISMA_GATE_OUT})
+
+# G10, export: a partial settings file opened with the model keeps the
+# printer's start, heating and bed (QA, 2026-11-16).
+tisma_gate_test(NAME gate_g10_partial_settings MODEL ${TISMA_GATE_DATA}/tee.stl SCRIPT gate_g10_partial_settings
+                ARGS ${TISMA_GATE_DATA}/support_only.json)
