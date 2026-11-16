@@ -684,6 +684,15 @@
     <string name="report_other">Otro motivo</string>
     <string name="shared_reported">Denuncia enviada: la revisa una persona.</string>
     <string name="shared_too_large">La biblioteca es demasiado grande para esta versión; actualizá la app.</string>
+    <string name="shared_open">Abrir en la placa</string>
+    <string name="shared_opening">Bajando… %1$d %%</string>
+    <string name="shared_open_not_yet">Este modelo todavía no está disponible para bajar.</string>
+    <string name="shared_open_blocked">Este modelo o su cuenta están bloqueados.</string>
+    <string name="shared_open_busy">La biblioteca está ocupada; probá de nuevo en un rato.</string>
+    <string name="shared_open_sign_in">Entrá a tu cuenta de Tisma Cloud para bajar modelos.</string>
+    <string name="shared_open_discarded">Lo que llegó no coincidía con la biblioteca y se descartó.</string>
+    <string name="shared_open_nothing">Este modelo no tiene un archivo que la placa pueda abrir.</string>
+    <string name="shared_open_failed">No se pudo bajar el modelo.</string>
     <string name="shared_problem">No se pudieron usar los archivos firmados de la biblioteca; se muestran los guardados en el teléfono.</string>
     <string name="shared_report_failed">No se pudo mandar la denuncia: %1$s</string>
     <string name="unsafe_file">Archivo inseguro: no se abrió (%1$s).</string>

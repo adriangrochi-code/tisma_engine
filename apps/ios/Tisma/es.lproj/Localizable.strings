@@ -247,3 +247,14 @@
 "estimate" = "Estimando";
 "summary" = "Resumiendo";
 "resolution" = "Ajustando la resolución";
+
+/* «Abrir en la placa» from the shared library (p2p_library.md, rule 8 octies). */
+"Open on the plate" = "Abrir en la placa";
+"Downloading…" = "Bajando…";
+"This model is not available to download yet." = "Este modelo todavía no está disponible para bajar.";
+"This model or its account is blocked." = "Este modelo o su cuenta están bloqueados.";
+"The library is busy; try again in a while." = "La biblioteca está ocupada; probá de nuevo en un rato.";
+"Sign in to Tisma Cloud to download models." = "Entrá a tu cuenta de Tisma Cloud para bajar modelos.";
+"What came did not match the library and was thrown away." = "Lo que llegó no coincidía con la biblioteca y se descartó.";
+"This model has no file the plate can open." = "Este modelo no tiene un archivo que la placa pueda abrir.";
+"The model could not be downloaded." = "No se pudo bajar el modelo.";

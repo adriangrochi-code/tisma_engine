@@ -21,6 +21,12 @@ import platform.posix.memcpy
 data class SharedModel(val id: String, val name: String, val author: String, val license: String, val checked: Boolean)
 
 /**
+ * «Abrir en la placa» (rule 8 octies): the checked file to put on the plate ([path]), or why not ([notice], one of
+ * NOT_YET, BLOCKED, BUSY, SIGN_IN, DISCARDED, NOTHING_TO_OPEN, FAILED, as on Android).
+ */
+data class OpenResult(val path: String?, val name: String?, val notice: String?)
+
+/**
  * The shared library for the iPhone app (p2p_library.md, rule 6), with the same fetch as Android ([LibraryFetch]).
  * The signatures are checked by CryptoKit: Swift hands its check over with [useEd25519] at start.
  */
@@ -61,6 +67,63 @@ object LibraryBridge {
         return r.index?.search(query, r.list).orEmpty().map { SharedModel(it.id, it.name, it.author, it.license, it.checked) }
     }
 
+    /**
+     * Rule 8 octies, as Android does it: the model's project or model file from the seeder at [server], with a
+     * ticket from the person's session ([token]; empty: none), checked piece by piece and whole, kept in
+     * Documents/library/files under its SHA-256. [progress] gets 0–100. Runs off the main thread.
+     */
+    fun openOnPlate(server: String, token: String, modelId: String, progress: (Int) -> Unit): OpenResult {
+        val m = last?.index?.models?.firstOrNull { it.id == modelId } ?: return OpenResult(null, null, "FAILED")
+        val file = LibraryOpen.fileToOpen(m) ?: return OpenResult(null, null, "NOTHING_TO_OPEN")
+        val root = m.pieceRoots[file.sha256.lowercase()] ?: return OpenResult(null, null, "DISCARDED")
+        if (token.isEmpty()) return OpenResult(null, null, "SIGN_IN")
+        val sha = file.sha256.lowercase()
+        val parts = DirPieces("${FileStore.folder}/downloads/$sha")
+        val r = runCatching {
+            SeedDownload(SeedClient(server, net.tisma.cloud.PlatformHttp)) { CloudClient(server, token).libraryTicket() }
+                .download(file, root, parts) { done, of -> progress(if (of == 0) 100 else done * 100 / of) }
+        }
+        val result = r.getOrElse {
+            return OpenResult(null, null, if ((it as? net.tisma.cloud.CloudException)?.status == 401) "SIGN_IN" else "FAILED")
+        }
+        return when (result) {
+            is SeedDownload.Result.Done -> {
+                val ext = file.path.substringAfterLast('.', "3mf").lowercase()
+                val out = "${FileStore.folder}/files/$sha.$ext"
+                if (!parts.assemble(SeedClient.pieceCount(file.size), out)) OpenResult(null, null, "FAILED")
+                else OpenResult(out, LibraryOpen.name(file), null)
+            }
+            is SeedDownload.Result.NotYet -> OpenResult(null, null, "NOT_YET")
+            is SeedDownload.Result.Blocked -> OpenResult(null, null, "BLOCKED")
+            is SeedDownload.Result.Busy -> OpenResult(null, null, "BUSY")
+            is SeedDownload.Result.Unauthorized -> OpenResult(null, null, "SIGN_IN")
+            else -> OpenResult(null, null, "DISCARDED")
+        }
+    }
+
+    /** A download's pieces as files in [dir], to resume after a cut (rule 8 octies). */
+    private class DirPieces(private val dir: String) : PieceStore {
+        private val fm get() = NSFileManager.defaultManager
+        override fun has(n: Int) = fm.fileExistsAtPath("$dir/$n")
+        override fun write(n: Int, bytes: ByteArray) {
+            fm.createDirectoryAtPath(dir, true, null, null)
+            bytes.toNSData().writeToFile("$dir/$n", atomically = true)
+        }
+        override fun read(n: Int): ByteArray = NSData.dataWithContentsOfFile("$dir/$n")?.toByteArray() ?: ByteArray(0)
+        override fun clear() { fm.removeItemAtPath(dir, null) }
+        /** The pieces in order into [out], one at a time; then the pieces go. */
+        fun assemble(count: Int, out: String): Boolean {
+            val folder = out.substringBeforeLast('/')
+            fm.createDirectoryAtPath(folder, true, null, null)
+            if (!fm.createFileAtPath(out, null, null)) return false
+            val h = platform.Foundation.NSFileHandle.fileHandleForWritingAtPath(out) ?: return false
+            for (n in 0 until count) h.writeData(NSData.dataWithContentsOfFile("$dir/$n") ?: run { h.closeFile(); return false })
+            h.closeFile()
+            clear()
+            return true
+        }
+    }
+
     private fun hexBytes(h: String): ByteArray {
         val t = h.trim()
         if (t.length % 2 != 0 || t.any { it !in "0123456789abcdefABCDEF" }) return ByteArray(0)
@@ -69,6 +132,7 @@ object LibraryBridge {
 
     /** Kept pieces in the app's Documents/library folder; sequences and server in the app's defaults. */
     private object FileStore : LibraryStore {
+        val folder: String get() = dir
         private val dir: String by lazy {
             val docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).first() as String
             "$docs/library".also { NSFileManager.defaultManager.createDirectoryAtPath(it, true, null, null) }

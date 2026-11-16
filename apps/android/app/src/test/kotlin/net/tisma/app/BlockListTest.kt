@@ -198,6 +198,82 @@ class BlockListTest {
         assertTrue(net.tisma.cloud.CloudClient("https://cloud.example", http = ok).libraryFile("index.json").contentEquals(big))
     }
 
+    @Test
+    fun `rule 8 octies Open on the plate downloads the model from the seeder, checked, and puts it on the plate`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val dir = tmp.newFolder("p2p")
+        val stl = "solid cube\nendsolid cube\n".toByteArray()
+        val sha = net.tisma.io.hex(net.tisma.io.Sha256.digest(stl))
+        val pieceHash = net.tisma.io.Sha256.digest(stl)
+        val root = net.tisma.io.hex(net.tisma.io.Sha256.digest(pieceHash))
+        val m = """{"id":"m1","revision":1,"name":"Cube","description":"","tags":[],"license":"CC0-1.0",
+            "author":{"name":"Ana","account":"acct-1"},"size":${stl.size},"checked":true,"thumbnail":"",
+            "files":[{"path":"cube.stl","role":"model","size":${stl.size},"sha256":"$sha"}],
+            "swarm":{"protocol":"libp2p/tisma-library/1","piece_size":1048576,"piece_roots":{"$sha":"$root"}}}"""
+        val idx = index(1, m)
+        val list = list(1)
+        val seen = mutableListOf<String>()
+        val seedHttp = net.tisma.cloud.Http { r ->
+            seen += r.url.substringAfter("/v1/seed/") + " " + r.headers["Authorization"]
+            val body = when (r.url.substringAfter("/v1/seed/")) {
+                "$sha/pieces" -> """{"size":${stl.size},"hashes":["${net.tisma.io.hex(pieceHash)}"]}""".toByteArray()
+                "$sha/piece/0" -> stl
+                else -> null
+            }
+            net.tisma.cloud.HttpResponse(if (body == null) 404 else 200, emptyMap(), net.tisma.io.BytesInput(body ?: ByteArray(0)))
+        }
+        val server = object : LibraryServer {
+            val files = mapOf("key" to keyJson(), "blocklist.json" to list, "blocklist.json.sig" to sign(library, list),
+                "index.json" to idx, "index.json.sig" to sign(library, idx))
+            override fun file(name: String) = files[name] ?: throw java.io.IOException("404 $name")
+            override fun report(model: String?, sha256: String?, reason: String) = "r1"
+            override val seeder get() = net.tisma.app.p2p.SeedClient("https://cloud.example", seedHttp)
+            override fun ticket() = "ticket-1"
+        }
+        val settings = AppSettings(context).apply { packWizardDone = true }
+        val shared = SharedViewModel(dir, projectKey, server, settings)
+        val work = tmp.newFolder("work")
+        val slice = SliceViewModel(EngineRunner(File(work, "none"), work), work, saved = settings)
+        val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+        val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        val nav = Navigator(Section.LIBRARY)
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav, shared = shared) } }
+        compose.onNodeWithTag("tab_shared").performClick()
+        compose.waitUntil(10_000) { ShadowLooper.idleMainLooper(); compose.onAllNodes(hasTestTag("shared_open_m1")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("shared_open_m1").performScrollTo().performClick()
+        compose.waitUntil(10_000) { ShadowLooper.idleMainLooper(); slice.state.value.modelName == "cube.stl" }
+        assertEquals(Section.PLATE, nav.section)
+        assertEquals(listOf("$sha/pieces Bearer ticket-1", "$sha/piece/0 Bearer ticket-1"), seen)
+        // Kept as a copy the phone may share later (rule 8), under its SHA-256.
+        assertTrue(File(dir, "files/$sha.stl").readBytes().contentEquals(stl))
+        assertFalse(File(dir, "downloads/$sha").exists())
+    }
+
+    @Test
+    fun `rule 8 octies a model the seeder does not have yet says so, and no session asks to sign in`() {
+        val dir = tmp.newFolder("p2p")
+        val sha = "c".repeat(64)
+        val m = net.tisma.app.p2p.LibraryIndex.Model("m9", 1, "Later", "", emptyList(), "CC0-1.0", "Ana", "acct-1", 10,
+            listOf(net.tisma.app.p2p.LibraryIndex.FileRef("later.3mf", "project", 10, sha)), false, "", mapOf(sha to "d".repeat(64)))
+        fun run(ticket: () -> String): net.tisma.app.p2p.OpenNotice? {
+            val server = object : LibraryServer {
+                override fun file(name: String) = throw java.io.IOException("404")
+                override fun report(model: String?, sha256: String?, reason: String) = ""
+                override val seeder get() = net.tisma.app.p2p.SeedClient("https://c", net.tisma.cloud.Http {
+                    net.tisma.cloud.HttpResponse(404, emptyMap(), net.tisma.io.BytesInput(ByteArray(0))) })
+                override fun ticket() = ticket()
+            }
+            val vm = SharedViewModel(dir, projectKey, server)
+            vm.openOnPlate(m)
+            val end = System.currentTimeMillis() + 10_000
+            while (vm.state.value.opening != null && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+            ShadowLooper.idleMainLooper()
+            return vm.state.value.openNotice
+        }
+        assertEquals(net.tisma.app.p2p.OpenNotice.NOT_YET, run { "t" })
+        assertEquals(net.tisma.app.p2p.OpenNotice.SIGN_IN, run { throw java.io.IOException("No session") })
+    }
+
     private class FakeServer(val files: Map<String, ByteArray>, override val origin: String = "") : LibraryServer {
         val reports = mutableListOf<Triple<String?, String?, String>>()
         override fun file(name: String) = files[name] ?: throw java.io.IOException("404 $name")

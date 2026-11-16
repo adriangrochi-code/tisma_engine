@@ -13,6 +13,29 @@ import kotlinx.coroutines.withContext
 import net.tisma.app.data.AppLog
 import java.io.File
 
+/** Why a model did not open on the plate (rule 8 octies), in the person's words on the screen. */
+enum class OpenNotice { NOT_YET, BLOCKED, BUSY, SIGN_IN, DISCARDED, NOTHING_TO_OPEN, FAILED }
+
+/** Rule 8 octies: a download's pieces as files, so it resumes after a cut and is checked whole at the end. */
+class FilePieceStore(private val dir: File) : PieceStore {
+    private fun f(n: Int) = File(dir, n.toString())
+    override fun has(n: Int) = f(n).isFile
+    override fun write(n: Int, bytes: ByteArray) {
+        dir.mkdirs()
+        val tmp = File(dir, "$n.part")
+        tmp.writeBytes(bytes)
+        if (!tmp.renameTo(f(n))) throw java.io.IOException("cannot keep piece $n")
+    }
+    override fun read(n: Int) = f(n).readBytes()
+    override fun clear() { dir.deleteRecursively() }
+    /** The pieces in order, into [out]; then the pieces go. */
+    fun assemble(count: Int, out: File) {
+        out.parentFile?.mkdirs()
+        out.outputStream().use { o -> for (n in 0 until count) o.write(read(n)) }
+        clear()
+    }
+}
+
 /** The shared library's screen (p2p_library.md). */
 data class SharedState(
     val list: BlockList? = null,
@@ -32,6 +55,12 @@ data class SharedState(
     /** «Denunciar» sent (the model's or file's id), or why it failed. */
     val reported: String? = null,
     val reportFailed: String? = null,
+    /** «Abrir en la placa» (rule 8 octies): the model being downloaded and how far (0–100). */
+    val opening: String? = null,
+    val openPercent: Int = 0,
+    val openNotice: OpenNotice? = null,
+    /** A downloaded, checked file for the plate: its name and where it is. */
+    val toOpen: Pair<String, File>? = null,
 ) {
     val blockedBy: SharingPolicy.Why? get() = SharingPolicy.blocked(sharing, list, unmetered, charging)
     val found: List<LibraryIndex.Model> get() = index?.search(query, list).orEmpty()
@@ -109,4 +138,60 @@ class SharedViewModel(
     }
 
     fun reportSeen() = _state.update { it.copy(reported = null, reportFailed = null) }
+
+    /**
+     * «Abrir en la placa» (rule 8 octies, provisional): the model's project or model file from the seeder, checked
+     * piece by piece against the signed index and whole, kept as a copy the phone may share (rule 8), then handed to
+     * the plate through [SharedState.toOpen].
+     */
+    fun openOnPlate(m: LibraryIndex.Model) {
+        if (_state.value.opening != null) return
+        fun say(n: OpenNotice) = _state.update { it.copy(openNotice = n, opening = null) }
+        val s = server
+        val seeder = s?.seeder ?: return say(OpenNotice.FAILED)
+        val file = LibraryOpen.fileToOpen(m) ?: return say(OpenNotice.NOTHING_TO_OPEN)
+        val root = m.pieceRoots[file.sha256.lowercase()] ?: return say(OpenNotice.DISCARDED)
+        _state.update { it.copy(opening = m.id, openPercent = 0, openNotice = null) }
+        viewModelScope.launch {
+            val r = withContext(io) {
+                runCatching {
+                    val parts = FilePieceStore(File(dir, "downloads/" + file.sha256.lowercase()))
+                    val result = SeedDownload(seeder) { s.ticket() }.download(file, root, parts) { done, of ->
+                        _state.update { it.copy(openPercent = if (of == 0) 100 else done * 100 / of) }
+                    }
+                    if (result is SeedDownload.Result.Done) {
+                        val ext = file.path.substringAfterLast('.', "3mf").lowercase()
+                        val whole = File(dir, "downloads/" + file.sha256.lowercase() + "." + ext)
+                        parts.assemble(SeedClient.pieceCount(file.size), whole)
+                        val copy = copies.add(whole, ext)
+                        whole.delete()
+                        result to copy.file
+                    } else result to null
+                }
+            }
+            r.onFailure { AppLog.line("p2p: open ${m.id} ${it.message}") }
+            val (result, copy) = r.getOrNull() ?: (null to null)
+            val notice = when {
+                copy != null -> null
+                r.exceptionOrNull()?.message == "No session" ||
+                    (r.exceptionOrNull() as? net.tisma.cloud.CloudException)?.status == 401 -> OpenNotice.SIGN_IN
+                result is SeedDownload.Result.NotYet -> OpenNotice.NOT_YET
+                result is SeedDownload.Result.Blocked -> OpenNotice.BLOCKED
+                result is SeedDownload.Result.Busy -> OpenNotice.BUSY
+                result is SeedDownload.Result.Unauthorized -> OpenNotice.SIGN_IN
+                result is SeedDownload.Result.BadList || result is SeedDownload.Result.Corrupt -> OpenNotice.DISCARDED
+                else -> OpenNotice.FAILED
+            }
+            val kept = withContext(io) { copies.all() }
+            _state.update {
+                it.copy(opening = null, openNotice = notice, copies = kept,
+                    toOpen = copy?.let { f -> LibraryOpen.name(file) to f })
+            }
+        }
+    }
+
+    /** The plate took the file. */
+    fun opened() = _state.update { it.copy(toOpen = null) }
+
+    fun openNoticeSeen() = _state.update { it.copy(openNotice = null) }
 }

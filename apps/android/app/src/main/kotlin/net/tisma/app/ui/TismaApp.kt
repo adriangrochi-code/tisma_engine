@@ -310,7 +310,10 @@ fun TismaApp(
                         Section.ENGINEERING -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav,
                             engineering = true)
                         Section.LIBRARY -> LibraryTabs(shared != null) { sharedTab ->
-                            if (sharedTab && shared != null) SharedScreen(shared)
+                            if (sharedTab && shared != null) SharedScreen(shared) { name, file ->
+                                slice.open(name) { file.inputStream() }
+                                nav.select(Section.PLATE)
+                            }
                             else if (library != null && sliceState.libraryAvailable) LibraryScreen(library, slice, nav, settings.libraryCapMb)
                             else LibraryUnavailable(nav)
                         }

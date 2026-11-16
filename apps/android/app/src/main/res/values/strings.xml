@@ -700,6 +700,15 @@
     <string name="report_other">Another reason</string>
     <string name="shared_reported">Report sent: a person reviews it.</string>
     <string name="shared_too_large">The library is too large for this version; update the app.</string>
+    <string name="shared_open">Open on the plate</string>
+    <string name="shared_opening">Downloading… %1$d %%</string>
+    <string name="shared_open_not_yet">This model is not available to download yet.</string>
+    <string name="shared_open_blocked">This model or its account is blocked.</string>
+    <string name="shared_open_busy">The library is busy; try again in a while.</string>
+    <string name="shared_open_sign_in">Sign in to Tisma Cloud to download models.</string>
+    <string name="shared_open_discarded">What came did not match the library and was thrown away.</string>
+    <string name="shared_open_nothing">This model has no file the plate can open.</string>
+    <string name="shared_open_failed">The model could not be downloaded.</string>
     <string name="shared_problem">The library\'s signed files could not be used; the ones kept on this phone are shown.</string>
     <string name="shared_report_failed">The report could not be sent: %1$s</string>
     <string name="unsafe_file">Unsafe file: not opened (%1$s).</string>

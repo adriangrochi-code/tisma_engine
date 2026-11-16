@@ -221,3 +221,16 @@ class SeedUpload(private val client: SeedClient, private val ticket: () -> Strin
         }
     }
 }
+
+/** «Abrir en la placa» (p2p_library.md, rule 8 octies; QA, 16-11-2026): which of a model's files the plate opens. */
+object LibraryOpen {
+    private val OPENABLE = setOf("3mf", "stl", "obj")
+
+    /** The project (role `project`), else the first model file the plate reads; never a photo, recipe or analysis. */
+    fun fileToOpen(m: LibraryIndex.Model): LibraryIndex.FileRef? =
+        m.files.firstOrNull { it.role == "project" }
+            ?: m.files.firstOrNull { it.role !in setOf("photo", "profile", "analysis") && it.path.substringAfterLast('.').lowercase() in OPENABLE }
+
+    /** The file's name on the phone: its own name in the model, without folders. */
+    fun name(f: LibraryIndex.FileRef): String = f.path.substringAfterLast('/').ifBlank { f.sha256 + ".3mf" }
+}

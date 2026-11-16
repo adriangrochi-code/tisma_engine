@@ -12427,5 +12427,11 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   `swarm.piece_roots`; `Sha256.Stream` hashea por partes. Probado contra un sembrador falso (8 pruebas comunes + 1 del
   índice); falta la pantalla (bajar y publicar) y el servidor real. Supuesto a confirmar con el servidor: la respuesta de
   `POST /v1/library/relay-ticket` trae el ticket en `ticket`.
+- 16-11 (QA: sin pausa para esto): «Abrir en la placa» en la biblioteca compartida de las dos apps (regla 8 octies):
+  baja del sembrador con un ticket de la sesión (`POST /v1/library/relay-ticket`, campo `ticket`, confirmado por QA),
+  comprobado, lo guarda como copia que el teléfono puede compartir (Android `files/<sha256>.<ext>`; iPhone
+  Documents/library/files) y lo pone en la placa. Avisos: «todavía no disponible», bloqueado, ocupada, entrar a la
+  cuenta, descartado, sin archivo para la placa. Android probado con Robolectric contra un sembrador falso (de la tarjeta
+  a la placa); iPhone compilado en su CI, sin prueba de la pantalla. Publicar desde el teléfono queda para después.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.

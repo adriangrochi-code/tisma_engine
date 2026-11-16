@@ -9,6 +9,10 @@ interface LibraryServer {
     fun report(model: String?, sha256: String?, reason: String): String
     /** The server these files come from: another one (Preferences) has its own sequences and key. */
     val origin: String get() = ""
+    /** Rule 8 octies: the seeder the models come from (provisional, over HTTPS), or null when there is none. */
+    val seeder: SeedClient? get() = null
+    /** Rule 8 sexies: a download ticket; needs the person's session (throws without one). */
+    fun ticket(): String = throw net.tisma.io.IOException("No session")
 }
 
 /** What the device keeps between runs: the last key, list and index, and the sequences seen (rule 3 ter). */

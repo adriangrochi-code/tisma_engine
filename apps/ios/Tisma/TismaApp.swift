@@ -29,6 +29,11 @@ struct TismaApp: App {
     }
 }
 
+extension Notification.Name {
+    /// Show the plate (a model was opened from the library).
+    static let tismaShowPlate = Notification.Name("tisma.showPlate")
+}
+
 struct RootView: View {
     @State private var tab = 0
     @AppStorage("plate.opened") private var openedPath = ""
@@ -50,6 +55,8 @@ struct RootView: View {
         .onOpenURL { url in
             if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 }
         }
+        // A model opened from the library (rule 8 octies) shows the plate.
+        .onReceive(NotificationCenter.default.publisher(for: .tismaShowPlate)) { _ in tab = 0 }
         // The saved printer is followed while the app is open; in the background, only while it prints.
         .onChange(of: phase, initial: true) { _, now in
             if now == .active { PrintWatcher.shared.start() } else {
@@ -197,13 +204,13 @@ struct PlateView: View {
     static let modelTypes: [UTType] = ["stl", "obj", "3mf"].compactMap { UTType(filenameExtension: $0) } + [.data]
 
     /// A picked file is copied into the app (the picker's access ends); nil when it cannot be read or is no model.
-    static func copyIn(_ url: URL) -> URL? {
+    static func copyIn(_ url: URL, named: String? = nil) -> URL? {
         guard ["stl", "obj", "3mf"].contains(url.pathExtension.lowercased()) else { return nil }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("models", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let dest = dir.appendingPathComponent(url.lastPathComponent)
+        let dest = dir.appendingPathComponent(named.flatMap { $0.isEmpty ? nil : $0 } ?? url.lastPathComponent)
         try? FileManager.default.removeItem(at: dest)
         return (try? FileManager.default.copyItem(at: url, to: dest)) != nil ? dest : nil
     }
@@ -384,6 +391,10 @@ struct LibraryView: View {
     @State private var items: [SharedModel] = []
     @State private var problem: String?
     @State private var tooLarge = false
+    @State private var opening: String?
+    @State private var percent = 0
+    @State private var notice: String?
+    @AppStorage("plate.opened") private var openedPath = ""
 
     var body: some View {
         NavigationStack {
@@ -391,6 +402,14 @@ struct LibraryView: View {
                 VStack(alignment: .leading) {
                     Text(m.name).font(.headline)
                     Text("\(m.author) · \(m.license)").font(.subheadline).foregroundStyle(.secondary)
+                    // Rule 8 octies: download it from the seeder, checked, and open it on the plate.
+                    if opening == m.id {
+                        ProgressView(value: Double(percent), total: 100) { Text("Downloading…") }
+                    } else {
+                        Button("Open on the plate") { open(m) }
+                            .disabled(opening != nil)
+                            .accessibilityIdentifier("library_open_\(m.id)")
+                    }
                 }
             }
             .overlay {
@@ -398,6 +417,9 @@ struct LibraryView: View {
                     ContentUnavailableView("No models yet", systemImage: "books.vertical",
                                            description: problem.map { Text($0) })
                 }
+            }
+            .alert(notice.map { LibraryView.noticeText($0) } ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+                Button("OK", role: .cancel) { notice = nil }
             }
             .safeAreaInset(edge: .top) {
                 if tooLarge {
@@ -411,6 +433,38 @@ struct LibraryView: View {
             .task { await refresh() }
             .refreshable { await refresh() }
             .navigationTitle("Library")
+        }
+    }
+
+    /// «Abrir en la placa»: the checked file goes onto the plate, which the root view then shows.
+    private func open(_ m: SharedModel) {
+        opening = m.id; percent = 0
+        let (server, token) = (Prefs.server, Keychain.read("cloud.token") ?? "")
+        Task.detached {
+            let r = LibraryBridge.shared.openOnPlate(server: server, token: token, modelId: m.id) { pc in
+                Task { @MainActor in percent = Int(pc.intValue) }
+            }
+            await MainActor.run {
+                opening = nil
+                if let path = r.path, let copy = PlateView.copyIn(URL(fileURLWithPath: path), named: r.name) {
+                    openedPath = copy.path
+                    NotificationCenter.default.post(name: .tismaShowPlate, object: nil)
+                } else {
+                    notice = r.notice ?? "FAILED"
+                }
+            }
+        }
+    }
+
+    static func noticeText(_ n: String) -> String {
+        switch n {
+        case "NOT_YET": return String(localized: "This model is not available to download yet.")
+        case "BLOCKED": return String(localized: "This model or its account is blocked.")
+        case "BUSY": return String(localized: "The library is busy; try again in a while.")
+        case "SIGN_IN": return String(localized: "Sign in to Tisma Cloud to download models.")
+        case "DISCARDED": return String(localized: "What came did not match the library and was thrown away.")
+        case "NOTHING_TO_OPEN": return String(localized: "This model has no file the plate can open.")
+        default: return String(localized: "The model could not be downloaded.")
         }
     }
 

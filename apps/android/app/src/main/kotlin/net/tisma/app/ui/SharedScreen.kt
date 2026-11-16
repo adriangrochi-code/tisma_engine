@@ -47,13 +47,15 @@ import java.time.format.DateTimeFormatter
  * downloading wait for the server's index.
  */
 @Composable
-fun SharedScreen(shared: SharedViewModel) {
+fun SharedScreen(shared: SharedViewModel, openOnPlate: (String, java.io.File) -> Unit = { _, _ -> }) {
     val state by shared.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         shared.refresh()
         shared.setConditions(unmetered(context), charging(context))
     }
+    // A downloaded, checked model goes to the plate (rule 8 octies).
+    LaunchedEffect(state.toOpen) { state.toOpen?.let { (name, file) -> openOnPlate(name, file); shared.opened() } }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("shared"),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Rule 4: a withdrawn copy is deleted, and said.
@@ -62,6 +64,20 @@ fun SharedScreen(shared: SharedViewModel) {
             AccentTextButton(onClick = { shared.withdrawnSeen() }) { Text(stringResource(R.string.shared_ok)) }
         }
         // Rule 7: a report sent, or why not.
+        state.openNotice?.let { n ->
+            TismaCard(Modifier.testTag("shared_open_notice")) {
+                Text(stringResource(when (n) {
+                    net.tisma.app.p2p.OpenNotice.NOT_YET -> R.string.shared_open_not_yet
+                    net.tisma.app.p2p.OpenNotice.BLOCKED -> R.string.shared_open_blocked
+                    net.tisma.app.p2p.OpenNotice.BUSY -> R.string.shared_open_busy
+                    net.tisma.app.p2p.OpenNotice.SIGN_IN -> R.string.shared_open_sign_in
+                    net.tisma.app.p2p.OpenNotice.DISCARDED -> R.string.shared_open_discarded
+                    net.tisma.app.p2p.OpenNotice.NOTHING_TO_OPEN -> R.string.shared_open_nothing
+                    net.tisma.app.p2p.OpenNotice.FAILED -> R.string.shared_open_failed
+                }))
+                AccentTextButton(onClick = { shared.openNoticeSeen() }) { Text(stringResource(R.string.shared_ok)) }
+            }
+        }
         state.reported?.let { TismaCard(Modifier.testTag("shared_reported")) {
             Text(stringResource(R.string.shared_reported)); AccentTextButton(onClick = { shared.reportSeen() }) { Text(stringResource(R.string.shared_ok)) } } }
         state.reportFailed?.let { TismaCard(Modifier.testTag("shared_report_failed")) {
@@ -78,7 +94,7 @@ fun SharedScreen(shared: SharedViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        state.found.take(200).forEach { m -> ModelCard(m) { reason -> shared.report(m.id, null, reason) } }
+        state.found.take(200).forEach { m -> ModelCard(m, state.opening, state.openPercent, { shared.openOnPlate(m) }) { reason -> shared.report(m.id, null, reason) } }
         TismaCard(Modifier.testTag("shared_list")) {
             Text(stringResource(R.string.shared_blocklist), style = MaterialTheme.typography.titleMedium)
             val list = state.list
@@ -134,7 +150,7 @@ private fun charging(context: Context): Boolean = runCatching {
 
 /** A model of the index: who made it, its licence, whether a seeder checked it, and «Denunciar» (rule 7). */
 @Composable
-private fun ModelCard(m: net.tisma.app.p2p.LibraryIndex.Model, report: (String) -> Unit) {
+private fun ModelCard(m: net.tisma.app.p2p.LibraryIndex.Model, opening: String?, percent: Int, open: () -> Unit, report: (String) -> Unit) {
     var asking by rememberSaveable(m.id) { mutableStateOf(false) }
     TismaCard(Modifier.testTag("shared_model_" + m.id)) {
         Text(m.name, style = MaterialTheme.typography.titleMedium)
@@ -145,6 +161,12 @@ private fun ModelCard(m: net.tisma.app.p2p.LibraryIndex.Model, report: (String) 
         if (m.checked) Text(stringResource(R.string.shared_checked), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (m.description.isNotBlank()) Text(m.description, style = MaterialTheme.typography.bodySmall, maxLines = 3)
+        // Rule 8 octies: download it from the seeder, checked, and open it on the plate.
+        if (opening == m.id) Text(stringResource(R.string.shared_opening, percent), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.testTag("shared_opening_" + m.id))
+        else AccentTextButton(onClick = open, enabled = opening == null, modifier = Modifier.testTag("shared_open_" + m.id)) {
+            Text(stringResource(R.string.shared_open))
+        }
         if (!asking) AccentTextButton(onClick = { asking = true }, modifier = Modifier.testTag("shared_report_" + m.id)) {
             Text(stringResource(R.string.shared_report))
         } else {

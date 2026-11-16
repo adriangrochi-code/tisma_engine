@@ -119,6 +119,12 @@ class MainActivity : ComponentActivity() {
                         net.tisma.cloud.CloudClient(app.settings.server, app.secrets.get(net.tisma.app.cloud.CloudViewModel.TOKEN))
                             .libraryReport(model, sha256, reason)
                     override val origin: String get() = app.settings.server
+                    // Rule 8 octies: the seeder at the same public address, and a ticket with the person's session.
+                    override val seeder get() = net.tisma.app.p2p.SeedClient(app.settings.server, net.tisma.cloud.UrlConnectionHttp)
+                    override fun ticket(): String {
+                        val token = app.secrets.get(net.tisma.app.cloud.CloudViewModel.TOKEN) ?: throw java.io.IOException("No session")
+                        return net.tisma.cloud.CloudClient(app.settings.server, token).libraryTicket()
+                    }
                 },
                 saved = app.settings) as T
         }
