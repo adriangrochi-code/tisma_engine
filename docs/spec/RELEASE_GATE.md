@@ -40,7 +40,9 @@ lanzamiento.
 
 ## Definiciones para G3
 
-- **Voladizo:** caras conectadas, más inclinadas que el ángulo de soporte, a más de 1 mm de la cama.
+- **Voladizo:** caras conectadas, más inclinadas que el ángulo de soporte, a más de 1 mm de la cama, que en alguna
+  capa sobresalen de la capa de abajo más de medio cordón (el umbral de `supports_skirt.md`, regla 1). Un labio que
+  sobresale menos se imprime sin soporte.
   Los puentes no cuentan: con `support.under_bridges` apagado no llevan soporte (`supports_skirt.md`, regla 1). El
   techo de la cabina del Benchy es un puente.
 - **Tiene soporte:** hay extrusión de soporte a menos de 2,5 mm de costado, en los 3 mm de abajo del voladizo.
