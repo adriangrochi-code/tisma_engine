@@ -350,6 +350,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_print_host_offline PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    # Closing with jobs under way: the process ends in under 3 s.
+    add_test(NAME ui_quit_busy
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/sphere.stl --lang es --size 1200x760 --cloud-server http://127.0.0.1:9
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/quit_busy.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_quit_busy.png)
+    set_tests_properties(ui_quit_busy PROPERTIES FAIL_REGULAR_EXPRESSION "error: " PASS_REGULAR_EXPRESSION "ui-script: quit: the program ended"
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 60)
     # AstroBox and Repetier-Server, chosen by their word, asked by «Test».
     add_test(NAME ui_print_host_kinds
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

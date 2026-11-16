@@ -14359,3 +14359,16 @@ hardware:** la RTX 4060 real.
 **Sigue:** en pausa. Pendiente de decisión del dueño: kernels de GPU para el solver de elasticidad (multigrid) y
 para el LBM D3Q19.
 
+
+## 2026-11-16 — interfaz: errores del probador (Windows 10, RTX 4060)
+
+- **El programa no cerraba (1):** al cerrar ya no se espera a lo que sigue en marcha. Los análisis los cancela y
+  espera el motor (ca81fae). Un laminado, una búsqueda en la red, una cámara o una llamada a la nube quedan atrás: el
+  proceso termina con `std::exit` después de guardar las preferencias, y la `App` no se destruye, así que nada espera
+  en un destructor. Se suman `busy-job` y `quit` a los guiones; `quit_busy.txt` cierra con un trabajo trabado de 30 s,
+  un laminado, la nube y una prueba de conexión: el programa termina en unos 35 ms (falla si pasa de 3 s).
+- **Cuadro de calibraciones (2), selección (3) y cámara que no gira (4):** no se reproducen acá. La tarjeta de
+  calibración cierra con Cerrar y con Esc; la selección se ve igual en OpenGL y en Vulkan, también con la pantalla
+  escalada a 150 %; las pruebas de navegación y de la barra de vista pasan en las dos vistas a 100 % y a 150 %. Se
+  suma `TISMA_SCALE` (la escala de la interfaz en las capturas, que antes era siempre 1) para probar pantallas
+  escaladas como las de Windows. Se esperan capturas del probador.

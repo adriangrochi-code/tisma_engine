@@ -1,0 +1,10 @@
+# Closing with work under way ends the program at once (the tester's report,
+# 2026-11-14: it had to be killed): a stuck job of 30 s, a slice, the cloud
+# dialog's call and a search on the network are left behind, and the process
+# ends in under 3 s.
+busy-job 30
+slice
+menu cloud_chip
+host moonraker http://127.0.0.1:9
+host test
+quit

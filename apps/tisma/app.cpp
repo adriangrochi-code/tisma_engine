@@ -117,6 +117,7 @@
 #include <fstream>
 #include <functional>
 #include <future>
+#include <thread>
 #include <map>
 #include <numbers>
 #include <memory>
@@ -2070,6 +2071,7 @@ private:
     std::array<std::size_t, 4> draw_bytes_{}; // the view's buffers last printed (--draw-stats)
     long long view_calls_ = -1; // the 3D view's draw calls in the last frame (--draw-stats)
     bool quit_ = false;
+    std::vector<std::future<void>> busy_jobs_; // script: stuck jobs, to time the exit (busy-job)
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
     bool failed_ = false; // the screenshot or its export failed
@@ -2584,6 +2586,7 @@ std::string g_last_field; // the last of them, for a field narrower than its cel
 // The entries of a menu drawn this frame, by a name in English, for
 // --ui-script's menu step: min x, min y, max x, max y.
 std::map<std::string, ImVec4> g_menu_rects;
+std::optional<std::chrono::steady_clock::time_point> g_quit_at; // script: when «quit» closed the window
 // The named entries drawn greyed this frame (--ui-script's expect-enabled).
 std::set<std::string> g_menu_disabled;
 // The scripted tests: the control a click is about to aim at. The panel that
@@ -3780,6 +3783,11 @@ bool App::init(std::string& error) {
         glfwGetWindowContentScale(window_, &sx, &sy);
         scale_ = std::clamp(std::max(sx, sy), 1.0f, 4.0f);
     }
+    // A screen scaled as Windows' 125 % or 150 % (TISMA_SCALE=1.5), for the
+    // tests: screenshots are taken at 1 otherwise, and some faults show only
+    // scaled (the tester's report, 2026-11-14).
+    if (const char* forced = std::getenv("TISMA_SCALE"); forced && std::atof(forced) >= 1.0)
+        scale_ = std::clamp(float(std::atof(forced)), 1.0f, 4.0f);
 
     // The window icon: the application icon, drawn at three sizes.
     std::vector<Image> sizes;
@@ -4203,10 +4211,16 @@ void App::shutdown() {
     optimize_job_.wait();
     aero_job_.wait();
     structural_estimate_job_.wait();
-    slice_job_.wait();
+    // The rest does not hold the exit (the same report): a slice, a search on
+    // the network, a camera or a call to the cloud is told to stop where it
+    // can and left behind; the process ends after this (run_app) without
+    // waiting for them, and the App is never destroyed, so what they read
+    // stays valid.
+    if (bambu_camera_)
+        bambu_camera_->stop = true;
+    if (usb_cam_)
+        usb_cam_->stop = true;
     device_disconnect();
-    bambu_camera_off();
-    usb_camera_off();
     // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
     session_file_.close();
     ui::end_session(session_mark_);
@@ -24389,6 +24403,7 @@ void App::calibration_panel() {
             if (button("##continue", "tisma_calibrate", format(tr(T::CalContinue), tr(title_of(*next_basic))).c_str(),
                        true, false, true, nullptr, button_h))
                 calibration_card_ = int(*next_basic);
+            note_rect("cal_continue");
         } else {
             loc::TextColored(rgb(theme_.paint_enforce), "%s", tr(T::CalAllBasicDone));
         }
@@ -24727,6 +24742,7 @@ void App::calibration_panel() {
                              ImGui::CalcTextSize(tr(T::Close)).x - ImGui::GetStyle().FramePadding.x * 2.0f);
         if (ImGui::Button(tr(T::Close)))
             close = true;
+        note_rect("cal_card_close");
         ImGui::PopTextWrapPos();
         if (close)
             ImGui::CloseCurrentPopup();
@@ -27269,6 +27285,14 @@ void App::script_input() {
             next();
         else if (f > 600)
             return fail_step(step.key + " analysis is not running");
+    } else if (step.verb == "busy-job") { // a job that takes SECONDS and ignores being stopped, as a stuck network call
+        const int seconds = std::atoi(step.key.c_str());
+        busy_jobs_.push_back(std::async(std::launch::async, [seconds] { std::this_thread::sleep_for(std::chrono::seconds(seconds)); }));
+        next();
+    } else if (step.verb == "quit") { // close the window now; the exit is timed (it must take under 3 s)
+        g_quit_at = std::chrono::steady_clock::now();
+        quit_ = true;
+        next();
     } else if (step.verb == "expect-structural") { // what keeps Analyze off: material, fixed, force or none
         if (objects_.empty())
             return fail_step("no part on the plate");
@@ -28789,8 +28813,20 @@ int write_settings_layout(const AppOptions& options) {
 int run_app(const AppOptions& options) {
     if (!options.settings_layout.empty())
         return write_settings_layout(options);
-    App app(options);
-    return app.run();
+    // The App is never destroyed: its jobs still running (std::async futures
+    // and Background threads wait in their destructors) would hold the exit.
+    // run() has saved what is kept and closed the window; the process ends
+    // here, with the static objects' clean-up (the design session's folder).
+    auto* app = new App(options);
+    const int code = app->run();
+    if (g_quit_at) {
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - *g_quit_at).count();
+        std::printf("ui-script: quit: the program ended %.0f ms after\n", ms);
+        if (ms > 3000.0)
+            std::fprintf(stderr, "error: the program took %.0f ms to end\n", ms);
+    }
+    std::fflush(nullptr);
+    std::exit(code);
 }
 
 } // namespace tisma::ui
