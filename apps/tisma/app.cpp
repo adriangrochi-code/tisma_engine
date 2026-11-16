@@ -19329,7 +19329,7 @@ void App::aerodynamics_panel() {
     } else if (aero_job_.running()) {
         const int permille = aero_permille_.load();
         ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
-                           format(tr(T::AeroAnalyzing), permille / 10).c_str());
+                           permille == 0 ? tr(T::AeroPreparingGrid) : format(tr(T::AeroAnalyzing), permille / 10).c_str());
         rect_of("aero_progress");
         ImGui::SameLine();
         if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
