@@ -130,6 +130,8 @@ class ReleaseGateTest {
         return gcode
     }
 
+    private val PART = listOf("perimeter", "wall", "infill", "bridge", "gap", "overhang", "ironing", "top", "bottom")
+
     /** G2: the printed part (walls and infill, not skirt or support) is the model's size within 0.1 mm. */
     private fun checkGcode(gcode: File, model: FloatArray) {
         val layers = gcode.bufferedReader().useLines { GcodeLayers.read(it) }
@@ -137,7 +139,9 @@ class ReleaseGateTest {
         var top = 0f
         for (l in layers.layers) for (i in 0 until l.count) {
             val type = layers.types.getOrElse(l.segmentTypes[i].toInt()) { "" }.lowercase()
-            if ("skirt" in type || "brim" in type || "support" in type || "wipe" in type || "purge" in type) continue
+            // Only the part: walls, infill, bridges, gap fill, ironing. Not the skirt or brim, support, wipe tower, nor
+            // the start G-code's purge line (untyped, «Custom»).
+            if (PART.none { it in type } || "support" in type) continue
             val half = l.widths[i] / 2
             val s = l.segments
             for (k in 0..1) {
