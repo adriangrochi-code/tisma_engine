@@ -193,7 +193,12 @@ class ReleaseGateTest {
             waitTag("send_to_gate-$kind")
             tap("send_to_gate-$kind")
             tap("plate_send")
-            compose.waitUntil(120_000) { received(url, want) }
+            try {
+                compose.waitUntil(120_000) { received(url, want) }
+            } catch (e: Throwable) {
+                val said = runCatching { java.net.URL("$url/_tisma/received").readText() }.getOrElse { "(no answer: ${it.message})" }
+                fail("$kind did not get the G-code (sha256 $want, ${gcode.length()} bytes) or did not start; it says $said; on screen: ${screen()}")
+            }
         }
     }
 
