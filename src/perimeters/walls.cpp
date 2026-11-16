@@ -6,6 +6,8 @@
 #include "perimeters/transitions.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <unordered_map>
 
 namespace tisma {
 
@@ -64,6 +66,68 @@ LayerWalls layer_walls(const Polygons& input, const BeadingParams& given) {
         out.infill = offset(offset(inner, -w / 4.0), w / 4.0); // drop what is narrower than w*/2
     }
     return out;
+}
+
+bool walls_leave_gap(const Polygons& region, const std::vector<Toolpath>& toolpaths, double outer, double width) {
+    if (region.empty() || !(width > 0.0))
+        return false;
+    const Polygons line = offset(offset(region, -(outer / 2.0 + width / 2.0)), width / 2.0);
+    if (line.empty())
+        return false;
+    // The toolpaths' segments in square cells of two beads.
+    const double cell = 2.0 * width;
+    const auto key = [&](double x, double y) {
+        return (std::int64_t(std::floor(x / cell)) << 32) ^ (std::int64_t(std::floor(y / cell)) & 0xffffffff);
+    };
+    struct Seg {
+        Point2d a, b;
+    };
+    std::vector<Seg> segs;
+    std::unordered_map<std::int64_t, std::vector<std::uint32_t>> cells;
+    for (const Toolpath& t : toolpaths) {
+        const std::size_t n = t.points.size();
+        const std::size_t count = t.closed ? n : (n > 0 ? n - 1 : 0);
+        for (std::size_t i = 0; i < std::max<std::size_t>(count, n == 1 ? 1 : 0); ++i) {
+            const Point2d a = t.points[i].p, b = n == 1 ? a : t.points[(i + 1) % n].p;
+            const auto id = std::uint32_t(segs.size());
+            segs.push_back({a, b});
+            const double x0 = std::min(a.x, b.x), x1 = std::max(a.x, b.x), y0 = std::min(a.y, b.y), y1 = std::max(a.y, b.y);
+            for (double x = std::floor(x0 / cell) * cell; x <= x1; x += cell)
+                for (double y = std::floor(y0 / cell) * cell; y <= y1; y += cell)
+                    cells[key(x + 0.5 * cell, y + 0.5 * cell)].push_back(id);
+        }
+    }
+    const double limit = 0.75 * width;
+    const auto near = [&](double px, double py) {
+        for (int dx = -1; dx <= 1; ++dx)
+            for (int dy = -1; dy <= 1; ++dy) {
+                const auto it = cells.find(key(px + dx * cell, py + dy * cell));
+                if (it == cells.end())
+                    continue;
+                for (std::uint32_t id : it->second) {
+                    const Seg& s = segs[id];
+                    const double ex = s.b.x - s.a.x, ey = s.b.y - s.a.y, len2 = ex * ex + ey * ey;
+                    const double t = len2 > 0.0 ? std::clamp(((px - s.a.x) * ex + (py - s.a.y) * ey) / len2, 0.0, 1.0) : 0.0;
+                    const double qx = s.a.x + t * ex - px, qy = s.a.y + t * ey - py;
+                    if (qx * qx + qy * qy <= limit * limit)
+                        return true;
+                }
+            }
+        return false;
+    };
+    const double step = width / 2.0;
+    for (const Polygon& ring : line) {
+        const std::size_t n = ring.size();
+        for (std::size_t i = 0; i < n; ++i) {
+            const double ax = to_mm(ring[i].x), ay = to_mm(ring[i].y);
+            const double bx = to_mm(ring[(i + 1) % n].x), by = to_mm(ring[(i + 1) % n].y);
+            const double len = std::hypot(bx - ax, by - ay);
+            for (double d = 0.0; d < len; d += step)
+                if (!near(ax + (bx - ax) * d / len, ay + (by - ay) * d / len))
+                    return true;
+        }
+    }
+    return false;
 }
 
 } // namespace tisma

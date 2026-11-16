@@ -42,7 +42,12 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
                                   ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
                                   : params.bead / 2.0) +
                              kTouching;
-        out[l] = Clipper2Lib::Difference(regions[l], offset(regions[l - 1], reach), Clipper2Lib::FillRule::NonZero);
+        // What the layer below prints: a sliver thinner than half a bead (the
+        // first section of a slope's foot) prints nothing and holds nothing
+        // (the support sweep, 2026-11-16: the foot of a 60 degree arm was left
+        // bare over one).
+        const Polygons below = offset(offset(regions[l - 1], -params.bead / 4.0), params.bead / 4.0);
+        out[l] = Clipper2Lib::Difference(regions[l], offset(below, reach), Clipper2Lib::FillRule::NonZero);
     });
     return out;
 }
@@ -271,6 +276,17 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
                 a = BitGrid(x0, y0, pixel, width, height);
                 const std::size_t above = above_of(l);
                 Polygons grown = offset(over[above], params.margin + 0.75 * to_mm(pixel));
+                // Without a margin (snug), an overhang thinner than a bead,
+                // next to the wall it hangs from, would leave a zone no line
+                // prints once kept xy_gap off that wall: such strips grow by
+                // half a bead (the support sweep, 2026-11-16: a strip of the
+                // Benchy's cabin went bare). Wide zones keep their edge (SM8).
+                if (params.margin <= 0.0) {
+                    const Polygons thin = Clipper2Lib::Difference(
+                        over[above], offset(offset(over[above], -params.bead / 2.0), params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
+                    if (!thin.empty())
+                        grown = Clipper2Lib::Union(grown, offset(thin, params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
+                }
                 // The margin never reaches a blocked face (BH47): what is
                 // blocked keeps no support under it.
                 if (params.block && above < params.block->size() && !(*params.block)[above].empty())

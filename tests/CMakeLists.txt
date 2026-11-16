@@ -101,6 +101,7 @@ add_executable(tisma_tests
   test_sketch_io.cpp
   test_sketch_edit.cpp
   test_aero.cpp
+  test_support_sweep.cpp
   test_fasteners.cpp
   test_gears.cpp
   test_cloud.cpp
@@ -168,6 +169,11 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     set_tests_properties(aero_benchy_unpack PROPERTIES FIXTURES_SETUP benchy_stl)
     add_test(NAME aero_benchy_ae8 COMMAND tisma_tests "[.aero-benchy]")
     set_tests_properties(aero_benchy_ae8 PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores FIXTURES_REQUIRED benchy_stl
+                         ENVIRONMENT TISMA_BENCHY_STL=${benchy_stl})
+    # The support on hard parts in the three styles, the Benchy among them
+    # (tests/test_support_sweep.cpp; the owner's request, 2026-11-16).
+    add_test(NAME support_sweep COMMAND tisma_tests "[.support-sweep]")
+    set_tests_properties(support_sweep PROPERTIES TIMEOUT 900 RESOURCE_LOCK all_cores FIXTURES_REQUIRED benchy_stl
                          ENVIRONMENT TISMA_BENCHY_STL=${benchy_stl})
   endif()
 endif()

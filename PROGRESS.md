@@ -14533,3 +14533,30 @@ para el LBM D3Q19.
   estela. AE1 a AE4 siguen pasando (8 min 36 s). `[aero]` pasa.
 - **Tiempo:** el Benchy rápido sin verificación de resolución, unos 4 min 30 s en este contenedor.
 - **Lo que sigue:** la interfaz arregla que las líneas no se vean en placas viejas.
+
+## 2026-11-16 — soporte siempre que haga falta (punto 1 del pedido del dueño por QA)
+
+- **Pedido:** «no tener soporte siempre es muy grave». Barrido de grid, organic y snug sobre piezas difíciles, con una
+  verificación sobre el G-code. Se levanta la pausa para esto.
+- **Verificación nueva** (`tests/support_check.hpp`): por capa, en una grilla de 0,1 mm, la parte de la pieza sin nada
+  debajo más allá de medio cordón (salvo puentes según la regla 1 de `supports_skirt.md`) y el soporte a más de 1,5 mm
+  de lo de abajo. El barrido (`support_sweep`, CTest): T, rampas a 40/50/60/75°, isla, puente de 40 mm, agujero
+  horizontal, T girada 30° en X, rampa girada 35° en Z, T a 0,5× y 3×, esfera de 260 000 triángulos, pieza no
+  manifold y Benchy, en los tres estilos. Pasa: ningún pedazo sin apoyo ni flotando de 1 mm² o más.
+- **Lo que salió y se arregló:**
+  - organic, pendientes: la interfaz bajo una cara a 50–60° eran astillas de 0,1 mm sin líneas; ahora se agrandan
+    medio cordón y se juntan (rampa a 60°: de 77 mm² sin apoyo a 0,01);
+  - organic, soporte en el aire: troncos que terminaban junto a una pared o al juntarse dejaban su capa sin nada
+    debajo (T a 3×: 64 mm², Benchy: 10,8); ahora las ramas que quedan sueltas bajan como columna (5,7 y 0, en pedazos
+    de menos de 0,25 mm²);
+  - todos los estilos: el pie de una pendiente era una astilla que no se imprime pero contaba como apoyo; ahora el
+    voladizo se mide contra lo que se imprime;
+  - snug: franjas de voladizo más finas que un cordón junto a la pared quedaban sin línea; ahora se agrandan medio
+    cordón (Benchy: de 2,55 mm² a 0,18; el soporte pasa de 9 032 a 15 812 mm² de cordón);
+  - paredes (no era del soporte): en la unión de una T, el generador de paredes variables dejaba la cara del tallo
+    sin ninguna pared desde la esquina interior (hasta 9,5 mm). Ahora se detecta y esa isla usa paredes de un ancho.
+    Falta la causa en el eje medio.
+- **El puente de 40 mm de QA:** sin soporte en los tres estilos es lo que dice la ficha (regla 1 y S10: no hay largo
+  máximo; `support.under_bridges` lo agrega).
+- **Lo que sigue:** punto 2 (interfaz, separación, que se despegue, base en la cama) y punto 3 (rendimiento del
+  orgánico en el Benchy y big.stl).
