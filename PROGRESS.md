@@ -14614,3 +14614,6 @@ para el LBM D3Q19.
   proyecto y abierta de nuevo sobre otra placa, da el mismo G-code byte a byte (verbos `keep-gcode` y
   `expect-gcode-same`). Probado al revés: cambiar un ajuste después de abrir hace fallar la comparación. Pasa.
 - **Puerta en Linux:** 39 pruebas, pasan todas menos las 4 de G3 del motor.
+- **Windows:** la primera corrida de la puerta no compilaba en MSVC (C1061: la cadena de `else if` de los verbos del
+  guion pasó el límite de anidamiento). Los verbos de la puerta se movieron a `script_check` (52b65d9). La cadena de
+  `script_input` sigue cerca del límite: los verbos nuevos van en funciones aparte.
