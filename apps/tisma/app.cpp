@@ -29050,7 +29050,9 @@ void App::script_input() {
             got = bambu_status_.code;
         else if (step.key == "trays")
             got = std::to_string(bambu_status_.trays.size());
-        else if (step.key == "found") { // ID: the search listed that printer
+        else if (step.key == "found") { // ID: the search listed that printer (once the search has ended)
+            if (bambu_search_.valid())
+                return f > 36000 ? fail_step("the search never ended") : void(); // it listens 6 s, whatever the frame rate
             got = "nothing";
             for (const device::SsdpPrinter& p : bambu_found_)
                 if (p.id == step.value)

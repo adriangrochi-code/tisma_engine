@@ -15132,3 +15132,5 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
 - **Prueba:** `ui_script_design_sketch_erase`. Las 48 de diseño y boceto siguen pasando.
 - **Falta:** deshacer dentro del boceto (regla 11) no existe todavía; no se puede deshacer un borrado. Diseño propio,
   sin ficha: se le pide a QA que lo sume a `cad_design.md`.
+- **`gate_g10_bambu` en el runner de Linux:** la búsqueda escucha 6 s y llena la lista al terminar; `expect-bambu found`
+  esperaba 600 cuadros, que en un runner rápido son menos de 6 s. Ahora espera a que la búsqueda termine.
