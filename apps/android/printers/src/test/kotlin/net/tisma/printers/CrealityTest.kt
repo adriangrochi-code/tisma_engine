@@ -60,6 +60,7 @@ class CrealityTest {
     fun `CR1-4 a print that stops counting shows no state data, never stopped`() {
         val c = connect()
         c.test()
+        assertEquals(PrinterException.Reason.CR_NO_STATE, c.status().reason, "idle shows no state data too, as the desktop")
         printer.push("""{"printJobTime":600,"printLeftTime":1800}""")
         waitFor { c.status().state == PrinterState.PRINTING }
         printer.push("""{"printJobTime":600,"printLeftTime":0}""")

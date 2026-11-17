@@ -364,9 +364,9 @@
     <string name="cr_reconnecting">Reconnecting…</string>
     <string name="cr_no_send">To send to this printer, turn on Moonraker/Fluidd.</string>
     <string name="ac_use_slicer_next">Tisma does not connect to Anycubic printers: use Anycubic Slicer Next.</string>
-    <string name="el_resin_no_gcode">This resin printer takes no G-code: pass the file by USB.</string>
+    <string name="el_resin_no_gcode">Export the resin file and pass it by USB.</string>
     <string name="cr_no_state">No state data</string>
-    <string name="plate_no_send_usb">%1$s takes no G-code: pass the file by USB.</string>
+    <string name="plate_no_send_usb">%1$s is a resin printer: export the resin file and pass it by USB.</string>
     <string name="plate_no_send_creality">%1$s: to send, turn on Moonraker/Fluidd.</string>
     <string name="bambu_confirm_title">Is this your printer?</string>
     <string name="bambu_confirm_text">Serial number %1$s\n\nCertificate %2$s\n\nIf it is, Tisma remembers this certificate and will not connect if it ever changes.</string>

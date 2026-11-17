@@ -127,9 +127,9 @@ class CrealityConnection(
             val left = state["printLeftTime"]?.doubleOrNull?.toLong()
             // Printing while time is left. A print that stops counting is not called stopped: the state's key and its
             // preheating value are not measured yet, so it shows «no state data» (CR1-4, spec/next a2611fe).
-            val now = left != null && left > 0
-            if (now) noData = false else if (printing) noData = true
-            printing = now
+            // As the desktop: whenever it is not printing, there is no state to show.
+            printing = left != null && left > 0
+            noData = !printing
             val total = if (elapsed != null && left != null && elapsed + left > 0) elapsed + left else null
             fun temp(a: String, t: String) = state[a]?.doubleOrNull?.let { Temperature(it, state[t]?.doubleOrNull ?: 0.0) }
             PrinterStatus(
