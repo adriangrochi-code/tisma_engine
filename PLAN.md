@@ -632,8 +632,9 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [x] `infill.solid_below_area` de la ficha `surfaces_infill.md` (zonas chicas sólidas)
     - [ ] `info` cuenta contornos de área cero en mallas con triángulos degenerados, y su `volume` suma las mallas que
       se pisan (el laminado está bien)
-    - [ ] la verificación del G-code crece más que lineal con las islas (equipo de fichas: ×37 de 25 a 400 cilindros,
-      el 16 % del total con 400)
+    - [x] la verificación del G-code crece más que lineal con las islas (equipo de fichas: ×37 de 25 a 400 cilindros,
+      el 16 % del total con 400). Medido otra vez el 2026-11-17 (con el mapa de alturas nuevo): 25, 100 y 400 cilindros
+      de 64 lados, 16, 52 y 238–268 ms para 86 mil, 343 mil y 1,37 millones de líneas: lineal; ya no se reproduce
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel

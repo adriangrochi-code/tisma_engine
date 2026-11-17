@@ -14938,3 +14938,10 @@ para el LBM D3Q19.
 - **Probado:** prueba nueva `G-code check: a move down through what is already printed` (el cubo con un viaje que baja
   a Z 2 en la capa 31: se ve; el cubo sin tocar: limpio). Las 1121 pruebas sin interfaz en verde (3 min 20 s), y el
   barrido de las 87 impresoras instaladas del paquete con el cubo de 20 mm: todas limpias.
+
+## 2026-11-17 — bloque nocturno: la verificación con muchas islas, medida
+
+- El punto de PLAN.md «la verificación del G-code crece más que lineal con las islas» (×37 de 25 a 400 cilindros,
+  según el equipo de fichas) ya no se reproduce: rejillas de 25, 100 y 400 cilindros de 6 mm (64 lados, 5 mm de
+  alto), dos corridas cada una: `check_ms` 16, 52 y 238–268 ms para 86 mil, 343 mil y 1,37 millones de líneas, lineal
+  con las líneas (incluido el mapa de alturas nuevo). Con bloques: 9, 16 y 68 ms. Cerrado sin cambio de código.
