@@ -192,6 +192,11 @@ class ReleaseGateTest {
             compose.onNodeWithTag("section_plate").performClick()
             waitTag("send_to_gate-$kind")
             tap("send_to_gate-$kind")
+            compose.waitForIdle()
+            val chip = compose.onNodeWithTag("send_to_gate-$kind").fetchSemanticsNode().config
+            assertTrue(chip.getOrNull(SemanticsProperties.Selected) == true, "gate-$kind is chosen to send to; on screen: ${screen()}")
+            val send = compose.onNodeWithTag("plate_send").fetchSemanticsNode().config
+            assertTrue(!send.contains(SemanticsProperties.Disabled), "«Print» can be pressed for gate-$kind; on screen: ${screen()}")
             tap("plate_send")
             try {
                 compose.waitUntil(120_000) { received(url, want) }

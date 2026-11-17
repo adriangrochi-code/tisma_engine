@@ -15,6 +15,8 @@ object AppLog {
 
     @Synchronized
     fun line(text: String) {
+        // Also to the system log, where a test on an emulator (the release gate) reads what went wrong.
+        runCatching { android.util.Log.d("Tisma", text) }
         lines.addLast(LocalTime.now().format(time) + " " + text.replace('\n', ' '))
         while (lines.size > MAX_LINES) lines.removeFirst()
     }

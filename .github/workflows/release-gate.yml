@@ -81,6 +81,9 @@ jobs:
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           adb exec-out screencap -p > "$RUNNER_TEMP/gate-screen.png" || true
           adb logcat -d -t 400 > "$RUNNER_TEMP/gate-logcat.txt" || true
+          # The app's own lines (its notices and its log, tag «Tisma»), the whole run.
+          adb logcat -d | grep -iE " Tisma|tisma\.app|tismaservidores" > "$RUNNER_TEMP/gate-app.txt" || true
+          tail -60 "$RUNNER_TEMP/gate-app.txt" || true
           tail -40 "$RUNNER_TEMP/gate-logcat.txt" || true
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -89,5 +92,6 @@ jobs:
           path: |
             ${{ runner.temp }}/gate-screen.png
             ${{ runner.temp }}/gate-logcat.txt
+            ${{ runner.temp }}/gate-app.txt
             ${{ runner.temp }}/gate.txt
             ${{ runner.temp }}/mockprinters.log
