@@ -14877,3 +14877,14 @@ para el LBM D3Q19.
   captura.
 - Además: marcado como hecho en PLAN.md «los patrones de las superficies de arriba y de abajo (14 a 17)», que ya
   estaba hecho (ver la entrada de P10).
+
+## 2026-11-17 — bloque nocturno: Q10, puentes con un número entero de líneas
+
+- Los puentes se llenan con tantas líneas como hagan falta para cruzar cada pedazo de borde a borde sin pasar la
+  separación (el ancho del cordón del puente): si el ancho no se divide justo, las líneas quedan un poco más juntas en
+  vez de dejar una franja sin cubrir (antes, hasta un cordón, repartido entre los dos bordes). Una franja más angosta
+  que 3/4 de cordón lleva una sola línea en el medio. Solo los puentes: el resto de lo sólido no cambia.
+- **Probado:** prueba nueva `bridges: a whole number of lines from edge to edge (Q10)` (franja de 10,3 mm con líneas de
+  0,4: 26 líneas, las de afuera en 0,2 y 10,1 mm, ninguna separación mayor que 0,4; una franja de 0,65 mm, una línea).
+  `[combine]`, `[arcs]`, `[calibration]`, `[fuzzy]`, `[surfaces]`, `[determinism]`, `[gcode]` en verde. No impreso.
+- **Siguiente:** queda de Q10 el umbral de voladizo según ventilador, velocidad y temperatura (necesita mediciones).

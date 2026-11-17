@@ -596,7 +596,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] Q7: mapa de rugosidad por cara y compensación en XY según el ángulo
     - [ ] Q8: riesgo de alabeo con un modelo cerrado, borde automático y patrón según el material
     - [ ] Q9: orden de islas y viajes que escala (curva que llena el plano y 2-opt)
-    - [ ] Q10: umbral de voladizo según ventilador, velocidad y temperatura; puentes con anchos enteros de línea
+    - [ ] Q10: umbral de voladizo según ventilador, velocidad y temperatura (queda); puentes con anchos enteros de línea
+      (hecho 2026-11-17: un número entero de líneas de borde a borde, un poco más juntas si no entran justas)
     - [ ] Q11: transformada de distancia exacta en Vulkan, número de vueltas para mallas rotas, Voronoi robusto
     - [ ] Q12: interfaz trabada entre materiales (ITIL, con MM1)
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales

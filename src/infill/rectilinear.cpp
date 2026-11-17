@@ -74,7 +74,7 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect, bool fit, bool monotonic, double overlap, double shift,
-                                       double max_join, const Polygons* join_inside) {
+                                       double max_join, const Polygons* join_inside, bool whole) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -137,11 +137,17 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
             const double across = double(hi - lo) - 20.0; // without the slack
             if (across < 0.0)
                 continue;
-            const auto count = static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
-            const double first = double(lo) + 10.0 + (across - double(count - 1) * step) / 2.0;
+            // Whole: enough lines to span it with at most `step` between them,
+            // the outer ones on its shrunk edges; one line in the middle when
+            // two would overlap by more than a quarter (narrower than 3/4 of
+            // a step).
+            const auto count = whole ? (across < 0.75 * step ? 1 : static_cast<std::int64_t>(std::ceil(across / step - 1e-9)) + 1)
+                                     : static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
+            const double gap = whole && count > 1 ? across / double(count - 1) : step;
+            const double first = double(lo) + 10.0 + (across - double(count - 1) * gap) / 2.0;
             Polygons lines;
             for (std::int64_t k = 0; k < count; ++k) {
-                const std::int64_t y = std::llround(first + double(k) * step);
+                const std::int64_t y = std::llround(first + double(k) * gap);
                 lines.push_back({{left - 1, y}, {right + 1, y}});
             }
             clip(lines, piece, open);
@@ -344,7 +350,7 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const double bridge = params.bridge_width > 0.0 ? params.bridge_width : params.width;
     out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, !surfaces.bridge_support.empty(),
                                   true, false, 0.0, 0.0, 2.0 * (bridge + bridge),
-                                  surfaces.bridge_support.empty() ? nullptr : &surfaces.bridge_support);
+                                  surfaces.bridge_support.empty() ? nullptr : &surfaces.bridge_support, true);
     if (params.density <= 0.0)
         return out;
     const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;

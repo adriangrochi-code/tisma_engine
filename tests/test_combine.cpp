@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -811,4 +812,28 @@ TEST_CASE("infill angles: a list cycled layer by layer (Q18)", "[combine]") {
             CHECK(most->first == want);
         }
     }
+}
+
+TEST_CASE("bridges: a whole number of lines from edge to edge (Q10)", "[combine]") {
+    // A strip 10.3 mm wide bridged with 0.4 mm lines: across the shrunk strip
+    // (9.9 mm) 0.4 does not divide evenly, so the lines come a little closer
+    // and the outer ones lie on both shrunk edges; with fit alone a strip of
+    // up to a line's width stayed bare, split between the edges.
+    const auto at = [](double x, double y) { return Clipper2Lib::Point64{to_units(x), to_units(y)}; };
+    const Polygons strip{{at(0, 0), at(30, 0), at(30, 10.3), at(0, 10.3)}};
+    const double w = 0.4;
+    const std::vector<Toolpath> lines = rectilinear_fill(strip, w, 0.0, w, false, true, false, 0.0, 0.0, 0.0, nullptr, true);
+    std::vector<double> ys;
+    for (const Toolpath& t : lines)
+        ys.push_back(t.points.front().p.y);
+    std::sort(ys.begin(), ys.end());
+    REQUIRE(ys.size() >= 2);
+    CHECK(ys.size() == 26); // ceil(9.9 / 0.4) + 1
+    CHECK_THAT(ys.front(), WithinAbs(0.2, 0.01));
+    CHECK_THAT(ys.back(), WithinAbs(10.1, 0.01));
+    for (std::size_t i = 1; i < ys.size(); ++i)
+        CHECK(ys[i] - ys[i - 1] <= w + 1e-3);
+    // Narrower than 3/4 of a line across: one line in the middle.
+    const Polygons thin{{at(0, 0), at(30, 0), at(30, 0.65), at(0, 0.65)}};
+    CHECK(rectilinear_fill(thin, w, 0.0, w, false, true, false, 0.0, 0.0, 0.0, nullptr, true).size() == 1);
 }
