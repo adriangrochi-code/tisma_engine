@@ -28392,8 +28392,14 @@ bool App::script_check(const ScriptStep& step, int f) {
         next();
     } else if (step.verb == "expect-busy") { // slice|cloud: that work is under way now (waits up to 600 frames)
         const bool busy = step.key == "slice" ? slice_job_.running() : step.key == "cloud" ? cloud_slice_.valid() : false;
-        if (!busy)
-            return f > 600 ? fail_step(step.key + " is not under way") : true;
+        if (!busy) {
+            if (f <= 600)
+                return true;
+            // What was said meanwhile, to tell why (G15 on the CI).
+            for (std::size_t i = toasts_shown_.size() > 5 ? toasts_shown_.size() - 5 : 0; i < toasts_shown_.size(); ++i)
+                std::printf("ui-script: expect-busy %s: toast «%s»\n", step.key.c_str(), toasts_shown_[i].c_str());
+            return fail_step(step.key + " is not under way");
+        }
         std::printf("ui-script: expect-busy %s: ok\n", step.key.c_str());
         next();
     } else if (step.verb == "expect-sketch-rules") { // N: the sketch being drawn has N dimensions and constraints added by hand
@@ -28858,6 +28864,9 @@ void App::script_input() {
             g_scroll_to = step.key;
             return;
         }
+        static int retries = 0;
+        if (f == 1) // a new entry: its own tries
+            retries = 0;
         if (f >= 1008) // clicked: the menu has closed
             return next();
         const auto it = g_menu_rects.find(step.key);
@@ -28882,6 +28891,17 @@ void App::script_input() {
             io.AddMouseButtonEvent(0, true);
         } else if (f == 1005) {
             io.AddMouseButtonEvent(0, false);
+        } else if (f == 1006) {
+            // Where the press landed (macOS on the CI: the real cursor's
+            // place can still win a frame): not on the entry, aimed again.
+            const ImVec2 at = io.MouseClickedPos[0];
+            const bool on = at.x >= r.x - 1.0f && at.x <= r.z + 1.0f && at.y >= r.y - 1.0f && at.y <= r.w + 1.0f;
+            if (!on && retries < 3) {
+                ++retries;
+                std::printf("ui-script: menu %s: the press landed at %.0f,%.0f, off the entry; again\n", step.key.c_str(),
+                            double(at.x), double(at.y));
+                script_frame_ = 1000;
+            }
         }
     } else if (step.verb == "slide") { // a click on a named slider, VALUE (0 to 1) of the way across
         const auto it = g_menu_rects.find(step.key);

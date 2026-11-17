@@ -15228,3 +15228,11 @@ corridas de su puerta. QA la probó en Linux: la A1 mini da `F523.843`. Las 72 c
 junto a los instaladores. Desde ahora `release.yml` no las sube: ni sueltas ni en zip. Quedan solo como artifact de la CI (decisión del dueño,
 17-11). En la beta.3
 siguen sueltas: no tengo herramienta para borrar archivos de una versión publicada.
+## 2026-11-17 — la puerta de macOS en 0.13.0-beta.3: G11 y G15
+
+- En macOS (CI), G11 y G15 fallaron justo después de `menu cloud_close`: la ventana de la nube quedó abierta, y el
+  clic siguiente no llegó. El verbo `menu` del guion ahora mira dónde cayó la pulsación (`MouseClickedPos`). Si cayó
+  fuera de la entrada (el cursor real de macOS), apunta de nuevo y repite, hasta 3 veces. Cada vez lo dice en la
+  salida.
+- G15, línea 23 (`expect-busy cloud`, macOS x86_64): se reproduce en Linux con carga (–j4). Ahora la falla escribe
+  los últimos avisos de la pantalla, para ver por qué el corte en la nube no quedó en curso. La causa sigue abierta.
