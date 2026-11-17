@@ -166,4 +166,17 @@ SsdpListen ssdp_listen(int ms, const std::vector<int>& ports) {
     return out;
 }
 
+void ssdp_announce_local(const std::string& datagram, int port) {
+    sockets_once();
+    const Socket s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == kNoSocket)
+        return;
+    sockaddr_in to{};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(std::uint16_t(port));
+    to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    sendto(s, datagram.data(), int(datagram.size()), 0, reinterpret_cast<const sockaddr*>(&to), int(sizeof to));
+    close_socket(s);
+}
+
 } // namespace tisma::device

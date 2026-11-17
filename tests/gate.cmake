@@ -228,3 +228,10 @@ add_test(NAME gate_g15_quit
 set_tests_properties(gate_g15_quit PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSION "error: " TIMEOUT 300
                      PASS_REGULAR_EXPRESSION "ui-script: quit: the program ended" FIXTURES_REQUIRED gate_benchy
                      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_CLOUD_HOLD=1;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${TISMA_GATE_OUT}/g15_secrets.txt")
+
+# G10, Bambu Lab on the local network (QA, 2026-11-17) against the simulated
+# printer: found by SSDP (1990 and 2021), the certificate confirmed, the state
+# over MQTT on TLS, and the print: the package by FTPS arrives whole and
+# project_file starts it.
+tisma_gate_test(NAME gate_g10_bambu MODEL ${TISMA_GATE_DATA}/cube_ascii.stl SCRIPT gate_g10_bambu LANG es
+                PROPERTIES RESOURCE_LOCK ssdp_ports)
