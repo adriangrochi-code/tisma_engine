@@ -45,10 +45,12 @@ Los límites de la máquina (aceleraciones, velocidades y tirones máximos por e
    - la comprobación del G-code (`gcode_check`) acepta como temperatura de boquilla `M109 R<t>` y `M104/M109 T<n>`
      para el cabezal con que se imprime, y no la exige si el filamento no tiene temperatura (0: impresoras sin
      calentador, como la de chocolate Cocoa Press) (prueba FW11).
-   - la comprobación también marca como problema una línea que no es un comando: la que empieza con algo que no es
-     una letra ni un signo de host (`$`, `@`, `%`, `!`), aunque venga del G-code de la máquina, con «not a G-code
-     command: '…'» (QA, 17-11-2026: el fin de la Z-Bolt Classic del paquete traía una expresión de Cura sin evaluar)
-     (prueba FW12).
+   - una línea que no es un comando (empieza con algo que no es una letra, `_` de una macro de Klipper, ni un signo
+     de host `$`, `@`, `%`, `!`): en lo que escribe el motor es un problema; en el G-code de la máquina es un aviso
+     «not a G-code command: '…'» y el G-code sale igual, porque perfiles reales traen líneas así que la impresora
+     ignora (`//M85` de Sovol, `==========` de Bambu). Es problema, también en el G-code de la máquina, una expresión
+     sin evaluar: una línea que empieza con comilla y sigue con `' +`, o que tiene `if … else` fuera de `{…}` (QA,
+     17-11-2026: la Z-Bolt Classic; las macros `_ON_LAYER_CHANGE` de RatRig son válidas) (prueba FW12).
 2. **Límites de la máquina** con `emit`, antes del G-code de inicio:
 
    | Firmware | Comandos | Unidades |
@@ -148,4 +150,4 @@ del cubo de 20 mm, con centros en X = 100 y X = 74. Los valores de los límites 
 | FW9 | Marlin 1 y Marlin 2, `emit`, aceleraciones 1100 al imprimir, 1200 al retraer y 1300 al viajar | Marlin 1: `M204 S1100 T1200`. Marlin 2: `M204 P1100 R1200 T1300` |
 | FW10 | Perfil Kobra 3, `strict_parser` = `anycubic`, cubo de 20 mm | `.gcode` plano con `HEADER_BLOCK`, `EXECUTABLE_BLOCK` y un `CONFIG_BLOCK` corto sin `;` dentro de valores; los nombres como en el archivo de referencia; la Kobra 3 del dueño lo imprime sin quedarse en «parsing», con y sin el ACE Pro |
 | FW11 | Lulzbot TAZ 4/5 (`M109 R…`), Sovol SV04 en modo 02 (`M104 T1`, `M109 T1`), Deltacomb DC-20 (solo `M140` al inicio) y Cocoa Press, del paquete | Los cuatro laminan; el DC-20 recibe `M104`/`M109` de la boquilla antes de imprimir |
-| FW12 | G-code de fin con la línea `'M104 S0 ;extruder heater off' + ('` | La comprobación da el problema «not a G-code command» |
+| FW12 | G-code de fin con la línea `'M104 S0 ;extruder heater off' + ('`; G-code de capa `_ON_LAYER_CHANGE`; inicio con `//M85` | La primera es problema; `_ON_LAYER_CHANGE` es una macro válida; `//M85` da aviso y lamina |
