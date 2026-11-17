@@ -596,3 +596,139 @@ Avisa que cualquiera en la LAN puede controlar la impresora, y nunca la expone f
 | CR1-4 | Imprimiendo, luego el estado de precalentamiento durante 15 s sin volver | Se informa «detenida» después de la ventana, no antes |
 | CR1-5 | Se corta el WebSocket a mitad de una impresión | Se reconecta, la impresión sigue figurando activa y aparece «Reconectando…» |
 | CR1-6 | La subida devuelve 404 | Se muestra el mensaje de firmware sin subida por la red, sin reintentar sin fin |
+
+# Impresoras Elegoo por red local (SDCP v3)
+
+Spec de comportamiento solamente. No tiene código. Cada dato lleva su fuente:
+- **[OF]** = oficial CBD-Tech, protocolo SDCP V3.0.0:
+  https://github.com/cbd-tech/SDCP-Smart-Device-Control-Protocol-V3.0.0 (archivo `SDCP(Smart Device Control Protocol)_V3.0.0_EN.md`).
+- **[OC]** = comunidad, OpenCentauri: http://docs.opencentauri.cc/software/api (antes en suchmememanyskill.github.io/OpenCentauri, hoy da 404).
+- **[CA]** = comunidad, cassini: https://github.com/vvuk/cassini
+- **[PG]** = comunidad, guía de Printago: https://docs.printago.io/docs/connecting-printers/elegoo
+
+## 1. A qué modelos aplica
+- Centauri Carbon (FDM), la primera generación: usa SDCP por WebSocket [PG][OC].
+- Resina con placa ChiTu y WiFi, por ejemplo Saturn 3 Ultra: también usa SDCP [OF][CA]. Las variantes viejas (cassini) usan SDCP sobre MQTT: la impresora se conecta como cliente MQTT a la PC. Ver §8 [CA].
+  Qué Saturn o Mars usan WebSocket y cuáles MQTT: **sin confirmar** modelo por modelo.
+- **No aplica:**
+  - Centauri Carbon 2 y Centauri 2 (incluidos los Combo): usan MQTT y la impresora es el broker. Piden modo «LAN-Only» y la contraseña de fábrica es 123456 [PG]. El detalle del protocolo está **sin confirmar** y sería otra spec.
+  - Neptune 4: usa Klipper/Moonraker (dato de la comunidad), así que corresponde el conector Moonraker y no este. **Sin confirmar** en las fuentes leídas.
+
+## 2. Descubrimiento
+- El programa manda por broadcast UDP el texto ASCII `M99999` al puerto **3000** [OF].
+- Cada impresora responde con un JSON: `Id`, y dentro de `Data` vienen `Name`, `MachineName`, `BrandName`, `MainboardIP`, `MainboardID`, `ProtocolVersion` y `FirmwareVersion` [OF].
+- La lista de impresoras se arma con las respuestas que lleguen en una ventana de tiempo. Se elige la ventana; el protocolo no fija una.
+  Se deduplica por `MainboardID`.
+- Si no responde ninguna, el usuario puede escribir la IP a mano.
+
+## 3. Conexión
+- WebSocket en `ws://<MainboardIP>:3030/websocket` [OF]. OpenCentauri nombra rutas alternativas (`/ws`, `/`, `/api/websocket`, `/sdcp`) [OC], **sin confirmar** en el oficial.
+- No se nombra ningún subprotocolo WebSocket: **sin confirmar**. No hay que exigir uno.
+- Latido: el cliente manda el texto `ping` y la impresora responde `pong` [OF]. Si deja de responder, se reconecta.
+- Límite: hasta 5 WebSocket abiertos; el sexto recibe un HTTP 500 con «too many client» (resultado de búsqueda de comunidad, **sin confirmar**). Al usuario hay que decirle «la impresora tiene demasiadas conexiones abiertas».
+- No hay cifrado ni autenticación en LAN [CA].
+
+## 4. Sobre de los mensajes (JSON por texto) [OF]
+- **Pedido** (cliente → impresora):
+  - `Id`: identificador de la conexión.
+  - `Data` contiene:
+    - `Cmd`: número de comando.
+    - `Data`: parámetros.
+    - `RequestID`: único por pedido; la respuesta lo repite.
+    - `MainboardID`.
+    - `TimeStamp`: segundos Unix.
+    - `From`: 0 = PC por LAN, 1 = PC por web, 2 = cliente web, 3 = app, 4 = servidor.
+  - `Topic`: `sdcp/request/<MainboardID>`.
+- **Respuesta**: el mismo sobre, con `Topic` `sdcp/response/<MainboardID>` y `Data.Data.Ack`, donde 0 = éxito.
+- **Estado y atributos** llegan solos, sin que se pidan, en `sdcp/status/...` (campo `Status`) y `sdcp/attributes/...` (campo `Attributes`).
+- **Error y aviso** llegan en `sdcp/error/...` y `sdcp/notice/...`.
+  El aviso tipo 1 es «historial sincronizado».
+- La respuesta se empareja con su pedido por `RequestID`. Un pedido sin respuesta en un tiempo propio se informa como «la impresora no respondió».
+
+## 5. Estado
+- Comandos: 0 refresca el estado y 1 pide los atributos [OF].
+- `CurrentStatus` es un arreglo [OC] con estos valores: 0 libre, 1 imprimiendo, 2 recibiendo archivo, 3 test de exposición o calibración, 4 autochequeo [OF][OC].
+- `PrintInfo` [OF] tiene estos campos:
+  - `Status`:
+    - 0 libre, 1 homing, 2 bajando, 3 exponiendo, 4 subiendo;
+    - 5 pausando, 6 en pausa, 7 deteniendo, 8 detenido;
+    - 9 terminado, 10 verificando archivo.
+    - En FDM se reutilizan los nombres de resina [OC].
+  - `CurrentLayer` y `TotalLayer`.
+  - `CurrentTicks` y `TotalTicks`: tiempo transcurrido y tiempo total. La unidad está **sin confirmar**.
+  - `Filename`, `ErrorNumber` y `TaskId`.
+- Campos de resina [OF]:
+  - `TempOfUVLED`;
+  - `TempOfBox` y `TempTargetBox`;
+  - `ReleaseFilm`;
+  - `TimeLapseStatus`.
+- Campos de FDM (solo en la comunidad) [OC]:
+  - `TempOfNozzle` y `TempTargetNozzle`;
+  - `TempOfHotbed` y `TempTargetHotbed`;
+  - `CurrentFanSpeed`;
+  - `CurrenCoord`: texto «x,y,z», con la errata incluida;
+  - `ZOffset` y `PrintSpeed`.
+  Hay que aceptar las dos grafías (`CurrenCoord` y `CurrentCoord`) y tolerar que los campos vengan anidados a distinta profundidad.
+- El progreso que se muestra es `CurrentLayer/TotalLayer`, o la proporción de ticks.
+
+## 6. Subida del archivo (G-code o .goo) [OF][OC]
+- HTTP POST `multipart/form-data` a `http://<MainboardIP>:3030/uploadFile/upload`.
+- Se manda en trozos de **1 MB**: un POST por trozo, en orden.
+- Campos de cada POST:
+  - `S-File-MD5`: MD5 del archivo entero, en hex.
+  - `Check`: «1» activa la verificación y «0» la apaga.
+  - `Offset`: byte donde empieza el trozo.
+  - `Uuid`: el mismo en todos los trozos del archivo.
+  - `TotalSize`: tamaño total en bytes.
+  - `File`: los datos del trozo.
+- Respuesta: código «000000» si salió bien y «111111» si falló.
+  Errores: -1 offset negativo, -2 offset que no coincide, -3 no pudo abrir el archivo, -4 error desconocido.
+- Durante la subida, `CurrentStatus` incluye el 2.
+- Si el MD5 falla, llega por `sdcp/error` el `ErrorCode` 1; si el formato es incorrecto, el `ErrorCode` 2 [OF].
+- Cancelar: comando 255 con `Uuid` y `FileName`.
+  Ack: 0 OK, 1 no hay transferencia en curso, 2 ya está verificando, 3 archivo no encontrado [OF].
+- Variante vieja [CA]: el comando 256 le pasa a la impresora una URL, y es la impresora la que baja el archivo desde un HTTP que sirve el cliente.
+
+## 7. Imprimir, pausar, parar [OF]
+- Iniciar: comando 128 con `Filename` (el nombre en la impresora) y `StartLayer` (0 para empezar desde el principio).
+  Ack:
+  - 0 OK
+  - 1 ocupada
+  - 2 no existe el archivo
+  - 3 falló el MD5
+  - 4 error de lectura
+  - 5 la resolución no coincide
+  - 6 formato desconocido
+  - 7 el modelo de impresora no coincide
+- Pausar es el comando 129, parar el 130 y reanudar el 131.
+  El 132 detiene la alimentación de material y el 133 saltea el precalentamiento.
+- Otros comandos:
+  - 258: lista de archivos, con `Url` `/local/` o `/usb/`.
+  - 259: borrado de archivos.
+  - 320 y 321: historial.
+  - 386: video. Ack 1 = límite de streams y 2 = no hay cámara.
+  - 387: timelapse.
+  - 403: velocidad y ventiladores, solo en la comunidad [OC].
+
+## 8. Errores y cómo avisar al usuario
+- Cada Ack distinto de 0 se muestra con su texto en castellano, según las tablas de §6 y §7. Nunca se muestra solo el número.
+- `PrintInfo.ErrorNumber` [OF]: 1 MD5, 2 lectura, 3 resolución, 4 formato, 5 modelo.
+- `ErrorStatusReason` [OF] va del 1 al 34. Algunos ejemplos:
+  - 1 sobretemperatura;
+  - 3 y 16 poca resina;
+  - 7 falló la nivelación;
+  - 8 la pieza se despegó;
+  - 12 se sacó el USB.
+  La lista completa sale de la fuente y se muestra traducida. Un código desconocido se muestra como «error N de la impresora».
+- MQTT en resina vieja [CA]: el cliente manda `M66666 <puerto>` por UDP 3000 y la impresora se conecta como cliente MQTT a ese puerto. El uso de esta variante está **sin confirmar**; no es parte de la primera versión.
+
+## 9. Pruebas de caja negra contra un simulador
+
+| EL1 | caso | resultado |
+|---|---|---|
+| EL1.1 | El simulador responde a `M99999` en UDP 3000 con un JSON válido; llegan dos respuestas iguales | Aparece una sola impresora, con nombre, IP y `MainboardID` |
+| EL1.2 | Se sube un archivo de 2,5 MB | Llegan 3 POST con offsets 0, 1048576 y 2097152, el mismo `Uuid`, el `TotalSize` correcto y el MD5 del archivo entero |
+| EL1.3 | El simulador responde «111111» o -2 al segundo trozo | La subida se corta y el usuario ve «falló la subida (offset no coincide)», sin pantalla colgada |
+| EL1.4 | Comando 128 con Ack 1 | El usuario ve «la impresora está ocupada» y no se marca como imprimiendo |
+| EL1.5 | Pausa (129) y parada (130); el simulador pasa `PrintInfo.Status` por 5→6 y 7→8 | La interfaz muestra «en pausa» y «detenida», y el `RequestID` coincide con cada respuesta |
+| EL1.6 | El simulador deja de responder `pong` o rechaza la sexta conexión con un 500 | Se reconecta, o muestra «demasiadas conexiones», sin perder el estado anterior |
