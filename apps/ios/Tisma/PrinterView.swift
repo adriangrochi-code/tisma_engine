@@ -51,10 +51,11 @@ struct PrinterView: View {
                         TextField("Serial number (starts with «SN»)", text: $user).textInputAutocapitalization(.characters)
                             .autocorrectionDisabled().accessibilityIdentifier("printer_user")
                     }
-                    SecureField(kind == "bambu" ? "Access code" : kind == "flashforge" ? "Check code (empty for the Adventurer 3 and 4)"
+                    // Elegoo's SDCP has no key on the local network.
+                    if kind != "elegoo" { SecureField(kind == "bambu" ? "Access code" : kind == "flashforge" ? "Check code (empty for the Adventurer 3 and 4)"
                                 : kind == "octoprint" || kind == "moonraker" ? "API key" : "Password", text: $secret)
                         .onChange(of: secret) { _, v in Keychain.write("printer.secret", v) }
-                        .accessibilityIdentifier("printer_secret")
+                        .accessibilityIdentifier("printer_secret") }
                     Button("Test") { run { tested = try PrinterBridge.shared.test(kind: $0.0, address: $0.1, user: $0.2, secret: $0.3) } }
                         .disabled(address.isEmpty).accessibilityIdentifier("printer_test")
                     if let tested { Text(tested).foregroundStyle(.secondary).accessibilityIdentifier("printer_tested") }
@@ -164,6 +165,7 @@ enum PrinterKinds {
         case "duet": return "Duet"
         case "bambu": return "Bambu Lab (LAN)"
         case "flashforge": return "Flashforge"
+        case "elegoo": return "Elegoo (SDCP)"
         default: return kind
         }
     }

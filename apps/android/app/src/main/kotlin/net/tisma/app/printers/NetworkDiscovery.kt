@@ -5,6 +5,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import net.tisma.cloud.UrlConnectionHttp
 import net.tisma.printers.DiscoveryTypes
+import net.tisma.printers.ElegooProbe
 import net.tisma.printers.FlashforgeProbe
 import net.tisma.printers.FoundPrinter
 import net.tisma.printers.MoonrakerConnection
@@ -54,6 +55,8 @@ class NetworkDiscovery(
         runCatching { flashforge.execute {
             while (!Thread.currentThread().isInterrupted) {
                 runCatching { FlashforgeProbe.probe() }.getOrDefault(emptyList()).forEach(onFound)
+                // Elegoo's SDCP answers `M99999` on UDP 3000 the same way.
+                runCatching { ElegooProbe.probe() }.getOrDefault(emptyList()).forEach(onFound)
                 try { Thread.sleep(60_000) } catch (_: InterruptedException) { break }
             }
         } }

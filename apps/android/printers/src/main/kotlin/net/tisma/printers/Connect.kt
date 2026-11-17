@@ -12,5 +12,6 @@ fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tism
         PrinterKind.DUET -> DuetConnection(url, secret.orEmpty().ifEmpty { "reprap" }, http)
         PrinterKind.BAMBU -> BambuConnection.of(url, secret.orEmpty(), certSha256.ifBlank { null })
         PrinterKind.FLASHFORGE -> Flashforge.of(url, user, secret.orEmpty(), http)
+        PrinterKind.ELEGOO -> ElegooConnection.of(url, http)
     }
 

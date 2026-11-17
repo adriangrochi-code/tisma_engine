@@ -79,6 +79,7 @@ object PrinterBridge {
             PrinterKind.DUET -> DuetConnection(url, secret.ifEmpty { "reprap" }, PlatformHttp)
             PrinterKind.BAMBU -> BambuConnection.of(url, secret, defaults.stringForKey(pinKey(address)))
             PrinterKind.FLASHFORGE -> Flashforge.of(url, user, secret, PlatformHttp)
+            PrinterKind.ELEGOO -> ElegooConnection.of(url, PlatformHttp)
         }
     }
 

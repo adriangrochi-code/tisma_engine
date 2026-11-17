@@ -413,7 +413,8 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     label = { Text(stringResource(if (kind == PrinterKind.FLASHFORGE) R.string.printer_serial else R.string.printer_user)) },
                     modifier = Modifier.fillMaxWidth().testTag("printer_user"))
             }
-            OutlinedTextField(key, { key = it }, singleLine = true,
+            // Elegoo's SDCP has no key on the local network.
+            if (kind != PrinterKind.ELEGOO) OutlinedTextField(key, { key = it }, singleLine = true,
                 label = { Text(stringResource(when (kind) {
                     PrinterKind.OCTOPRINT -> R.string.printer_key
                     PrinterKind.MOONRAKER -> R.string.printer_key_optional
@@ -421,6 +422,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     PrinterKind.DUET -> R.string.printer_board_password
                     PrinterKind.BAMBU -> R.string.printer_access_code
                     PrinterKind.FLASHFORGE -> R.string.printer_check_code
+                    PrinterKind.ELEGOO -> R.string.printer_key_optional
                 })) },
                 supportingText = if (existing != null) { { Text(stringResource(R.string.printer_key_keep)) } } else null,
                 visualTransformation = PasswordVisualTransformation(),
@@ -442,6 +444,8 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (kind == PrinterKind.FLASHFORGE) Text(stringResource(R.string.printer_flashforge_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("printer_flashforge_hint"))
+            if (kind == PrinterKind.ELEGOO) Text(stringResource(R.string.printer_elegoo_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(stringResource(R.string.printer_key_safe), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -471,6 +475,7 @@ private fun kindName(k: PrinterKind) = stringResource(when (k) {
     PrinterKind.DUET -> R.string.kind_duet
     PrinterKind.BAMBU -> R.string.kind_bambu
     PrinterKind.FLASHFORGE -> R.string.kind_flashforge
+    PrinterKind.ELEGOO -> R.string.kind_elegoo
 })
 
 private fun temp(t: Temperature): String =
@@ -513,6 +518,43 @@ fun Context.reasonText(reason: String?, detail: String): String? {
         PrinterException.Reason.FF_UNREACHABLE_LAN -> getString(R.string.ff_error_unreachable_lan, ip)
         PrinterException.Reason.FF_OTHER_PROGRAM -> getString(R.string.ff_error_other_program)
         PrinterException.Reason.FF_NO_UPLOAD -> getString(R.string.ff_error_no_upload)
+        PrinterException.Reason.EL_TOO_MANY -> getString(R.string.el_error_too_many)
+        PrinterException.Reason.EL_UNREACHABLE -> getString(R.string.el_error_unreachable)
+        PrinterException.Reason.EL_NO_ANSWER -> getString(R.string.el_error_no_answer)
+        else -> elegooCode(reason)
+    }
+}
+
+/** Elegoo's numbered answers in words (the spec's §6 to §8): never the number alone. */
+private fun Context.elegooCode(reason: String?): String? {
+    reason ?: return null
+    fun n(prefix: String) = reason.removePrefix(prefix).toIntOrNull()
+    return when {
+        reason.startsWith(PrinterException.Reason.EL_ACK_PRINT) -> when (n(PrinterException.Reason.EL_ACK_PRINT)) {
+            1 -> getString(R.string.el_ack_busy)
+            2 -> getString(R.string.el_ack_no_file)
+            3 -> getString(R.string.el_ack_md5)
+            4 -> getString(R.string.el_ack_read)
+            5 -> getString(R.string.el_ack_resolution)
+            6 -> getString(R.string.el_ack_format)
+            7 -> getString(R.string.el_ack_model)
+            else -> getString(R.string.el_error_number, n(PrinterException.Reason.EL_ACK_PRINT) ?: 0)
+        }
+        reason.startsWith(PrinterException.Reason.EL_UPLOAD_FAILED) -> when (n(PrinterException.Reason.EL_UPLOAD_FAILED)) {
+            -1 -> getString(R.string.el_upload_failed, getString(R.string.el_upload_negative))
+            -2 -> getString(R.string.el_upload_failed, getString(R.string.el_upload_offset))
+            -3 -> getString(R.string.el_upload_failed, getString(R.string.el_upload_open))
+            -4 -> getString(R.string.el_upload_failed, getString(R.string.el_upload_unknown))
+            else -> getString(R.string.el_upload_failed_plain)
+        }
+        reason.startsWith(PrinterException.Reason.EL_PRINT_ERROR) -> when (n(PrinterException.Reason.EL_PRINT_ERROR)) {
+            1 -> getString(R.string.el_ack_md5)
+            2 -> getString(R.string.el_ack_read)
+            3 -> getString(R.string.el_ack_resolution)
+            4 -> getString(R.string.el_ack_format)
+            5 -> getString(R.string.el_ack_model)
+            else -> getString(R.string.el_error_number, n(PrinterException.Reason.EL_PRINT_ERROR) ?: 0)
+        }
         else -> null
     }
 }

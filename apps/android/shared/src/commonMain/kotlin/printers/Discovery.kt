@@ -24,6 +24,7 @@ data class FoundPrinter(
             val h = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
             // Flashforge is added by its host: HTTP and TCP are on their usual ports.
             if (kind == PrinterKind.FLASHFORGE) return "flashforge://$h"
+            if (kind == PrinterKind.ELEGOO) return "elegoo://$h"
             val p = path.trim().ifEmpty { "/" }.let { if (it.startsWith("/")) it else "/$it" }.trimEnd('/')
             return "http://$h:$port$p"
         }
