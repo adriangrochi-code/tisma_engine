@@ -109,6 +109,17 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     - `bed_mesh_probe_count`, `bed_mesh_algo` (OrcaSlicer, malla adaptativa de Klipper): si el perfil trae los valores,
       esos; si no, falta medirlos en OrcaSlicer como caja negra: hasta entonces se avisa en la interfaz, no solo en el
       registro.
+    - segunda tanda (QA, 17-11-2026, con el motor 272dd50): `wipe_tower_center_pos_valid`: no, salvo que haya torre de
+      purga; `start_filament_gcode`: el G-code de inicio del filamento; `required_nozzle_HRC`: el del filamento, si no
+      0; `filament_flush_volumetric_speed`: el del filamento, si no su caudal máximo; `inner_wall_speed`,
+      `outer_wall_speed`, `initial_layer_speed`: las velocidades de pared interna, externa y de primera capa;
+      `outer_wall_line_width`, `extrusion_width`: los anchos de línea de la pared externa y el general; `filament_notes`:
+      las notas del filamento; `print_bed_max` también en el dialecto `prusaslicer` (Creality); y de Cura:
+      `print_time` (el tiempo estimado, como lo escribe Cura), `top_bottom_thickness` (capas de arriba por la altura de
+      capa), `filament_amount` (m), `filament_cost`, y `purge_distance`, `retraction_hop_height_after_extruder_switch`,
+      `switch_extruder_retraction_amount` del perfil de la impresora si los trae, si no los valores por defecto de
+      Cura;
+    - `date` sale como `dd-mm-aaaa` y `time` como `HH:MM:SS`, la hora local (como Cura).
     Una variable sin valor conocido sigue saliendo con aviso, que la interfaz muestra al laminar (prueba GM22).
 10 bis. **Dialectos** (campo `dialect` del bloque `gcode` del paquete, `profile_pack_format.md`): `prusaslicer` es el
     lenguaje de arriba con los nombres de la documentación pública de PrusaSlicer; `orcaslicer`, `crealityprint` y
