@@ -14861,3 +14861,19 @@ para el LBM D3Q19.
   a una punta queda en su misma línea. Se descartó el cambio; queda en PLAN.md lo que sí rendiría: juntar las ramas
   paralelas en troncos.
 - **Siguiente:** juntar ramas necesita diseño (más de un bloque); el próximo bloque toma el siguiente punto de PLAN.md.
+
+## 2026-11-17 — bloque nocturno: Q18, lista de ángulos por capa
+
+- **`infill.angles`** (mapa de investigación, Q18): una lista de ángulos en grados que las capas usan en ciclo
+  (`angles[capa % largo]`) en vez de `angle` y `angle` + 90. Vale para las superficies sólidas, los puentes sin
+  dirección propia, el planchado, la purga en el relleno y los patrones de líneas del relleno disperso (`rectilinear`,
+  `zigzag`, `line`); también en las zonas de relleno con ajustes propios. Vacía (por defecto), todo queda igual.
+  Hasta 64 ángulos, de −360 a 360.
+- Interfaz: un campo de texto en la tarjeta de relleno, nivel Avanzado («0; 60; 120» en castellano, «0, 60, 120» en
+  inglés), con su guía en los dos idiomas. Documentado en `docs/CONFIG.md`.
+- **Probado:** prueba nueva `infill angles: a list cycled layer by layer (Q18)` (lectura, ida y vuelta, errores, y la
+  dirección dominante de las líneas en 4 capas, del relleno y de lo sólido); `[combine]`, `[settings]`, `[layout]`,
+  `[help]` y `[ui]` en verde; `ui_script_panel_fold` y `ui_script_slice_panel` en verde. El campo no se miró en una
+  captura.
+- Además: marcado como hecho en PLAN.md «los patrones de las superficies de arriba y de abajo (14 a 17)», que ya
+  estaba hecho (ver la entrada de P10).

@@ -929,6 +929,7 @@ void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector
             continue;
         FillParams params{s.wall_width, std::min(s.mix_purge_infill_max, s.infill_density * need / have) / 100.0,
                           s.infill_angle, s.infill_pattern, s.top_pattern};
+        params.angles = s.infill_angles;
         params.sparse_width = sparse.front().points.empty() ? 0.0 : sparse.front().points.front().width;
         LayerSurfaces only;
         only.sparse = model.surfaces[l].sparse;
@@ -2421,7 +2422,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (s.sparse.empty())
                 continue;
             if (s.bridge.empty())
-                s.bridge_angle = settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0);
+                s.bridge_angle = layer_angle(settings.infill_angle, settings.infill_angles, l);
             s.bridge = Clipper2Lib::Union(s.bridge, s.sparse, Clipper2Lib::FillRule::NonZero);
             s.sparse.clear();
         }
@@ -2760,6 +2761,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     });
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.top_pattern};
+    fill.angles = settings.infill_angles;
     fill.bridge_width = bridge_bead(settings);
     fill.sparse_width = nozzles.sparse_width;
     // At 0 from the nozzle, not the walls (surfaces_infill.md, I9): the top
@@ -2895,6 +2897,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               FillParams zoned = fill;
                               zoned.density = own.infill_density / 100.0;
                               zoned.angle = own.infill_angle;
+                              zoned.angles = own.infill_angles;
                               zoned.pattern = own.infill_pattern;
                               zoned.depth = nullptr;
                               LayerSurfaces only;
@@ -3020,7 +3023,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             const double over = settings.ironing_angle < 0.0 ? 45.0 : settings.ironing_angle;
             const double angle = settings.ironing_angle_fixed
                                      ? over
-                                     : settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0) + over;
+                                     : layer_angle(settings.infill_angle, settings.infill_angles, l) + over;
             out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width_at(l), true);
         });
     }

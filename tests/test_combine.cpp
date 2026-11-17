@@ -4,6 +4,7 @@
 #include "infill/stress_density.hpp"
 
 #include "config/analysis_case.hpp"
+#include "config/settings.hpp"
 #include "fea/analysis.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
@@ -778,5 +779,36 @@ TEST_CASE("infill patterns: Hilbert and Archimedean chords on a large region, cl
                 ++ends[{std::llround(q.x * 1000.0), std::llround(q.y * 1000.0)}];
         for (const auto& [q, n] : ends)
             CHECK(n == 1);
+    }
+}
+
+TEST_CASE("infill angles: a list cycled layer by layer (Q18)", "[combine]") {
+    // infill.angles: the layer's lines at angles[layer % size] instead of
+    // angle and angle + 90, for the sparse lines and the solid surfaces.
+    const Settings s = parse_settings(R"({"infill": {"angles": [0, 60, 120]}})");
+    REQUIRE(s.infill_angles == std::vector<double>{0.0, 60.0, 120.0});
+    CHECK(parse_settings(settings_json(s)).infill_angles == s.infill_angles);
+    CHECK_THROWS_AS(parse_settings(R"({"infill": {"angles": 30}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"infill": {"angles": [400]}})"), SettingsError);
+    CHECK(layer_angle(45.0, {}, 3) == 135.0);
+    CHECK(layer_angle(45.0, s.infill_angles, 4) == 60.0);
+
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angles = s.infill_angles;
+    const LayerSurfaces sparse = square_sparse(20.0);
+    LayerSurfaces solid;
+    solid.bottom = sparse.sparse;
+    for (std::size_t l = 0; l < 4; ++l) {
+        INFO("layer " << l);
+        const int want = int(s.infill_angles[l % 3]);
+        for (const std::vector<Toolpath>& paths : {fill_layer(sparse, l, p).sparse, fill_layer(solid, l, p).solid}) {
+            const std::map<int, double> d = by_direction(paths);
+            REQUIRE(!d.empty());
+            const auto most = std::max_element(d.begin(), d.end(),
+                                               [](const auto& a, const auto& b) { return a.second < b.second; });
+            CHECK(most->first == want);
+        }
     }
 }

@@ -2253,7 +2253,7 @@ const std::map<T, const char*>& row_keys() {
         {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
         {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
-        {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"},
+        {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
         {T::NonplanarRow, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
         {T::NonplanarWavelength, "infill.nonplanar_wavelength"}, {T::CombineInfill, "infill.combine_layers"},
@@ -10018,6 +10018,44 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {InfillPattern::Archimedean, tr(T::ArchimedeanInfill)},
                             {InfillPattern::Octagram, tr(T::OctagramInfill)}});
         mm(T::InfillAngle, "infill.angle", s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
+        if (shown("infill.angles")) {
+            // The list as "0, 60, 120"; empty: angle and angle + 90. Taken
+            // only while every item is a number from -360 to 360 (Q18).
+            static std::string text;
+            static bool editing = false;
+            if (!editing) {
+                text.clear();
+                for (const double a : s.infill_angles)
+                    text += (text.empty() ? "" : localized("0.5") != "0.5" ? "; " : ", ") + localized(format("%g", a));
+            }
+            ImGui::TextUnformatted(tr(T::InfillAngles));
+            ImGui::SetNextItemWidth(-9.0f * scale_);
+            if (ImGui::InputText("##infill_angles", &text)) {
+                // Items apart by ';', spaces, or ',' where ',' is not the
+                // decimal point (it is in Spanish: "0; 60; 120" or "0 60 120").
+                const bool comma_decimal = localized("0.5") != "0.5";
+                const std::string seps = comma_decimal ? "; \t" : ";, \t";
+                std::vector<double> list;
+                bool ok = true;
+                for (std::size_t at = 0; at < text.size();) {
+                    const std::size_t from = text.find_first_not_of(seps, at);
+                    if (from == std::string::npos)
+                        break;
+                    const std::size_t to = std::min(text.find_first_of(seps, from), text.size());
+                    const std::optional<double> v = typed_number(std::string_view(text).substr(from, to - from));
+                    if (!v || std::fabs(*v) > 360.0)
+                        ok = false;
+                    else
+                        list.push_back(*v);
+                    at = to;
+                }
+                if (ok && list.size() <= 64 && list != s.infill_angles) {
+                    s.infill_angles = std::move(list);
+                    changed = true;
+                }
+            }
+            editing = ImGui::IsItemActive();
+        }
     } else if (id == "infill_more") {
         mm(T::WallOverlap, "infill.wall_overlap", s.infill_wall_overlap, 0.0, 100.0, "%.0f %%", 0.5f);
         flag(T::InfillBeforeWalls, "infill.before_walls", s.infill_before_walls);

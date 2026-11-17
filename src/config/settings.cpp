@@ -1835,7 +1835,7 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be a whole number from 0 to 1000");
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
-    read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
+    read_group(root, "infill", {"density", "angle", "angles", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
                                 "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width", "before_walls",
@@ -1941,6 +1941,20 @@ Settings parse_checked(std::string_view text) {
             if (!(d > 0.0) || d > 10.0)
                 fail(k, "must be more than 0 and at most 10 mm, or a percentage of the nozzle");
             s.infill_combine_max_height = {d, false};
+            return;
+        }
+        if (n == "angles") {
+            const char* what = "must be a list of up to 64 angles in degrees, from -360 to 360";
+            const json& v = g.at(n);
+            if (!v.is_array() || v.size() > 64)
+                fail(k, what);
+            std::vector<double> list;
+            for (const json& x : v) {
+                if (!x.is_number() || !(std::fabs(x.get<double>()) <= 360.0))
+                    fail(k, what);
+                list.push_back(x.get<double>());
+            }
+            s.infill_angles = std::move(list);
             return;
         }
         if (n == "combine_layers") {
@@ -3616,6 +3630,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"mixing.predictor", s.mix_predictor},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
+        {"infill.angles", json(s.infill_angles).dump()},
         {"infill.pattern", pattern},
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
         {"infill.width", num(s.infill_width)},
@@ -4221,6 +4236,7 @@ std::string settings_json(const Settings& s) {
         {"infill",
          {{"density", s.infill_density},
           {"angle", s.infill_angle},
+          {"angles", s.infill_angles},
           {"pattern", pattern},
           {"wall_overlap", s.infill_wall_overlap},
           {"width", s.infill_width},

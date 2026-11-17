@@ -240,9 +240,15 @@ std::size_t fill_period(const FillParams& params) {
     return 0;
 }
 
+double layer_angle(double angle, const std::vector<double>& angles, std::size_t layer) {
+    if (!angles.empty())
+        return angles[layer % angles.size()];
+    return angle + (layer % 2 == 1 ? 90.0 : 0.0);
+}
+
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
-    const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
+    const double angle = layer_angle(params, layer);
     // The top surface itself, and under it the rest of the top layers, solid
     // like the bottom ones (surfaces_infill.md, rule 2).
     const Polygons surface = surfaces.top_under.empty()

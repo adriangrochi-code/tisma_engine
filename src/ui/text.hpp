@@ -542,6 +542,7 @@
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \
+    X(InfillAngles, "Ángulos por capa (en ciclo)", "Angles by layer (cycled)")                                        \
     X(Supports, "Soportes", "Supports")                                                                               \
     X(SupportAutomatic, "Soporte automático", "Automatic support")                                                     \
     X(SupportAutomaticTip, "Apagado, solo hay soporte bajo las caras pintadas con Pintar > Soportes",                   \

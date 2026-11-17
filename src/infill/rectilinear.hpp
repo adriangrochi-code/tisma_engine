@@ -80,6 +80,7 @@ struct FillParams {
     double overlap = 0.0; // neighbouring lines' overlap (bead_overlap of the layer's height, perimeters.md rule 1)
     double max_link = 0.0; // mm along the walls the sparse lines may be joined over (infill.max_link); 0: 3 spacings
     SurfacePattern bottom_pattern = SurfacePattern::Rectilinear; // the bottom surfaces (surfaces.bottom_pattern)
+    std::vector<double> angles; // the layer's angle, cycled (infill.angles, Q18); empty: angle and angle + 90
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
@@ -108,6 +109,11 @@ struct FillParams {
 //  - lightning: none here, since each layer's branches come from the layer
 //    above's (lightning_layers).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
+
+// The angle of layer `layer`'s lines: angles[layer % size] when the list is
+// given, else angle, plus 90 on odd layers.
+double layer_angle(double angle, const std::vector<double>& angles, std::size_t layer);
+inline double layer_angle(const FillParams& p, std::size_t layer) { return layer_angle(p.angle, p.angles, layer); }
 
 // Every how many layers fill_layer gives the same toolpaths for the same
 // surfaces: the directions turn with the layer number alone (2, or 6 with

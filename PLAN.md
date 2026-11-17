@@ -535,7 +535,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
       (o 16 mil puntos), en paralelo, y los pedazos unidos otra vez en los bordes (2026-11-17). 300 mm al 100 %, un
       núcleo: Hilbert 0,73 → 0,28 s, Arquímedes 0,90 → 0,033 s; 4 núcleos: 0,11 y 0,011 s. Mismos caminos y largo
     - [ ] panal 3D (regla 11): la ficha describe poco su forma; pedir más mediciones al equipo de fichas
-    - [ ] los patrones de las superficies de arriba y de abajo (14 a 17)
+    - [x] los patrones de las superficies de arriba y de abajo (14 a 17), hecho 2026-11-0x (ver PROGRESS.md)
     - [x] una capa sólida cada N y el espesor mínimo de la cáscara (21 y 22)
     - [x] relleno guiado por tensiones (fase A2): `infill.stress_density` con `slice --case`
     - [x] el caso de carga en el laminado de la interfaz (un `.json` como el de `analyze`)
@@ -610,7 +610,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
       - [ ] Q16: ventilador por tipo de tramo (alto en voladizos, puentes y pared externa; bajo adentro), con Q1 y T3;
         medirlo en el banco, porque los estudios no coinciden
       - [ ] Q17: pieza de capacidad (agujeros y pernos de 2 a 20 mm) y compensación de agujeros según el diámetro
-      - [ ] Q18: lista de ángulos por capa para el relleno y las superficies sólidas
+      - [x] Q18: lista de ángulos por capa para el relleno y las superficies sólidas (`infill.angles`, 2026-11-17)
       - patente US 10,353,378 B2 (WARF): toca el análisis «como impresa» que ya existe; al abogado ya (decide el
         dueño)
   - brillo parejo (pedido del dueño, 2026-10-25; `docs/GLOSS.md`):

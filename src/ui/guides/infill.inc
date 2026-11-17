@@ -117,6 +117,19 @@
      "It only matters with ironing on. On, the ironing angle no longer adds to the top surface's: it is the passes' "
      "direction from the X axis, the same on every layer.\n\nIt makes every ironed top shine the same way.\n\n"
      "Example: off, the default; on with 0° for left-to-right passes on every layer."},
+    {"infill.angles",
+     "Es una lista de ángulos, en grados, que las capas usan por turno: la primera capa el primero, la segunda el "
+     "segundo, y al terminar la lista vuelve a empezar. Reemplaza al ángulo de relleno y a su giro de 90° en las "
+     "superficies sólidas, el planchado y los dibujos de líneas (rectilíneo, zigzag, línea).\n\nSirve para repartir "
+     "la resistencia en más direcciones, o para dejar todas las capas con el mismo ángulo y alinear las líneas con la "
+     "carga que va a llevar la pieza. Vacía, todo queda como siempre.\n\nEjemplo: 0; 60; 120 reparte en tres "
+     "direcciones; 0; 45; 90; 135 en cuatro; un solo 90 deja todas las capas a 90°.",
+     "It is a list of angles, in degrees, that the layers take in turn: the first layer the first one, the second the "
+     "second, and after the last the list starts again. It replaces the infill angle and its 90° turn on the solid "
+     "surfaces, ironing and the line patterns (rectilinear, zigzag, line).\n\nUse it to spread the strength over "
+     "more directions, or to keep every layer at one angle and line the beads up with the load the part will carry. "
+     "Empty, everything stays as before.\n\nExample: 0, 60, 120 spreads it over three directions; 0, 45, 90, 135 "
+     "over four; a single 90 keeps every layer at 90°."},
     {"infill.angle",
      "Es la dirección de las líneas del relleno, en grados, medida desde el eje X de la cama (de izquierda a derecha). "
      "En el dibujo de líneas, cada capa por medio suma 90°.\n\nNo cambia cuánto plástico lleva la pieza; cambia hacia "

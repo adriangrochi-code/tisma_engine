@@ -330,6 +330,11 @@ struct Settings {
     double paint_max_region_width = 0.0, paint_interlocking_depth = 0.0;
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
+    // Degrees of the layer's lines, cycled layer by layer (infill.angles,
+    // research map Q18): the solid surfaces and the line patterns of the
+    // sparse infill take angles[layer % size] instead of angle and angle + 90.
+    // Empty: angle and angle + 90.
+    std::vector<double> infill_angles;
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
     int infill_solid_every = 0;        // layers N, 2N... all solid infill (0: never)

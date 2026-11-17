@@ -84,7 +84,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"surfaces.bottom_pattern", A},
             {"surfaces.bridge_angle", A},
             {"surfaces.interface_shells", A}}},
-          {"infill", T::SubInfill, {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}}},
+          {"infill", T::SubInfill, {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}, {"infill.angles", A}}},
           {"infill_more", T::SubInfillMore,
            {{"infill.wall_overlap", A},
             {"infill.solid_every", A},
