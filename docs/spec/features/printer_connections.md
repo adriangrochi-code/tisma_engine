@@ -60,7 +60,7 @@ Tisma Slicer usa código de PrusaSlicer: se escriben desde la documentación pú
      sus campos como los manda la app de Android, que imprime en una A1 mini real (decisión de QA, 17-11-2026):
      `md5` es el MD5 del G-code de la placa (`Metadata/plate_1.gcode`), no el del paquete; `ams_mapping` va como texto
      vacío `""` sin AMS; no se agrega el campo `file`; `url` es `ftp:///<nombre>.gcode.3mf`. Escritorio, Android e
-     iPhone mandan el mismo `project_file` (prueba BL2);
+     iPhone mandan el mismo `project_file` (prueba BL4);
    - el servidor FTP exige que la conexión de datos reanude la sesión TLS de la de control. Con TLS 1.3, algunas
      bibliotecas no la reanudan; con TLS 1.2 alcanza el identificador de sesión.
 6. **Cámara (A1 y P1):** TLS al puerto 6000, un paquete de autenticación de 80 bytes y después imágenes JPEG seguidas,
@@ -340,7 +340,7 @@ Contra simuladores propios de cada impresora (un programa que contesta como ella
 | U3 | El simulador se queda sin contestar un `ok` | Al rato se manda `M105` y la impresión sigue |
 | U4 | El simulador manda reportes `T:210.0 /210.0 B:60.0 /60.0` | El estado muestra boquilla 210 °C y cama 60 °C |
 | U5 | Cancelar a mitad de la impresión | Se manda `M108` y después los comandos de cancelación |
-| BL2 | El mismo `.gcode.3mf` mandado desde el escritorio y desde la app de Android al simulador | El `project_file` que recibe el simulador es igual campo por campo en los dos |
+| BL4 | El mismo `.gcode.3mf` mandado desde el escritorio y desde la app de Android al simulador | El `project_file` que recibe el simulador es igual campo por campo en los dos |
 | BL1 | Simulador Bambu (MQTT con TLS + FTPS) con código de acceso de prueba | Lee estado, porcentaje y temperaturas; sube el `.gcode.3mf` y manda `project_file` |
 | BL2 | El mismo con un código de acceso equivocado | Error de autenticación claro, sin escribir el código en ningún registro |
 | BL3 | Certificado distinto del guardado | No se conecta y se avisa |
