@@ -231,6 +231,10 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         fallback("required_nozzle_HRC", each(TemplateValue::of(0LL)));
         fallback("filament_flush_volumetric_speed", each(number(flow > 0.0 ? flow : kSafeFlow)));
         fallback("filament_notes", each(TemplateValue::of(std::string())));
+        // cura's own defaults: the heat zone's 16 mm, and the hop of a
+        // retraction.
+        fallback("switch_extruder_retraction_amount", number(16.0));
+        fallback("retraction_hop_height_after_extruder_switch", number(s.retract_lift));
         set("inner_wall_speed", each(number(s.wall_speed)));
         set("outer_wall_speed", each(number(outer_speed)));
         set("initial_layer_speed",
@@ -243,6 +247,8 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         if (s.machine_macros.dialect == "cura") {
             set("filament_amount", number(0.0));
             set("filament_cost", number(0.0));
+            // The estimate so far, as cura writes it (the writer updates it).
+            set("print_time", TemplateValue::of(std::string("0h 0m 0s")));
         } else {
             set("filament_cost", each(number(s.filament_cost)));
         }

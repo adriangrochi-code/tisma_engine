@@ -3835,6 +3835,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         if (s.machine_macros.dialect == "cura") {
             templates.variables["filament_amount"] = r3(g.total_e() / 1000.0);
             templates.variables["filament_cost"] = r3(grams * s.filament_cost / 1000.0);
+            const long long t = std::llround(g.print_time());
+            templates.variables["print_time"] = TemplateValue::of(std::to_string(t / 3600) + "h " +
+                                                                  std::to_string(t / 60 % 60) + "m " +
+                                                                  std::to_string(t % 60) + "s");
         }
     };
     const auto at_layer = [&](std::size_t l) {

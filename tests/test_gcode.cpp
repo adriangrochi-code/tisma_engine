@@ -204,6 +204,8 @@ TEST_CASE("the machine's G-code takes the original program's branches (gcode_mac
     CHECK_FALSE(c.unfilled.contains("inner_wall_speed"));
     CHECK_FALSE(c.unfilled.contains("outer_wall_line_width"));
     CHECK_FALSE(c.unfilled.contains("filament_notes"));
+    CHECK(render_template("{switch_extruder_retraction_amount};{retraction_hop_height_after_extruder_switch}", c, "t") ==
+          "16;0.4");
     // A pack value replaces a default (the filament says it is abrasive).
     Settings given = s;
     given.abrasive = false;

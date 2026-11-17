@@ -15046,3 +15046,12 @@ Versión 0.13.0-beta.2.
     falta el valor por defecto de Cura;
   - `bed_mesh_*`.
 - Pruebas `[gcode]`: 137 casos bien.
+
+**Tercera tanda GM22 (respuestas de QA, spec/next 44184ef):**
+- Valores por defecto de Cura: `switch_extruder_retraction_amount` vale 16 mm y
+  `retraction_hop_height_after_extruder_switch` toma `retraction.lift`. Los dos se pueden reemplazar con los valores del
+  paquete.
+- `print_time` de Cura sale como «1h 2m 3s» con el tiempo estimado hasta ese punto. En el G-code de inicio vale «0h 0m
+  0s», porque el tiempo total todavía no se conoce.
+- `purge_distance` sigue con aviso: Cura no tiene ese valor.
+- Pruebas `[gcode]`: 137 casos bien.
