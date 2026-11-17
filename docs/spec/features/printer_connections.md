@@ -473,3 +473,126 @@ No pude leer `GhostTypes/ff-5mp-api/docs/protocols.md` (GitHub devolvió 503), a
 | FF1.4 | Pausa y cancelación en una moderna | Se envía `jobCtl_cmd` con `pause` y después con `cancel`. El estado mostrado sale de `/detail` (pause, cancel) |
 | FF1.5 | Legado: el simulador contesta "Control Failed" a M601 S1 | Muestra que otro programa controla la impresora y no manda M23 ni M24 |
 | FF1.6 | Puerto 8898 cerrado | Muestra el mensaje de "no se pudo conectar" con la IP, sin colgarse, y lo corta por timeout |
+
+## Creality de fábrica (Klipper sin Moonraker) en red local (decisión del dueño, 17-11-2026: para la beta del 24-11; la subida y las órdenes de impresión quedan sin confirmar hasta medir el programa de Creality con una impresora real)
+
+Sección solo de comportamiento. No contiene código ni fragmentos copiados. Todo lo que no tiene una fuente
+pública que lo diga está marcado **(sin confirmar)**. No se leyó código de ningún slicer ni de ningún cliente.
+
+### Qué modelos
+
+- La integración comunitaria de Home Assistant `ha_creality_ws` dice que habla con K1, K1C, K1C (2025), K1 SE,
+  K1 Max, K2, K2 Pro, K2 Plus, Ender 3 V3, V3 KE, V3 Plus y Creality Hi por un WebSocket local, sin nube
+  (https://github.com/3dg1luk43/ha_creality_ws).
+- Un usuario dice que K1, K1C y K1 Max usan el mismo firmware y el mismo protocolo
+  (https://community.home-assistant.io/t/adding-creality-k1-max-to-ha-using-nodered-no-root-required/794457).
+  Es la opinión de un usuario, no una fuente oficial. **(sin confirmar para K2 Plus y Hi en el detalle de campos)**
+
+### Detectar si la impresora es de fábrica o tiene root
+
+1. Probar Fluidd en 4408 y Mainsail en 4409. Las guías de instalación con root los listan
+   (https://simplyprint.io/setup-guide/creality/k1-max.md). Si alguno responde, la impresora tiene root.
+2. Probar Moonraker en 7125. Si responde, usar la conexión Moonraker que ya existe y no usar esta sección.
+   - Un escaneo de puertos de un K1C 2025 con firmware de fábrica reporta 7125 como «compatible con Moonraker,
+     totalmente funcional» (https://forum.creality.com/t/k1c-2025-orcaslicer-workarounds-for-missing-web-interface/47164).
+     Que 7125 responda no prueba que haya root: alcanza con que la API funcione. **(sin confirmar en otros modelos)**
+3. Si nada de eso responde y el puerto 9999 acepta un WebSocket, tratarla como Creality de fábrica.
+4. Si no responde nada, mostrar: «No encontramos la impresora en <IP>. Revisá que esté encendida y en la misma red.»
+
+### Puertos de fábrica
+
+Según el mismo escaneo (foro de Creality, enlace de arriba):
+- 80: nginx, responde 404 en todas las rutas. Un mensaje posterior dice que 80 es una redirección (iptables) a 8081.
+  Esto no se verificó en el hilo. **(sin confirmar)**
+- 8081: responde 404 en la raíz.
+- 9999: WebSocket con un flujo de estado de la impresora.
+- 8000: cámara WebRTC.
+- 22: SSH con una contraseña desconocida. No usarlo.
+
+En firmware v1.0.0.x del K1C 2025 no hay interfaz web en 80. Aun así, OrcaSlicer sube e imprime con la IP y el
+puerto 80 (mismo hilo).
+
+### WebSocket de estado (puerto 9999)
+
+- Dirección: `ws://<IP>:9999`. El hilo de Home Assistant solo dice «el socket está en el puerto 9999», sin ruta.
+  La ruta raíz y el subprotocolo quedan **(sin confirmar)**.
+- Envío: la impresora empuja el estado sola. El cliente no consulta (README de `ha_creality_ws`).
+- Contenido: mensajes JSON. Algunos valores solo cambian mientras imprime (hilo de Home Assistant).
+- Mantener la conexión viva: usuarios de Node-RED activaron un latido (heartbeat) cada 10 s y la conexión se
+  rearmó sola (hilo de Home Assistant). El contenido del latido queda **(sin confirmar)**.
+- Campos con nombre confirmado:
+  - `printJobTime`: tiempo impreso, en segundos.
+  - `printLeftTime`: tiempo restante, en segundos.
+  - Ambos según el hilo de Home Assistant.
+  - `model`, `modelVersion`, `hostname`: identidad. Si `model` viene vacío, `modelVersion` lleva un código de placa,
+    por ejemplo F012, F021, F008, F001, F002, F005 o F018 (README de `ha_creality_ws`).
+  - `boxTemp`, `maxBoxTemp`, `targetBoxTemp`: cámara. `lightSw`: luz. `webrtcSupport`: cámara WebRTC.
+    Todos según el README de `ha_creality_ws`.
+- Campos que existen pero cuyo nombre no conocemos **(sin confirmar)**:
+  - temperatura de boquilla y de cama, con sus objetivos;
+  - progreso en %;
+  - capa actual y capas totales;
+  - nombre del archivo;
+  - estado.
+  Las fuentes dicen que esos datos llegan, pero no nombran las claves.
+- Estados que la integración muestra: `idle`, `processing`, `printing`, `paused`, `stopped`, `completed`, `error`,
+  `self-testing`. No se sabe si son valores crudos o traducidos por la integración **(sin confirmar)**.
+- Detener no tiene un estado propio. La impresora manda el mismo estado que al precalentar, y la integración
+  sostiene esa forma ambigua unos 15 s antes de decidir. El motor tiene que tratar «detenida» como una transición
+  y no como un valor (README de `ha_creality_ws`).
+
+### Comandos por el WebSocket
+
+- Los comandos son JSON con un método `set` (lo muestra una publicación de seguridad; ver la advertencia).
+  Las claves exactas para iniciar un archivo por nombre, pausar, reanudar y detener quedan **(sin confirmar)**.
+  No se implementan hasta tenerlas de una captura propia de tráfico o de una documentación pública.
+- Ventiladores: el mismo canal acepta G-code `M106 P<canal> S<0–255>` (README de `ha_creality_ws`).
+- Filamento (`modifyMaterial`): Creality no lo documenta. Mientras la impresora está ocupada, el cambio se
+  rechaza (README de `ha_creality_ws`). Queda fuera de alcance.
+
+### Subida del G-code
+
+- OrcaSlicer tiene un tipo de host «CrealityPrint». Con la IP y el puerto 80, el usuario prueba la conexión,
+  la prueba pasa, y sube e imprime
+  (https://forum.creality.com/t/k1c-2025-orcaslicer-workarounds-for-missing-web-interface/47164).
+  En las versiones viejas de OrcaSlicer el tipo no aparece. La respuesta es actualizar
+  (https://forum.creality.com/t/how-do-i-get-orca-to-communicate-with-my-k1c-problem/52030).
+- En K2 Pro, poner `:4408` en el campo del host devuelve el control del equipo, y el tipo de host da la
+  sincronización con el CFS
+  (https://forum.creality.com/t/orcaslicer-2-4-1-k2-pro-cfs-device-control-findings/52221).
+  Es una pista, no un hecho confirmado.
+- Ruta HTTP, método y nombre del campo del formulario: **(sin confirmar)**. Ninguna fuente pública los da.
+  Antes de implementar, hay que obtenerlos con una captura caja negra del programa oficial contra una impresora real.
+- Hay reportes de archivos que se suben pero no aparecen en la lista y no se pueden iniciar
+  (https://forum.creality.com/t/k1-max-camera-works-but-uploaded-files-are-not-visible-and-remote-print-cannot-start-in-orcaslicer/49936).
+  Después de subir, el motor confirma que el archivo esté en la lista antes de decir «enviado».
+- Vista previa de la impresión en curso: GET a `/downloads/original/current_print_image.png`, primero por HTTPS y
+  después por HTTP (README de `ha_creality_ws`).
+
+### Errores y mensajes al usuario
+
+- Conexión rechazada en 9999: «La impresora no acepta conexiones de estado. Revisá la IP y que el firmware esté
+  actualizado.»
+- Se cortó el WebSocket: reconectar con espera creciente y mostrar «Reconectando…». Nunca dar por perdida una
+  impresión porque se cortó la conexión.
+- La subida responde 404 o 501 en 80: «Esta impresora no acepta subidas por la red con este firmware. Probá con
+  USB o actualizá el firmware.» En Simplify3D, el puerto 80 dio 501/404 (https://forum.simplify3d.com/viewtopic.php?p=66001).
+- Se pidió una acción con la impresora ocupada: «La impresora está ocupada (<estado>). Esperá a que termine.»
+- Nunca enviar G-code arbitrario por 9999 sin que el usuario lo confirme.
+
+### Advertencia de seguridad
+
+El WebSocket 9999 no pide autenticación. Hay una publicación de seguridad pública que lo usa para ejecutar
+comandos. No se usa como fuente de diseño. El motor conecta solo a IPs que el usuario eligió en la red local.
+Avisa que cualquiera en la LAN puede controlar la impresora, y nunca la expone fuera de la LAN.
+
+### Pruebas (simulador)
+
+| CR1 | caso | resultado |
+|---|---|---|
+| CR1-1 | El simulador responde en 7125, y no en 9999 | Se usa la conexión Moonraker, no la de Creality |
+| CR1-2 | Solo 9999 abierto, empuja JSON con `printJobTime`/`printLeftTime` | Se muestran el tiempo transcurrido y el restante, en segundos convertidos |
+| CR1-3 | `model` vacío y `modelVersion` = F012 | El modelo se deduce del código de placa, sin fallar |
+| CR1-4 | Imprimiendo, luego el estado de precalentamiento durante 15 s sin volver | Se informa «detenida» después de la ventana, no antes |
+| CR1-5 | Se corta el WebSocket a mitad de una impresión | Se reconecta, la impresión sigue figurando activa y aparece «Reconectando…» |
+| CR1-6 | La subida devuelve 404 | Se muestra el mensaje de firmware sin subida por la red, sin reintentar sin fin |
