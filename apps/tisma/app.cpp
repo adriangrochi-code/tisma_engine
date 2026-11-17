@@ -853,6 +853,7 @@ private:
     bool try_material_ = false; // a suggested material chosen: analyze again
     bool structural_map_in_view_ = false;
     std::string structural_message_;
+    int structural_starts_ = 0; // analyses started this session (the scripted tests' diagnosis)
     std::string structural_parsed_for_;
     nlohmann::json structural_parsed_;
     void start_structural();
@@ -20033,8 +20034,11 @@ void App::start_structural() {
     const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
     const PlateObject& o = objects_[part];
     TriangleMesh placed = placed_mesh(o);
-    if (placed.empty() || o.mesh.empty())
+    if (placed.empty() || o.mesh.empty()) {
+        structural_message_ = "the part has no mesh to analyze";
         return;
+    }
+    ++structural_starts_;
     std::array<double, 9> a{};
     std::array<double, 3> b{};
     own_to_placed(o, placed, a, b);
@@ -28049,10 +28053,15 @@ bool App::script_check(const ScriptStep& step, int f) {
     } else if (step.verb == "expect-structural-map") { // the structural map has a finite value on every face it shows
         if (structural_job_.running() || cloud_eng_.valid())
             return f >= 120000 ? fail_step("the analysis is still running") : true;
-        if (!structural_map_)
-            return f >= 600 ? fail_step("no structural map" +
-                                        (structural_message_.empty() ? std::string() : ": " + structural_message_))
-                            : true;
+        if (!structural_map_) {
+            if (f < 600)
+                return true;
+            std::string why = structural_message_;
+            if (why.empty())
+                why = structural_starts_ == 0 ? "Analizar never started an analysis"
+                                              : "an analysis started and gave nothing back";
+            return fail_step("no structural map: " + why);
+        }
         const StructuralRun& m = *structural_map_;
         const std::size_t n = m.corners.size() / 3;
         // A face with no stress has an infinite safety factor (strength over
@@ -28536,12 +28545,24 @@ void App::script_input() {
             return f >= 30 && f < 1000 ? fail_step("no menu entry of that name is on the screen") : void();
         const ImVec4 r = it->second;
         io.AddMousePosEvent(0.5f * (r.x + r.z), 0.5f * (r.y + r.w));
-        if (script_frame_ < 1000) // hovered for a few frames (a submenu opens on hover), then clicked
+        // The entry moved since the last frame (a result arriving in the
+        // background grew the panel above it): a press and a release on two
+        // places is no click, so the hover starts again where it is now (G13
+        // on the CI, where the estimate under the quality came mid-click).
+        static ImVec4 aimed;
+        const bool moved = script_frame_ >= 1000 && (r.x != aimed.x || r.y != aimed.y || r.z != aimed.z || r.w != aimed.w);
+        aimed = r;
+        if (script_frame_ < 1000) { // hovered for a few frames (a submenu opens on hover), then clicked
             script_frame_ = 1000;
-        else if (f == 1004)
+        } else if (moved && f <= 1005) {
+            if (f == 1005)
+                io.AddMouseButtonEvent(0, false);
+            script_frame_ = 1000;
+        } else if (f == 1004) {
             io.AddMouseButtonEvent(0, true);
-        else if (f == 1005)
+        } else if (f == 1005) {
             io.AddMouseButtonEvent(0, false);
+        }
     } else if (step.verb == "slide") { // a click on a named slider, VALUE (0 to 1) of the way across
         const auto it = g_menu_rects.find(step.key);
         if (it == g_menu_rects.end())

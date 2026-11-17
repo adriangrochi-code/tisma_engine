@@ -14888,3 +14888,17 @@ para el LBM D3Q19.
   0,4: 26 líneas, las de afuera en 0,2 y 10,1 mm, ninguna separación mayor que 0,4; una franja de 0,65 mm, una línea).
   `[combine]`, `[arcs]`, `[calibration]`, `[fuzzy]`, `[surfaces]`, `[determinism]`, `[gcode]` en verde. No impreso.
 - **Siguiente:** queda de Q10 el umbral de voladizo según ventilador, velocidad y temperatura (necesita mediciones).
+
+## 2026-11-17 — bloque nocturno: G13 estructural en macOS y una vez en Windows
+
+- **Lo que fallaba:** `gate_g13_structural_cube` en macOS (siempre) y una vez en Windows (68d7f52): «no structural map»
+  sin mensaje, con todos los pasos anteriores bien. Sin mensaje quiere decir que el análisis nunca empezó: el clic en
+  Analizar no se dio. En local pasa 8 de 8 (3,8 s contra 27 s en la CI).
+- **Causa probable:** al elegir la calidad rápida se calcula en segundo plano el tamaño estimado; cuando llega agrega
+  texto arriba de Analizar y lo corre. En una máquina lenta eso cae entre apretar y soltar: apretar en un lugar y
+  soltar en otro no es un clic.
+- **Arreglo:** el verbo `menu` de los guiones vuelve a apuntar si el control se movió antes de soltar. Y
+  `expect-structural-map` dice ahora si Analizar nunca empezó un análisis o si empezó y no devolvió nada; si la pieza
+  no tiene malla, lo dice también.
+- **Probado:** 109 guiones de interfaz y 61 pruebas de la puerta (sin las largas ni las de descarga) en verde, en
+  local. Falta verlo en macOS y Windows en la CI.
