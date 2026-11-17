@@ -182,7 +182,7 @@ endforeach()
 # G10, send: each kind of network printer, faked on this machine, from end to
 # end through the Device page (the tester's report, 2026-11-16): the G-code
 # arrives whole, byte for byte the slice's, and the print starts.
-foreach(kind octoprint astrobox moonraker prusalink duet repetier)
+foreach(kind octoprint astrobox moonraker prusalink duet repetier flashforge)
   add_test(NAME ui_host_e2e_${kind}
     COMMAND $<TARGET_FILE:tisma_fake_print_host> ${kind} ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>
             ${TISMA_GATE_DATA}/cube_ascii.stl --lang en --size 1200x760
@@ -235,3 +235,6 @@ set_tests_properties(gate_g15_quit PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSIO
 # project_file starts it.
 tisma_gate_test(NAME gate_g10_bambu MODEL ${TISMA_GATE_DATA}/cube_ascii.stl SCRIPT gate_g10_bambu LANG es
                 PROPERTIES RESOURCE_LOCK ssdp_ports)
+# Flashforge (FF1.3): the upload asks to level first, as chosen.
+set_tests_properties(ui_host_e2e_flashforge PROPERTIES PASS_REGULAR_EXPRESSION
+                     "fake host: started=1 name=([^ ]*/)?[^ ./][^ /]*[.]gcode bytes=[0-9]+/[0-9]+ whole=1 leveling=true")

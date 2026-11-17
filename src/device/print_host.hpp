@@ -15,7 +15,11 @@
 // only those. Repetier-Server's Web API (repetier-server.com, «Web API»):
 // /printer/info, /printer/api/<slug>?a=<command> with the key in x-api-key,
 // and the upload of a file into the printer's models or jobs. Own design;
-// see PROVENANCE.md.
+// Flashforge's Adventurer 5M, 5M Pro, AD5X and Creator 5 in LAN mode
+// (printer_connections.md, «Flashforge en red local»): HTTP on port 8898,
+// every call a POST with the serial number and the check code (/detail,
+// /uploadGcode, /control), as the community's flashforge-api-docs wiki
+// describes them. See PROVENANCE.md.
 
 #include <string>
 #include <utility>
@@ -25,7 +29,7 @@
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier, Flashforge };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;
@@ -34,6 +38,8 @@ struct HostConfig {
     std::string user, password; // PrusaLink's Digest login, Duet's board password (secrets too;
                                 // Duet: «reprap» when empty, its default)
     std::string printer; // Repetier-Server: the printer's slug on the server; empty, its first printer
+                         // Flashforge: the printer's serial number (the check code is api_key)
+    bool level_before_print = false; // Flashforge: «levelingBeforePrint» with the upload
     int timeout_s = 20;
 };
 

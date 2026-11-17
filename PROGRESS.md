@@ -15158,3 +15158,15 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
   (`bench/README.md`).
 
 **Sigue:** la medición en una GPU real; después P2 (fichas de QA) y W4.
+## 2026-11-17 — Flashforge en red local (beta del 24-11, printer_connections.md, FF1)
+
+- **Modernas (5M, 5M Pro, AD5X, Creator 5), HTTP 8898:** nuevo tipo «Flashforge» en las impresoras de red. Probar y
+  estado por `/detail` (status, `rightTemp`, `platTemp`, `printProgress` de 0 a 1, `estimatedTime`, `printFileName`),
+  subida multipart `gcodeFile` con número de serie, código de verificación, `fileSize`, `printNow` y
+  `levelingBeforePrint` en cabeceras, y pausa, reanudar y cancelar por `/control` (`jobCtl_cmd`), confirmados leyendo
+  `/detail` porque `/control` responde éxito a todo. Códigos 1/2/3/-1 con los mensajes de la ficha; sin conexión,
+  «no se pudo conectar … en http://<IP>:8898 … modo Solo LAN». La IP sola recibe http:// y el puerto 8898. En el
+  panel: número de serie, código de verificación y «Nivelar antes de imprimir».
+- **Pruebas:** `[device][net]` con el simulador (FF1.2, FF1.3, FF1.4, FF1.6) y `ui_host_e2e_flashforge` en la puerta
+  (G10): el archivo llega entero, arranca y pide nivelar.
+- **Lo que sigue:** las de legado por TCP 8899 (FF1.5) y la búsqueda por UDP (FF1.1); después Elegoo SDCP y Creality.

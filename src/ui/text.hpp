@@ -1730,6 +1730,10 @@
     X(EditRotate, "Girar", "Rotate") \
     X(EditScale, "Escalar", "Scale") \
     X(EditErase, "Borrar", "Erase") \
+    X(HostSerial, "Número de serie", "Serial number") \
+    X(HostCheckCode, "Código de verificación", "Check code") \
+    X(HostLevelFirst, "Nivelar antes de imprimir", "Level before printing") \
+    X(HostFlashforgeHelp, "Adventurer 5M, 5M Pro, AD5X y Creator 5: activá «Solo LAN» en la impresora; ahí se ven el número de serie y el código de verificación. Dirección: http://<IP>:8898.", "Adventurer 5M, 5M Pro, AD5X and Creator 5: turn on «LAN only» on the printer; its screen shows the serial number and the check code. Address: http://<IP>:8898.") \
     X(SketchNothingToUndo, "No hay nada para deshacer en el boceto", "Nothing to undo in the sketch") \
     X(SketchNothingToRedo, "No hay nada para rehacer en el boceto", "Nothing to redo in the sketch") \
     X(PromptTrim, "Recortar: hacé clic en la parte a quitar (Enter termina)", "Trim: click the part to cut away (Enter ends)") \

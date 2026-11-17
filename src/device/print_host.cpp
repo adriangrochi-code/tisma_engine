@@ -7,6 +7,9 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <thread>
 #include <cctype>
 #include <cstdio>
 #include <fstream>
@@ -632,6 +635,152 @@ HostResult repetier_job(const HostConfig& host, const char* command) {
 
 } // namespace
 
+
+namespace {
+
+// Flashforge (printer_connections.md, «Flashforge en red local»; the
+// community's flashforge-api-docs wiki, «HTTP REST API»).
+// The address as a person types it: the IP alone gets http:// and port 8898.
+std::string flashforge_base(const HostConfig& host) {
+    std::string b = base_of(host);
+    if (b.find("://") == std::string::npos)
+        b = "http://" + b;
+    const std::size_t host_at = b.find("://") + 3;
+    if (b.find(':', host_at) == std::string::npos)
+        b += ":8898";
+    return b;
+}
+
+net::Request flashforge_request(const HostConfig& host, const std::string& path, const nlohmann::json& body) {
+    net::Request r;
+    r.method = "POST";
+    r.url = flashforge_base(host) + path;
+    nlohmann::json b = body;
+    b["serialNumber"] = host.printer;
+    b["checkCode"] = host.api_key;
+    r.body = b.dump();
+    r.headers.push_back({"Content-Type", "application/json"});
+    r.timeout_s = host.timeout_s;
+    r.connect_timeout_s = std::min(host.timeout_s, 10);
+    r.max_bytes = 1u << 20;
+    return r;
+}
+
+// The answer's «code» as a result, with the words of the spec.
+HostResult flashforge_result(const HostConfig& host, const net::Response& r, nlohmann::json* answer = nullptr) {
+    HostResult out = result_of(r);
+    if (!out.ok) {
+        if (out.code == "unreachable")
+            out.error = "cannot reach the printer at " + flashforge_base(host) +
+                        "; check that it is on, on the same network and in LAN-only mode";
+        return out;
+    }
+    const nlohmann::json j = nlohmann::json::parse(r.body, nullptr, false);
+    if (!j.is_object() || !j.contains("code") || !j["code"].is_number()) {
+        out.ok = false;
+        out.code = "bad_answer";
+        out.error = "the address answers, but not as a Flashforge printer";
+        return out;
+    }
+    const int code = j["code"].get<int>();
+    out.ok = code == 0;
+    if (code == 1) {
+        out.code = "unauthorized";
+        out.error = "wrong serial number or check code; see the printer's network mode screen";
+    } else if (code == 2) {
+        out.code = "conflict";
+        out.error = "the printer is busy";
+    } else if (code == 3) {
+        out.code = "failed";
+        out.error = "the file is not on the printer";
+    } else if (code != 0) {
+        out.code = "failed";
+        out.error = "the printer refused the request";
+    }
+    if (answer)
+        *answer = j;
+    return out;
+}
+
+HostStatus flashforge_status(const HostConfig& host) {
+    HostStatus out;
+    nlohmann::json j;
+    static_cast<HostResult&>(out) = flashforge_result(host, net::perform(flashforge_request(host, "/detail", nlohmann::json::object())), &j);
+    if (!out.ok)
+        return out;
+    const nlohmann::json d = j.value("detail", nlohmann::json::object());
+    out.state = d.value("status", std::string());
+    // Its words (ready, busy, heating, printing, pausing, pause, canceling,
+    // cancel, completed…); an unknown one counts as busy.
+    out.printing = out.state == "printing" || out.state == "heating" || out.state == "pausing";
+    out.paused = out.state == "pause";
+    out.file = d.value("printFileName", std::string());
+    const double progress = number(d, "printProgress");
+    out.progress = progress >= 0.0 ? progress * 100.0 : -1.0; // 0 to 1
+    out.seconds_left = number(d, "estimatedTime");
+    out.nozzle = number(d, "rightTemp");
+    out.nozzle_target = number(d, "rightTargetTemp");
+    out.bed = number(d, "platTemp");
+    out.bed_target = number(d, "platTargetTemp");
+    return out;
+}
+
+HostVersion flashforge_version(const HostConfig& host) {
+    HostVersion out;
+    nlohmann::json j;
+    static_cast<HostResult&>(out) = flashforge_result(host, net::perform(flashforge_request(host, "/detail", nlohmann::json::object())), &j);
+    if (out.ok) {
+        const nlohmann::json d = j.value("detail", nlohmann::json::object());
+        out.server = "Flashforge " + d.value("name", std::string());
+    }
+    return out;
+}
+
+HostResult flashforge_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
+    net::Request r;
+    r.method = "POST";
+    r.url = flashforge_base(host) + "/uploadGcode";
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    // The credentials go in headers here, the booleans as "true" or "false".
+    r.headers = {{"serialNumber", host.printer},
+                 {"checkCode", host.api_key},
+                 {"fileSize", std::to_string(ec ? 0 : size)},
+                 {"printNow", start ? "true" : "false"},
+                 {"levelingBeforePrint", host.level_before_print ? "true" : "false"},
+                 {"flowCalibration", "false"},
+                 {"firstLayerInspection", "false"},
+                 {"timeLapseVideo", "false"}};
+    r.timeout_s = std::max(host.timeout_s, 600);
+    r.form.push_back({"gcodeFile", "", path, name, "application/octet-stream"});
+    return flashforge_result(host, net::perform(r));
+}
+
+// /control answers success even for an unknown command: the state read
+// after it says whether it took (the spec).
+HostResult flashforge_job(const HostConfig& host, const char* action) {
+    const nlohmann::json body = {{"payload", {{"cmd", "jobCtl_cmd"}, {"args", {{"jobID", ""}, {"action", action}}}}}};
+    HostResult out = flashforge_result(host, net::perform(flashforge_request(host, "/control", body)));
+    if (!out.ok)
+        return out;
+    const std::string want = std::string(action) == "pause" ? "pause" : std::string(action) == "cancel" ? "cancel" : "";
+    for (int i = 0; i < 10; ++i) {
+        const HostStatus st = flashforge_status(host);
+        if (!st.ok)
+            return st;
+        if (want.empty() ? st.state != "pause" && st.state != "pausing"
+                         : st.state == want || st.state == want + "ing" || (want == "cancel" && st.state == "ready"))
+            return out;
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+    out.ok = false;
+    out.code = "failed";
+    out.error = std::string("the printer did not ") + action;
+    return out;
+}
+
+} // namespace
+
 bool host_kind_from(const std::string& word, HostKind& out) {
     if (word == "octoprint")
         out = HostKind::OctoPrint;
@@ -645,6 +794,8 @@ bool host_kind_from(const std::string& word, HostKind& out) {
         out = HostKind::AstroBox;
     else if (word == "repetier")
         out = HostKind::Repetier;
+    else if (word == "flashforge")
+        out = HostKind::Flashforge;
     else
         return false;
     return true;
@@ -683,6 +834,7 @@ const char* host_kind_word(HostKind kind) {
     case HostKind::Duet: return "duet";
     case HostKind::AstroBox: return "astrobox";
     case HostKind::Repetier: return "repetier";
+    case HostKind::Flashforge: return "flashforge";
     default: return "octoprint";
     }
 }
@@ -694,6 +846,7 @@ const char* host_kind_name(HostKind kind) {
     case HostKind::Duet: return "Duet";
     case HostKind::AstroBox: return "AstroBox";
     case HostKind::Repetier: return "Repetier-Server";
+    case HostKind::Flashforge: return "Flashforge";
     default: return "OctoPrint";
     }
 }
@@ -707,6 +860,8 @@ HostVersion host_version(const HostConfig& host) {
         return duet_version(host);
     if (host.kind == HostKind::Repetier)
         return repetier_version(host);
+    if (host.kind == HostKind::Flashforge)
+        return flashforge_version(host);
     HostVersion out;
     const net::Response r = net::perform(request(host, "GET", "/api/version"));
     static_cast<HostResult&>(out) = result_of(r);
@@ -736,6 +891,8 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
         return duet_upload(host, path, name, start, simulate);
     if (host.kind == HostKind::Repetier)
         return repetier_upload(host, path, name, start);
+    if (host.kind == HostKind::Flashforge)
+        return flashforge_upload(host, path, name, start);
     net::Request r = request(host, "POST", "/api/files/local");
     r.timeout_s = std::max(host.timeout_s, 600); // a large file on a slow network
     r.form.push_back({"file", "", path, name, "application/octet-stream"});
@@ -753,6 +910,8 @@ HostStatus host_status(const HostConfig& host) {
         return duet_status(host);
     if (host.kind == HostKind::Repetier)
         return repetier_status(host);
+    if (host.kind == HostKind::Flashforge)
+        return flashforge_status(host);
     if (host.kind == HostKind::AstroBox) {
         HostStatus out;
         static_cast<HostResult&>(out) = unsupported("AstroBox has no published API for the printer's state");
@@ -810,6 +969,8 @@ HostResult host_pause(const HostConfig& host, bool pause) {
                      : repetier_job(host, "continueJob");
     if (host.kind == HostKind::AstroBox)
         return unsupported("AstroBox has no published API to pause or resume");
+    if (host.kind == HostKind::Flashforge)
+        return flashforge_job(host, pause ? "pause" : "continue");
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = nlohmann::json{{"command", "pause"}, {"action", pause ? "pause" : "resume"}}.dump();
@@ -827,6 +988,8 @@ HostResult host_cancel(const HostConfig& host) {
         return repetier_job(host, "stopJob");
     if (host.kind == HostKind::AstroBox)
         return unsupported("AstroBox has no published API to cancel");
+    if (host.kind == HostKind::Flashforge)
+        return flashforge_job(host, "cancel");
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = R"({"command": "cancel"})";

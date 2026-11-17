@@ -26777,7 +26777,8 @@ void App::host_panel(float field, float button_h) {
     ImGui::SetNextItemWidth(field * 1.4f);
     if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
         for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
-                                         device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier})
+                                         device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier,
+                                         device::HostKind::Flashforge})
             if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
                 host_.kind = k;
                 host_tested_ = false;
@@ -26843,6 +26844,17 @@ void App::host_panel(float field, float button_h) {
     if (host_.kind == device::HostKind::Duet) {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else if (host_.kind == device::HostKind::Flashforge) {
+        // The serial number and the check code from the printer's network
+        // mode screen (printer_connections.md, «Flashforge en red local»).
+        ImGui::SetNextItemWidth(field);
+        if (ImGui::InputTextWithHint(tr(T::HostSerial), "SN…", &host_.printer))
+            host_tested_ = false;
+        ImGui::SetNextItemWidth(field);
+        if (ImGui::InputText(tr(T::HostCheckCode), &host_.api_key, ImGuiInputTextFlags_Password))
+            host_tested_ = false;
+        ImGui::Checkbox(tr(T::HostLevelFirst), &host_.level_before_print);
+        loc::TextDisabled("%s", tr(T::HostFlashforgeHelp));
     } else {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostApiKey), &host_.api_key, ImGuiInputTextFlags_Password);
@@ -29064,8 +29076,10 @@ void App::script_input() {
             host_.user = step.value;
         else if (step.key == "password")
             host_.password = step.value;
-        else if (step.key == "printer") // Repetier-Server's printer
+        else if (step.key == "printer") // Repetier-Server's printer; Flashforge's serial number
             host_.printer = step.value;
+        else if (step.key == "level") // Flashforge: level before printing, yes or no
+            host_.level_before_print = step.value == "yes";
         else if (step.key == "send") { // the last slice, uploaded and printed, as «Send» with «Start printing»
             if (!device_can_print())
                 return fail_step("nothing sliced to send");

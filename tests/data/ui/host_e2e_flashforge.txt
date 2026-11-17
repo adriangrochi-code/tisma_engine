@@ -1,0 +1,20 @@
+# The Device page against a fake Flashforge Adventurer 5M in LAN mode (FF1):
+# test with the serial number and check code, send and print with levelling,
+# state.
+slice
+host flashforge {url}
+host key 0a1b2c3d
+host printer SNFAKE123
+host level yes
+host test
+host-wait
+expect-host ok yes
+# Klipper's limits read on the test may change the settings: sliced again.
+slice
+# The G-code that goes, for the fake to compare (release gate G10).
+keep-gcode host_sent_flashforge.gcode
+host send
+host-wait
+expect-host sent yes
+host refresh
+host-wait

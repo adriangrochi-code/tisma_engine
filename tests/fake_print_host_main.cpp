@@ -97,6 +97,13 @@ int main(int argc, char** argv) {
             return "started=" + std::string(f.job != "none" ? "1" : "0") + " name=" + f.uploaded_name + whole(f.uploaded);
         });
     }
+    if (kind == "flashforge") {
+        FakeFlashforge fake;
+        return run<FakeFlashforge>(fake, argc, argv, [](const FakeFlashforge& f) {
+            return "started=" + std::string(f.print_now == "true" ? "1" : "0") + " name=" + f.uploaded_name +
+                   whole(f.uploaded) + " leveling=" + f.leveling;
+        });
+    }
     std::fprintf(stderr, "tisma_fake_print_host: unknown kind %s\n", kind.c_str());
     return 2;
 }

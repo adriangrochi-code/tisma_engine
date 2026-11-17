@@ -325,3 +325,63 @@ TEST_CASE("print host: AstroBox answers OctoPrint's version and upload calls (de
     CHECK(std::string(host_kind_name(HostKind::Repetier)) == "Repetier-Server");
     std::filesystem::remove(g);
 }
+
+TEST_CASE("print host: Flashforge in LAN mode, test, upload and print, state, pause and cancel (FF1)", "[device][net]") {
+    FakeFlashforge fake;
+    HostConfig host;
+    host.kind = HostKind::Flashforge;
+    host.url = fake.url();
+    host.printer = "SNFAKE123";
+    host.api_key = "0a1b2c3d";
+    const HostVersion v = host_version(host);
+    INFO(v.error);
+    REQUIRE(v.ok);
+    CHECK(v.server == "Flashforge Adventurer 5M");
+    // FF1.2: a wrong check code is said once, with what to check.
+    HostConfig wrong = host;
+    wrong.api_key = "ffffffff";
+    const int before = fake.details;
+    const HostVersion w = host_version(wrong);
+    CHECK(w.code == "unauthorized");
+    CHECK(w.error.find("check code") != std::string::npos);
+    CHECK(fake.details == before + 1);
+
+    // FF1.3: the upload, printing and levelling, its real size in fileSize.
+    const std::filesystem::path g = std::filesystem::temp_directory_path() / "tisma_print_host_ff.gcode";
+    const std::string gcode = "G28\nG1 X10 Y10 E1\n";
+    std::ofstream(g, std::ios::binary) << gcode;
+    host.level_before_print = true;
+    const HostResult up = host_upload(host, g.string(), "pieza.gcode", true);
+    INFO(up.error);
+    REQUIRE(up.ok);
+    CHECK(fake.uploaded == gcode);
+    CHECK(fake.uploaded_name == "pieza.gcode");
+    CHECK(fake.file_size == std::to_string(gcode.size()));
+    CHECK(fake.print_now == "true");
+    CHECK(fake.leveling == "true");
+    const HostStatus st = host_status(host);
+    REQUIRE(st.ok);
+    CHECK(st.printing);
+    CHECK(st.progress == 25.0); // 0 to 1 on the printer
+    CHECK(st.nozzle == 210.5);
+    CHECK(st.bed_target == 55.0);
+    CHECK(st.seconds_left == 1800.0);
+    CHECK(st.file == "pieza.gcode");
+
+    // FF1.4: pause and cancel by jobCtl_cmd, the state read from /detail.
+    REQUIRE(host_pause(host, true).ok);
+    CHECK(host_status(host).paused);
+    REQUIRE(host_pause(host, false).ok);
+    REQUIRE(host_cancel(host).ok);
+    CHECK(fake.controls == std::vector<std::string>{"jobCtl_cmd:pause", "jobCtl_cmd:continue", "jobCtl_cmd:cancel"});
+    CHECK(host_status(host).state == "cancel");
+    std::filesystem::remove(g);
+
+    // FF1.6: nothing listens: «cannot reach», with what to check, in time.
+    HostConfig closed = host;
+    closed.url = "http://127.0.0.1:9";
+    closed.timeout_s = 3;
+    const HostVersion c = host_version(closed);
+    CHECK(c.code == "unreachable");
+    CHECK(c.error.find("LAN-only") != std::string::npos);
+}
