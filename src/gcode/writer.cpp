@@ -3033,7 +3033,7 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     // (profile_pack_format.md, source_values) fill names the same way.
     for (const auto* given : {&s.machine_macros.values, &s.source_values})
         for (const auto& [name, values] : *given) {
-            if (c.variables.contains(name) && !c.unfilled.contains(name))
+            if (c.variables.contains(name) && !c.unfilled.contains(name) && !c.defaults.contains(name))
                 continue;
             std::vector<TemplateValue> items;
             for (const std::string& v : values)
@@ -3831,6 +3831,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         templates.variables["extruded_volume"] = TemplateValue::of(std::move(volume));
         const double grams = g.total_e() * area / 1000.0 * s.filament_density;
         templates.variables["extruded_weight_total"] = templates.variables["filament_weight"] = r3(grams);
+        // cura's: the filament used in m and its cost.
+        if (s.machine_macros.dialect == "cura") {
+            templates.variables["filament_amount"] = r3(g.total_e() / 1000.0);
+            templates.variables["filament_cost"] = r3(grams * s.filament_cost / 1000.0);
+        }
     };
     const auto at_layer = [&](std::size_t l) {
         const double z = std::round((model.layers[l].top - base_of(l)) * 1000.0) / 1000.0;

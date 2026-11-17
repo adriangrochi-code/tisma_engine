@@ -15028,3 +15028,21 @@ Versión 0.13.0-beta.2.
 **Sigue:**
 - `bed_mesh_*` queda con aviso hasta que se mida en OrcaSlicer.
 - Falta confirmar el formato de `date` y `time` de Cura.
+
+**Segunda tanda GM22 (17-11, QA con 272dd50: de 447 a 55 variantes):**
+- Ahora se llenan:
+  - `wipe_tower_center_pos_valid` y `start_filament_gcode`;
+  - las velocidades de pared interna, externa y de primera capa;
+  - los anchos de línea de la pared externa y el general;
+  - de Cura: `top_bottom_thickness`, y `filament_amount` y `filament_cost` en metros y en dinero. `filament_cost` sigue
+    siendo el precio por kg en los otros dialectos.
+- Valores por defecto que los valores del paquete (`values`, `source_values`) todavía pueden reemplazar
+  (`TemplateContext::defaults`): `required_nozzle_HRC`, `filament_flush_volumetric_speed`, `filament_notes`,
+  `filament_abrasive`, `notes`, `timelapse_type` y otras.
+- Siguen con aviso, por falta de datos:
+  - `print_bed_max` en la CR-20 y la CR-20 Pro, porque el paquete no trae su cama (8 variantes);
+  - `print_time` de Cura (formato sin confirmar);
+  - `purge_distance`, `retraction_hop_height_after_extruder_switch` y `switch_extruder_retraction_amount`, porque
+    falta el valor por defecto de Cura;
+  - `bed_mesh_*`.
+- Pruebas `[gcode]`: 137 casos bien.

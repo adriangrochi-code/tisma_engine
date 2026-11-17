@@ -14,6 +14,7 @@
 #include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -195,6 +196,22 @@ TEST_CASE("the machine's G-code takes the original program's branches (gcode_mac
     // The old [variable_index] form through another program's name, for a
     // second head the list does not have: the last value.
     CHECK(render_template("[nozzle_temperature_initial_layer_1]", c, "t") == "215");
+    // The second round (QA, 17-11-2026).
+    CHECK(render_template("{wipe_tower_center_pos_valid}", c, "t") == "false");
+    CHECK(render_template("{required_nozzle_HRC[0]}", c, "t") == "0");
+    CHECK(std::stod(render_template("{top_bottom_thickness}", c, "t")) ==
+          Catch::Approx(s.top_layers * s.layer_height));
+    CHECK_FALSE(c.unfilled.contains("inner_wall_speed"));
+    CHECK_FALSE(c.unfilled.contains("outer_wall_line_width"));
+    CHECK_FALSE(c.unfilled.contains("filament_notes"));
+    // A pack value replaces a default (the filament says it is abrasive).
+    Settings given = s;
+    given.abrasive = false;
+    given.source_values["required_nozzle_HRC"] = {"40"};
+    given.source_values["filament_abrasive"] = {"1"};
+    TemplateContext gc = template_context(given, SlicedModel{});
+    CHECK(render_template("{required_nozzle_HRC[0]}", gc, "t") == "40");
+    CHECK(render_template("{if filament_abrasive[0]}A{else}N{endif}", gc, "t") == "A");
     CHECK(render_template("[date]", c, "t").size() == 10);
     CHECK(render_template("[time]", c, "t").size() == 8);
     for (const char* name : {"filament_abrasive", "nozzle_high_flow", "zhop", "outer_wall_acceleration", "print_sequence",

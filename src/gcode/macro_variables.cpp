@@ -198,7 +198,15 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         const auto each = [&](TemplateValue value) {
             return TemplateValue::of(std::vector<TemplateValue>(heads, value));
         };
-        set("filament_abrasive", each(TemplateValue::of(s.abrasive)));
+        // The value when the profile does not say; the pack's own values
+        // replace it.
+        const auto fallback = [&](const char* name, TemplateValue value) {
+            if (v.contains(name))
+                return;
+            v[name] = std::move(value);
+            c.defaults.insert(name);
+        };
+        fallback("filament_abrasive", each(TemplateValue::of(s.abrasive)));
         TemplateValue high = TemplateValue::of(std::vector<TemplateValue>{}), kinds = high;
         for (std::size_t k = 0; k < heads; ++k) {
             const bool hf = !s.high_flow_nozzle.empty() && s.high_flow_nozzle[std::min(k, s.high_flow_nozzle.size() - 1)];
@@ -212,11 +220,32 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         set("outer_wall_acceleration",
             list_of(number(s.accel_outer_wall > 0.0 ? s.accel_outer_wall : s.acceleration)));
         set("print_sequence", TemplateValue::of(std::string(s.sequential ? "by object" : "by layer")));
-        set("timelapse_type", TemplateValue::of(0LL));
-        set("has_single_extruder_multi_material_priming", TemplateValue::of(false));
-        set("long_retraction_when_cut", TemplateValue::of(false));
-        set("notes", TemplateValue::of(std::string()));
+        fallback("timelapse_type", TemplateValue::of(0LL));
+        fallback("has_single_extruder_multi_material_priming", TemplateValue::of(false));
+        fallback("long_retraction_when_cut", TemplateValue::of(false));
+        fallback("notes", TemplateValue::of(std::string()));
         set("build_volume_temperature", whole(s.chamber_temperature));
+        // The second round (QA, 17-11-2026, GM22).
+        set("wipe_tower_center_pos_valid", TemplateValue::of(s.wipe_tower));
+        set("start_filament_gcode", each(TemplateValue::of(s.filament_start_gcode)));
+        fallback("required_nozzle_HRC", each(TemplateValue::of(0LL)));
+        fallback("filament_flush_volumetric_speed", each(number(flow > 0.0 ? flow : kSafeFlow)));
+        fallback("filament_notes", each(TemplateValue::of(std::string())));
+        set("inner_wall_speed", each(number(s.wall_speed)));
+        set("outer_wall_speed", each(number(outer_speed)));
+        set("initial_layer_speed",
+            each(number(s.first_layer_speed_percent ? s.wall_speed * s.first_layer_speed / 100.0 : s.first_layer_speed)));
+        set("outer_wall_line_width", number(outer_width));
+        set("extrusion_width", number(s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter)));
+        set("top_bottom_thickness", number(s.top_layers * s.layer_height));
+        // filament_cost is the print's cost in cura (the writer sets it as it
+        // goes) and the price per kg elsewhere.
+        if (s.machine_macros.dialect == "cura") {
+            set("filament_amount", number(0.0));
+            set("filament_cost", number(0.0));
+        } else {
+            set("filament_cost", each(number(s.filament_cost)));
+        }
         const double width = s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter);
         set("wall_thickness", number(s.wall_count * width));
         if (const double idle = first_number("idle_temperature"); idle > 0.0 || nozzle > 0.0)
