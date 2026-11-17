@@ -14799,3 +14799,6 @@ para el LBM D3Q19.
 - **Vista con el renderizador por software (RELEASE_GATE.md, spec/next a804372):** con `TISMA_SOFTWARE_GL` (CI de
   macOS) el chequeo de la vista exige igual 0 píxeles negros pero no cuenta destellos; en Linux y Windows el tope de
   1 en 1000 sigue.
+- **Abrir un G-code (QA):** desde Abrir, arrastrándolo o por la línea de comandos ya pasaba solo a Vista previa
+  (`load_gcode`). Lo que vio QA era el arnés: con `--screenshot` sin `--view`, el cuadro 2 forzaba «Preparar» (el
+  valor por defecto). Ahora un G-code abierto queda en Vista previa también ahí. Prueba `ui_gcode_opens_preview`.

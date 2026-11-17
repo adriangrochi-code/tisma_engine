@@ -29750,7 +29750,7 @@ void App::frame() {
                 set_tab(Tab::Aerodynamics);
             else if (options_.view == "preview" && result_)
                 set_tab(Tab::Preview);
-            else if (options_.view == "prepare")
+            else if (options_.view == "prepare" && !viewer_) // an opened G-code stays in Preview, as it opens
                 set_tab(Tab::Prepare);
             else if (options_.view == "calibration")
                 set_tab(Tab::Calibration);

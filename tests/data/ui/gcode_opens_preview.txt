@@ -1,0 +1,4 @@
+# An opened G-code shows in Preview, also in a screenshot without --view (QA,
+# 2026-11-17: the bed looked empty in Prepare).
+wait 10
+expect-tab preview

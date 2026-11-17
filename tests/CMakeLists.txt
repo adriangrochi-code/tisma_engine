@@ -215,6 +215,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview
               --export ${CMAKE_CURRENT_BINARY_DIR}/ui_test.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_test.png)
+    set_tests_properties(ui_slice_export_screenshot PROPERTIES FIXTURES_SETUP ui_test_gcode)
+    # The G-code just exported, opened: it shows in Preview (QA, 2026-11-17).
+    add_test(NAME ui_gcode_opens_preview
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_test.gcode --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/gcode_opens_preview.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_gcode_opens_preview.png)
+    set_tests_properties(ui_gcode_opens_preview PROPERTIES FIXTURES_REQUIRED ui_test_gcode FAIL_REGULAR_EXPRESSION "error: "
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # Mesa's OpenGL keeps memory until exit; the leak checker would count it.
     # The ray tracing on the GPU against RayScene, the CPU reference: the same
     # shadow rays from the same surfaces must give the same answers.
