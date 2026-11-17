@@ -22,7 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * port with the WebSocket at `/websocket` (requests with `RequestID`, pushed `sdcp/status` and `sdcp/attributes`,
  * `ping`/`pong`) and the 1 MB uploads at `/uploadFile/upload`, and the UDP answer to `M99999`. Written from the spec.
  */
-class MockElegoo(val mainboardId: String = "ELEGOO0000000001", val name: String = "Centauri Carbon", port: Int = 0) {
+class MockElegoo(val mainboardId: String = "ELEGOO0000000001", val name: String = "Centauri Carbon", port: Int = 0,
+                 /** The model in the attributes: «Saturn 3 Ultra» makes it a resin printer. */
+                 val machine: String = "Centauri Carbon") {
     private val loopback = InetAddress.getByName("127.0.0.1")
     private val server = ServerSocket(port, 20, loopback)
     val port get() = server.localPort
@@ -236,7 +238,7 @@ class MockElegoo(val mainboardId: String = "ELEGOO0000000001", val name: String 
 
     private fun attributes() = buildJsonObject {
         put("Attributes", buildJsonObject {
-            put("Name", name); put("MachineName", "Centauri Carbon"); put("BrandName", "ELEGOO")
+            put("Name", name); put("MachineName", machine); put("BrandName", "ELEGOO")
             put("FirmwareVersion", "V1.1.29"); put("MainboardID", mainboardId); put("XYZsize", "256x256x256")
         })
         put("MainboardID", mainboardId)

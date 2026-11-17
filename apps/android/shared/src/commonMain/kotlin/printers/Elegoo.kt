@@ -177,7 +177,7 @@ class ElegooConnection(
             ?: if (fresh) throw PrinterException(PrinterException.Kind.UNEXPECTED, "No state from the printer")
             else throw PrinterException(PrinterException.Kind.NETWORK, "Could not connect to the printer at $host.",
                 reason = PrinterException.Reason.EL_UNREACHABLE)
-        return statusOf(s)
+        return statusOf(s).copy(acceptsGcode = !resin)
     }
 
     override fun pause() = job(129)
@@ -191,8 +191,23 @@ class ElegooConnection(
         if (a != 0) throw PrinterException(PrinterException.Kind.CONFLICT, "The printer answered $a", reason = PrinterException.Reason.EL_ACK_PRINT + a)
     }
 
+    /**
+     * A resin printer (a ChiTu board: Saturn, Mars, Jupiter…), told by its name or by resin-only fields (`TempOfUVLED`,
+     * `ReleaseFilm`). It takes the engine's `.goo`, never G-code (QA, 17-11-2026).
+     */
+    val resin: Boolean
+        get() = lock.locked {
+            val name = attributes?.let { (find(it, "MachineName")?.contentOrNull.orEmpty() + " " + find(it, "Name")?.contentOrNull.orEmpty()) }.orEmpty()
+            RESIN_NAMES.any { name.contains(it, ignoreCase = true) } ||
+                lastStatus?.let { find(it, "TempOfUVLED") != null || find(it, "ReleaseFilm") != null } == true
+        }
+
     override fun upload(name: String, length: Long, start: Boolean, open: () -> ByteInput) {
         val file = name.substringAfterLast('/')
+        link()
+        if (resin && !file.endsWith(".goo", ignoreCase = true))
+            throw PrinterException(PrinterException.Kind.UNSUPPORTED, "This resin printer takes no G-code: pass the file by USB.",
+                reason = PrinterException.Reason.EL_RESIN_NO_GCODE)
         // The whole file's MD5 goes with every piece: read once for it, once for the pieces.
         val md5 = Md5Digest()
         var size = 0L
@@ -266,6 +281,7 @@ class ElegooConnection(
         /** The pieces of an upload: 1 MB (1 048 576 bytes, as the spec's offsets show). */
         const val PIECE = 1 shl 20
         const val PING_MS = 10_000L
+        private val RESIN_NAMES = listOf("Saturn", "Mars", "Jupiter", "Halot", "Mighty")
 
         fun of(url: String, http: Http): ElegooConnection {
             val rest = url.removePrefix("elegoo://").substringAfter("://")

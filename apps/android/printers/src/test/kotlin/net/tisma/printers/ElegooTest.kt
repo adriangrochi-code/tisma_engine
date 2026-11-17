@@ -141,6 +141,21 @@ class ElegooTest {
     }
 
     @Test
+    fun `a resin printer is never sent G-code, only the engine's goo`() {
+        val resin = MockElegoo(name = "Saturn", machine = "Saturn 3 Ultra").start()
+        try {
+            val c = ElegooConnection("127.0.0.1", resin.port, net.tisma.cloud.UrlConnectionHttp, answerMs = 3_000).also { opened += it }
+            assertEquals(false, c.status().acceptsGcode)
+            val e = assertFailsWith<PrinterException> { c.upload("a.gcode", 3, false) { net.tisma.io.BytesInput(byteArrayOf(1, 2, 3)) } }
+            assertEquals(PrinterException.Reason.EL_RESIN_NO_GCODE, e.reason)
+            assertEquals(0, resin.pieces.size, "nothing was sent")
+            c.upload("a.goo", 3, false) { net.tisma.io.BytesInput(byteArrayOf(1, 2, 3)) }
+            assertEquals(1, resin.pieces.size)
+        } finally { resin.stop() }
+        assertEquals(true, connect().status().acceptsGcode, "the Centauri Carbon takes G-code")
+    }
+
+    @Test
     fun `a pushed print error is the printer's error`() {
         val s = ElegooConnection.statusOf(kotlinx.serialization.json.Json.parseToJsonElement(
             """{"CurrentStatus":[1],"PrintInfo":{"Status":3,"ErrorNumber":4,"CurrentLayer":5,"TotalLayer":10}}""") as kotlinx.serialization.json.JsonObject)

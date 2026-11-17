@@ -116,6 +116,11 @@ data class PrinterStatus(
     val finished: Boolean? = null,
     /** Why it could not be read, when the spec words it (a [PrinterException.reason]). */
     val reason: String? = null,
+    /**
+     * Whether the printer takes the G-code the phone makes: not a resin Elegoo (it takes the engine's `.goo`), nor a
+     * stock Creality without Moonraker. The plate does not offer «Send» to those (QA, 17-11-2026).
+     */
+    val acceptsGcode: Boolean = true,
 )
 
 data class Camera(
@@ -167,6 +172,10 @@ class PrinterException(
         const val CR_RECONNECTING = "creality.reconnecting"
         const val CR_NO_SEND = "creality.no_send"
         const val AC_USE_SLICER_NEXT = "anycubic.slicer_next"
+        /** A resin Elegoo: it takes the engine's `.goo`, not G-code; «pass it by USB». */
+        const val EL_RESIN_NO_GCODE = "elegoo.resin_no_gcode"
+        /** A stock Creality whose print stopped counting: its state key is not measured yet (CR1-4). */
+        const val CR_NO_STATE = "creality.no_state"
     }
 
     enum class Kind {

@@ -16,8 +16,8 @@ class CrealityTest {
     @After
     fun stop() { opened.forEach { it.close() }; printer.stop() }
 
-    private fun connect(url: String = printer.url, windowMs: Long = 15_000) =
-        CrealityConnection.of(url, net.tisma.cloud.UrlConnectionHttp, windowMs).also { opened += it }
+    private fun connect(url: String = printer.url) =
+        CrealityConnection.of(url, net.tisma.cloud.UrlConnectionHttp).also { opened += it }
 
     private fun waitFor(ms: Long = 5_000, ok: () -> Boolean) {
         val end = System.currentTimeMillis() + ms
@@ -57,19 +57,18 @@ class CrealityTest {
     }
 
     @Test
-    fun `CR1-4 a print that stops counting is called stopped only after the window`() {
-        val c = connect(windowMs = 1_500)
+    fun `CR1-4 a print that stops counting shows no state data, never stopped`() {
+        val c = connect()
         c.test()
         printer.push("""{"printJobTime":600,"printLeftTime":1800}""")
         waitFor { c.status().state == PrinterState.PRINTING }
-        // The same shape as preheating: no time left reported.
         printer.push("""{"printJobTime":600,"printLeftTime":0}""")
-        Thread.sleep(300)
-        assertEquals(PrinterState.PRINTING, c.status().state, "not before the window")
-        Thread.sleep(1_500)
+        waitFor { c.status().state != PrinterState.PRINTING }
         val s = c.status()
-        assertEquals(PrinterState.READY, s.state)
-        assertEquals("stopped", s.message)
+        assertEquals(PrinterException.Reason.CR_NO_STATE, s.reason)
+        assertTrue("stopped" !in s.message)
+        assertEquals(null, s.finished)
+        assertEquals(false, s.acceptsGcode, "a stock Creality is not offered «Send»")
     }
 
     @Test

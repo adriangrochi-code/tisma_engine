@@ -259,7 +259,14 @@ private fun PlateControls(
                     Text(stringResource(R.string.plate_share))
                 }
                 val ready = printerState.printers.filter {
-                    printerState.status[it.id]?.state.let { s -> s == null || s == PrinterState.READY }
+                    printerState.status[it.id]?.state.let { s -> s == null || s == PrinterState.READY } &&
+                        printerState.status[it.id]?.acceptsGcode != false
+                }
+                // A printer that takes no G-code (a resin Elegoo, a stock Creality) is not offered «Send»: it says why.
+                printerState.printers.filter { printerState.status[it.id]?.acceptsGcode == false }.forEach { p ->
+                    Text(stringResource(if (p.kind == net.tisma.printers.PrinterKind.CREALITY) R.string.plate_no_send_creality else R.string.plate_no_send_usb, p.name),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("plate_no_send_" + p.name))
                 }
                 if (ready.isNotEmpty()) {
                     Text(stringResource(R.string.plate_send_to), style = MaterialTheme.typography.labelLarge)

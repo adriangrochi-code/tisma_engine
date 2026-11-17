@@ -349,6 +349,10 @@
     <string name="cr_reconnecting">Reconectando…</string>
     <string name="cr_no_send">Para mandar a esta impresora, activá Moonraker/Fluidd.</string>
     <string name="ac_use_slicer_next">Tisma no se conecta con impresoras Anycubic: usá Anycubic Slicer Next.</string>
+    <string name="el_resin_no_gcode">Esta impresora de resina no recibe G-code: pasalo por USB.</string>
+    <string name="cr_no_state">Sin datos de estado</string>
+    <string name="plate_no_send_usb">%1$s no recibe G-code: pasalo por USB.</string>
+    <string name="plate_no_send_creality">%1$s: para mandar, activá Moonraker/Fluidd.</string>
     <string name="bambu_confirm_title">¿Es tu impresora?</string>
     <string name="bambu_confirm_text">Número de serie %1$s\n\nCertificado %2$s\n\nSi lo es, Tisma recuerda este certificado y no se conecta si alguna vez cambia.</string>
     <string name="bambu_confirm_yes">Sí, guardarla</string>

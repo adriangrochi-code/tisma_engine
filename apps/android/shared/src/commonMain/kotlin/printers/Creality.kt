@@ -19,8 +19,8 @@ import net.tisma.io.startDaemon
  * - If Moonraker answers on 7125 (rooted, or a firmware that has it), that connection is used for everything (CR1-1).
  * - Otherwise the state comes from the WebSocket the printer pushes on `ws://host:9999/`: `printJobTime` and
  *   `printLeftTime` (seconds) give the times and the progress; `model`, or «Creality (board <modelVersion>)» when it is
- *   empty (CR1-3). The key of the printer's own state is not confirmed, so the times decide whether it prints, and a
- *   print that stops counting is called stopped only after 15 s (CR1-4).
+ *   empty (CR1-3). The key of the printer's own state is not confirmed, so the times decide whether it prints; a print
+ *   that stops counting shows «no state data», not «stopped», until it is measured on a printer (CR1-4).
  * - A cut link is opened again with growing waits; meanwhile the last state is kept, a print stays active and the
  *   message says «Reconnecting…» (CR1-5).
  * - Sending is not tried: the person is told to turn on Moonraker/Fluidd (CR1-6).
@@ -33,8 +33,6 @@ class CrealityConnection(
     private val wsPort: Int,
     private val moonrakerPort: Int,
     private val http: Http,
-    /** How long a print that stopped counting stays «printing» before it is called stopped (CR1-4). */
-    private val stopWindowMs: Long = 15_000,
 ) : PrinterConnection {
     private val lock = Lock()
     private var moonraker: PrinterConnection? = null
@@ -44,8 +42,7 @@ class CrealityConnection(
     private var closed = false
     private val state = mutableMapOf<String, JsonPrimitive>()
     private var printing = false
-    private var stopped = false
-    private var stillSince = 0L
+    private var noData = false
 
     /** Moonraker or the stock socket, decided once (CR1-1). */
     private fun moonraker(): PrinterConnection? {
@@ -128,14 +125,11 @@ class CrealityConnection(
         return lock.locked {
             val elapsed = state["printJobTime"]?.doubleOrNull?.toLong()
             val left = state["printLeftTime"]?.doubleOrNull?.toLong()
-            val now = nowMs()
-            if (left != null && left > 0) {
-                printing = true; stopped = false; stillSince = 0L
-            } else if (printing) {
-                // Stopping has no state of its own: the print is called stopped only once the window passes (CR1-4).
-                if (stillSince == 0L) stillSince = now
-                if (now - stillSince >= stopWindowMs) { printing = false; stopped = true }
-            }
+            // Printing while time is left. A print that stops counting is not called stopped: the state's key and its
+            // preheating value are not measured yet, so it shows «no state data» (CR1-4, spec/next a2611fe).
+            val now = left != null && left > 0
+            if (now) noData = false else if (printing) noData = true
+            printing = now
             val total = if (elapsed != null && left != null && elapsed + left > 0) elapsed + left else null
             fun temp(a: String, t: String) = state[a]?.doubleOrNull?.let { Temperature(it, state[t]?.doubleOrNull ?: 0.0) }
             PrinterStatus(
@@ -146,11 +140,15 @@ class CrealityConnection(
                 chamber = temp("boxTemp", "targetBoxTemp"),
                 message = when {
                     reconnecting -> "Reconnecting…"
-                    stopped -> "stopped"
+                    noData -> "No state data"
                     else -> ""
                 },
-                finished = if (stopped) false else null,
-                reason = if (reconnecting) PrinterException.Reason.CR_RECONNECTING else null,
+                reason = when {
+                    reconnecting -> PrinterException.Reason.CR_RECONNECTING
+                    noData -> PrinterException.Reason.CR_NO_STATE
+                    else -> null
+                },
+                acceptsGcode = false,
             )
         }
     }
@@ -191,11 +189,11 @@ class CrealityConnection(
         const val MOONRAKER_PORT = 7125
 
         /** `creality://host` (tests: `creality://host?ws=9999&moonraker=7125`). */
-        fun of(url: String, http: Http, stopWindowMs: Long = 15_000): CrealityConnection {
+        fun of(url: String, http: Http): CrealityConnection {
             val rest = url.removePrefix("creality://").substringAfter("://")
             val host = rest.substringBefore('?').substringBefore('/').substringBefore(':')
             val q = rest.substringAfter('?', "").split('&').mapNotNull { p -> p.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
-            return CrealityConnection(host, q["ws"]?.toIntOrNull() ?: WS_PORT, q["moonraker"]?.toIntOrNull() ?: MOONRAKER_PORT, http, stopWindowMs)
+            return CrealityConnection(host, q["ws"]?.toIntOrNull() ?: WS_PORT, q["moonraker"]?.toIntOrNull() ?: MOONRAKER_PORT, http)
         }
     }
 }

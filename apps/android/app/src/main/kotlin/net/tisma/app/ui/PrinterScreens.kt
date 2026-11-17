@@ -531,6 +531,8 @@ fun Context.reasonText(reason: String?, detail: String): String? {
         PrinterException.Reason.CR_RECONNECTING -> getString(R.string.cr_reconnecting)
         PrinterException.Reason.CR_NO_SEND -> getString(R.string.cr_no_send)
         PrinterException.Reason.AC_USE_SLICER_NEXT -> getString(R.string.ac_use_slicer_next)
+        PrinterException.Reason.EL_RESIN_NO_GCODE -> getString(R.string.el_resin_no_gcode)
+        PrinterException.Reason.CR_NO_STATE -> getString(R.string.cr_no_state)
         else -> elegooCode(reason)
     }
 }
