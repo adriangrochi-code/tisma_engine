@@ -627,7 +627,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
       nodos, en paralelo); el orden monótono sin costo cuadrático (hecho 2026-11-17: la línea de abajo por altura, los pedazos que tocan por inicio ordenado, el más cercano en una grilla)
     - [ ] escribir y verificar el G-code por capas, sin tenerlo entero en memoria
     - [ ] el Voronoi propio más rápido en capas con miles de sitios (hoy es lo más lento con muchas islas)
-    - [ ] el verificador con un mapa de alturas de lo ya impreso (ningún movimiento por debajo)
+    - [x] el verificador con un mapa de alturas de lo ya impreso (ningún movimiento por debajo), hecho 2026-11-17: celdas
+      de 1 mm, más de una capa por debajo es problema; capas planas solamente
     - [x] `infill.solid_below_area` de la ficha `surfaces_infill.md` (zonas chicas sólidas)
     - [ ] `info` cuenta contornos de área cero en mallas con triángulos degenerados, y su `volume` suma las mallas que
       se pisan (el laminado está bien)

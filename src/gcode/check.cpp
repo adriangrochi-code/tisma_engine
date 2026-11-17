@@ -26,10 +26,15 @@
 #include <numbers>
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <string>
 
 namespace tisma {
 namespace {
+
+// The printed-height map's cells, mm.
+constexpr double kPrintedCell = 1.0;
+
 
 constexpr double kPositionSlack = 1e-3; // mm: coordinates are written with 3 decimals
 // mm an arc's end may be off the circle its start and centre make: the three
@@ -494,6 +499,7 @@ private:
                         " leaves the allowed area (the part with its skirt and brim, on the bed)");
             if (given[2] && (to[2] < limits_.min_z - kPositionSlack || to[2] > limits_.max_z + kPositionSlack))
                 problem("move to Z" + text(to[2]) + " is out of " + text(limits_.min_z) + " to " + text(limits_.max_z));
+            through_printed(to, to[3] - position_[3] > 1e-9 && (given[0] || given[1]));
             classify(to, given, path);
         }
         for (int a = 0; a < 4; ++a) {
@@ -503,6 +509,40 @@ private:
         }
         if (known_[2])
             out_.stats.max_z = std::max(out_.stats.max_z, position_[2]);
+    }
+
+    // A map of what is already printed: the highest bead top in each cell of
+    // kPrintedCell mm. A move whose nozzle passes more than a layer below it
+    // runs through the part (a layer out of order, a Z that dropped). Planar
+    // layers only: nonplanar blocks, waves, curved layers, Z anti-aliasing,
+    // belts and the wipe tower lowered under the layer go their own way.
+    void through_printed(const double to[4], bool extrudes) {
+        if (limits_.wave > 0.0 || limits_.curved || limits_.zaa_below > 0.0 || limits_.zaa_above > 0.0 ||
+            limits_.belt || nonplanar_ || tower_ || !known_[0] || !known_[1] || !known_[2] || !layer_z_)
+            return;
+        const double a[3] = {position_[0], position_[1], position_[2]};
+        const double length = std::hypot(to[0] - a[0], to[1] - a[1]);
+        const auto steps = std::size_t(std::ceil(length / (0.5 * kPrintedCell))) + 1;
+        const double below = std::max(layer_height_, height_.value_or(0.0)) + kPositionSlack;
+        bool told = false;
+        for (std::size_t k = 0; k <= steps; ++k) {
+            const double t = double(k) / double(steps);
+            const double x = a[0] + t * (to[0] - a[0]), y = a[1] + t * (to[1] - a[1]), z = a[2] + t * (to[2] - a[2]);
+            const std::uint64_t key = (std::uint64_t(std::uint32_t(std::int32_t(std::floor(x / kPrintedCell)))) << 32) |
+                                      std::uint32_t(std::int32_t(std::floor(y / kPrintedCell)));
+            if (!told) {
+                const auto it = printed_.find(key);
+                if (it != printed_.end() && z < it->second - below) {
+                    problem("moves through what is already printed: Z" + text(z) + " at X" + text(x) + " Y" + text(y) +
+                            ", printed up to Z" + text(it->second));
+                    told = true;
+                }
+            }
+            if (extrudes) {
+                float& top = printed_[key];
+                top = std::max(top, float(z));
+            }
+        }
     }
 
     // What an engine move is, by its E: an extrusion, a travel, a retraction
@@ -710,6 +750,7 @@ private:
     std::vector<double> pulled_pieces_; // and in how many pieces
     bool tool_back_ = false;      // the tool came back from a change: its own extra
     bool tower_ = false;          // in the wipe tower's lines
+    std::unordered_map<std::uint64_t, float> printed_; // the highest bead top by cell (through_printed)
     bool awaiting_z_ = false;
     bool new_object_ = false; // after ;NEXT_OBJECT, until the next object's first ;Z:
     std::optional<double> layer_z_, height_, width_;

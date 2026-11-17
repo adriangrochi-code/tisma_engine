@@ -279,6 +279,26 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
     }
 }
 
+TEST_CASE("G-code check: a move down through what is already printed", "[gcode][check]") {
+    // The cube's 30th layer, then a travel that drops to Z 2 and back over
+    // the part: it runs through the layers already printed there.
+    const Settings s = test_printer();
+    const Output o = slice_and_write(cube(), s);
+    std::string g = o.gcode;
+    std::size_t at = 0;
+    for (int n = 0; n < 31; ++n)
+        at = g.find(";LAYER_CHANGE", at + 1);
+    REQUIRE(at != std::string::npos);
+    // Before the 31st layer, over the cube's middle: down to Z 2, then up.
+    const double cx = 0.5 * (o.limits.min_x + o.limits.max_x), cy = 0.5 * (o.limits.min_y + o.limits.max_y);
+    std::ostringstream dive;
+    dive << "G0 X" << cx << " Y" << cy << "\nG0 Z2\nG0 X" << cx + 1.0 << "\nG0 Z8\n";
+    g.insert(at, dive.str());
+    const GcodeCheck c = check_gcode(g, o.limits);
+    CHECK_THAT(problems_of(c), ContainsSubstring("moves through what is already printed"));
+    CHECK(check_gcode(o.gcode, o.limits).ok());
+}
+
 TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
     // The check reads the file in chunks of about 256 KiB of whole lines, in
     // parallel, and takes them in order: lines on both sides of a cut.

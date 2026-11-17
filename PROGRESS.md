@@ -14927,3 +14927,14 @@ para el LBM D3Q19.
 - **Probado:** prueba nueva `gyroid: a large dense region marched in bands, joined at their edges` (160 mm al 100 %: el
   largo es el área sobre la separación al 5 %, ningún par de pedazos unido por la punta); `[gyroid]`, `[combine]`,
   `[infill]`, `[determinism]`, `[gcode]` en verde.
+
+## 2026-11-17 — bloque nocturno: el verificador no deja pasar la boquilla por lo ya impreso
+
+- El verificador lleva un mapa de lo ya impreso: la cima más alta de los cordones en cada celda de 1 mm. Un
+  movimiento (viaje o extrusión) que pasa más de una altura de capa por debajo de esa cima atraviesa la pieza y sale
+  como problema «moves through what is already printed». Solo con capas planas: no en bloques no planares, ondas,
+  capas curvas, Z anti-aliasing, cintas ni la torre bajada bajo la capa; tampoco en el G-code de la máquina (su purga
+  de inicio queda fuera del mapa).
+- **Probado:** prueba nueva `G-code check: a move down through what is already printed` (el cubo con un viaje que baja
+  a Z 2 en la capa 31: se ve; el cubo sin tocar: limpio). Las 1121 pruebas sin interfaz en verde (3 min 20 s), y el
+  barrido de las 87 impresoras instaladas del paquete con el cubo de 20 mm: todas limpias.
