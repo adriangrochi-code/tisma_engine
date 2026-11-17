@@ -27609,7 +27609,11 @@ void App::check_view(int fb_w, int fb_h) {
     const PictureHealth health = picture_health(picture.data(), w, h);
     std::printf("view check (%s, %s, up to %d samples): %zu pixels, %zu black, %zu sparkles\n", vulkan_ ? "Vulkan" : "OpenGL",
                 gpu_renderer_.c_str(), vulkan_ ? 0 : renderer_.max_samples(), health.pixels, health.black, health.sparkles);
-    if (health.black > 0 || health.sparkles * 1000 > health.pixels) {
+    // With Apple's software renderer (the macOS CI, TISMA_SOFTWARE_GL) the
+    // sparkles are its antialiasing, not the program's: only black pixels
+    // count there (RELEASE_GATE.md, «Vista con el renderizador por software»).
+    const bool count_sparkles = !std::getenv("TISMA_SOFTWARE_GL");
+    if (health.black > 0 || (count_sparkles && health.sparkles * 1000 > health.pixels)) {
         // The picture next to the screenshot, as evidence, rows from the top.
         std::vector<std::uint8_t> upright(picture.size());
         const std::size_t row = std::size_t(w) * 4;

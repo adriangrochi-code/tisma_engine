@@ -14796,3 +14796,6 @@ para el LBM D3Q19.
   (calidad rápida), un laminado en la nube y uno local en marcha (verbo `expect-busy slice|cloud`), y `quit`: el
   proceso termina en 525 ms (tope 3 s). Pasa.
 - **Puerta:** falta solo G16 (las apps). Todo lo demás de la tabla tiene su prueba.
+- **Vista con el renderizador por software (RELEASE_GATE.md, spec/next a804372):** con `TISMA_SOFTWARE_GL` (CI de
+  macOS) el chequeo de la vista exige igual 0 píxeles negros pero no cuenta destellos; en Linux y Windows el tope de
+  1 en 1000 sigue.
