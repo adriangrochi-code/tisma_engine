@@ -363,3 +363,113 @@ Contra simuladores propios de cada impresora (un programa que contesta como ella
 | LM7 | Elegoo SDCP, simulador con `XYZsize` «256x256x256» | Volumen 256 × 256 × 256 mm si el perfil no lo tenía |
 | CM1 | Klipper con una cámara en `/server/webcams/list` | La cámara se ve en la página Impresora |
 | CM2 | Bambu Lab H2D con `ipcam.rtsp_url = "disable"` | «La cámara está apagada en la impresora: prendé LAN Only Liveview en su pantalla» |
+
+## Flashforge en red local (decisión del dueño, 17-11-2026: para la beta del 24-11)
+
+Esta sección describe solo comportamiento observable: no tiene código. Las fuentes son comunitarias salvo donde dice
+"oficial". Siglas de las fuentes:
+- [W-HTTP] https://github.com/Parallel-7/flashforge-api-docs/wiki/HTTP-REST-API (comunitaria)
+- [W-AUTH] https://github.com/Parallel-7/flashforge-api-docs/wiki/Authentication (comunitaria)
+- [W-DISC] https://github.com/Parallel-7/flashforge-api-docs/wiki/Discovery-Protocol (comunitaria)
+- [W-MCODE] https://github.com/Parallel-7/flashforge-api-docs/wiki/M-Code-Reference (comunitaria)
+- [FF-C5] https://wiki.flashforge.com/en/creator-series/creator-5-series/manual/network-setup (oficial, manual de la Creator 5)
+- [SP] https://simplyprint.io/setup-guide/flashforge/adventurer-5m.md (de terceros)
+
+No pude leer `GhostTypes/ff-5mp-api/docs/protocols.md` (GitHub devolvió 503), así que no se usó.
+
+### Familias de modelos
+- **Modernas:** Adventurer 5M, 5M Pro, AD5X y Creator 5. Usan HTTP en el puerto 8898 para estado, subida y control.
+  También tienen TCP en el 8899. [W-HTTP] [W-DISC]
+- **Legado:** Adventurer 3 y Adventurer 4 (también la 4 Pro). Solo tienen TCP en el 8899, sin HTTP. [W-AUTH] [W-DISC]
+- **Guider:** sin confirmar. Ninguna fuente consultada la menciona. Hasta que haya un dato, el programa la trata como
+  legado y lo dice en la interfaz.
+
+### Descubrimiento
+- El programa manda un paquete UDP cualquiera, porque la impresora ignora el contenido. Para las modernas lo manda al
+  grupo multicast 225.0.0.9, puerto 19000, y en broadcast al puerto 48899. Para las de legado lo manda al mismo grupo,
+  puerto 8899. [W-DISC]
+- Las modernas responden con 276 bytes (firmware 3.x y Creator 5) o 280 bytes (firmware 5.x). Los números van en big
+  endian. Campos de la respuesta: nombre (128 B), puerto TCP (normalmente 8899), VID, PID, estado de la sesión TCP,
+  tipo de producto, puerto HTTP (normalmente 8898), modo de conexión (0 = solo LAN, 1 = nube), vínculo con la nube y
+  número de serie (128 B). Una respuesta de 196 bytes o más se considera moderna. [W-DISC]
+- Las de legado responden con exactamente 140 bytes: nombre, puerto, VID, PID y estado (0 listo, 1 ocupada,
+  2 error). La respuesta no trae número de serie; se pide por TCP con M115. [W-DISC]
+- Si el descubrimiento no encuentra nada (red de invitados, VLAN o bandas separadas, según
+  https://printago.io/guides/flashforge-orca-printer-offline, de terceros), el usuario puede cargar la IP a mano.
+
+### Qué carga el usuario
+- **IP:** se muestra en la pantalla de la impresora. [SP]
+- **Número de serie:** está en Ajustes, en la sección Red, Acerca de o Info del dispositivo, y suele empezar con "SN".
+  Si la impresora se encontró por descubrimiento, el programa lo completa solo. [W-AUTH] [W-DISC]
+- **Código de verificación** ("Check Code" o "código de acceso"), solo en las modernas: se ve en la pantalla de modo
+  de red, la misma donde se activa "Solo LAN". [W-AUTH] [SP]
+  - En la Creator 5 la ruta es Red > Solo LAN. [FF-C5] (oficial)
+  - En la 5M, la ruta exacta del menú está sin confirmar en una fuente oficial.
+  - En la 5M y la AD5X son 8 caracteres de 0–9 y a–f. Si se genera uno nuevo, el anterior deja de valer. [W-AUTH]
+- Las de legado no piden credenciales. [W-AUTH]
+
+### HTTP (modernas, puerto 8898)
+- Todas las llamadas son POST y toda respuesta trae `code` y `message`. [W-HTTP]
+- Credenciales: casi todas las llamadas llevan `serialNumber` y `checkCode` en el cuerpo JSON. En `/uploadGcode` van en
+  cabeceras. [W-HTTP]
+- **Estado (`/detail`):** devuelve `status`, temperaturas, progreso y tiempos. Valores de `status`: ready, busy,
+  calibrate_doing, error, heating, printing, pausing, pause, canceling, cancel, completed, downloading, loading,
+  cloud_slicing, sending y unzipping. Un valor desconocido se trata como ocupada. [W-HTTP]
+  - `/product` informa qué funciones tiene la impresora, pero no sirve para detectar el hardware. [W-HTTP]
+- **Subida (`/uploadGcode`):** multipart, con el archivo en el campo `gcodeFile`. [W-HTTP]
+  - Cabeceras: `serialNumber`, `checkCode`, `fileSize` (tamaño en bytes), `printNow` (imprimir al terminar) y
+    `levelingBeforePrint` (nivelar antes). [W-HTTP]
+  - Otras cabeceras: `flowCalibration`, `firstLayerInspection` y `timeLapseVideo`. [W-HTTP]
+  - Solo AD5X: `useMatlStation`, `gcodeToolCnt` y `materialMappings` (JSON en Base64). [W-HTTP]
+  - Los valores booleanos van como texto en minúscula: "true" o "false". [W-HTTP]
+- **Imprimir un archivo que ya está en la impresora (`/printGcode`):** el cuerpo lleva `fileName` y
+  `levelingBeforePrint`. Los dos son obligatorios en el firmware de la serie 5M. [W-HTTP]
+- **Pausa, reanudar y cancelar (`/control`):** `cmd` = `jobCtl_cmd`, con acción `pause`, `continue` o `cancel`.
+  Ojo: `/control` responde éxito aunque el comando no exista, así que el programa confirma cada acción leyendo
+  `/detail`. [W-HTTP]
+- **Códigos de respuesta y mensaje al usuario:** [W-HTTP]
+  - 0: éxito.
+  - -1 ("Parameters is error"): "La impresora rechazó el pedido".
+  - 1 ("SN is different" / "Access code is different"): "Número de serie o código de verificación incorrecto. Revisalo
+    en la pantalla de modo de red de la impresora".
+  - 2: "La impresora está ocupada".
+  - 3: "El archivo no está en la impresora".
+
+### TCP (puerto 8899; el único que tienen las de legado)
+- Los comandos van con prefijo `~`. Las respuestas empiezan con "CMD <código> Received." y terminan en "ok". El
+  terminador de línea al enviar está sin confirmar. [W-MCODE]
+- **Sesión:**
+  - M601 S1 abre la sesión de control y responde "Control Success". [W-MCODE] [W-AUTH]
+  - Si responde "Control Failed", otro cliente ya tiene la sesión. Mensaje: "Otro programa está controlando la
+    impresora". [W-MCODE] [W-AUTH]
+  - M602 la libera antes de desconectar. [W-MCODE] [W-AUTH]
+- **Consultas:**
+  - M115: modelo, firmware, número de serie y MAC.
+  - M119: estado de la máquina y archivo actual.
+  - M105: temperaturas.
+  - M27: progreso; el formato de la respuesta está sin confirmar. [W-MCODE]
+- **Trabajo:**
+  - M23: elige el archivo (rutas `0:/user/...` o `/data/...`).
+  - M24: inicia o reanuda.
+  - M25: pausa.
+  - M26: cancela. Después de cancelar, hay que cerrar el aviso en la pantalla de la impresora antes de volver a
+    controlarla. [W-MCODE]
+- **Subida en las de legado:** M28 y M29. Los detalles del envío binario están sin confirmar, porque no los leí.
+  [W-MCODE]
+- **Puerto cerrado o conexión rechazada** (8898 u 8899): "No se pudo conectar a la impresora en <IP>. Revisá que esté
+  prendida y en la misma red". Si la impresora es moderna, además: "y que el modo Solo LAN esté activo". [SP]
+
+### Archivos
+- Las modernas aceptan `.gcode` y `.3mf`, según los ejemplos de [W-MCODE].
+- Que las de legado usen `.gx` (el formato de FlashPrint con miniatura) está sin confirmar: no aparece en estas fuentes.
+
+### Pruebas de caja negra contra un simulador
+
+| FF1 | caso | resultado |
+|---|---|---|
+| FF1.1 | Descubrimiento: el simulador responde con 280 bytes (moderna) y con 140 bytes (legado) | Lista ambas. La moderna aparece con número de serie y puerto HTTP 8898. La de legado aparece sin número de serie hasta pedir M115 |
+| FF1.2 | `/detail` con un código de verificación incorrecto: el simulador devuelve code 1 | Muestra el mensaje de credenciales incorrectas y no reintenta en bucle |
+| FF1.3 | Subida con "imprimir al terminar" y "nivelar" activados | El simulador recibe multipart con el campo `gcodeFile`, `fileSize` igual al tamaño real, `printNow`="true" y `levelingBeforePrint`="true" en cabeceras |
+| FF1.4 | Pausa y cancelación en una moderna | Se envía `jobCtl_cmd` con `pause` y después con `cancel`. El estado mostrado sale de `/detail` (pause, cancel) |
+| FF1.5 | Legado: el simulador contesta "Control Failed" a M601 S1 | Muestra que otro programa controla la impresora y no manda M23 ni M24 |
+| FF1.6 | Puerto 8898 cerrado | Muestra el mensaje de "no se pudo conectar" con la IP, sin colgarse, y lo corta por timeout |
