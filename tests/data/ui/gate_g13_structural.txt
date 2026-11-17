@@ -8,9 +8,14 @@ menu tab_structural
 expect-control structural_tool_fixed_zone
 menu structural_tool_fixed_zone
 click-model
+# The part is held; Analizar waits only for a force.
+expect-structural force
 menu structural_tool_force_point
 click-model
 key escape
+# Held and pushed: nothing keeps Analizar off.
+expect-structural none
+expect-control structural_force_unit_1
 menu structural_quality
 menu structural_quality_fast
 menu structural_analyze
