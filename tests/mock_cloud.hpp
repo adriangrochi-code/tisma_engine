@@ -250,8 +250,13 @@ public:
             }
             // queued, running at 50 %, done.
             ++polls_;
+            // With TISMA_MOCK_CLOUD_HOLD the job stays running (a test that
+            // closes the program with it under way: the release gate's G15).
             if (state_ != "cancelled")
-                state_ = polls_ == 1 ? "running" : polls_ >= 3 ? "done" : "running";
+                state_ = std::getenv("TISMA_MOCK_CLOUD_HOLD") ? "running"
+                         : polls_ == 1                       ? "running"
+                         : polls_ >= 3                       ? "done"
+                                                             : "running";
             res.set_content(job_json(), "application/json");
         });
         server_.Post(R"(/v1/jobs/([a-z0-9]+)/cancel)", [this](const httplib::Request& req, httplib::Response& res) {

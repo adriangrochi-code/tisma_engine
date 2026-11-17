@@ -14980,3 +14980,6 @@ para el LBM D3Q19.
   El mismo filamento (85 811 mm) y los mismos tramos por tipo; 70 líneas más de 5,45 millones.
 - **Probado:** las 1124 pruebas sin interfaz en verde.
 - **Siguiente:** el `locate` del Voronoi en una isla grande con miles de sitios (PLAN.md, sigue abierto).
+- **G15, carrera (motor, run 44039216677):** el trabajo de la nube del servidor de prueba termina en 3 consultas y,
+  con la aerodinámica usando todos los núcleos, podía terminar antes de `expect-busy cloud`. Con
+  `TISMA_MOCK_CLOUD_HOLD` el servidor de prueba lo deja en marcha; `gate_g15_quit` lo usa. 3 de 3 corridas pasan.
