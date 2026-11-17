@@ -15235,4 +15235,7 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   fuera de la entrada (el cursor real de macOS), apunta de nuevo y repite, hasta 3 veces. Cada vez lo dice en la
   salida.
 - G15, línea 23 (`expect-busy cloud`, macOS x86_64): se reproduce en Linux con carga (–j4). Ahora la falla escribe
-  los últimos avisos de la pantalla, para ver por qué el corte en la nube no quedó en curso. La causa sigue abierta.
+  los últimos avisos de la pantalla. Con eso salió la causa: el proyecto del Benchy pasa el límite de 1 MiB del
+  servidor de prueba, y el corte en la nube de G15 siempre terminaba con 413. La prueba pasaba solo si llegaba a
+  verlo en curso antes de la respuesta. El simulador toma el límite de `TISMA_MOCK_CLOUD_MAX_BYTES` (1 MiB si no
+  está, como CC5); G15 le da 64 MiB, así su corte en la nube queda de verdad en curso al cerrar.
