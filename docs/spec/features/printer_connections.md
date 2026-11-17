@@ -602,7 +602,7 @@ Avisa que cualquiera en la LAN puede controlar la impresora, y nunca la expone f
 Spec de comportamiento solamente. No tiene código. Cada dato lleva su fuente:
 - **[OF]** = oficial CBD-Tech, protocolo SDCP V3.0.0:
   https://github.com/cbd-tech/SDCP-Smart-Device-Control-Protocol-V3.0.0.
-- **[OC]** = comunidad, OpenCentauri: https://docs.opencentauri.cc/software/api/ (antes en suchmememanyskill.github.io/OpenCentauri, hoy da 404).
+- **[OC]** = comunidad, OpenCentauri: su documentación en línea, página «software/api» (dominio docs.opencentauri, terminación «cc»; antes en suchmememanyskill.github.io/OpenCentauri, hoy da 404).
 - **[CA]** = comunidad, cassini: https://github.com/vvuk/cassini
 - **[PG]** = comunidad, guía de Printago: https://docs.printago.io/docs/connecting-printers/elegoo
 
