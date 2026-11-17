@@ -55,4 +55,4 @@ lanzamiento.
 
 En la CI de macOS la ventana se dibuja con el renderizador por software de Apple (no hay GPU). Ahí el control de la
 vista sigue exigiendo que no haya píxeles negros, pero no cuenta los destellos: los da el suavizado de ese
-renderizador, no el programa. Con GPU (Linux, Windows) el tope de destellos de 1 cada 1000 sigue igual.
+renderizador, no el programa. En Linux y Windows (GPU o Mesa) el tope de destellos de 1 cada 1000 sigue igual.
