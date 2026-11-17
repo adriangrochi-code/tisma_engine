@@ -47,6 +47,7 @@
 #include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
 #include "device/mdns.hpp"
+#include "device/flashforge.hpp"
 #include "device/print_host.hpp"
 #include "device/printer_limits.hpp"
 #include "device/ssdp.hpp"
@@ -1872,6 +1873,8 @@ private:
     // Klipper's Moonraker on the network (printer_connections.md, «Búsqueda en
     // la red»): its `_moonraker._tcp` services that answer /server/info.
     std::future<std::vector<device::FoundHost>> moonraker_search_;
+    std::future<std::vector<device::FlashforgePrinter>> flashforge_search_;
+    std::vector<device::FlashforgePrinter> flashforge_found_;
     std::vector<device::FoundHost> moonraker_found_;
     // What another program's project brought that has no equivalent
     // (project_import.md, rules 6 and 9: «sin equivalente», by name and value).
@@ -2669,7 +2672,18 @@ std::string g_last_field; // the last of them, for a field narrower than its cel
 // The entries of a menu drawn this frame, by a name in English, for
 // --ui-script's menu step: min x, min y, max x, max y.
 std::map<std::string, ImVec4> g_menu_rects;
-std::optional<std::chrono::steady_clock::time_point> g_quit_at; // script: when «quit» closed the window
+std::optional<std::chrono::steady_clock::time_point> g_quit_at;
+// The tests' Flashforge on this machine, asked directly by the search:
+// TISMA_TEST_FLASHFORGE_DISCOVERY=127.0.0.1:<port>.
+std::vector<std::pair<std::string, int>> flashforge_test_targets() {
+    std::vector<std::pair<std::string, int>> out;
+    if (const char* v = std::getenv("TISMA_TEST_FLASHFORGE_DISCOVERY")) {
+        const std::string t = v;
+        if (const std::size_t colon = t.rfind(':'); colon != std::string::npos)
+            out.push_back({t.substr(0, colon), std::atoi(t.c_str() + colon + 1)});
+    }
+    return out;
+} // script: when «quit» closed the window
 // The named entries drawn greyed this frame (--ui-script's expect-enabled).
 std::set<std::string> g_menu_disabled;
 // The scripted tests: the control a click is about to aim at. The panel that
@@ -26754,6 +26768,10 @@ void App::host_poll() {
         host_found_ = host_search_.get();
         host_searched_ = true;
     }
+    if (flashforge_search_.valid() && flashforge_search_.wait_for(0ms) == std::future_status::ready) {
+        flashforge_found_ = flashforge_search_.get();
+        host_searched_ = true;
+    }
     if (moonraker_search_.valid() && moonraker_search_.wait_for(0ms) == std::future_status::ready) {
         moonraker_found_ = moonraker_search_.get();
         host_searched_ = true;
@@ -26778,7 +26796,7 @@ void App::host_panel(float field, float button_h) {
     if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
         for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
                                          device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier,
-                                         device::HostKind::Flashforge})
+                                         device::HostKind::Flashforge, device::HostKind::FlashforgeLegacy})
             if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
                 host_.kind = k;
                 host_tested_ = false;
@@ -26837,6 +26855,34 @@ void App::host_panel(float field, float button_h) {
         if (host_searched_ && moonraker_found_.empty() && !moonraker_search_.valid())
             loc::TextDisabled("%s", tr(T::HostNoneFound));
     }
+    // Flashforge answers a UDP datagram (printer_connections.md, FF1.1): the
+    // newer ones with their serial number, the older without.
+    if (host_.kind == device::HostKind::Flashforge || host_.kind == device::HostKind::FlashforgeLegacy) {
+        ImGui::BeginDisabled(flashforge_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            flashforge_search_ = std::async(std::launch::async, [] { return device::flashforge_discover(3000, flashforge_test_targets()); });
+        }
+        note_rect("flashforge_search");
+        ImGui::EndDisabled();
+        if (flashforge_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::FlashforgePrinter& p : flashforge_found_) {
+            const std::string label = p.name + "  " + p.address + (p.serial.empty() ? std::string() : "  " + p.serial);
+            if (ImGui::Selectable(label.c_str(), host_.url.find(p.address) != std::string::npos)) {
+                host_.kind = p.modern ? device::HostKind::Flashforge : device::HostKind::FlashforgeLegacy;
+                host_.url = p.modern ? "http://" + p.address + ":" + std::to_string(p.http_port)
+                                     : p.address + ":" + std::to_string(p.tcp_port);
+                if (p.modern)
+                    host_.printer = p.serial;
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && flashforge_found_.empty() && !flashforge_search_.valid())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
+    }
     ImGui::SetNextItemWidth(field * 1.4f);
     if (ImGui::InputTextWithHint(tr(T::HostUrl), "http://192.168.1.50", &host_.url))
         host_tested_ = false;
@@ -26844,6 +26890,8 @@ void App::host_panel(float field, float button_h) {
     if (host_.kind == device::HostKind::Duet) {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else if (host_.kind == device::HostKind::FlashforgeLegacy) {
+        loc::TextDisabled("%s", tr(T::HostFlashforgeLegacyHelp)); // no login; files by USB stick
     } else if (host_.kind == device::HostKind::Flashforge) {
         // The serial number and the check code from the printer's network
         // mode screen (printer_connections.md, «Flashforge en red local»).
@@ -29078,7 +29126,11 @@ void App::script_input() {
             host_.password = step.value;
         else if (step.key == "printer") // Repetier-Server's printer; Flashforge's serial number
             host_.printer = step.value;
-        else if (step.key == "level") // Flashforge: level before printing, yes or no
+        else if (step.key == "search" && (host_.kind == device::HostKind::Flashforge ||
+                                          host_.kind == device::HostKind::FlashforgeLegacy)) {
+            host_searched_ = false;
+            flashforge_search_ = std::async(std::launch::async, [] { return device::flashforge_discover(1500, flashforge_test_targets()); });
+        } else if (step.key == "level") // Flashforge: level before printing, yes or no
             host_.level_before_print = step.value == "yes";
         else if (step.key == "send") { // the last slice, uploaded and printed, as «Send» with «Start printing»
             if (!device_can_print())
@@ -29111,7 +29163,14 @@ void App::script_input() {
             got = !host_sent_ ? "none" : *host_sent_ ? "yes" : "no";
         else if (step.key == "printing")
             got = host_status_.ok && host_status_.printing ? "yes" : "no";
-        else
+        else if (step.key == "found") { // the Flashforge search listed this serial number, or «older» for an older one
+            if (flashforge_search_.valid())
+                return f > 36000 ? fail_step("the search never ended") : void();
+            got = "nothing";
+            for (const device::FlashforgePrinter& p : flashforge_found_)
+                if ((p.modern && p.serial == step.value) || (!p.modern && step.value == "older"))
+                    got = step.value;
+        } else
             return fail_step("unknown expect-host key");
         if (got == step.value) {
             std::printf("ui-script: expect-host %s %s: ok\n", step.key.c_str(), step.value.c_str());

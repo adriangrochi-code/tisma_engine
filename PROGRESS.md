@@ -15169,4 +15169,14 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
   panel: número de serie, código de verificación y «Nivelar antes de imprimir».
 - **Pruebas:** `[device][net]` con el simulador (FF1.2, FF1.3, FF1.4, FF1.6) y `ui_host_e2e_flashforge` en la puerta
   (G10): el archivo llega entero, arranca y pide nivelar.
-- **Lo que sigue:** las de legado por TCP 8899 (FF1.5) y la búsqueda por UDP (FF1.1); después Elegoo SDCP y Creality.
+- **Legado (Adventurer 3 y 4), TCP 8899:** tipo «Flashforge (Adventurer 3, 4)»: cada pedido abre la sesión con
+  `M601 S1`, consulta y la libera con `M602`; probar con M115 (modelo y serie), estado con M119 y M105, pausa M25,
+  reanudar M24, cancelar M26. «Control Failed» dice «otro programa está controlando la impresora» y no manda nada más
+  (FF1.5). Mandar archivos no se ofrece: M28/M29 no están confirmados en la ficha; el panel lo dice (pendrive).
+- **Búsqueda (FF1.1):** botón Buscar en los dos tipos Flashforge: datagrama a 225.0.0.9:19000, 255.255.255.255:48899
+  y 225.0.0.9:8899; respuestas de 196 bytes o más (modernas: nombre, puertos y serie en big endian) y de 140 (legado,
+  sin serie). Elegir una completa el tipo, la dirección y, en las modernas, la serie.
+- **Pruebas:** `[device][net]` con simuladores propios (`tests/fake_flashforge_net.hpp`: TCP de legado, con y sin
+  «Control Failed», y respuestas UDP de 280 y 140 bytes) y `ui_host_e2e_flashforge` en la puerta, que además busca y
+  encuentra las dos. FF1.1 a FF1.6 cubiertos.
+- **Lo que sigue:** Elegoo SDCP (EL1) y Creality de fábrica (CR1).

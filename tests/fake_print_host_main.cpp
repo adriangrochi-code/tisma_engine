@@ -5,6 +5,7 @@
 // program ends, one line says what the fake saw («fake host: started=1
 // name=...»); the exit code is the program's. Own design, as mock_cloud_main.
 #include "cad/process.hpp"
+#include "fake_flashforge_net.hpp"
 #include "fake_print_hosts.hpp"
 
 #include <cstdio>
@@ -99,6 +100,14 @@ int main(int argc, char** argv) {
     }
     if (kind == "flashforge") {
         FakeFlashforge fake;
+        // The search's answers too (FF1.1): a newer and an older printer.
+        fake_flashforge::Discovery discovery;
+        const std::string target = "127.0.0.1:" + std::to_string(discovery.port());
+#ifdef _WIN32
+        _putenv_s("TISMA_TEST_FLASHFORGE_DISCOVERY", target.c_str());
+#else
+        setenv("TISMA_TEST_FLASHFORGE_DISCOVERY", target.c_str(), 1);
+#endif
         return run<FakeFlashforge>(fake, argc, argv, [](const FakeFlashforge& f) {
             return "started=" + std::string(f.print_now == "true" ? "1" : "0") + " name=" + f.uploaded_name +
                    whole(f.uploaded) + " leveling=" + f.leveling;

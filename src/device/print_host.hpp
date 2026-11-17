@@ -29,7 +29,7 @@
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier, Flashforge };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier, Flashforge, FlashforgeLegacy };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;

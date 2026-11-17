@@ -1,5 +1,7 @@
 #include "device/print_host.hpp"
 
+#include "device/flashforge.hpp"
+
 #include "io/checksum.hpp"
 #include "net/digest.hpp"
 #include "net/http.hpp"
@@ -11,6 +13,8 @@
 #include <filesystem>
 #include <thread>
 #include <cctype>
+#include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
@@ -781,6 +785,93 @@ HostResult flashforge_job(const HostConfig& host, const char* action) {
 
 } // namespace
 
+
+namespace {
+
+// The older Flashforge printers, Adventurer 3 and 4 (TCP 8899, «~» commands;
+// device/flashforge.hpp). The address is the IP, with or without http://.
+std::string legacy_host(const HostConfig& host) {
+    std::string h = base_of(host);
+    if (const std::size_t at = h.find("://"); at != std::string::npos)
+        h = h.substr(at + 3);
+    if (const std::size_t colon = h.find(':'); colon != std::string::npos)
+        h = h.substr(0, colon);
+    return h;
+}
+int legacy_port(const HostConfig& host) {
+    const std::string b = base_of(host);
+    const std::size_t at = b.find("://") == std::string::npos ? 0 : b.find("://") + 3;
+    const std::size_t colon = b.find(':', at);
+    return colon == std::string::npos ? 8899 : std::atoi(b.c_str() + colon + 1);
+}
+
+HostResult legacy_result(const FlashforgeSession& s) {
+    HostResult out;
+    out.ok = s.ok;
+    out.code = s.code;
+    out.error = s.error;
+    return out;
+}
+
+// A labelled value of an answer: «MachineStatus: READY» → READY.
+std::string legacy_field(const std::string& answer, const std::string& label) {
+    const std::size_t at = answer.find(label);
+    if (at == std::string::npos)
+        return {};
+    std::size_t from = at + label.size();
+    while (from < answer.size() && answer[from] == ' ')
+        ++from;
+    std::string v = answer.substr(from, answer.find('\n', from) - from);
+    while (!v.empty() && (v.back() == ' ' || v.back() == '\r'))
+        v.pop_back();
+    return v;
+}
+
+// «T0:210/210 B:55/55» (the older ones space them differently).
+void legacy_temperature(const std::string& answer, const char* label, double& now, double& target) {
+    const std::size_t at = answer.find(label);
+    if (at == std::string::npos)
+        return;
+    const char* p = answer.c_str() + at + std::strlen(label);
+    char* end = nullptr;
+    now = std::strtod(p, &end);
+    while (*end == ' ')
+        ++end;
+    if (*end == '/')
+        target = std::strtod(end + 1, nullptr);
+}
+
+HostVersion legacy_version(const HostConfig& host) {
+    HostVersion out;
+    const FlashforgeSession s = flashforge_tcp(legacy_host(host), legacy_port(host), {"M115"}, host.timeout_s * 1000 / 4);
+    static_cast<HostResult&>(out) = legacy_result(s);
+    if (out.ok)
+        out.server = "Flashforge " + legacy_field(s.answers.at(0), "Machine Type:") + " (" +
+                     legacy_field(s.answers.at(0), "SN:") + ")";
+    return out;
+}
+
+HostStatus legacy_status(const HostConfig& host) {
+    HostStatus out;
+    const FlashforgeSession s = flashforge_tcp(legacy_host(host), legacy_port(host), {"M119", "M105"}, host.timeout_s * 1000 / 4);
+    static_cast<HostResult&>(out) = legacy_result(s);
+    if (!out.ok)
+        return out;
+    out.state = legacy_field(s.answers.at(0), "MachineStatus:");
+    out.printing = out.state == "BUILDING_FROM_SD";
+    out.paused = out.state == "PAUSED";
+    out.file = legacy_field(s.answers.at(0), "CurrentFile:");
+    legacy_temperature(s.answers.at(1), "T0:", out.nozzle, out.nozzle_target);
+    legacy_temperature(s.answers.at(1), "B:", out.bed, out.bed_target);
+    return out;
+}
+
+HostResult legacy_command(const HostConfig& host, const char* command) {
+    return legacy_result(flashforge_tcp(legacy_host(host), legacy_port(host), {command}, host.timeout_s * 1000 / 4));
+}
+
+} // namespace
+
 bool host_kind_from(const std::string& word, HostKind& out) {
     if (word == "octoprint")
         out = HostKind::OctoPrint;
@@ -796,6 +887,8 @@ bool host_kind_from(const std::string& word, HostKind& out) {
         out = HostKind::Repetier;
     else if (word == "flashforge")
         out = HostKind::Flashforge;
+    else if (word == "flashforge_legacy")
+        out = HostKind::FlashforgeLegacy;
     else
         return false;
     return true;
@@ -835,6 +928,7 @@ const char* host_kind_word(HostKind kind) {
     case HostKind::AstroBox: return "astrobox";
     case HostKind::Repetier: return "repetier";
     case HostKind::Flashforge: return "flashforge";
+    case HostKind::FlashforgeLegacy: return "flashforge_legacy";
     default: return "octoprint";
     }
 }
@@ -846,7 +940,8 @@ const char* host_kind_name(HostKind kind) {
     case HostKind::Duet: return "Duet";
     case HostKind::AstroBox: return "AstroBox";
     case HostKind::Repetier: return "Repetier-Server";
-    case HostKind::Flashforge: return "Flashforge";
+    case HostKind::Flashforge: return "Flashforge (5M, AD5X, Creator 5)";
+    case HostKind::FlashforgeLegacy: return "Flashforge (Adventurer 3, 4)";
     default: return "OctoPrint";
     }
 }
@@ -862,6 +957,8 @@ HostVersion host_version(const HostConfig& host) {
         return repetier_version(host);
     if (host.kind == HostKind::Flashforge)
         return flashforge_version(host);
+    if (host.kind == HostKind::FlashforgeLegacy)
+        return legacy_version(host);
     HostVersion out;
     const net::Response r = net::perform(request(host, "GET", "/api/version"));
     static_cast<HostResult&>(out) = result_of(r);
@@ -893,6 +990,9 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
         return repetier_upload(host, path, name, start);
     if (host.kind == HostKind::Flashforge)
         return flashforge_upload(host, path, name, start);
+    if (host.kind == HostKind::FlashforgeLegacy) // M28 and M29: not confirmed (the spec)
+        return unsupported("sending files to an Adventurer 3 or 4 over the network is not confirmed yet; "
+                           "copy the file to a USB stick");
     net::Request r = request(host, "POST", "/api/files/local");
     r.timeout_s = std::max(host.timeout_s, 600); // a large file on a slow network
     r.form.push_back({"file", "", path, name, "application/octet-stream"});
@@ -912,6 +1012,8 @@ HostStatus host_status(const HostConfig& host) {
         return repetier_status(host);
     if (host.kind == HostKind::Flashforge)
         return flashforge_status(host);
+    if (host.kind == HostKind::FlashforgeLegacy)
+        return legacy_status(host);
     if (host.kind == HostKind::AstroBox) {
         HostStatus out;
         static_cast<HostResult&>(out) = unsupported("AstroBox has no published API for the printer's state");
@@ -971,6 +1073,8 @@ HostResult host_pause(const HostConfig& host, bool pause) {
         return unsupported("AstroBox has no published API to pause or resume");
     if (host.kind == HostKind::Flashforge)
         return flashforge_job(host, pause ? "pause" : "continue");
+    if (host.kind == HostKind::FlashforgeLegacy)
+        return legacy_command(host, pause ? "M25" : "M24");
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = nlohmann::json{{"command", "pause"}, {"action", pause ? "pause" : "resume"}}.dump();
@@ -990,6 +1094,8 @@ HostResult host_cancel(const HostConfig& host) {
         return unsupported("AstroBox has no published API to cancel");
     if (host.kind == HostKind::Flashforge)
         return flashforge_job(host, "cancel");
+    if (host.kind == HostKind::FlashforgeLegacy)
+        return legacy_command(host, "M26");
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = R"({"command": "cancel"})";

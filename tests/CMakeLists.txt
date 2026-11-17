@@ -134,6 +134,10 @@ target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SECRET_TOOL="$<TARGET_
 # The mock Tisma Cloud server around a program (the interface's cloud tests).
 add_executable(tisma_fake_print_host fake_print_host_main.cpp)
 target_link_libraries(tisma_fake_print_host PRIVATE tisma_core tisma_net tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)
+if(WIN32) # the Flashforge fakes' own sockets (fake_flashforge_net.hpp)
+  target_link_libraries(tisma_fake_print_host PRIVATE ws2_32)
+  target_link_libraries(tisma_tests PRIVATE ws2_32)
+endif()
 add_dependencies(tisma_tests tisma_fake_print_host)
 add_executable(tisma_mock_cloud mock_cloud_main.cpp)
 target_link_libraries(tisma_mock_cloud PRIVATE tisma_core tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)

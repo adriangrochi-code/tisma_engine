@@ -1,14 +1,17 @@
 // The network printer programs' client against a simulator built from
 // OctoPrint's published REST API (printer_connections.md: «se prueban contra
 // un simulador propio»).
+#include "device/flashforge.hpp"
 #include "device/print_host.hpp"
 #include "device/printer_limits.hpp"
+#include "fake_flashforge_net.hpp"
 #include "fake_print_hosts.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -384,4 +387,63 @@ TEST_CASE("print host: Flashforge in LAN mode, test, upload and print, state, pa
     const HostVersion c = host_version(closed);
     CHECK(c.code == "unreachable");
     CHECK(c.error.find("LAN-only") != std::string::npos);
+}
+
+TEST_CASE("print host: Flashforge found by UDP, newer and older (FF1.1)", "[device][net]") {
+    const auto modern = parse_flashforge_discovery(fake_flashforge::Discovery::modern(), "192.168.1.30");
+    REQUIRE(modern);
+    CHECK(modern->modern);
+    CHECK(modern->name == "Adventurer 5M");
+    CHECK(modern->serial == "SNFAKE123");
+    CHECK(modern->http_port == 8898);
+    CHECK(modern->tcp_port == 8899);
+    const auto legacy = parse_flashforge_discovery(fake_flashforge::Discovery::legacy(), "192.168.1.31");
+    REQUIRE(legacy);
+    CHECK_FALSE(legacy->modern);
+    CHECK(legacy->name == "Adventurer 4");
+    CHECK(legacy->serial.empty()); // until M115
+    CHECK_FALSE(parse_flashforge_discovery(std::string(100, 'x'), "1.2.3.4"));
+
+    fake_flashforge::Discovery fake;
+    const auto found = flashforge_discover(1500, {{"127.0.0.1", fake.port()}});
+    REQUIRE(found.size() == 2);
+    CHECK(std::count_if(found.begin(), found.end(), [](const FlashforgePrinter& p) { return p.modern && p.serial == "SNFAKE123"; }) == 1);
+    CHECK(std::count_if(found.begin(), found.end(), [](const FlashforgePrinter& p) { return !p.modern && p.serial.empty(); }) == 1);
+}
+
+TEST_CASE("print host: an older Flashforge over TCP 8899, its session, state and job (FF1.5)", "[device][net]") {
+    fake_flashforge::Legacy fake;
+    HostConfig host;
+    host.kind = HostKind::FlashforgeLegacy;
+    host.url = "127.0.0.1:" + std::to_string(fake.port());
+    host.timeout_s = 8;
+    const HostVersion v = host_version(host);
+    INFO(v.error);
+    REQUIRE(v.ok);
+    CHECK(v.server == "Flashforge Flashforge Adventurer 4 (SNOLD456)");
+    const HostStatus st = host_status(host);
+    REQUIRE(st.ok);
+    CHECK(st.printing);
+    CHECK(st.file == "cubo.gx");
+    CHECK(st.nozzle == 205.0);
+    CHECK(st.nozzle_target == 210.0);
+    CHECK(st.bed == 58.0);
+    REQUIRE(host_pause(host, true).ok);
+    CHECK(host_status(host).paused);
+    REQUIRE(host_cancel(host).ok);
+    const std::vector<std::string> c = fake.commands();
+    CHECK(std::count(c.begin(), c.end(), "M601 S1") == std::count(c.begin(), c.end(), "M602")); // each session released
+    CHECK(std::find(c.begin(), c.end(), "M25") != c.end());
+    CHECK(std::find(c.begin(), c.end(), "M26") != c.end());
+    // Sending a file is not offered: not confirmed (the spec).
+    CHECK(host_upload(host, "x.gcode", "x.gcode", true).code == "unsupported");
+
+    // FF1.5: another program holds it: said so, and nothing else sent.
+    fake_flashforge::Legacy busy(true);
+    HostConfig other = host;
+    other.url = "127.0.0.1:" + std::to_string(busy.port());
+    const HostVersion b = host_version(other);
+    CHECK(b.code == "conflict");
+    CHECK(b.error.find("another program") != std::string::npos);
+    CHECK(busy.commands() == std::vector<std::string>{"M601 S1"});
 }
