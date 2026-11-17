@@ -42,6 +42,14 @@ struct RootView: View {
     /// A file handed over by another app that could not be read (it is said, not dropped in silence).
     @State private var openProblem: String?
 
+    /** A file handed to the app goes onto the plate, or the person is told it could not be read. */
+    private func take(_ url: URL) {
+        if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 } else {
+            NSLog("TISMA-OPEN could not read %@", url.path)
+            openProblem = String(format: String(localized: "Tisma could not open %@."), url.lastPathComponent)
+        }
+    }
+
     var body: some View {
         TabView(selection: $tab) {
             // mobile_app.md, rule 5: Plate, Print, Material, Printer and More (the library is in More, rule 9).
@@ -56,16 +64,21 @@ struct RootView: View {
         // «Compartir con Tisma» from another app (MA5): the model goes onto the plate.
         .onOpenURL { opened in
             NSLog("TISMA-OPEN %@", opened.absoluteString)
-            // The release gate's UI test hands a file over as `tisma://open?path=…` (the simulator does not route a file
-            // URL to the app); only when started with --ui-test-open, so no other app can use it.
+            // The release gate's UI test hands a file over as `tisma://open?path=…`; only when started with
+            // --ui-test-open, so no other app can use it.
             var url = opened
             if opened.scheme == "tisma", opened.host == "open", ProcessInfo.processInfo.arguments.contains("--ui-test-open"),
                let path = URLComponents(url: opened, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "path" })?.value {
                 url = URL(fileURLWithPath: path)
             }
-            if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 } else {
-                NSLog("TISMA-OPEN could not read %@", url.path)
-                openProblem = String(format: String(localized: "Tisma could not open %@."), url.lastPathComponent)
+            take(url)
+        }
+        // The simulator does not hand a URL from the UI test to onOpenURL: the test may start the app with the file in
+        // TISMA_UI_TEST_OPEN instead (only with --ui-test-open), and it goes the same way as «Open with».
+        .task {
+            let info = ProcessInfo.processInfo
+            if info.arguments.contains("--ui-test-open"), let path = info.environment["TISMA_UI_TEST_OPEN"], !path.isEmpty {
+                take(URL(fileURLWithPath: path))
             }
         }
         .alert(openProblem ?? "", isPresented: Binding(get: { openProblem != nil }, set: { if !$0 { openProblem = nil } })) {

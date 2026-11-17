@@ -55,10 +55,11 @@ final class ReleaseGateTests: XCTestCase {
 
     /// «Open with» Tisma: the file handed to the app by its address; the plate names it and shows its size.
     private func open(_ name: String, size: String?) {
-        // The simulator does not hand a file URL to the app; the test's own scheme does (accepted only in UI tests).
-        var c = URLComponents(string: "tisma://open")!
-        c.queryItems = [URLQueryItem(name: "path", value: URL(fileURLWithPath: dir).appendingPathComponent(name).path)]
-        app.open(c.url!)
+        // The simulator hands no URL from a UI test to the app (neither a file URL nor its own scheme reached it): the
+        // app starts with the file in TISMA_UI_TEST_OPEN and takes it as «Open with» does.
+        app.terminate()
+        app.launchEnvironment["TISMA_UI_TEST_OPEN"] = URL(fileURLWithPath: dir).appendingPathComponent(name).path
+        app.launch()
         let plate = app.tabBars.buttons["Plate"]
         XCTAssertTrue(plate.waitForExistence(timeout: 20), "the app opens \(name)")
         if !plate.isSelected { plate.tap() }
