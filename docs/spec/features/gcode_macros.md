@@ -43,6 +43,15 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
    - coincidencia con una expresión regular `=~` y no coincidencia `!~`;
    - paréntesis para agrupar. Precedencia usual: `not` y `-` de un operando, después `*` `/` `%`, `+` `-`,
      comparaciones, `and`, `or`, ternario.
+   - **división entre enteros** (medido en PrusaSlicer 2.7.2 como caja negra, 17-11-2026): si los dos lados son
+     enteros, `/` da la parte entera: `{1/3}` es 0, `{10/4}` es 2, `{2/3*1000000}` es 0 y `{first_layer_temperature[0]/3}`
+     con 200 °C es 66. Si uno tiene decimales, la cuenta es con decimales: `{21/2.4053*60}` es 523,843 (prueba GM23);
+   - **cómo se escribe un número calculado** (misma medición): con 6 cifras significativas como mucho, sin ceros al
+     final y sin punto si queda entero: `{60}` → `60`, `{2.5}` → `2.5`, `{100.0}` → `100`, `{0.1+0.2}` → `0.3`,
+     `{nozzle_diameter[0]*2}` → `0.8`, `{21/2.4053*60}` → `523.843`; los muy chicos o muy grandes en notación
+     científica: `{1e-7*3}` → `3e-07`, `{123456789.123}` → `1.23457e+08`. Vale para todos los dialectos que usan
+     este lenguaje (`prusaslicer`, `orcaslicer`, `crealityprint`, `elegooslicer`); OrcaSlicer no se pudo medir
+     todavía (la red del equipo de especificación no lo deja bajar): si difiere, se corrige acá (prueba GM23).
 4. **Funciones:** `min` y `max` de dos valores; la parte entera, que se escribe con la palabra `int` y corta los
    decimales; `round`, que redondea a entero; `ceil`, que redondea hacia arriba (dialecto `orcaslicer` y derivados); `digits` con un valor, una cantidad de caracteres y, opcional, de
    decimales (0 si falta): redondea a esos decimales, agrega ceros a la derecha si faltan y rellena con espacios a la
@@ -226,5 +235,6 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM20 | Prusa XL de 5 cabezales del paquete, un solo filamento | Se interpreta su G-code de inicio entero (`M17`, `M862.3 P "XL"`, `G28 XY`, `G28 Z`, la purga); no cae en la versión simple |
 | GM21 | G-code de inicio que no se puede interpretar, versión simple sin `G28` | El G-code tiene `G28` antes de la primera extrusión y el aviso se ve en la interfaz |
 | GM22 | Barrido de las 2 267 variantes FDM del paquete con el cubo de 20 mm | Ninguna da el aviso de variable sin llenar, salvo `bed_mesh_probe_count` y `bed_mesh_algo` sin valor en el perfil; las ramas `{if}` coinciden con las del programa original en las impresoras de referencia (MK4S, XL, X1C, K1, Voron 2.4) |
+| GM23 | G-code de inicio con `;A {60}`, `;B {2.5}`, `;C {21/2.4053*60}`, `;D {1/3}`, `;E {100.0}`, `;F {2/3*1000000}`, `;G {0.1+0.2}`, `;H {10/4}`, `;I {first_layer_temperature[0]/3}` (200 °C), `;J {nozzle_diameter[0]*2}` (0,4), `;K {1e-7*3}`, `;L {123456789.123}` | `60`, `2.5`, `523.843`, `0`, `100`, `0`, `0.3`, `2`, `66`, `0.8`, `3e-07`, `1.23457e+08` (PrusaSlicer 2.7.2) |
 | GM18 | `{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n"A" + a + "\n";\n}` (con saltos de línea reales) | Sale `A3` y un salto de línea; nada más |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |
