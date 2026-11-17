@@ -12449,5 +12449,18 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   sigue en la placa. **G16 de Android en verde** (17-11, corrida 43993864839, 1b0c835): asistente, abrir 4 archivos,
   laminar cubo y Benchy dentro de 0,1 mm, exportar y mandar a Moonraker, OctoPrint, PrusaLink y Duet simulados (llega
   entero y empieza). Sin probar en un teléfono real. Falta: Bambu Lab en la puerta y la puerta del iPhone.
+- 17-11, G16: Bambu Lab entra en la puerta de Android (simulador con puertos fijos 7130/7131/7133 por `adb reverse`;
+  compara el G-code dentro del 3MF) y pasa en verde (e768a15). BL4: `BambuProjectFileTest` compara el `project_file`
+  campo por campo con `tests/data/bambu_project_file.json`, la referencia común con el escritorio. La puerta del iPhone
+  (`ReleaseGateTests`, `tools/gate_ios_check.py`, trabajo «iPhone simulator») ya compila y arranca: pasa el asistente;
+  falla al abrir el primer archivo («Abrir con» por `app.open`), sin saber todavía si la URL no llega o la app no puede
+  leer la ruta del Mac (corrida con diagnóstico 5fe7121, en cola: faltan runners macOS arm64). Arreglado en el camino: la
+  app de iPhone ahora avisa cuando no puede abrir un archivo que le pasa otra app, en vez de no hacer nada.
+- 17-11, beta del 24-11 (decisión del dueño, fichas de spec/next b6f52e9): Flashforge (FF1, 432a5f8) y Elegoo SDCP (EL1,
+  93c56e3) en las dos apps, con simuladores propios y las pruebas de la ficha (10 + 11). Cliente WebSocket (RFC 6455) y
+  SHA-1 en el módulo común. Mensajes de la ficha en es/en por `PrinterException.reason`; una impresora con la clave
+  rechazada ya no se consulta en bucle. Sin probar en impresoras reales; en Elegoo no se muestran tiempos (unidad de los
+  ticks sin confirmar); las Flashforge de legado no reciben archivos todavía. Sigue Creality de fábrica (CR1); Anycubic
+  queda fuera.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
