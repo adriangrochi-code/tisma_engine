@@ -15209,8 +15209,8 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
   par que cerraba terminaba el programa con SIGPIPE en Linux.
 - **Pruebas:** CR1-1, 2, 3, 5 y 6 en `[device][net]` con un simulador propio (`fake_sdcp::Creality`), y
   `ui_host_e2e_creality` en la puerta (prueba, estado imprimiendo, la orden de mandar con su aviso, y el de Anycubic).
-- **Sin hacer:** CR1-4 («detenida» tras 15 s en precalentamiento): la ficha no nombra la clave del estado ni sus
-  valores; queda pendiente de la ficha.
+- **CR1-4 fuera de la beta** (spec/next a2611fe): hasta medirlo con una Creality real, lo que no imprime (lista,
+  terminada o parada) se muestra «sin datos de estado», nunca «detenida».
 - No probado con hardware.
 
 ## 2026-11-17 — una Elegoo de resina recibe su .goo, nunca G-code (QA)

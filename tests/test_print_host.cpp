@@ -593,6 +593,13 @@ TEST_CASE("print host: a stock Creality, its state by 9999 or Moonraker when it 
     const HostResult up = host_upload(host, "x.gcode", "x.gcode", true);
     CHECK(up.code == "unsupported");
     CHECK(up.error.find("Moonraker/Fluidd") != std::string::npos);
+    // CR1-4 waits for a real printer: done, idle or stopped is «no state data».
+    fake.left = 0.0;
+    const HostStatus stop = host_status(host);
+    CHECK_FALSE(stop.printing);
+    CHECK(stop.state == "no_state");
+    fake.left = 1200.0;
+    REQUIRE(host_status(host).printing);
     // CR1-5: the link cut mid-print: still printing, reconnecting.
     fake.down = true;
     const HostStatus cut = host_status(host);

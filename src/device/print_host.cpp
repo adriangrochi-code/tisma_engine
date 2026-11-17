@@ -1216,7 +1216,9 @@ HostStatus creality_ws_status(const HostConfig& host, std::string* model) {
     out.seconds_done = number(merged, "printJobTime");
     out.seconds_left = number(merged, "printLeftTime");
     out.printing = out.seconds_left > 0.0;
-    out.state = out.printing ? "printing" : "idle";
+    // Idle, done or stopped are not told apart until measured on a real
+    // printer (CR1-4, spec/next a2611fe): «no state data».
+    out.state = out.printing ? "printing" : "no_state";
     // No share is pushed: the times give it (CR1-2).
     if (out.seconds_done + out.seconds_left > 0.0)
         out.progress = 100.0 * out.seconds_done / (out.seconds_done + out.seconds_left);

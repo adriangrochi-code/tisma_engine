@@ -27019,7 +27019,7 @@ void App::host_panel(float field, float button_h) {
     const device::HostStatus& st = host_status_;
     if (st.ok) {
         if (st.nozzle < 0.0 && st.bed < 0.0) // not reported (a stock Creality, CR1)
-            loc::Text("%s", st.state.c_str());
+            loc::Text("%s", st.state == "no_state" ? tr(T::HostNoStateData) : st.state.c_str());
         else
             loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
         if (st.printing) {
