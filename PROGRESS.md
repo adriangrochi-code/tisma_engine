@@ -15055,3 +15055,10 @@ Versión 0.13.0-beta.2.
   0s», porque el tiempo total todavía no se conoce.
 - `purge_distance` sigue con aviso: Cura no tiene ese valor.
 - Pruebas `[gcode]`: 137 casos bien.
+
+**Cuarta tanda GM22 (QA con 765903d: 43 variantes, todas con aviso por ficha o por el paquete):**
+- `wipe_tower_center_pos_x` y `_y`: la esquina de la torre más la mitad de su ancho, haya torre o no. Tomé el ancho
+  también para Y, porque la profundidad de la torre depende de cuánto se purga.
+- `line_width` (Cura): el ancho de línea general.
+- `jobname` (Cura): el nombre del modelo sin la extensión.
+- Pruebas `[gcode]`: 137 casos bien.

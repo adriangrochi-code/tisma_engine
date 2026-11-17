@@ -227,6 +227,11 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         set("build_volume_temperature", whole(s.chamber_temperature));
         // The second round (QA, 17-11-2026, GM22).
         set("wipe_tower_center_pos_valid", TemplateValue::of(s.wipe_tower));
+        // The tower's centre from its corner and width, with or without a
+        // tower (QA, 17-11-2026).
+        set("wipe_tower_center_pos_x", number(s.wipe_tower_x + s.wipe_tower_width / 2.0));
+        set("wipe_tower_center_pos_y", number(s.wipe_tower_y + s.wipe_tower_width / 2.0));
+        set("jobname", TemplateValue::of(s.input_name));
         set("start_filament_gcode", each(TemplateValue::of(s.filament_start_gcode)));
         fallback("required_nozzle_HRC", each(TemplateValue::of(0LL)));
         fallback("filament_flush_volumetric_speed", each(number(flow > 0.0 ? flow : kSafeFlow)));
@@ -240,6 +245,7 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         set("initial_layer_speed",
             each(number(s.first_layer_speed_percent ? s.wall_speed * s.first_layer_speed / 100.0 : s.first_layer_speed)));
         set("outer_wall_line_width", number(outer_width));
+        set("line_width", number(s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter)));
         set("extrusion_width", number(s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter)));
         set("top_bottom_thickness", number(s.top_layers * s.layer_height));
         // filament_cost is the print's cost in cura (the writer sets it as it
