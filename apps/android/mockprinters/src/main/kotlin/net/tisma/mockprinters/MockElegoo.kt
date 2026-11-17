@@ -125,6 +125,21 @@ class MockElegoo(val mainboardId: String = "ELEGOO0000000001", val name: String 
                 outs -= out
                 clients.decrementAndGet()
             }
+        } else if (method == "GET" && path == "/_tisma/received") {
+            // For the release gate (G16): each uploaded file whole, and whether it prints.
+            val files = pieces.map { it.uuid }.distinct().associate { u -> pieces.first { it.uuid == u }.filename to file(u) }
+            val reply = buildJsonObject {
+                put("state", if (current == 1) "printing" else "idle")
+                put("file", filename)
+                put("files", buildJsonObject {
+                    files.forEach { (n, b) -> put(n, buildJsonObject {
+                        put("size", b.size)
+                        put("sha256", java.security.MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) })
+                    }) }
+                })
+            }.toString().toByteArray()
+            out.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${reply.size}\r\nConnection: close\r\n\r\n".toByteArray())
+            out.write(reply); out.flush()
         } else if (method == "POST" && path == "/uploadFile/upload") {
             val body = ByteArray(headers["content-length"]?.toInt() ?: 0).also { input.readFully(it) }
             val reply = upload(headers["content-type"].orEmpty(), body)

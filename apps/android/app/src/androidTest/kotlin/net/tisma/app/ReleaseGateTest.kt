@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.core.content.FileProvider
 import androidx.test.core.app.ActivityScenario
@@ -83,6 +84,7 @@ class ReleaseGateTest {
         // G10: exported through the system's «save as», and sent to each simulated printer, where it prints.
         export(gcode)
         send(gcode)
+        crealityStock()
     }
 
     /** MA1: the first start opens the assistant; with the built-in catalog it ends with a printer chosen. */
@@ -177,15 +179,22 @@ class ReleaseGateTest {
             // Bambu Lab in local mode: MQTT and FTPS on the host's loopback, reached through `adb reverse`; what it
             // received is told on 7129.
             Triple("bambu", BAMBU, "12345678"),
+            // The beta's brands (printer_connections.md, FF1 and EL1), on the host's loopback through `adb reverse`.
+            Triple("flashforge", FLASHFORGE, "0a1b2c3d"),
+            Triple("elegoo", ELEGOO, ""),
         )
         for ((kind, address, key) in printers) {
             compose.onNodeWithTag("section_printer").performClick()
             waitTag("add_printer")
             compose.onNodeWithTag("add_printer").performClick()
             waitTag("printer_address")
-            compose.onNodeWithTag("kind_$kind").performClick()
+            tap("kind_$kind")
             compose.onNodeWithTag("printer_name").performTextInput("gate-$kind")
             compose.onNodeWithTag("printer_address").performTextInput(address)
+            if (kind == "flashforge") {
+                compose.onNodeWithTag("printer_user").performTextClearance()
+                compose.onNodeWithTag("printer_user").performTextInput("SNTEST0001")
+            }
             if (key.isNotEmpty()) compose.onNodeWithTag("printer_key").performTextInput(key)
             tap("printer_save")
             if (kind == "bambu") {
@@ -200,7 +209,12 @@ class ReleaseGateTest {
         }
         val want = sha(gcode.readBytes())
         for ((kind, address, _) in printers) {
-            val url = if (kind == "bambu") "http://10.0.2.2:7129" else address
+            val url = when (kind) {
+                "bambu" -> "http://10.0.2.2:7129"
+                "flashforge" -> "http://127.0.0.1:7135"
+                "elegoo" -> "http://127.0.0.1:7137"
+                else -> address
+            }
             compose.onNodeWithTag("section_plate").performClick()
             waitTag("send_to_gate-$kind")
             tap("send_to_gate-$kind")
@@ -217,6 +231,29 @@ class ReleaseGateTest {
                 fail("$kind did not get the G-code (sha256 $want, ${gcode.length()} bytes) or did not start; it says $said; on screen: ${screen()}")
             }
         }
+    }
+
+    /**
+     * CR1: a Creality with its stock firmware is added (its state over 9999, no Moonraker), its card names it by its
+     * board, and the plate does not offer it «Send» but says to turn on Moonraker/Fluidd.
+     */
+    private fun crealityStock() {
+        compose.onNodeWithTag("section_printer").performClick()
+        waitTag("add_printer")
+        compose.onNodeWithTag("add_printer").performClick()
+        waitTag("printer_address")
+        compose.onNodeWithTag("kind_creality").performScrollTo().performClick()
+        compose.onNodeWithTag("printer_name").performTextInput("gate-creality")
+        compose.onNodeWithTag("printer_address").performTextInput(CREALITY)
+        tap("printer_save")
+        compose.waitUntil(60_000) { !has("printer_save") }
+        compose.onNodeWithTag("section_plate").performClick()
+        try {
+            compose.waitUntil(60_000) { has("plate_no_send_gate-creality") }
+        } catch (e: Throwable) {
+            fail("a stock Creality is said not to take «Send»; on screen: ${screen()}")
+        }
+        assertTrue(!has("send_to_gate-creality"), "no «Send» chip for the stock Creality")
     }
 
     /** The simulator's account of what arrived (`/_tisma/received`): the whole G-code, and the print started. */
@@ -322,3 +359,8 @@ class ReleaseGateTest {
 
 /** The Bambu Lab simulator's address from the emulator: its MQTT (7130) and FTPS (7131) through `adb reverse`. */
 private const val BAMBU = "bambu://127.0.0.1:7130?ftp=7131"
+
+/** Flashforge (HTTP 7135, TCP 7136), Elegoo (7137) and a stock Creality (WebSocket 7138), through `adb reverse`. */
+private const val FLASHFORGE = "flashforge://127.0.0.1?http=7135&tcp=7136"
+private const val ELEGOO = "elegoo://127.0.0.1?port=7137"
+private const val CREALITY = "creality://127.0.0.1?ws=7138"

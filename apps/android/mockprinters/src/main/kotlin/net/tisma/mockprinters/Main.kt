@@ -27,6 +27,13 @@ fun main(args: Array<String>) {
         }
         start()
     }
+    // The beta's brands (printer_connections.md, FF1, EL1, CR1), on the loopback too: `adb reverse` their ports.
+    val flashforge = MockFlashforge(http = port + 10, tcp = port + 11).start()
+    val elegoo = MockElegoo(port = port + 12).start()
+    val creality = MockCreality(port = port + 13).start()
+    creality.push("""{"model":"","modelVersion":"F012","hostname":"K1C-gate","printJobTime":0,"printLeftTime":0}""")
+    println("Flashforge simulator: ${flashforge.url}, serial \"${flashforge.serial}\", check code \"${flashforge.checkCode}\"")
+    println("Elegoo simulator: ${elegoo.url}; Creality (stock) simulator: ws on ${creality.port}")
     println("Bambu Lab simulator: ${bambu.url}, access code \"${bambu.accessCode}\" (adb reverse tcp:${bambu.mqttPort} tcp:${bambu.mqttPort}; same for ${bambu.ftpPort} and ${port + 8}); received: http://10.0.2.2:${port + 4}/_tisma/received")
     println("Upload a G-code with «print» to start; each status read moves the print forward.")
     Thread.currentThread().join()

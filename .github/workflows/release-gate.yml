@@ -75,6 +75,8 @@ jobs:
           adb shell pm grant net.tismaservidores.tisma android.permission.POST_NOTIFICATIONS
           # Bambu Lab's simulator listens on the host's loopback: MQTT, FTPS and the FTPS data port.
           for p in 7130 7131 7133; do adb reverse tcp:$p tcp:$p; done
+          # The beta's brands on the host's loopback: Flashforge (7135 HTTP, 7136 TCP), Elegoo (7137), Creality (7138).
+          for p in 7135 7136 7137 7138; do adb reverse tcp:$p tcp:$p; done
           adb push "$RUNNER_TEMP/3DBenchy.stl" /data/local/tmp/3DBenchy.stl
           adb shell chmod 644 /data/local/tmp/3DBenchy.stl
           adb shell am instrument -w -e class net.tisma.app.ReleaseGateTest -e benchy /data/local/tmp/3DBenchy.stl \

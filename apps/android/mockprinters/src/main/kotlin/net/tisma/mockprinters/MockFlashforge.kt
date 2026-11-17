@@ -111,8 +111,28 @@ class MockFlashforge(
 
     private val udp = CopyOnWriteArrayList<java.net.DatagramSocket>()
 
+    /** For the release gate (G16): what arrived and whether it prints, as the other simulators' `/_tisma/received`. */
+    fun received(): String = buildJsonObject {
+        put("state", when (status) { "printing" -> "printing"; "completed" -> "complete"; "pause" -> "paused"; else -> "idle" })
+        put("file", file)
+        put("files", buildJsonObject {
+            uploads.forEach { u ->
+                put(u.name, buildJsonObject {
+                    put("size", u.bytes.size)
+                    put("sha256", java.security.MessageDigest.getInstance("SHA-256").digest(u.bytes).joinToString("") { "%02x".format(it) })
+                })
+            }
+        })
+    }.toString()
+
     private fun handle(ex: HttpExchange) {
         val path = ex.requestURI.rawPath
+        if (ex.requestMethod == "GET" && path == "/_tisma/received") {
+            val b = received().toByteArray()
+            ex.responseHeaders.add("Content-Type", "application/json")
+            ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
+            return
+        }
         val reply: JsonObject = if (path == "/uploadGcode") upload(ex) else {
             val body = runCatching { Json.parseToJsonElement(String(ex.requestBody.readAllBytes())).jsonObject }.getOrNull()
             if (body == null) answer(-1, "Parameters is error") else {

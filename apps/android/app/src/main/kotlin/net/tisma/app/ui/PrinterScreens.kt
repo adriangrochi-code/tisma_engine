@@ -408,6 +408,11 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                 placeholder = { Text(if (kind == PrinterKind.MOONRAKER) "192.168.1.20:7125" else "192.168.1.30") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth().testTag("printer_address"))
+            // PrusaLink's «maker» is not a Flashforge serial number: the field follows the kind chosen.
+            LaunchedEffect(kind) {
+                if (kind == PrinterKind.FLASHFORGE && user == "maker") user = ""
+                if (kind == PrinterKind.PRUSALINK && user.isBlank()) user = "maker"
+            }
             if (kind == PrinterKind.PRUSALINK || kind == PrinterKind.FLASHFORGE) {
                 OutlinedTextField(user, { user = it }, singleLine = true,
                     label = { Text(stringResource(if (kind == PrinterKind.FLASHFORGE) R.string.printer_serial else R.string.printer_user)) },
