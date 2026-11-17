@@ -1,0 +1,38 @@
+# Erasing in the sketch (the owner, 2026-11-17: nothing could be erased, and
+# a click meant to pick a line began a new one). Two lines drawn with the
+# Line tool; with no tool a click picks one and Supr erases it (as Fusion); a
+# click on nothing draws nothing; then B (BORRA, as AutoCAD) with a crossing
+# box and Enter erases the other; the rules on them go too.
+menu mode_engineering
+menu tab_design
+menu design_sketch
+menu design_plane_xy
+expect-control sketch_finish
+menu design_command
+type L
+key enter
+type 0,0
+key enter
+type 20,0
+key enter
+key enter
+type L
+key enter
+type 0,10
+key enter
+type 20,10
+key enter
+key enter
+expect-sketch-entities 2
+sketch-point 30 30
+expect-sketch-entities 2
+sketch-point 10 0
+key delete
+expect-sketch-entities 1
+expect-command-message 1
+menu design_command
+type B
+key enter
+sketch-point 10 10
+key enter
+expect-sketch-entities 0

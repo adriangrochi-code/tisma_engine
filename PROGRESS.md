@@ -15115,3 +15115,20 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
   sus opciones y el `project_file` exacto que deben mandar el escritorio y las apps. La prueba de escritorio
   (`[bambu]`) lo compara campo por campo y en cantidad de campos. Pasa. Las apps pueden leer el mismo archivo.
 - La prueba de `project_file` en la ficha ahora es BL4 (spec/next 6f164aa); renombrada en la prueba y en la referencia.
+
+## 2026-11-17 — boceto: borrar líneas y elegir con un clic (el dueño)
+
+- **Pedido del dueño:** no se podían borrar líneas del boceto (estilo AutoCAD) y la interfaz no generaba las líneas
+  como Fusion. Causa: sin herramienta, un clic sobre una línea no la elegía, empezaba una línea nueva; y no había
+  ninguna forma de borrar (`cad::erase_entity` existía pero la interfaz no la llamaba).
+- **Hecho:**
+  - sin herramienta, un clic elige una línea, círculo o arco, o la suelta; un clic en el vacío suelta todo; arrastrar
+    hace la caja de selección (ventana o cruce, regla 17); las líneas se dibujan con la herramienta Línea (L);
+  - Supr o Retroceso borran lo elegido (también con la línea de comandos activa y vacía, que se queda con el teclado);
+    Esc primero suelta la elección, después sale de la herramienta o del boceto (regla 11);
+  - herramienta «Borrar» en Modificar y en la línea de comandos: `B`, `BORRA`, `BORRAR` (AutoCAD en castellano),
+    `ERASE`, `SUPR`, `DEL` (la `E` sigue siendo extruir, regla 12). Elegir y Enter; si ya había algo elegido, lo borra
+    al instante. Se van también las restricciones de lo borrado.
+- **Prueba:** `ui_script_design_sketch_erase`. Las 48 de diseño y boceto siguen pasando.
+- **Falta:** deshacer dentro del boceto (regla 11) no existe todavía; no se puede deshacer un borrado. Diseño propio,
+  sin ficha: se le pide a QA que lo sume a `cad_design.md`.
