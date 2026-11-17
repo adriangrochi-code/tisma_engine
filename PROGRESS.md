@@ -15102,3 +15102,6 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
   escucha UDP 1990 y 2021 (el aviso sin resultados nombra el cortafuegos, la red «Pública» y escribir la dirección), y
   la dirección a mano no depende de la búsqueda; TLS sin validar la cadena, sin nombre de host (sin SNI), con la
   huella fijada, curvas y RSA del mbedTLS por defecto. No probado con hardware.
+- **BL2 (printer_connections.md, spec/next 3eb4be8):** `tests/data/bambu_project_file.json` es la referencia: un G-code,
+  sus opciones y el `project_file` exacto que deben mandar el escritorio y las apps. La prueba de escritorio
+  (`[bambu]`) lo compara campo por campo y en cantidad de campos. Pasa. Las apps pueden leer el mismo archivo.

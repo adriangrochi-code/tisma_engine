@@ -1,0 +1,34 @@
+{
+ "comment": "printer_connections.md, BL2: the project_file that the desktop and the phone apps send for this G-code and options; each side's test compares field by field.",
+ "gcode": "G28\nG1 X10 Y10 Z0.2 E1\n",
+ "name": "pieza",
+ "options": {
+  "timelapse": false,
+  "bed_levelling": true,
+  "flow_cali": false,
+  "vibration_cali": false,
+  "use_ams": false
+ },
+ "project_file": {
+  "print": {
+   "sequence_id": "0",
+   "command": "project_file",
+   "param": "Metadata/plate_1.gcode",
+   "project_id": "0",
+   "profile_id": "0",
+   "task_id": "0",
+   "subtask_id": "0",
+   "subtask_name": "pieza",
+   "url": "ftp:///pieza.gcode.3mf",
+   "md5": "e7a6c7ed78c3a7b62042af62bcefff56",
+   "timelapse": false,
+   "bed_type": "auto",
+   "bed_levelling": true,
+   "flow_cali": false,
+   "vibration_cali": false,
+   "layer_inspect": false,
+   "ams_mapping": "",
+   "use_ams": false
+  }
+ }
+}

@@ -11,6 +11,7 @@
 #include "io/zip.hpp"
 #include "net/digest.hpp"
 
+#include <fstream>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
@@ -443,4 +444,24 @@ TEST_CASE("bambu: the send options go in the print request (gcode_macros.md, rul
     CHECK(p["bed_type"] == "Textured PEI Plate");
     // No AMS mapping: an empty text, as the phone apps send it.
     CHECK(p["ams_mapping"] == "");
+}
+
+TEST_CASE("bambu: project_file as the phone apps send it, field by field (printer_connections.md, BL2)", "[bambu]") {
+    std::ifstream in(std::string(TISMA_TEST_DATA_DIR) + "/bambu_project_file.json", std::ios::binary);
+    REQUIRE(in);
+    const nlohmann::json c = nlohmann::json::parse(in);
+    BambuPrint job;
+    job.name = c.at("name").get<std::string>();
+    job.gcode = c.at("gcode").get<std::string>();
+    const nlohmann::json& o = c.at("options");
+    job.timelapse = o.at("timelapse").get<bool>();
+    job.bed_leveling = o.at("bed_levelling").get<bool>();
+    job.flow_calibration = o.at("flow_cali").get<bool>();
+    job.vibration_calibration = o.at("vibration_cali").get<bool>();
+    job.use_ams = o.at("use_ams").get<bool>();
+    const nlohmann::json got = bambu_project_file(job, job.name + ".gcode.3mf", net::md5_hex(job.gcode), 0);
+    const nlohmann::json& want = c.at("project_file");
+    for (const auto& [key, value] : want.at("print").items())
+        CHECK(got.at("print").value(key, nlohmann::json()) == value);
+    CHECK(got.at("print").size() == want.at("print").size());
 }
