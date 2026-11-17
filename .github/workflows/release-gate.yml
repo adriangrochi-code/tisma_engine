@@ -118,7 +118,9 @@ jobs:
       - name: The printer simulators (Moonraker, OctoPrint, PrusaLink, Duet on 7125–7128)
         run: |
           nohup ./gradlew --no-daemon :mockprinters:run -Pport=7125 > "$RUNNER_TEMP/mockprinters.log" 2>&1 &
-          timeout 300 sh -c 'until curl -sf http://127.0.0.1:7128/_tisma/received > /dev/null; do sleep 3; done'
+          # macOS has no timeout(1): up to 300 s.
+          for i in $(seq 100); do curl -sf http://127.0.0.1:7128/_tisma/received > /dev/null && exit 0; sleep 3; done
+          tail -30 "$RUNNER_TEMP/mockprinters.log"; exit 1
       - name: The gate's models (the 20 mm cube, tests/data/formats and the 3DBenchy of dev)
         working-directory: .
         run: |
