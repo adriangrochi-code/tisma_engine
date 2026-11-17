@@ -14814,3 +14814,20 @@ para el LBM D3Q19.
 - **Prueba nueva:** tubo de 20 mm con agujero de 8 mm: afuera sube 0,2 mm por capa, el agujero plano en la Z de la
   capa, ninguna bajada de Z, el aviso una vez. 1120 pruebas sin interfaz en verde.
 
+## 2026-11-17 — barrido de QA de las impresoras del paquete (GM20, GM21, FW11)
+
+- **Versión simple sin G28 (37 variantes: Prusa XL 2T/5T, HartSmart HSP1-I, Snapmaker U1):** las impresoras de varios
+  cabezales tienen `machine.extruders` 1 en el perfil, pero su bloque de la máquina trae una boquilla por cabezal: el
+  motor cuenta los cabezales por ahí (`nozzle_diameter` de los valores de la máquina). Con varios cabezales un valor
+  único vale para cada uno (el filamento del primero); `is_extruder_used` da no a los que no se usan (antes el índice
+  se recortaba al último: daba sí); `is_nil(x[i])` fuera del vector da sí sin error (regla 8, GM20). La versión simple
+  lleva `G28` si no tiene ni `G28` ni macro de inicio (regla 10 bis, GM21).
+- **No laminaban (14 variantes) por la comprobación de temperatura:** el verificador acepta `M109 R`, `M104/M109 T<n>`,
+  `G10 P S` y `M568 P S` (RepRapFirmware), y no pide temperatura a un filamento de 0 °C (Cocoa Press). El escritor
+  mira cada calentador por separado: un inicio que solo calienta la cama recibe la boquilla (Deltacomb DC-20), y uno
+  que solo calienta la boquilla recibe la cama (gcode_firmware.md, regla 1, FW11).
+- **HSP1-I:** `{directories.system^"…"}` es una expresión de RepRapFirmware que el firmware evalúa: queda tal cual.
+- **Medido:** barrido local de 188 variantes de esos fabricantes (87 instaladas con su filamento; el resto de
+  fabricantes no bajados): todas laminan, ninguna en la versión simple; sin `G28` solo la mycusini 2.0 (su propio
+  inicio, de chocolate). 1121 pruebas sin interfaz en verde (PT7 cambia: la cama se agrega).
+

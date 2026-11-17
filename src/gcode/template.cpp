@@ -172,6 +172,8 @@ public:
         : src_(source), at_(at), end_(end), lookup_(lookup) {
         if (const TemplateValue* e = lookup_("current_extruder"); e && e->kind == Kind::Int)
             extruder_ = e->integer;
+        if (const TemplateValue* n = lookup_(kExtrudersVariable); n && n->kind == Kind::Int)
+            extruders_ = n->integer;
     }
 
     TemplateValue whole() {
@@ -496,8 +498,16 @@ private:
                 src_.fail(at_, "']' is expected");
             if (index.kind != Kind::Int)
                 src_.fail(index_at, "an index must be a whole number");
+            // Inside is_nil(), a value that is not there is nil, not an
+            // error (gcode_macros.md, rule 8, GM20).
+            const bool past = index.integer < 0 || (v->kind == Kind::List ? std::size_t(index.integer) >= v->list.size()
+                                                                            : index.integer != 0);
+            if (past && nil_ok_ > 0 && !(index.integer >= 0 && index.integer < extruders_))
+                return TemplateValue{};
             if (v->kind != Kind::List) { // a single value is a list of one
-                if (index.integer != 0)
+                // Several heads: one value a head, the unused ones the first
+                // head's filament (rule 8, the Prusa XL).
+                if (index.integer != 0 && !(index.integer > 0 && index.integer < extruders_))
                     src_.fail(index_at, "'" + name + "' has one value: index 0 only");
                 return *v;
             }
@@ -518,6 +528,8 @@ private:
         ++at_; // (
         std::vector<TemplateValue> args;
         std::vector<std::size_t> where;
+        if (name == "is_nil")
+            ++nil_ok_;
         if (!take(")")) {
             do {
                 space();
@@ -527,6 +539,8 @@ private:
             if (!take(")"))
                 src_.fail(at_, "')' is expected");
         }
+        if (name == "is_nil")
+            --nil_ok_;
         const auto count = [&](std::size_t lo, std::size_t hi) {
             if (args.size() < lo || args.size() > hi)
                 src_.fail(at, name + "() takes " + (lo == hi ? std::to_string(lo) : std::to_string(lo) + " to " + std::to_string(hi)) +
@@ -654,6 +668,8 @@ private:
     std::size_t at_, end_;
     const std::function<const TemplateValue*(std::string_view)>& lookup_;
     long long extruder_ = 0;
+    long long extruders_ = 1; // the printer's heads: one value each in every vector (rule 8)
+    int nil_ok_ = 0;          // inside is_nil(): a value not there is nil
 
     // Inside an expression, a list where one value is expected and a text
     // written as a number count as that value (rule 10 bis bis, GM15, BH50).

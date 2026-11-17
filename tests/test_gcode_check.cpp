@@ -212,6 +212,48 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         const GcodeCheck noted = check_gcode(g2, heat);
         CHECK(noted.ok());
         CHECK(!noted.notes.empty());
+         // The ways firmwares set a nozzle (gcode_firmware.md, rule 1, FW11):
+        // M109 R, M104/M109 T<n>, RepRapFirmware's G10 P S and M568 P S.
+        for (const char* set : {"M109 R210\n", "M104 T0 S210\n", "G10 P0 S210\n", "M568 P0 S210\n"}) {
+            CAPTURE(set);
+            std::string g3 = ho.gcode;
+            for (const char* m : {"M104", "M109"})
+                for (std::size_t at = g3.find(m); at != std::string::npos; at = g3.find(m))
+                    g3.replace(at, 4, "M117");
+            g3.insert(g3.find("G28"), set);
+            CHECK(check_gcode(g3, heat).ok());
+        }
+        // A printer with no heater (a filament at 0 °C, Cocoa Press): not asked for.
+        Settings cold = h;
+        cold.variables["temperature"] = {"0"};
+        CHECK_FALSE(gcode_limits(slice_model(cube(), cold), cold).require_heat);
+    }
+    {
+        // Each heater on its own: a start that only heats the bed still gets
+        // the nozzle (the Deltacomb DC-20).
+        Settings d = test_printer();
+        d.start_gcode = "M140 S55\nG28";
+        d.variables["temperature"] = {"215"};
+        const Output o = slice_and_write(cube(), d);
+        const std::string head = o.gcode.substr(0, o.gcode.find(";LAYER_CHANGE"));
+        CHECK(head.find("M104 S215") != std::string::npos);
+        CHECK(head.find("M109 S215") != std::string::npos);
+        CHECK(head.find("M190") == std::string::npos); // the bed is the start's own
+    }
+    {
+        // The simple version always homes (gcode_macros.md, rule 10 bis, GM21):
+        // the machine's own start cannot be read, the simple one has no G28.
+        Settings m = test_printer();
+        m.start_gcode = "G1 Z5 F600";
+        m.variables["temperature"] = {"210"};
+        m.machine_macros.dialect = "prusaslicer";
+        m.machine_macros.templates["start"] = "G28\nM104 S{no_such_variable}";
+        const Output o = slice_and_write(cube(), m);
+        const std::size_t home = o.gcode.find("\nG28");
+        const std::size_t first_layer = o.gcode.find(";LAYER_CHANGE");
+        REQUIRE(home != std::string::npos);
+        CHECK(home < first_layer);
+        CHECK(o.gcode.find("M104 S{") == std::string::npos);
     }
 }
 

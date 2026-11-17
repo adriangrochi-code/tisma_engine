@@ -2746,6 +2746,11 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["layer_height"] = TemplateValue::of(s.layer_height);
     c.variables["first_layer_height"] = TemplateValue::of(s.first_layer_height);
     c.variables["nozzle_diameter"] = list({TemplateValue::of(s.nozzle_diameter)});
+    // The printer's heads: the extruders, or as many as the machine's own
+    // G-code values give nozzles (a Prusa XL, rule 8: one value a head).
+    const auto nozzles = s.machine_macros.values.find("nozzle_diameter");
+    const int heads = std::max({s.extruders, 1, nozzles == s.machine_macros.values.end() ? 1 : int(nozzles->second.size())});
+    c.variables[kExtrudersVariable] = TemplateValue::of(static_cast<long long>(heads));
     c.variables["filament_diameter"] = list({TemplateValue::of(s.filament_diameter)});
     // machine.variables: one value per extruder.
     for (const auto& [name, values] : s.variables) {
@@ -2797,7 +2802,11 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     }
     c.variables["num_extruders"] = TemplateValue::of(1LL);
     c.variables["initial_extruder"] = c.variables["initial_tool"] = TemplateValue::of(0LL);
-    c.variables["is_extruder_used"] = list({TemplateValue::of(true)});
+    {
+        std::vector<TemplateValue> used(std::size_t(heads), TemplateValue::of(false)); // the other heads unused
+        used.front() = TemplateValue::of(true);
+        c.variables["is_extruder_used"] = TemplateValue::of(std::move(used));
+    }
     // A tool change waits for the next nozzle's temperature (gcode_variables.md);
     // with ooze prevention the engine waits itself (multi_extruder.md, rule 7).
     c.variables["wait_for_extruder_temp"] = TemplateValue::of(!s.ooze_prevention);
@@ -3006,6 +3015,33 @@ std::string without_negative_tools(std::string_view gcode) {
     return out;
 }
 
+// The heaters a G-code sets: the nozzle (M104, M109, also with R or T<n>;
+// RepRapFirmware's G10 S; M116's wait), the bed (M140, M190), the chamber
+// (M141, M191) (gcode_firmware.md, rule 1: each heater on its own).
+HeatersSet heaters_set(std::string_view gcode) {
+    HeatersSet out;
+    std::size_t at = 0;
+    while (at < gcode.size()) {
+        const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
+        std::string_view line = gcode.substr(at, end - at);
+        at = end + 1;
+        line = line.substr(std::min(line.find_first_not_of(" \t"), line.size()));
+        const std::string_view word = line.substr(0, line.find_first_of(" \t;\r"));
+        std::string command(word);
+        for (char& c : command)
+            c = char(std::toupper(static_cast<unsigned char>(c)));
+        // RepRapFirmware 3's M568 S sets a tool's temperature too.
+        if (command == "M104" || command == "M109" || command == "M116" ||
+            ((command == "G10" || command == "M568") && line.find_first_of("Ss", word.size()) != std::string_view::npos))
+            out.nozzle = true;
+        else if (command == "M140" || command == "M190")
+            out.bed = true;
+        else if (command == "M141" || command == "M191")
+            out.chamber = true;
+    }
+    return out;
+}
+
 bool sets_temperature(std::string_view gcode) {
     std::size_t at = 0;
     while (at < gcode.size()) {
@@ -3080,6 +3116,25 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         } catch (const TemplateError& e) {
             Settings plain = given;
             plain.machine_macros = {};
+            // The simple version always homes (gcode_macros.md, rule 10 bis,
+            // GM21): G28 first when it has neither G28 nor a start macro.
+            const auto homes = [](std::string_view text) {
+                std::size_t at = 0;
+                while (at < text.size()) {
+                    const std::size_t end = std::min(text.find('\n', at), text.size());
+                    std::string line(text.substr(at, end - at));
+                    at = end + 1;
+                    line.erase(0, std::min(line.find_first_not_of(" \t"), line.size()));
+                    for (char& c : line)
+                        c = char(std::toupper(static_cast<unsigned char>(c)));
+                    if ((line.starts_with("G28") && (line.size() == 3 || !std::isdigit(static_cast<unsigned char>(line[3])))) ||
+                        line.starts_with("START_PRINT") || line.starts_with("PRINT_START"))
+                        return true;
+                }
+                return false;
+            };
+            if (!homes(plain.start_gcode))
+                plain.start_gcode = "G28 ; home: the simple start G-code has none\n" + plain.start_gcode;
             if (warnings)
                 warnings->push_back({"gcode_macro", -1, 0.0,
                                      "The printer's own G-code (" + given.machine_macros.dialect +
@@ -3395,7 +3450,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     const double nozzle = start_nozzle,
                  bed = first_layer_value("first_layer_bed_temperature", "bed_temperature", std::size_t(std::max(bed_tool - 1, 0)));
     // The bed first, waited for, then the nozzle set (gcode_templates.md, rule 10, T10).
-    const bool heat = s.auto_temperatures && !sets_temperature(start_gcode);
+    // Each heater on its own (gcode_firmware.md, rule 1): a start that only
+    // heats the bed still gets the nozzle (QA, 17-11-2026: the Deltacomb DC-20).
+    const HeatersSet start_sets = heaters_set(start_gcode);
+    const bool heat = s.auto_temperatures && !start_sets.nozzle;
+    const bool heat_bed = s.auto_temperatures && !start_sets.bed;
     const bool heat_nozzle = heat && nozzle > 0.0;
     // What the start writes, as the time estimate reads it too (its heating
     // and waits, print_time.md, rules 8 to 10 and 14).
@@ -3403,7 +3462,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << text;
         g.machine_gcode(text);
     };
-    if (heat && bed > 0.0)
+    if (heat_bed && bed > 0.0)
         start_text(std::string(dialect.wait == Dialect::Wait::None ? "M140 " : "M190 ") + dialect.temperature +
                    std::to_string(std::lround(bed)) + "\n");
     // Several extruders: each one used set, then waited for after the start
@@ -4718,7 +4777,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The bed for the rest of the print, from the second layer
         // (multi_extruder.md, rule 4): that of extruders.bed_temperature_from,
         // or of the first extruder to print on that layer.
-        if (l == 1 && heat) {
+        if (l == 1 && (heat || heat_bed)) {
             int first = g.tool();
             for (const Step& st : steps)
                 if (st.type && st.tool > 0) {
@@ -4727,12 +4786,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 }
             const int from = s.bed_temperature_from > 0 ? s.bed_temperature_from : std::max(first, 1);
             const double rest = value_of("bed_temperature", std::size_t(from - 1));
-            if (rest > 0.0 && std::lround(rest) != std::lround(bed))
+            if (heat_bed && rest > 0.0 && std::lround(rest) != std::lround(bed))
                 g.custom(std::string("M140 ") + dialect.temperature + std::to_string(std::lround(rest)) + "\n");
             // Each extruder used from its first layer's temperature to the
             // print's, when they differ, without waiting (a temperature test
             // sets its own bands).
-            if (!nozzle_changes)
+            if (!nozzle_changes && heat)
                 for (int e = 1; e <= std::max(s.extruders, 1); ++e) {
                     if (s.extruders > 1 && !tools_used[std::size_t(e)])
                         continue;

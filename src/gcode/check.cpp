@@ -313,12 +313,30 @@ private:
             known_[0] = known_[1] = known_[2] = false; // homed: where exactly, the printer knows
         else if (kind == 'G' && (n == 10 || n == 11) && parameters.empty() && !custom_)
             firmware_retraction(n == 10);
+        else if ((kind == 'G' && n == 10 && param['S' - 'A']) || (kind == 'M' && n == 568 && param['S' - 'A'])) {
+            // RepRapFirmware: G10 P<tool> S<t> and RRF 3's M568 P<tool> S<t>
+            // set a tool's temperature (gcode_firmware.md, rule 1).
+            const std::optional<double>& p = param['P' - 'A'];
+            const std::size_t k = p && *p >= 0.0 ? std::size_t(*p) : tool_;
+            const double t = *param['S' - 'A'];
+            if (cold_.size() <= k)
+                cold_.resize(k + 1, false);
+            cold_[k] = t < 1.0;
+            if (t >= 1.0) {
+                if (heated_.size() <= k)
+                    heated_.resize(k + 1, false);
+                heated_[k] = true;
+            }
+        }
         else if (kind == 'M' && (n == 104 || n == 109)) {
             // The nozzle's heater set to 0: nothing may extrude from it until
             // it is set again (the spec team's BH10).
             const std::optional<double>& t = param['T' - 'A'];
             const std::size_t k = t && *t >= 0.0 ? std::size_t(*t) : tool_;
-            if (const std::optional<double>& s = param['S' - 'A']) {
+            // S, or R (wait for this exact temperature, cooling too), the
+            // same set point (gcode_firmware.md, rule 1, FW11).
+            const std::optional<double>& given = param['S' - 'A'] ? param['S' - 'A'] : param['R' - 'A'];
+            if (const std::optional<double>& s = given) {
                 if (cold_.size() <= k)
                     cold_.resize(k + 1, false);
                 cold_[k] = *s < 1.0;
@@ -726,7 +744,13 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         limits.belt_is_z = s.belt_is_z;
     }
     // A printer's profile (a bed and its start G-code) heats before printing.
-    limits.require_heat = !s.bed.empty() && !s.start_gcode.empty();
+    // Not without a nozzle temperature: a printer with no heater (Cocoa
+    // Press's chocolate, gcode_firmware.md, rule 1, FW11).
+    const auto t = s.variables.find("temperature");
+    const bool no_heater = t != s.variables.end() && !t->second.empty() &&
+                           std::all_of(t->second.begin(), t->second.end(),
+                                       [](const std::string& v) { return std::strtod(v.c_str(), nullptr) <= 0.0; });
+    limits.require_heat = !s.bed.empty() && !s.start_gcode.empty() && !no_heater;
     if (!s.bed.empty()) { // and never off the bed
         double bed_lo[2] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
         double bed_hi[2] = {-bed_lo[0], -bed_lo[1]};
