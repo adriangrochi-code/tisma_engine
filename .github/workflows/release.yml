@@ -266,6 +266,9 @@ jobs:
         run: |
           # macOS goes up in publish_macos, once its own gate passes.
           rm -f packages/*-macos-*
+          # The gate's screenshots stay a CI artifact only, never in the
+          # release, loose or zipped (owner's decision, 17-11-2026).
+          rm -f packages/*.png
           python3 tools/release_notes.py "$TAG" > notes.md
           version="$(cat VERSION)"
           prerelease=""
