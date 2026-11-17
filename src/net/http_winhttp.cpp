@@ -61,6 +61,8 @@ std::string last_error(const char* what) {
 
 bool https_available() { return true; }
 
+void keep_tls_at_exit() {}
+
 Response perform(const Request& request) {
     Response out;
     Url url;

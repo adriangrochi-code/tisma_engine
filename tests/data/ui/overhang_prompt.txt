@@ -1,0 +1,11 @@
+# The owner (2026-11-16): «no tener soporte siempre es muy grave». A T with
+# overhangs and the supports off: the Slice button asks «¿activar soportes?»;
+# «Activar soportes y laminar» turns them on and the slice has them. A cube
+# (no overhang) is not asked about.
+press-slice
+expect-control overhang_prompt
+menu overhang_enable
+slice
+expect-gcode-count ;TYPE:Support 20
+expect-setting support.enabled true
+expect-setting support.automatic true

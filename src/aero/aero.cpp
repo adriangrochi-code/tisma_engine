@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <optional>
 
 namespace tisma::aero {
@@ -246,7 +247,11 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         const double L = r.frontal_size_mm;
         l.origin = V{lo[0] - 1.5 * L, lo[1] - 1.5 * L, lo[2] - 1.5 * L};
         LbmOptions& o = l.o;
-        o.nx = int(std::ceil((hi[0] - lo[0] + 4.5 * L) / dx));
+        // 1.5 frontal sizes ahead; behind the part, its own length along the
+        // air and 3 frontal sizes more, for its wake (aerodynamics.md, the
+        // owner's request of 2026-11-16 with the Benchy).
+        const double length = hi[0] - lo[0];
+        o.nx = int(std::ceil((length + 1.5 * L + length + 3.0 * L) / dx));
         o.ny = int(std::ceil((size_y + 3.0 * L) / dx));
         o.nz = int(std::ceil((size_z + 3.0 * L) / dx));
         // The part in voxels of the lattice's size, placed in the lattice.
@@ -391,6 +396,7 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
                 return std::nullopt;
             return double(flow.mean_density[c]);
         };
+        std::vector<std::size_t> unset; // faces with no air near them
         for (std::size_t t = 0; t < tris; ++t) {
             if (area[t] <= 0.0)
                 continue;
@@ -415,11 +421,81 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
                         }
                     }
                 }
-            const double cp = count > 0 ? sum / count : 0.0;
+            // A face in a gap narrower than a cell: the nearest fluid cell
+            // round its centre, up to three cells away.
+            if (count == 0) {
+                const V m{(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0, (a[2] + b[2] + c[2]) / 3.0};
+                double best = std::numeric_limits<double>::infinity();
+                for (int dz = -3; dz <= 3; ++dz)
+                    for (int dy = -3; dy <= 3; ++dy)
+                        for (int dxx = -3; dxx <= 3; ++dxx) {
+                            const double d2 = double(dxx * dxx + dy * dy + dz * dz);
+                            if (d2 >= best || d2 > 9.0)
+                                continue;
+                            if (const auto rho = density_at({m[0] + dxx * dx, m[1] + dy * dx, m[2] + dz * dx})) {
+                                best = d2;
+                                sum = ((*rho - flow.inlet_density) / 3.0) / q_lat;
+                                count = 1;
+                            }
+                        }
+            }
+            if (count == 0) {
+                unset.push_back(t);
+                continue;
+            }
+            const double cp = sum / count;
             r.cp[t] = float(cp);
             pressure_x += -cp * normal[t][0] * area[t];
             pressure_y += -cp * normal[t][1] * area[t];
             pressure_z += -cp * normal[t][2] * area[t];
+        }
+        // Faces no air reaches (a closed pocket, a slit) push nothing, but
+        // still get a colour: the value of the nearest face that has one, so
+        // that no face of the map is left blank (aerodynamics.md, Results).
+        if (!unset.empty()) {
+            const auto centre = [&](std::size_t t) {
+                V m{0, 0, 0};
+                for (int k = 0; k < 3; ++k) {
+                    const Vec3f q = turned.corner(t, k);
+                    m[0] += q.x / 3.0, m[1] += q.y / 3.0, m[2] += q.z / 3.0;
+                }
+                return m;
+            };
+            const auto key = [&](const V& m) {
+                return std::array<long, 3>{long(std::floor(m[0] / dx)), long(std::floor(m[1] / dx)), long(std::floor(m[2] / dx))};
+            };
+            std::vector<char> is_unset(tris, 0);
+            for (std::size_t t : unset)
+                is_unset[t] = 1;
+            std::map<std::array<long, 3>, std::vector<std::size_t>> buckets;
+            for (std::size_t t = 0; t < tris; ++t)
+                if (area[t] > 0.0 && !is_unset[t])
+                    buckets[key(centre(t))].push_back(t);
+            const long reach = long(std::max(o.nx, std::max(o.ny, o.nz)));
+            for (std::size_t t : unset) {
+                const V m = centre(t);
+                const auto k = key(m);
+                double best = std::numeric_limits<double>::infinity();
+                float value = 0.0f;
+                // Rings of buckets outwards until a ring cannot hold a closer face.
+                for (long ring = 0; ring <= reach && double(ring - 1) * dx < std::sqrt(best); ++ring)
+                    for (long dz = -ring; dz <= ring; ++dz)
+                        for (long dy = -ring; dy <= ring; ++dy)
+                            for (long dxx = -ring; dxx <= ring; ++dxx) {
+                                if (std::max({std::labs(dxx), std::labs(dy), std::labs(dz)}) != ring)
+                                    continue;
+                                const auto it = buckets.find({k[0] + dxx, k[1] + dy, k[2] + dz});
+                                if (it == buckets.end())
+                                    continue;
+                                for (std::size_t u : it->second) {
+                                    const V n = centre(u);
+                                    const double d2 = (n[0] - m[0]) * (n[0] - m[0]) + (n[1] - m[1]) * (n[1] - m[1]) + (n[2] - m[2]) * (n[2] - m[2]);
+                                    if (d2 < best)
+                                        best = d2, value = r.cp[u];
+                                }
+                            }
+                r.cp[t] = value;
+            }
         }
         r.cd_pressure_surface = pressure_x / r.frontal_area_mm2;
         r.blockage = double(main.shadow) / (double(o.ny) * double(o.nz));
@@ -431,8 +507,7 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
             pressure_z = flow.pressure_force[2] / (q_lat * double(main.shadow)) * r.frontal_area_mm2;
         }
 
-        // Streamlines: seeds on a grid across the part's front, a little
-        // wider than it, followed through the mean velocity (Heun's steps
+        // Streamlines: seeds on a grid over the inlet plane, followed through the mean velocity (Heun's steps
         // of half a cell) until they leave the domain or meet the part.
         const auto cell_of = [&](int x, int y, int z) {
             return (std::size_t(z) * std::size_t(o.ny) + std::size_t(y)) * std::size_t(o.nx) + std::size_t(x);
@@ -469,14 +544,22 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
             const int x = int(gx), y = int(gy), z = int(gz);
             return x >= 0 && y >= 0 && z >= 0 && x < o.nx && y < o.ny && z < o.nz && solid[cell_of(x, y, z)] != 0;
         };
-        constexpr int kSeeds = 11;
-        const double ylo = (lo[1] - origin[1]) / dx - 0.25 * size_y / dx, yhi = (hi[1] - origin[1]) / dx + 0.25 * size_y / dx;
-        const double zlo = (lo[2] - origin[2]) / dx - 0.25 * size_z / dx, zhi = (hi[2] - origin[2]) / dx + 0.25 * size_z / dx;
-        for (int sj = 0; sj < kSeeds; ++sj)
-            for (int sk = 0; sk < kSeeds; ++sk) {
-                double p[3] = {3.0, ylo + (yhi - ylo) * (sj + 0.5) / kSeeds, zlo + (zhi - zlo) * (sk + 0.5) / kSeeds};
-                if (size_z <= 1e-9)
-                    p[2] = 0.5 * (zlo + zhi);
+        // Seeds on a grid over the whole inlet plane (aerodynamics.md,
+        // Results): the lines pass beside, over and behind the part. A finer
+        // grid across the part's front, a little wider than it, adds the
+        // lines that wrap round it and into its wake.
+        std::vector<std::array<double, 2>> seeds;
+        const auto seed_grid = [&](int count, double ylo, double yhi, double zlo, double zhi) {
+            for (int sj = 0; sj < count; ++sj)
+                for (int sk = 0; sk < count; ++sk)
+                    seeds.push_back({ylo + (yhi - ylo) * (sj + 0.5) / count,
+                                     size_z <= 1e-9 ? 0.5 * (zlo + zhi) : zlo + (zhi - zlo) * (sk + 0.5) / count});
+        };
+        seed_grid(15, 0.0, double(o.ny), 0.0, double(o.nz));
+        seed_grid(11, (lo[1] - origin[1]) / dx - 0.25 * size_y / dx, (hi[1] - origin[1]) / dx + 0.25 * size_y / dx,
+                  (lo[2] - origin[2]) / dx - 0.25 * size_z / dx, (hi[2] - origin[2]) / dx + 0.25 * size_z / dx);
+        for (const auto& seed : seeds) {
+                double p[3] = {3.0, seed[0], seed[1]};
                 AeroResult::Streamline line;
                 const int max_steps = 4 * (o.nx + o.ny + o.nz);
                 for (int step = 0; step < max_steps; ++step) {
@@ -558,6 +641,7 @@ std::string result_json(const AeroResult& r, const AeroInput& in) {
                      {"reynolds", finite(r.reynolds)},
                      {"reynolds_simulated", finite(r.reynolds_simulated)},
                      {"simulated", r.simulated},
+                     {"devices", {{"solver", r.solver_device}}},
                      {"ra_mean_um", finite(r.ra_mean_um)},
                      {"roughness_share", finite(r.roughness_share)},
                      {"cells", {r.cells_x, r.cells_y, r.cells_z}},

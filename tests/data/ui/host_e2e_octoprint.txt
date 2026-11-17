@@ -1,0 +1,17 @@
+# The Device page against a fake octoprint, from end to end (the tester's report,
+# 2026-11-16: printers did not connect or send): test, send and print, state.
+slice
+host octoprint {url}
+host key KEY
+host test
+host-wait
+expect-host ok yes
+# Klipper's limits read on the test may change the settings: sliced again.
+slice
+# The G-code that goes, for the fake to compare (release gate G10).
+keep-gcode host_sent_octoprint.gcode
+host send
+host-wait
+expect-host sent yes
+host refresh
+host-wait

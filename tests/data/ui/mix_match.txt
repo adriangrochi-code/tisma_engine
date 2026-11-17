@@ -1,0 +1,25 @@
+# The mixing dialog's colour sought and quick palette (color_mixing_plus.md,
+# rules 4 and 22; the spec team's MX5, MX6 and MX18).
+wait 3
+set machine.extruders 2
+filament-color 1 #FFFFFF
+filament-color 2 #000000
+open-mixing
+wait 3
+# MX5: grey from white and black: a blend and its recommendations.
+color-target #808080
+menu find_blend
+expect-control add_match.0
+expect-control add_match.1
+menu add_match.0
+expect-mixes 1
+# MX6: green cannot be reached with white and black.
+color-target #00FF00
+menu find_blend
+expect-control color_not_reached
+# MX18: the quick palette of 4 filaments and cycles of up to 2 layers: 10 samples.
+set machine.extruders 4
+filament-color 3 #FF0000
+filament-color 4 #0000FF
+menu quick_palette.2
+expect-text 10 muestras en la paleta

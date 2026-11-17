@@ -62,7 +62,9 @@ std::vector<Layer> resin_layers(const IndexedMesh& mesh, const Settings& s) {
         top = std::max(top, double(v.z));
     if (mesh.vertices.empty())
         return {};
-    return plan_layers(0.0, top, {s.resin_layer_height, s.resin_layer_height});
+    // The first layer resin.first_layer_height, the others resin.layer_height (rule 1, RE11).
+    const double first = s.resin_first_layer_height > 0.0 ? s.resin_first_layer_height : s.resin_layer_height;
+    return plan_layers(0.0, top, {first, s.resin_layer_height});
 }
 
 std::vector<Polygons> sections_of(const IndexedMesh& mesh, const Settings& s, const std::vector<Layer>& layers) {

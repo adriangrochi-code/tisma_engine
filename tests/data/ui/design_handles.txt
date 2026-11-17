@@ -1,0 +1,17 @@
+# The arrows of a step in its panel (cad_design.md, rule 11 quinquies): a new
+# box shows one for each measure; dragging the height's up makes it taller,
+# built again when let go.
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-design 8000
+wait 5
+expect-control design_handle_1
+expect-control design_handle_2
+expect-control design_handle_3
+drag-control design_handle_3 0 -40
+wait 10
+expect-design-above 8500
+menu design_dialog_accept
+wait 3
+expect-no-control design_handle_3

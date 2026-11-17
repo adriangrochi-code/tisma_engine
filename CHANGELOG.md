@@ -9,6 +9,66 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+
+## [0.13.0-beta.4] - 2026-11-17
+El mismo programa que 0.13.0-beta.3.
+### Cambiado
+- La página de la versión trae solo los instaladores, los zip y los APK. Las capturas de pantalla de las pruebas ya no
+  se publican.
+
+## [0.13.0-beta.3] - 2026-11-17
+0.13.0-beta.1 y 0.13.0-beta.2 no se publicaron: sus builds de publicación fallaban. Esta versión los reúne.
+
+- Relleno: lista de ángulos por capa en ciclo (`infill.angles`), para lo sólido, los puentes, el planchado y los
+  rellenos de líneas.
+- Puentes con un número entero de líneas de borde a borde: sin franja sin cubrir junto a los bordes.
+- Verificación del G-code: una línea que no es un comando sale como problema, también en el G-code de la máquina; un
+  movimiento que atraviesa lo ya impreso (más de una capa por debajo) también; `T<n>` se sigue en impresoras sin
+  longitudes de cambio de herramienta (Sovol SV04 en modo 02).
+- Más rápido en piezas grandes y con muchas islas: Hilbert y Arquímedes recortados por franjas (hasta 27 veces), el
+  giroide por bandas (4,5 veces y la mitad de memoria al 100 % en 300 mm), el orden monótono sin costo cuadrático, el
+  orden de muchas islas por grilla, y las paredes de cada isla por separado con 16 islas o más.
+- `info`: contornos degenerados aparte; con varias partes, el volumen es la unión; `overlap_volume` en mallas con
+  cáscaras que se pisan.
+- Varios cabezales, calentadores por separado, versión simple con `G28` y `is_nil` fuera del vector (barrido del
+  paquete de perfiles); modo vaso con agujeros (VA5).
+- Colores pintados: se laminan, cada zona con su filamento o mezcla; las paredes finas llevan el color de su lado
+  pintado en todo el espesor y los techos y pisos pintados colorean sus capas sólidas. El color termina en el borde
+  pintado (antes se pasaba un ancho de línea a lo largo de la pared, o dos en una pared fina, y una cara que terminaba
+  en la base de una capa pintaba esa capa). Casillas de la pintura en el proyecto (`paint_slots`). 8 veces más rápido
+  en piezas grandes.
+- Mezclas de color: degradé a lo largo de X o Y (cada franja de la capa con su mezcla) y pieza de la paleta de mezclas.
+- Mezclas de color: el estimado de cambios antes de laminar sigue el alto por filamento y el paso
+  (`mixing.cadence_heights`, `mixing.step`).
+- Mezclas de color: ajuste `mixing.predictor` (`mixer` o `spectral`) para predecir el color buscado; nombres de los
+  colores en inglés y español y paleta rápida de 10 y 26 muestras.
+- Mandar a la impresora: un nombre de archivo con espacios, `#`, acentos o comillas llega entero (PrusaLink,
+  OctoPrint, Moonraker).
+- Paquete de perfiles: el flujo de puentes de la impresión, el volumen de purga de la impresora y el tipo de
+  filamento se leen, sin avisos.
+- Varias boquillas: temperatura de espera del filamento (`filament.idle_temperature`); un extrusor que la impresora
+  no tiene pasa a ser el 1, con un aviso.
+- Copias: la cuenta de las que entran en la cama deja lugar a la falda.
+- Línea de comandos: `profile --filament` acepta el nombre del filamento sin la marca.
+- Mezcla de colores: secuencias escritas (`1,1,2` o `AAB`), pares automáticos y mezclas apagadas o con nombre.
+- Firma de versiones: la clave se crea sola al enchufar el pendrive (`tools/crear_clave_pendrive.bat`), con copia en
+  un segundo pendrive, la clave pública en GitHub y los borradores firmados; después queda bloqueada.
+- Macros: una lista por extrusor y los números escritos como texto valen como número en cuentas y comparaciones
+  (G-code de inicio de las Bambu X1).
+- Dos extrusores con G-code de máquina: sin `T-1` y sin apagar la boquilla activa al empezar.
+- Relleno `honeycomb_3d` (panal 3D).
+- Macros: bloques de sentencias con `if … then … endif` (cambios de herramienta de las Prusa XL y Snapmaker U1).
+- Varias boquillas con el G-code de inicio de la máquina: cada boquilla se calienta antes de imprimir (nunca a 0).
+- Macros: `ceil`.
+- Resina: altura propia de la primera capa (`resin.first_layer_height`).
+- Con altura de capa variable, la separación Z del soporte respeta los milímetros pedidos.
+- Paquete de perfiles: un filamento con `compatible_prints` solo se ofrece con esas impresiones.
+- Anchos de cordón: se aceptan si superan la altura de capa y hasta tres boquillas; muy finos, con aviso.
+- `support.xy_gap` en % se mide sobre el perímetro externo.
+- `speed.first_layer` fija la velocidad de toda la primera capa, o un porcentaje de cada una ("50%").
+- Impresión secuencial: una sola falda alrededor de todos los objetos, impresa una vez al principio.
+- Un bloqueador de soporte pintado en parte de una cara ya no deja soporte bajo su borde (el margen del soporte
+  entraba 1,6 mm en la zona bloqueada).
 - El modo vaso ya no se niega a laminar cuando la placa tiene otro modelo marcado como no imprimible.
 - La barra de estado ya no lee fuera del texto con un «1 » al final (lo encontró ASan).
 - Importar preferencias reemplaza la lista de proyectos recientes en vez de duplicarla.
@@ -29,6 +89,18 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - Los contadores con uno dicen «1 aviso», «1 capa», «1 pared» (antes «1 avisos»), también en inglés.
 - `--ground-*` con un 3MF que trae bloqueadores o forzadores de soporte ya no los deja fuera de lugar: avisa que
   todavía no se puede.
+
+### Corregido
+- Verificación del G-code: las macros de Klipper que empiezan con `_` (`_ON_LAYER_CHANGE` de las RatRig) son
+  comandos, y en el G-code de la máquina una línea que no es comando (`//M85`, `==========`) es un aviso y no impide
+  laminar; solo una expresión sin evaluar (Z-Bolt Classic) sigue siendo problema. Sin esto, 146 de 2 267
+  variantes del paquete no laminaban con la verificación nueva (FW12).
+- G-code de la máquina igual al del programa original: se llenan las variables que quedaban vacías o en 0 y cambiaban
+  las ramas `{if}` en 447 variantes del paquete. Entre ellas: filamento abrasivo, boquilla de alto caudal, `zhop`,
+  aceleración de la pared externa, orden de impresión, nombres de los perfiles, posición, lo retraído y lo usado, y las
+  de Cura. Una variable que el motor todavía no llena es ahora un aviso visible (GM22).
+- G-code de la máquina: un número calculado sale como lo escribe el programa original, con 6 cifras significativas como mucho (`523.843`, no `523.8431796449507`), y `1e-7` se lee como número (GM23).
+- Publicación: el programa ya no se cierra con error si recibe SIGTERM mientras arranca y descarga el paquete; los datos firmados de las pruebas llegan iguales a Windows; el build de macOS pide macOS 13.3 o más nuevo.
 
 ## [0.12.0-beta.1] - 2026-11-10
 
@@ -1894,7 +1966,10 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.4...HEAD
+[0.13.0-beta.4]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.3...v0.13.0-beta.4
+[0.13.0-beta.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.12.0-beta.1...v0.13.0-beta.3
+[0.12.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...v0.12.0-beta.1
 [0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
 [0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
 [0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2

@@ -1,0 +1,9 @@
+# Supports in the preview (the owner, 2026-11-16): with supports on, the
+# legend has its Support and Support interface rows (kinds 11 and 12), with
+# their colour, and the G-code has them.
+set support.enabled true
+slice
+wait 10
+expect-control legend_kind_11
+expect-control legend_kind_12
+expect-gcode-count ;TYPE:Support 20

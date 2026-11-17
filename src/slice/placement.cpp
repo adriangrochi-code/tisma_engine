@@ -145,6 +145,14 @@ std::size_t copies_that_fit(const TriangleMesh& mesh, std::size_t copies, const 
     for (const auto& p : s.bed)
         for (int a = 0; a < 2; ++a)
             lo[a] = std::min(lo[a], p[std::size_t(a)]), hi[a] = std::max(hi[a], p[std::size_t(a)]);
+    // The brim and the skirt go around the copies and must fit too (BH52):
+    // the bed, less what they reach past the outer copies.
+    const double bead = s.first_line_width.value > 0.0 ? s.first_line_width.of(s.first_layer_height) : s.wall_width;
+    const bool brim = s.brim_width > 0.0 && (s.brim_type == BrimType::Outer || s.brim_type == BrimType::OuterAndInner);
+    const double reach = (brim ? s.brim_gap + s.brim_width : 0.0) +
+                         (s.skirt_loops > 0 ? s.skirt_distance + double(s.skirt_loops) * bead : 0.0);
+    for (int a = 0; a < 2; ++a)
+        lo[a] += reach, hi[a] -= reach;
     const BoundingBox box = mesh.bounding_box();
     const std::array<double, 2> size{double(box.max.x) - double(box.min.x), double(box.max.y) - double(box.min.y)};
     const double spacing = s.sequential ? std::max(s.placement_spacing, s.clearance_radius) : s.placement_spacing;

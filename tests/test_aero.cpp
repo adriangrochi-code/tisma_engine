@@ -4,6 +4,7 @@
 
 #include "aero/aero.hpp"
 #include "aero/lbm.hpp"
+#include "io/stl.hpp"
 #include "mesh/shapes.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -12,6 +13,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <numbers>
 
 using namespace tisma;
@@ -268,4 +270,64 @@ TEST_CASE("aero: EP9, a 20 mm cube in air along +X at 10 m/s, fast quality", "[.
     REQUIRE(n > 0);
     INFO(front / n);
     CHECK(front / n > 0.66);
+}
+
+TEST_CASE("aero: AE8, the Benchy with the air from bow to stern", "[.aero-benchy]") {
+    // bench/3DBenchy.stl.xz, unpacked by CTest (tests/CMakeLists.txt). Its
+    // bow is at +X (the hull narrows there), so the air goes along -X.
+    const char* path = std::getenv("TISMA_BENCHY_STL");
+    if (path == nullptr)
+        SKIP("TISMA_BENCHY_STL is not set");
+    AeroInput in;
+    in.mesh = read_stl(path).mesh;
+    in.direction = {-1.0, 0.0, 0.0};
+    in.quality = AeroQuality::Fast;
+    in.resolution_check = false;
+    float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+    for (std::size_t t = 0; t < in.mesh.triangle_count(); ++t)
+        for (int k = 0; k < 3; ++k) {
+            const Vec3f p = in.mesh.corner(t, k);
+            lo[0] = std::min(lo[0], p.x), lo[1] = std::min(lo[1], p.y), lo[2] = std::min(lo[2], p.z);
+            hi[0] = std::max(hi[0], p.x), hi[1] = std::max(hi[1], p.y), hi[2] = std::max(hi[2], p.z);
+        }
+    const AeroResult r = analyze(in);
+    REQUIRE(r.ok);
+    REQUIRE(r.simulated);
+    const double length = hi[0] - lo[0], L = r.frontal_size_mm, dx = L / quality_cells(in.quality);
+    // The domain: 1.5 sizes ahead, the part, and its length and 3 sizes behind.
+    CHECK(r.cells_x * dx >= 2.0 * length + 4.5 * L - dx);
+    // The stern's faces (the transom, facing the way the air goes) have Cp,
+    // negative on the whole, behind the cabin.
+    double sum = 0.0, weight = 0.0;
+    std::size_t blank = 0, stern = 0;
+    for (std::size_t t = 0; t < in.mesh.triangle_count(); ++t) {
+        const Vec3f a = in.mesh.corner(t, 0), b = in.mesh.corner(t, 1), c = in.mesh.corner(t, 2);
+        const Vec3f u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+        const double nx = u.y * v.z - u.z * v.y, ny = u.z * v.x - u.x * v.z, nz = u.x * v.y - u.y * v.x;
+        const double area = 0.5 * std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (area <= 1e-9 || (a.x + b.x + c.x) / 3.0 > lo[0] + 3.0 || nx / (2.0 * area) > -0.5)
+            continue;
+        ++stern;
+        blank += r.cp[t] == 0.0f;
+        sum += r.cp[t] * area, weight += area;
+    }
+    INFO("stern faces " << stern << ", blank " << blank << ", mean Cp " << sum / weight);
+    REQUIRE(stern > 10);
+    CHECK(blank <= stern / 100);
+    CHECK(sum / weight < 0.0);
+    // The streamlines: at least 30 % go past the stern and reach the outlet;
+    // some go through the wake, right behind the hull.
+    std::size_t past = 0, wake = 0;
+    for (const AeroResult::Streamline& s : r.streamlines) {
+        bool behind = false, in_wake = false;
+        for (const auto& p : s.points) {
+            behind = behind || p[0] < lo[0] - 5.0f;
+            in_wake = in_wake || (p[0] < lo[0] - 1.0f && p[0] > lo[0] - L && p[1] > lo[1] && p[1] < hi[1] && p[2] > lo[2] && p[2] < hi[2]);
+        }
+        past += behind && !s.points.empty() && s.points.back()[0] < lo[0] - length - 2.5 * L;
+        wake += in_wake;
+    }
+    INFO("lines " << r.streamlines.size() << ", past the stern to the outlet " << past << ", through the wake " << wake);
+    CHECK(double(past) >= 0.3 * double(r.streamlines.size()));
+    CHECK(wake >= 3);
 }

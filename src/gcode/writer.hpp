@@ -79,6 +79,10 @@ std::string toolchange_template_error(const Settings& settings);
 // M190, M141, M191, M116, or RepRapFirmware's G10 S): the start G-code that
 // does is left to it (gcode_firmware.md, rule 1).
 bool sets_temperature(std::string_view gcode);
+struct HeatersSet {
+    bool nozzle = false, bed = false, chamber = false;
+};
+HeatersSet heaters_set(std::string_view gcode);
 
 // The command that sets the firmware's pressure advance: M900 K (Marlin's
 // linear advance), SET_PRESSURE_ADVANCE ADVANCE= (Klipper) or M572 D0 S

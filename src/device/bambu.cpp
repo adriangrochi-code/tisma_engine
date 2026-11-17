@@ -268,10 +268,14 @@ std::string bambu_package(const std::string& gcode) {
                              {"Metadata/plate_1.gcode.md5", net::md5_hex(gcode)}});
 }
 
-json bambu_project_file(const BambuPrint& job, const std::string& file, const std::string& package_md5, int seq) {
+json bambu_project_file(const BambuPrint& job, const std::string& file, const std::string& gcode_md5, int seq) {
+    // As the phone apps send it, tried on an A1 mini (QA, 2026-11-17): an
+    // empty mapping is an empty text, not an empty list.
     json mapping = json::array();
     for (const int slot : job.ams_mapping)
         mapping.push_back(slot);
+    if (mapping.empty())
+        mapping = "";
     return json{{"print",
                  {{"sequence_id", std::to_string(seq)},
                   {"command", "project_file"},
@@ -281,11 +285,12 @@ json bambu_project_file(const BambuPrint& job, const std::string& file, const st
                   {"task_id", "0"},
                   {"subtask_id", "0"},
                   {"subtask_name", job.name},
-                  {"file", file},
                   // The card's root, as OpenBambuAPI shows it for a file
                   // there (not tested on hardware).
                   {"url", "ftp:///" + file},
-                  {"md5", package_md5},
+                  // The MD5 of the G-code inside (plate_1.gcode), as the phone
+                  // apps send it, tried on an A1 mini (QA, 2026-11-17).
+                  {"md5", gcode_md5},
                   {"timelapse", job.timelapse},
                   {"bed_type", job.bed_type.empty() ? std::string("auto") : job.bed_type},
                   {"bed_levelling", job.bed_leveling},
@@ -332,7 +337,7 @@ BambuResult bambu_print(const BambuConfig& config, const BambuPrint& job,
         return out;
     }
     try {
-        s.client->publish(request_topic(s), bambu_project_file(job, file, net::md5_hex(package), sequence++).dump(), 1);
+        s.client->publish(request_topic(s), bambu_project_file(job, file, net::md5_hex(job.gcode), sequence++).dump(), 1);
         s.client->disconnect();
     } catch (const net::TlsError& e) {
         out.code = "unreachable";

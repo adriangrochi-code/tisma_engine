@@ -12,6 +12,7 @@
 #include "io/model.hpp"
 #include "io/paths.hpp"
 #include "io/stl.hpp"
+#include "slice/contours.hpp"
 #include "slice/placement.hpp"
 #include "io/ply.hpp"
 #include "io/vtk.hpp"
@@ -36,7 +37,9 @@
 #include "gcode/preview.hpp"
 #include "perimeters/sites.hpp"
 #include "perimeters/transitions.hpp"
+#include "slice/job.hpp"
 #include "slice/layers.hpp"
+#include "slice/color_mix.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
 #include "slice/transform.hpp"
@@ -108,17 +111,24 @@ constexpr std::string_view kUsage =
     "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
     "                     [--summary <summary.json>]   (the nodes' summary: print time, filament, layers)\n"
     "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
+    "                     [--mixes <mixes.json> --mix <n>]   (the blends, as a project keeps them, and the one the model prints\n"
+    "                      with: docs/spec/features/color_mixing.md, rule 15)\n"
     "                     [--align-to-y-axis]   (the copies in one column along Y)\n"
     "                     [--strict]   (a warning is an error: no G-code, exit code 4)\n"
     "                     [--ground-largest-face | --ground-face-normal X,Y,Z | --ground-face-point X,Y,Z]\n"
     "                     [--inspect-mesh <out.json|->] [--export-statistics <out.json|->] [--export-settings <out.json|->]\n"
     "  tisma-engine slice <project> -o <out.gcode> --summary <summary.json> [--sandbox] [--no-gpu] [--yes]\n"
-    "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md)\n"
+    "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md;\n"
+    "                     another 3MF: its parts with --config <settings.json> or the defaults, its own settings\n"
+    "                     translated with --translation <the pack's translation/<dialect>.json>, or\n"
+    "                     --translation-dir <the pack's translation/ folder>: the table of the file's program)\n"
     "  on a project's slice, analyze, aero and orient: [--config-over <partial.json>] [--set group.key=value ...]\n"
     "  aero and orient also take a model with --config <settings.json> instead of a project\n"
     "                     (changes over the project's own settings)\n"
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
+    "                       [--mode lightest-infill [--no-zones] [--ribs] [--safety <factor, 2>]]\n"
+    "                       (the lowest infill that holds, as for a project: structural_optimization.md, rules 2 to 4)\n"
     "  tisma-engine analyze <project> -o <report.json> [--config <settings.json>] [...]\n"
     "                       (the first part with Engineering conditions, as the project keeps them)\n"
     "  tisma-engine analyze <project> -o <result.tea> --summary <summary.json> --sandbox --mode analyze\n"
@@ -168,6 +178,9 @@ struct SliceArgs {
     std::string statistics;
     std::string export_settings;
     bool align_y = false;
+    // Blends (color_mixing.md, rule 15) and the one the model prints with.
+    std::string mixes;
+    int mix = 0;
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -255,6 +268,20 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
                 return std::nullopt;
             }
             out.copies = std::size_t(v);
+        } else if (a == "--mixes" && !analyze) {
+            if (!value(out.mixes))
+                return std::nullopt;
+        } else if (a == "--mix" && !analyze) {
+            std::string n;
+            if (!value(n))
+                return std::nullopt;
+            char* end = nullptr;
+            const long v = std::strtol(n.c_str(), &end, 10);
+            if (n.empty() || *end != '\0' || v < 2 || v > 255) {
+                err << "error: --mix needs a blend's number, from 2 to 255\n";
+                return std::nullopt;
+            }
+            out.mix = int(v);
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
             return std::nullopt;
@@ -334,7 +361,12 @@ void print_mesh_summary(const ModelFile& stl, double seconds, std::ostream& out)
         out << "min: " << box.min.x << " " << box.min.y << " " << box.min.z << "\n";
         out << "max: " << box.max.x << " " << box.max.y << " " << box.max.z << "\n";
     }
-    out << "volume: " << stl.mesh.signed_volume() << "\n";
+    // Several parts may overlap: their meshes' volumes added count the
+    // overlap twice. The union comes from the slices (info's volume below).
+    if (stl.parts > 1)
+        out << "parts_volume: " << stl.mesh.signed_volume() << "\n";
+    else
+        out << "volume: " << stl.mesh.signed_volume() << "\n";
     out << "read_ms: " << seconds * 1000.0 << "\n";
 }
 
@@ -368,6 +400,18 @@ const Entry* pick_entry(const std::vector<Entry>& all, const std::vector<const E
     for (const Entry& e : all)
         if (lower(name_of(e)) == lower(query))
             return &e;
+    // The name without the maker's ("Prusament PLA" of Prusament's), when it
+    // is only one's: other names holding its words do not make it ambiguous.
+    const Entry* by_model = nullptr;
+    int models = 0;
+    const std::string tail = " " + lower(query);
+    for (const Entry& e : all) {
+        const std::string name = lower(name_of(e));
+        if (name.size() > tail.size() && name.compare(name.size() - tail.size(), tail.size(), tail) == 0)
+            by_model = &e, ++models;
+    }
+    if (models == 1)
+        return by_model;
     if (found.size() == 1)
         return found.front();
     if (found.empty()) {
@@ -447,6 +491,12 @@ int cmd_profile(std::span<const std::string_view> args, std::ostream& out, std::
             return kExitInput;
         }
         settings = with_profile(settings, ProfileKind::Filament, filament_profile(*f).settings);
+    } else {
+        // The temperatures come with the filament: without one they stay at
+        // 0, and the G-code check rejects a slice that extrudes cold. Said here,
+        // where it is chosen (seen from the iOS app, 2026-11-12).
+        err << "warning: no --filament: the nozzle and bed temperatures stay at 0, so a slice with these settings "
+               "is rejected by the G-code check; name one with --filament \"<vendor> <name>\"\n";
     }
     const std::string json = settings_json(settings);
     if (output.empty() || output == "-") {
@@ -493,11 +543,23 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         const auto layers = slice_levels(indexed, height_field(indexed), heights);
         const double slice_ms =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - slice_start).count();
-        std::size_t contours = 0;
+        // A contour that encloses no area (the edge of a degenerate triangle,
+        // a sliver) is counted apart: it slices to nothing.
+        std::size_t contours = 0, degenerate = 0;
         for (const auto& layer : layers)
-            contours += layer.size();
+            for (const Contour& c : layer) {
+                double twice = 0.0;
+                for (std::size_t i = 0, n = c.points.size(); i < n; ++i) {
+                    const Vec3f& a = c.points[i];
+                    const Vec3f& b = c.points[(i + 1) % n];
+                    twice += double(a.x) * double(b.y) - double(b.x) * double(a.y);
+                }
+                (c.closed && std::abs(twice) > 2e-6 ? contours : degenerate) += 1;
+            }
         out << "layers: " << layers.size() << "\n";
         out << "contours: " << contours << "\n";
+        if (degenerate > 0)
+            out << "degenerate_contours: " << degenerate << "\n";
         out << "slice_ms: " << slice_ms << "\n";
         if (layers.empty())
             return kExitOk; // flat or thinner than a layer: no middle layer to look at
@@ -535,6 +597,12 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         out << "mid_layer_toolpaths: " << walls.size() << "\n";
         out << "mid_layer_toolpaths_ms: " << walls_ms << "\n";
         out << "sliced_volume: " << volume << "\n";
+        if (stl.parts > 1) {
+            out << "volume: " << volume << "\n"; // the parts' union, overlaps once
+        } else if (const double mesh = stl.mesh.signed_volume(); mesh - volume > std::max(0.01 * mesh, 1.0)) {
+            // Shells of one mesh that overlap: volume counted them twice.
+            out << "overlap_volume: " << mesh - volume << "\n";
+        }
     }
     return kExitOk;
 }
@@ -734,12 +802,18 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         fallback += (fallback.empty() ? "" : ", ") + key;
     if (!fallback.empty())
         err << "warning: no speed for " << fallback << ": using a stock Ender-3's\n";
+    // Without a printer (no bed in the settings) the G-code is not for a
+    // machine: said, so that it is not sent to one as it is (QA, 2026-11-16).
+    if (settings.bed.empty())
+        err << "warning: no printer in the settings (no bed): the part stays round X 0, Y 0, nothing is checked "
+               "against a bed, and the G-code heats only what the settings give; give a printer's settings with --config\n";
 
     ModelFile stl;
     double seconds = 0.0;
     if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+    job_step("slicing", 5);
     // A face on the bed (orca_2_5.md, rule 25), before the transforms and the placement.
     if (parsed->ground != SliceArgs::Ground::None) {
         if (!stl.negative.empty() || !stl.support_blockers.empty() || !stl.support_enforcers.empty()) {
@@ -785,6 +859,33 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
             followers.add_triangle(more->corner(t, 0), more->corner(t, 1), more->corner(t, 2));
     if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &followers, parsed->align_y))
         return kExitUsage;
+    // The blends and the one the model prints with (color_mixing.md, rule 15).
+    std::vector<ColorMix> mixes;
+    if (!parsed->mixes.empty()) {
+        std::ifstream in(parsed->mixes, std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        if (!in) {
+            err << "error: cannot read '" << parsed->mixes << "'\n";
+            return kExitInput;
+        }
+        try {
+            mixes = parse_color_mixes(text.str());
+        } catch (const ColorMixError& e) {
+            err << "error: " << parsed->mixes << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+    }
+    if (parsed->mix != 0) {
+        const auto it = std::find_if(mixes.begin(), mixes.end(), [&](const ColorMix& m) { return m.id == parsed->mix; });
+        if (it == mixes.end() || !mix_usable(*it, settings.extruders)) {
+            err << "error: --mix " << parsed->mix << ": no blend with that number in --mixes that this machine ("
+                << settings.extruders << " extruders) can print\n";
+            return kExitUsage;
+        }
+        for (MeshObject& o : objects)
+            o.extruder = parsed->mix;
+    }
     const auto piece = [&](std::size_t from, std::size_t to) {
         TriangleMesh m;
         for (std::size_t t = from; t < to && t < followers.triangle_count(); ++t)
@@ -805,9 +906,10 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         return kExitModel;
     }
     std::unique_ptr<gpu::Context> gpu;
+    std::string no_gpu = "turned off in the settings (gpu = off)";
     if (settings.gpu == GpuMode::Auto)
-        gpu = gpu::Context::create();
-    out << "gpu: " << (gpu ? gpu->device_name() : std::string("none, using the CPU")) << "\n";
+        gpu = gpu::Context::create({}, &no_gpu);
+    out << "gpu: " << (gpu ? gpu->device_name() : "none, using the CPU: " + no_gpu) << "\n";
     // Stress-guided infill (docs/INFILL.md): the part analysed under the load
     // case first, to know where it works hardest.
     StressField stress;
@@ -842,16 +944,17 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         warnings.push_back({"speed_fallback", -1, 0.0,
                             "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
-        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, mixes.empty() ? nullptr : &mixes, cut,
                              nullptr, &support_volumes);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, mixes.empty() ? nullptr : &mixes, cut,
                              nullptr, &support_volumes);
     }
+    job_step("gcode", 60);
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {
         err << "error: " << reason << "\n";
@@ -908,6 +1011,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     const std::vector<GcodeThumbnail> thumbnails = gcode_thumbnails(stl.mesh, settings, &warnings);
     const GcodeExport exported = export_gcode(target, sliced, settings, &warnings, thumbnails);
+    job_step("finishing", 95);
     if (!exported.written) {
         err << "error: " << exported.error << "\n";
         for (const GcodeProblem& p : exported.check.problems)
@@ -952,6 +1056,10 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         << " layers, " << exported.check.stats.filament << " mm of filament net of retractions)\n";
     out << "wrote " << target.string() << "\n";
     out << "warnings: " << warnings.size() << "\n";
+    // The slice's notices, one line each (a vase with holes, vase_mode.md,
+    // rule 7: said once when slicing).
+    for (const std::string& notice : sliced.notices)
+        out << "note: " << notice << "\n";
     if (!parsed->warnings.empty()) {
         if (!write_file(parsed->warnings, [&](std::ostream& report) { report << warnings_json(warnings); })) {
             err << "error: cannot write '" << parsed->warnings << "'\n";
@@ -1059,7 +1167,40 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     return kExitOk;
 }
 
-int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+int cmd_analyze(std::span<const std::string_view> all_args, std::ostream& out, std::ostream& err) {
+    // The optimizing modes on a model with its case, as on a project
+    // (structural_optimization.md, rules 2 to 4): --mode lightest-infill
+    // [--no-zones] [--ribs] [--safety <factor>].
+    std::string mode = "analyze";
+    bool no_zones = false, ribs = false;
+    ProjectEngineering engineering;
+    std::vector<std::string_view> rest;
+    for (std::size_t i = 0; i < all_args.size(); ++i) {
+        const std::string_view a = all_args[i];
+        if (a == "--mode" && i + 1 < all_args.size()) {
+            mode = std::string(all_args[++i]);
+        } else if (a == "--no-zones") {
+            no_zones = true;
+        } else if (a == "--ribs") {
+            ribs = true;
+        } else if (a == "--safety" && i + 1 < all_args.size()) {
+            double v = 0.0;
+            const std::string_view text = all_args[++i];
+            const auto [end, ec] = chars_to(text.data(), text.data() + text.size(), v);
+            if (ec != std::errc() || end != text.data() + text.size() || !(v >= 1.0 && v <= 10.0)) {
+                err << "error: --safety is a factor from 1 to 10\n";
+                return kExitUsage;
+            }
+            engineering.structural.safety_factor = v;
+        } else {
+            rest.push_back(a);
+        }
+    }
+    if (mode != "analyze" && mode != "lightest-infill") {
+        err << "error: analyze <model>: --mode is analyze or lightest-infill\n";
+        return kExitUsage;
+    }
+    const std::span<const std::string_view> args(rest);
     const std::optional<SliceArgs> parsed = parse_slice_args(args, err, true);
     if (!parsed) {
         err << kUsage;
@@ -1109,8 +1250,41 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         return kExitModel;
     }
     std::unique_ptr<gpu::Context> gpu;
+    std::string no_gpu = "turned off in the settings (gpu = off)";
     if (settings.gpu == GpuMode::Auto && analysis.model == AnalysisModel::AsPrinted)
-        gpu = gpu::Context::create();
+        gpu = gpu::Context::create({}, &no_gpu);
+    if (mode == "lightest-infill") {
+        if (analysis.fixtures.empty() || analysis.loads.empty()) {
+            err << "error: the case needs a fixed zone and a force\n";
+            return kExitInput;
+        }
+        nlohmann::json result{{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "lightest-infill"},
+                              {"part", std::filesystem::path(parsed->model).filename().string()}};
+        try {
+            result["summary"] = lightest_infill_search(mesh, stl.mesh, settings, analysis, engineering, no_zones, ribs,
+                                                       [&](double done) {
+                                                           if (parsed->progress)
+                                                               out << "progress: lightest-infill " << done << std::endl;
+                                                       },
+                                                       result);
+        } catch (const AnalysisError& e) {
+            err << "error: " << e.what() << "\n";
+            return kExitAnalysis;
+        }
+        const nlohmann::json& summary = result["summary"];
+        if (summary["found"].get<bool>() && !summary["solid"].get<bool>())
+            out << "lightest_infill: " << summary["density"].get<int>() << " %, min_safety " << summary["min_safety"].dump()
+                << " (asked " << engineering.structural.safety_factor << ")\n";
+        else
+            out << "lightest_infill: " << (summary["solid"].get<bool>() ? "the case analyses the part solid" : "not even 100 % holds")
+                << "\n";
+        if (!write_file(parsed->output, [&](std::ostream& json) { json << result.dump(2) << "\n"; })) {
+            err << "error: cannot write '" << parsed->output << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->output << "\n";
+        return kExitOk;
+    }
     if (parsed->estimate) {
         AnalysisEstimate estimate;
         try {
@@ -1146,7 +1320,10 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         err << "error: " << e.what() << "\n";
         return kExitAnalysis;
     }
+    if (!gpu && analysis.model == AnalysisModel::AsPrinted)
+        report.warnings.push_back({"gpu_unavailable", "the part was sliced on the CPU: " + no_gpu});
     const ElasticityResult& e = report.result.elasticity;
+    out << "devices: slicing " << report.slicing_device << ", solver " << report.solver_device << "\n";
     out << "voxels: " << report.grid.count() << " of " << report.grid.solid.size() << " (" << report.grid.hx
         << " mm, " << report.rows_per_layer << " rows per layer)\n";
     out << "solver: " << e.levels << " levels, " << e.iterations << " iterations, residual " << e.residual

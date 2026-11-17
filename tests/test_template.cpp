@@ -117,7 +117,9 @@ TEST_CASE("templates: values from the settings' text", "[template]") {
     CHECK(TemplateValue::parse("true").kind == TemplateValue::Kind::Bool);
     CHECK(TemplateValue::parse("\"gyroid\"").text == "gyroid");
     CHECK(TemplateValue::parse("60%").text == "60%");
-    CHECK(template_text(TemplateValue::of(0.1 + 0.2)) == "0.30000000000000004");
+    // At most 6 significant digits (gcode_macros.md, rule 3, GM23).
+    CHECK(template_text(TemplateValue::of(0.1 + 0.2)) == "0.3");
+    CHECK(template_text(TemplateValue::of(523.8431796449507)) == "523.843");
     CHECK(template_text(TemplateValue::of(-0.0)) == "0");
 }
 
@@ -331,4 +333,18 @@ TEST_CASE("templates: regex_replace and the print time's parts (orca_2_5.md, rul
     CHECK(output_filename(s, model, GcodeTotals{3725.0, 0.0}) == "1:2:5_3725_0");
     CHECK(output_filename(s, model, std::nullopt) ==
           "{print_time_hour}:{print_time_minute}:{print_time_sec}_{print_time_total_sec}_{print_time_day}");
+}
+
+TEST_CASE("templates: several heads, one value each; is_nil past the end (gcode_macros.md, rule 8, GM20)", "[template]") {
+    TemplateContext c = context();
+    c.variables["filament_notes"] = TemplateValue::of(std::string("note"));
+    // One head: [1] of a single value is an error, but nil inside is_nil().
+    CHECK_THROWS_AS(render_template("{filament_notes[1]}", c, "test"), TemplateError);
+    CHECK(render_template("{if is_nil(filament_notes[1])}nil{else}set{endif}", c, "test") == "nil");
+    CHECK(render_template("{if is_nil(temperature[4])}nil{else}set{endif}", c, "test") == "nil");
+    // Five heads (a Prusa XL): every head has the first head's value.
+    c.variables[kExtrudersVariable] = TemplateValue::of(5LL);
+    CHECK(render_template("{filament_notes[3]}", c, "test") == "note");
+    CHECK(render_template("{if is_nil(filament_notes[3])}nil{else}set{endif}", c, "test") == "set");
+    CHECK_THROWS_AS(render_template("{filament_notes[5]}", c, "test"), TemplateError);
 }

@@ -3,3 +3,4 @@
 *.3mf binary
 *.xz binary
 tests/data/pack/** binary
+tests/data/library/** binary

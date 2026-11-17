@@ -1,0 +1,17 @@
+# The cut's connectors (model_tools.md, rule 18; the spec team's MT23): a pin.
+# Both halves of the 10 mm cube cut at 5 mm have the hole; the pin, 6 mm long,
+# is a third model.
+wait 3
+cut 5 pin 4 3 0.1
+expect-objects 3 pasador
+expect-model 0 5 4.2 4.2 3.1
+expect-model 1 5 4.2 4.2 3.1
+expect-model 2 6
+# MT32: the upper half lies on its cut face, so an inverted dowel goes back to
+# the lower half, with a notice: the 6 mm pin cut at 3 mm with a 2 mm dowel
+# 1 mm deep.
+cut 3 dowel 2 1 0.1 invert
+expect-objects 4
+expect-model 2 4
+expect-model 3 3 2.2 2.2 1.1
+expect-toast para que apoye plana

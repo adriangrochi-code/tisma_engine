@@ -1,0 +1,17 @@
+# A plan that does not include the job (cloud.md, CC16): the server answers
+# 402, and the program says in its own words which plans include it, not the
+# server's text.
+menu more
+menu cloud_slice
+cloud-wait
+cloud-field email ana@example.com
+cloud-field password secret123
+menu cloud_login
+cloud-wait
+expect-cloud logged yes
+menu cloud_close
+menu more
+menu cloud_slice
+cloud-slice-wait
+expect-toast Included in the plan Free, Maker
+expect-no-text Payment required

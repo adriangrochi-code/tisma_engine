@@ -42,7 +42,12 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
                                   ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
                                   : params.bead / 2.0) +
                              kTouching;
-        out[l] = Clipper2Lib::Difference(regions[l], offset(regions[l - 1], reach), Clipper2Lib::FillRule::NonZero);
+        // What the layer below prints: a sliver thinner than half a bead (the
+        // first section of a slope's foot) prints nothing and holds nothing
+        // (the support sweep, 2026-11-16: the foot of a 60 degree arm was left
+        // bare over one).
+        const Polygons below = offset(offset(regions[l - 1], -params.bead / 4.0), params.bead / 4.0);
+        out[l] = Clipper2Lib::Difference(regions[l], offset(below, reach), Clipper2Lib::FillRule::NonZero);
     });
     return out;
 }
@@ -192,6 +197,26 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
     return over;
 }
 
+std::vector<int> support_gaps_above(const std::vector<double>& thickness, double z_gap) {
+    std::vector<int> out(thickness.size(), 0);
+    for (std::size_t l = 0; l < thickness.size(); ++l) {
+        double sum = 0.0;
+        for (std::size_t k = l + 1; k < thickness.size() && sum + thickness[k] / 2.0 <= z_gap + 1e-9; ++k)
+            sum += thickness[k], ++out[l];
+    }
+    return out;
+}
+
+std::vector<int> support_gaps_below(const std::vector<double>& thickness, double z_gap) {
+    std::vector<int> out(thickness.size(), 0);
+    for (std::size_t l = 0; l < thickness.size(); ++l) {
+        double sum = 0.0;
+        for (std::size_t k = l; k-- > 0 && sum + thickness[k] / 2.0 <= z_gap + 1e-9;)
+            sum += thickness[k], ++out[l];
+    }
+    return out;
+}
+
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params) {
     const std::size_t n = regions.size();
@@ -221,7 +246,10 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
     const std::int64_t x0 = bounds.left - margin * pixel, y0 = bounds.top - margin * pixel;
     const int width = int((bounds.right - bounds.left) / pixel) + 2 * margin + 1;
     const int height = int((bounds.bottom - bounds.top) / pixel) + 2 * margin + 1;
-    const auto above_of = [&](std::size_t l) { return l + 1 + std::size_t(std::max(params.z_gap_layers, 0)); };
+    const auto above_of = [&](std::size_t l) {
+        const int gap = params.gap_above && l < params.gap_above->size() ? (*params.gap_above)[l] : params.z_gap_layers;
+        return l + 1 + std::size_t(std::max(gap, 0));
+    };
     const auto adds = [&](std::size_t l) { return above_of(l) < n && !over[above_of(l)].empty(); };
     // From the top down, a chunk of layers at a time: their grids filled in
     // parallel; the column, in order, grows with every overhang (gap layers
@@ -246,7 +274,24 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
                 // overhang thinner than a pixel (a slope just past the
                 // threshold) still sets the pixels it crosses.
                 a = BitGrid(x0, y0, pixel, width, height);
-                a.fill(offset(over[above_of(l)], params.margin + 0.75 * to_mm(pixel)));
+                const std::size_t above = above_of(l);
+                Polygons grown = offset(over[above], params.margin + 0.75 * to_mm(pixel));
+                // Without a margin (snug), an overhang thinner than a bead,
+                // next to the wall it hangs from, would leave a zone no line
+                // prints once kept xy_gap off that wall: such strips grow by
+                // half a bead (the support sweep, 2026-11-16: a strip of the
+                // Benchy's cabin went bare). Wide zones keep their edge (SM8).
+                if (params.margin <= 0.0) {
+                    const Polygons thin = Clipper2Lib::Difference(
+                        over[above], offset(offset(over[above], -params.bead / 2.0), params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
+                    if (!thin.empty())
+                        grown = Clipper2Lib::Union(grown, offset(thin, params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
+                }
+                // The margin never reaches a blocked face (BH47): what is
+                // blocked keeps no support under it.
+                if (params.block && above < params.block->size() && !(*params.block)[above].empty())
+                    grown = Clipper2Lib::Difference(grown, (*params.block)[above], Clipper2Lib::FillRule::NonZero);
+                a.fill(grown);
             }
         });
         const std::size_t count = top - bottom;
@@ -264,7 +309,15 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
             // and bottom_gap_layers over the part it stands on (supports_more.md, rule 6).
             out[l] = Clipper2Lib::Difference(simplify(c.outline(), params.bead / 2.0), offset(regions[l], params.xy_gap),
                                              Clipper2Lib::FillRule::NonZero);
-            for (std::size_t g = 1; g <= std::size_t(std::max(params.bottom_gap_layers, 0)) && g <= l && !out[l].empty(); ++g)
+            // Nor right under the part within the z gap: under a slope, each
+            // layer's support reached under the part of the layer above it,
+            // fused to it (the support sweep, 2026-11-16: 84 mm2 under a 75
+            // degree arm).
+            const int gap = params.gap_above && l < params.gap_above->size() ? (*params.gap_above)[l] : params.z_gap_layers;
+            for (std::size_t g = 1; g <= std::size_t(std::max(gap, 0)) && l + g < n && !out[l].empty(); ++g)
+                out[l] = Clipper2Lib::Difference(out[l], offset(regions[l + g], params.xy_gap / 2.0), Clipper2Lib::FillRule::NonZero);
+            const int below = params.gap_below && l < params.gap_below->size() ? (*params.gap_below)[l] : params.bottom_gap_layers;
+            for (std::size_t g = 1; g <= std::size_t(std::max(below, 0)) && g <= l && !out[l].empty(); ++g)
                 // Grown by half a bead: no slivers left hanging over its edge.
                 out[l] = Clipper2Lib::Difference(out[l], offset(regions[l - g], params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
         });

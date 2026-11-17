@@ -1,0 +1,2 @@
+# Release gate G1: an OBJ box opens onto the plate at its size.
+expect-on-plate 20 20 10

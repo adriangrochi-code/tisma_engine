@@ -1,0 +1,11 @@
+# Release gate G12: the resin_exposure calibration test from its card in the
+# Calibration tab: «Create» makes it and the card closes; it slices to
+# its file.
+menu tab_calibration
+menu cal_row_resin_exposure
+expect-control cal_create
+menu cal_create
+wait 10
+expect-no-control cal_create
+slice
+expect-resin-file

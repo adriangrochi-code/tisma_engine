@@ -1,0 +1,18 @@
+# A shell needs a face to open (cad_design.md, rule 7; the tool refuses none):
+# while none is picked, OK in the dialog stays grey and says so; ended without
+# one, the history says it in one line and the step is red in the timeline.
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-design 8000
+menu design_dialog_accept
+wait 3
+menu design_group_modify
+menu design_op_shell
+expect-control design_pick_done
+expect-text Elegí al menos una cara para vaciar
+menu design_command
+key enter
+wait 5
+expect-text Elegí al menos una cara para vaciar
+expect-no-text select 1…1000 faces

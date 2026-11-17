@@ -41,6 +41,30 @@ IndexedMesh cylinder(double r, double h, int n) {
     return m;
 }
 
+// A tube round (100, 100): radius r outside, a hole of radius hole, from z 0
+// to h, n sides.
+IndexedMesh tube(double r, double hole, double h, int n) {
+    IndexedMesh m;
+    for (double rad : {r, hole})
+        for (int ring = 0; ring < 2; ++ring)
+            for (int i = 0; i < n; ++i) {
+                const double a = 2.0 * std::numbers::pi * i / n;
+                m.vertices.push_back({float(100.0 + rad * std::cos(a)), float(100.0 + rad * std::sin(a)), float(ring * h)});
+            }
+    const auto at = [n](int wall, int ring, int i) { return std::uint32_t(wall * 2 * n + ring * n + (i % n)); };
+    for (int i = 0; i < n; ++i) {
+        m.triangles.push_back({at(0, 0, i), at(0, 0, i + 1), at(0, 1, i + 1)}); // outside, outwards
+        m.triangles.push_back({at(0, 0, i), at(0, 1, i + 1), at(0, 1, i)});
+        m.triangles.push_back({at(1, 0, i), at(1, 1, i + 1), at(1, 0, i + 1)}); // the hole, inwards
+        m.triangles.push_back({at(1, 0, i), at(1, 1, i), at(1, 1, i + 1)});
+        m.triangles.push_back({at(0, 1, i), at(0, 1, i + 1), at(1, 1, i + 1)}); // top
+        m.triangles.push_back({at(0, 1, i), at(1, 1, i + 1), at(1, 1, i)});
+        m.triangles.push_back({at(0, 0, i), at(1, 0, i + 1), at(0, 0, i + 1)}); // bottom
+        m.triangles.push_back({at(0, 0, i), at(1, 0, i), at(1, 0, i + 1)});
+    }
+    return m;
+}
+
 IndexedMesh box(double x, double y, double z) {
     IndexedMesh m;
     for (int k = 0; k < 8; ++k)
@@ -217,3 +241,86 @@ TEST_CASE("vase mode: not with supports (VA4)", "[vase]") {
     CHECK(parse_settings(settings_json(s)).vase);
     CHECK_FALSE(parse_settings("{}").vase);
 }
+
+TEST_CASE("vase mode: a hole or several pieces is said once (rule 7, VA5)", "[vase]") {
+    static const std::string said = "Vase mode with holes or several pieces: those turns are not a spiral and leave a seam";
+    Settings s = vase_settings();
+    s.bottom_layers = 3;
+    const auto count = [&](const SlicedModel& m) { return std::count(m.notices.begin(), m.notices.end(), said); };
+    // One cylinder: nothing.
+    CHECK(count(slice_model(cylinder(10.0, 5.0, 64), s)) == 0);
+    // Two boxes apart: said, once.
+    IndexedMesh two = box(10, 10, 5);
+    IndexedMesh other = box(10, 10, 5);
+    const auto base = std::uint32_t(two.vertices.size());
+    for (Vec3f v : other.vertices)
+        v.x += 20.0f, two.vertices.push_back(v);
+    for (auto tri : other.triangles)
+        two.triangles.push_back({tri[0] + base, tri[1] + base, tri[2] + base});
+    CHECK(count(slice_model(two, s)) == 1);
+}
+
+TEST_CASE("vase mode with a hole: the outside a spiral, the hole a flat turn, Z never down (rule 7, VA5)", "[vase]") {
+    Settings s = vase_settings();
+    s.bottom_layers = 3;
+    const IndexedMesh part = tube(10.0, 4.0, 5.0, 64);
+    const SlicedModel m = slice_model(part, s);
+    CHECK(std::count(m.notices.begin(), m.notices.end(), std::string(kVaseSeamNotice)) == 1);
+    std::istringstream in(vase_gcode(part, s));
+    std::string line;
+    int layer = -1;
+    double x = 0, y = 0, z = 0, e = 0, highest = 0;
+    int downs = 0;
+    std::map<int, std::pair<double, double>> outside, inside; // per layer: the lowest and highest Z extruded
+    while (std::getline(in, line)) {
+        if (line.rfind(";LAYER_CHANGE", 0) == 0) {
+            ++layer;
+            continue;
+        }
+        if (line.rfind("G92", 0) == 0) {
+            if (const auto k = line.find('E'); k != std::string::npos)
+                e = std::stod(line.substr(k + 1));
+            continue;
+        }
+        if (line.rfind("G1", 0) != 0)
+            continue;
+        double nx = x, ny = y, nz = z, ne = e;
+        std::istringstream words(line.substr(2));
+        std::string w;
+        bool moves = false;
+        while (words >> w) {
+            if (w[0] == ';')
+                break;
+            const double v = std::stod(w.substr(1));
+            if (w[0] == 'X')
+                nx = v, moves = true;
+            else if (w[0] == 'Y')
+                ny = v, moves = true;
+            else if (w[0] == 'Z')
+                nz = v;
+            else if (w[0] == 'E')
+                ne = v;
+        }
+        if (nz < highest - 1e-6 && nz < z) // a lift coming back down is not lower than the print
+            ++downs;
+        highest = std::max(highest, nz);
+        if (moves && ne > e && layer >= 3) {
+            auto& span = std::hypot(nx - 100.0, ny - 100.0) > 7.0 ? outside[layer] : inside[layer];
+            if (span.first == 0.0 && span.second == 0.0)
+                span = {nz, nz};
+            span.first = std::min(span.first, nz), span.second = std::max(span.second, nz);
+        }
+        x = nx, y = ny, z = nz, e = ne;
+    }
+    CHECK(downs == 0);
+    for (int l = 4; l < 24; ++l) {
+        CAPTURE(l);
+        const double top = 0.2 * (l + 1);
+        REQUIRE(outside.contains(l));
+        REQUIRE(inside.contains(l));
+        CHECK_THAT(outside[l].second - outside[l].first, WithinAbs(0.2, 0.01)); // rises a layer
+        CHECK_THAT(inside[l].first, WithinAbs(top, 1e-3));                    // flat, at the layer's top
+        CHECK_THAT(inside[l].second, WithinAbs(top, 1e-3));
+    }
+}
+

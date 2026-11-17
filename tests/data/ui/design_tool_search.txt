@@ -1,0 +1,16 @@
+# Finding a tool (cad_design.md, rule 11 octies; CD29): S opens the search,
+# «redo» shows Redondeo and Enter starts it (it asks for the edges).
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-design 8000
+key s
+wait 2
+expect-control design_tool_search_field
+type redo
+wait 2
+expect-control design_found_op_fillet
+expect-no-control design_found_op_chamfer
+key enter
+wait 2
+expect-control design_pick_done

@@ -25,4 +25,14 @@ struct LayerWalls {
 // left for infill.
 LayerWalls layer_walls(const Polygons& region, const BeadingParams& params);
 
+// Whether the walls leave a stretch of the outline bare: a point of the line
+// half a bead `width` inside the outer bead's centre line (the region shrunk
+// by half of `outer` and half a bead, so that sharp tips, where beads may stop
+// short, are left out) farther than three quarters of a bead from every
+// toolpath. Only when an outer bead is open (a lost stretch leaves the outer
+// loop open). The variable
+// walls left the face of a T's stem bare from its inner corner (the support
+// sweep, 2026-11-16). Own design.
+bool walls_leave_gap(const Polygons& region, const std::vector<Toolpath>& toolpaths, double outer, double width);
+
 } // namespace tisma

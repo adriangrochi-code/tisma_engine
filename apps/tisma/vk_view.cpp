@@ -51,6 +51,7 @@ struct FrameBlock {
     float grid[4];
     float colours[16][4];
     float face_eye[4]; // what the preview's drawn faces face (preview_face_eye)
+    float section[4];  // the section's plane (ViewFrame::section)
 };
 
 // Each draw's values, as view_common.glsl's Draw push constants.
@@ -812,6 +813,7 @@ struct VulkanView::Impl {
             copy(fb.colours[k], f.kind_colours[k], 1.0f);
         const std::array<float, 4> face_eye = preview_face_eye(f);
         std::memcpy(fb.face_eye, face_eye.data(), sizeof fb.face_eye);
+        std::memcpy(fb.section, f.section.data(), sizeof fb.section);
         std::memcpy(uniforms[slot].mapped, &fb, sizeof fb);
 
         VkClearValue clears[3] = {};
@@ -904,6 +906,7 @@ struct VulkanView::Impl {
             bind(Mesh, coarse ? &model_coarse_v : &model_v);
             draw = {};
             copy(draw.colour, f.model);
+            draw.range[3] = 1.0f; // the models are cut by the section
             push(draw);
             if (first > 0)
                 vkCmdDraw(c, first, 1, 0, 0);

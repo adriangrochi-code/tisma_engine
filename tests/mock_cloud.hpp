@@ -3,12 +3,18 @@
 // A mock Tisma Cloud server for the tests, built from docs/spec/features/cloud.md
 // with cpp-httplib's server, on 127.0.0.1 and a free port.
 
+#include "cad/process.hpp"
 #include "io/zip.hpp"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
+#include <sstream>
+#include <cstdlib>
 #include <string>
 #include <thread>
 
@@ -20,6 +26,101 @@ using nlohmann::json;
 class MockCloud {
 public:
     MockCloud() {
+        if (std::getenv("TISMA_MOCK_CLOUD_DOWN")) // a UI test of the notice (CC21)
+            service_ = "down";
+        // The shared library's signed files (p2p_library.md, rule 3 bis),
+        // from a folder such as tests/data/library, without a session.
+        if (const char* dir = std::getenv("TISMA_MOCK_LIBRARY_DIR")) {
+            const std::string folder = dir;
+            const auto serve = [folder](const std::string& name, const char* type) {
+                return [folder, name, type](const httplib::Request&, httplib::Response& res) {
+                    std::ifstream in(folder + "/" + name, std::ios::binary);
+                    if (!in) {
+                        res.status = 404;
+                        return;
+                    }
+                    std::stringstream s;
+                    s << in.rdbuf();
+                    res.set_content(s.str(), type);
+                };
+            };
+            server_.Get("/v1/library/key", serve("key.json", "application/json"));
+            // The provisional download (rule 8 octies): a ticket for a
+            // session, then the seeder's pieces under seed/<sha256>/.
+            server_.Post("/v1/library/relay-ticket", [](const httplib::Request& req, httplib::Response& res) {
+                if (!authorized(req, res))
+                    return;
+                if (req.body != "{}") { // rule 8 octies: an empty object over HTTPS
+                    res.status = 400;
+                    return;
+                }
+                res.set_content(R"({"ticket": "K1", "expires": 4102444800, "relays": []})", "application/json");
+            });
+            const auto seeded = [folder](const std::string& sha, const std::string& name, std::string& out) {
+                std::ifstream in(folder + "/seed/" + sha + "/" + name, std::ios::binary);
+                if (!in)
+                    return false;
+                std::stringstream s;
+                s << in.rdbuf();
+                out = s.str();
+                return true;
+            };
+            server_.Get(R"(/v1/seed/([0-9a-f]{64})/pieces)", [seeded](const httplib::Request& req, httplib::Response& res) {
+                if (req.get_header_value("Authorization") != "Bearer K1") {
+                    res.status = 401;
+                    return;
+                }
+                std::string body;
+                if (!seeded(req.matches[1].str(), "pieces.json", body)) {
+                    res.status = 404;
+                    return;
+                }
+                res.set_content(body, "application/json");
+            });
+            server_.Get(R"(/v1/seed/([0-9a-f]{64})/piece/([0-9]+))", [seeded](const httplib::Request& req, httplib::Response& res) {
+                if (req.get_header_value("Authorization") != "Bearer K1") {
+                    res.status = 401;
+                    return;
+                }
+                std::string data;
+                const std::size_t n = std::stoul(req.matches[2].str()), piece = 1048576;
+                if (!seeded(req.matches[1].str(), "data", data) || n * piece >= data.size()) {
+                    res.status = 404;
+                    return;
+                }
+                res.set_content(data.substr(n * piece, piece), "application/octet-stream");
+            });
+            server_.Get(R"(/v1/library/thumbs/([A-Za-z0-9._-]+))", [folder](const httplib::Request& req, httplib::Response& res) {
+                std::ifstream in(folder + "/thumbs/" + req.matches[1].str(), std::ios::binary);
+                if (!in) {
+                    res.status = 404;
+                    return;
+                }
+                std::stringstream s;
+                s << in.rdbuf();
+                res.set_content(s.str(), "image/webp");
+            });
+            for (const char* name : {"index.json", "blocklist.json"}) {
+                server_.Get(std::string("/v1/library/") + name, serve(name, "application/json"));
+                server_.Get(std::string("/v1/library/") + name + ".sig", serve(std::string(name) + ".sig", "application/octet-stream"));
+            }
+        }
+        // cloud.md, rule 4a: no session; with no node, "down".
+        server_.Get("/v1/status", [this](const httplib::Request&, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            const bool down = service_ == "down";
+            res.set_content(json{{"status", service_},
+                                 {"label_es", down ? "Caído" : "Funcionando"},
+                                 {"label_en", down ? "Down" : "Working"},
+                                 {"message_es", down ? "No hay nodos conectados." : ""},
+                                 {"message_en", down ? "No nodes are connected." : ""},
+                                 {"unavailable", down ? json::array({"slice", "fea"}) : json::array()},
+                                 {"longest_wait_s", down ? 742 : 0},
+                                 {"nodes_online", down ? 0 : 3},
+                                 {"checked_at", "2026-11-12T05:00:00Z"}}
+                                .dump(),
+                            "application/json");
+        });
         server_.Get("/v1/health", [](const httplib::Request&, httplib::Response& res) {
             res.set_content(R"({"ok": true, "billing_url": "https://cloud.example/account"})", "application/json");
         });
@@ -82,6 +183,13 @@ public:
                 res.set_content(R"({"detail": "kind, params and file are needed"})", "application/json");
                 return;
             }
+            // A plan that does not include the job (cloud.md, CC16): the
+            // server's own words, which the program must not show.
+            if (std::getenv("TISMA_MOCK_CLOUD_402")) {
+                res.status = 402;
+                res.set_content(R"({"detail": "Payment required: upgrade your subscription"})", "application/json");
+                return;
+            }
             const httplib::FormData file = req.form.get_file("file");
             if (file.content.size() > (std::size_t(1) << 20)) {
                 res.status = 413;
@@ -142,8 +250,13 @@ public:
             }
             // queued, running at 50 %, done.
             ++polls_;
+            // With TISMA_MOCK_CLOUD_HOLD the job stays running (a test that
+            // closes the program with it under way: the release gate's G15).
             if (state_ != "cancelled")
-                state_ = polls_ == 1 ? "running" : polls_ >= 3 ? "done" : "running";
+                state_ = std::getenv("TISMA_MOCK_CLOUD_HOLD") ? "running"
+                         : polls_ == 1                       ? "running"
+                         : polls_ >= 3                       ? "done"
+                                                             : "running";
             res.set_content(job_json(), "application/json");
         });
         server_.Post(R"(/v1/jobs/([a-z0-9]+)/cancel)", [this](const httplib::Request& req, httplib::Response& res) {
@@ -171,6 +284,29 @@ public:
                 res.set_content(tea.dump(), "application/json");
                 return;
             }
+            // With TISMA_MOCK_CLOUD_ENGINE, a master of test: the engine
+            // slices the project as the nodes do (the release gate's G11).
+            if (const char* engine = std::getenv("TISMA_MOCK_CLOUD_ENGINE")) {
+                const std::filesystem::path dir =
+                    std::filesystem::temp_directory_path() / ("tisma_mock_master_" + std::to_string(port_));
+                std::filesystem::create_directories(dir);
+                const std::string ext = std::filesystem::path(filename_).extension().string();
+                const std::filesystem::path project = dir / ("job" + (ext.empty() ? std::string(".tisma") : ext));
+                std::ofstream(project, std::ios::binary) << project_;
+                const tisma::cad::ProcessResult r = tisma::cad::run_process(
+                    engine, {"slice", project.string(), "-o", (dir / "out.gcode").string(), "--summary",
+                             (dir / "summary.json").string(), "--sandbox"},
+                    600.0);
+                std::ifstream in(dir / "out.gcode", std::ios::binary);
+                const std::string gcode((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                if (!r.started || r.status != 0 || gcode.empty()) {
+                    res.status = 500;
+                    res.set_content(r.err + r.error, "text/plain");
+                    return;
+                }
+                res.set_content(gcode, "text/plain");
+                return;
+            }
             res.set_content("; sliced on the server\nG1 X10 Y10 E1\n", "text/plain");
         });
         port_ = server_.bind_to_any_port("127.0.0.1");
@@ -187,6 +323,7 @@ public:
     json last_report_;
     std::string report_token_, kind_, params_, filename_, project_, state_;
     int polls_ = 0, cancels_ = 0;
+    std::string service_ = "ok"; // what GET /v1/status says
 
 private:
     // T1 is a good session; "disabled" an account the administrator turned

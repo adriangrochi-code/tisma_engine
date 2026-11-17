@@ -1,0 +1,9 @@
+# Release gate G7: a skirt of 2 loops 6 mm off the 20 mm cube, in the first
+# layer only, with no brim: its inner edge 6 mm from the part, within 0.1 mm.
+menu tab_prepare
+set adhesion.skirt_loops 2
+set adhesion.skirt_distance 6
+set adhesion.brim_width 0
+slice
+expect-gcode-valid
+expect-first-layer skirt 5.9 6.1 6.5 8

@@ -19,6 +19,12 @@ bool https_available() {
 #endif
 }
 
+void keep_tls_at_exit() {
+#ifdef CPPHTTPLIB_SSL_ENABLED
+    OPENSSL_init_crypto(OPENSSL_INIT_NO_ATEXIT, nullptr);
+#endif
+}
+
 Response perform(const Request& request) {
     Response out;
     Url url;

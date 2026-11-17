@@ -7,7 +7,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -84,8 +86,8 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     set("filament_type", list_of(TemplateValue::of(s.filament_type)));
     set("spiral_vase", TemplateValue::of(s.vase));
     // The plate chosen to send to a Bambu Lab printer (gcode_macros.md, rule 12).
-    if (!s.bambu_plate.empty())
-        set("curr_bed_type", TemplateValue::of(s.bambu_plate));
+    // Without a plate chosen, Bambu Studio's «Cool Plate» (rule 10 quater).
+    set("curr_bed_type", TemplateValue::of(s.bambu_plate.empty() ? std::string("Cool Plate") : s.bambu_plate));
     set("has_wipe_tower", TemplateValue::of(s.wipe_tower));
     set("standby_temperature_delta", whole(s.standby_delta));
     set("max_fan_speed", list_of(whole(s.fan_max)));
@@ -158,13 +160,140 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     set("first_non_support_filaments", list_of(TemplateValue::of(0LL)));
     set("filament_ids", list_of(TemplateValue::of(std::string())));
     set("curr_y_acceleration_limit", number(s.max_accel_y));
-    set("nozzle_diameter_at_nozzle_id", list_of(number(s.nozzle_diameter)));
+    // By physical nozzle, from 0; the nozzle of the first filament that is
+    // not support, fixed at the start (the Bambu Lab H3C indexes the list
+    // with it); the safe temperature for extruding the fins, 0 (off) when the
+    // pack does not give it.
+    {
+        TemplateValue diameters = list_of(number(s.nozzle_diameter));
+        if (!s.nozzle_diameters.empty()) {
+            diameters.list.clear();
+            for (const double d : s.nozzle_diameters)
+                diameters.list.push_back(number(d));
+        }
+        set("nozzle_diameter_at_nozzle_id", std::move(diameters));
+    }
+    set("initial_no_support_nozzle_id", TemplateValue::of(0LL));
+    set("fins_extrude_safe_temp", list_of(TemplateValue::of(0LL)));
+    // Whether a first-layer filament is TPU; the current filament's long
+    // retraction on an extruder change, false unless the pack gives it.
+    {
+        std::string type = s.filament_type;
+        for (char& ch : type)
+            ch = char(std::toupper(static_cast<unsigned char>(ch)));
+        set("has_tpu_in_first_layer", TemplateValue::of(type == "TPU"));
+    }
+    set("long_retraction_when_ec", TemplateValue::of(false));
     set("overall_chamber_temperature", whole(s.chamber_temperature));
     set("min_vitrification_temperature", TemplateValue::of(0LL));
     set("temperature_vitrification", list_of(TemplateValue::of(0LL)));
     set("hold_chamber_temp_for_flat_print", TemplateValue::of(false));
     set("additional_fan_full_speed_layer", list_of(TemplateValue::of(0LL)));
     set("close_additional_fan_first_x_layers", list_of(TemplateValue::of(0LL)));
+
+    // What the machine's G-code needs to take the same branches as in the
+    // program it comes from (gcode_macros.md, rule 9 bis, GM22).
+    {
+        const std::size_t heads = std::size_t(std::max(s.extruders, 1));
+        const auto each = [&](TemplateValue value) {
+            return TemplateValue::of(std::vector<TemplateValue>(heads, value));
+        };
+        // The value when the profile does not say; the pack's own values
+        // replace it.
+        const auto fallback = [&](const char* name, TemplateValue value) {
+            if (v.contains(name))
+                return;
+            v[name] = std::move(value);
+            c.defaults.insert(name);
+        };
+        fallback("filament_abrasive", each(TemplateValue::of(s.abrasive)));
+        TemplateValue high = TemplateValue::of(std::vector<TemplateValue>{}), kinds = high;
+        for (std::size_t k = 0; k < heads; ++k) {
+            const bool hf = !s.high_flow_nozzle.empty() && s.high_flow_nozzle[std::min(k, s.high_flow_nozzle.size() - 1)];
+            high.list.push_back(TemplateValue::of(hf));
+            kinds.list.push_back(TemplateValue::of(std::string(hf ? "High Flow" : "Standard")));
+        }
+        set("nozzle_high_flow", high);
+        set("nozzle_volume_type", kinds);
+        set("nozzle_volume_types", kinds);
+        set("zhop", number(s.retract_lift));
+        set("outer_wall_acceleration",
+            list_of(number(s.accel_outer_wall > 0.0 ? s.accel_outer_wall : s.acceleration)));
+        set("print_sequence", TemplateValue::of(std::string(s.sequential ? "by object" : "by layer")));
+        fallback("timelapse_type", TemplateValue::of(0LL));
+        fallback("has_single_extruder_multi_material_priming", TemplateValue::of(false));
+        fallback("long_retraction_when_cut", TemplateValue::of(false));
+        fallback("notes", TemplateValue::of(std::string()));
+        set("build_volume_temperature", whole(s.chamber_temperature));
+        // The second round (QA, 17-11-2026, GM22).
+        set("wipe_tower_center_pos_valid", TemplateValue::of(s.wipe_tower));
+        // The tower's centre from its corner and width, with or without a
+        // tower (QA, 17-11-2026).
+        set("wipe_tower_center_pos_x", number(s.wipe_tower_x + s.wipe_tower_width / 2.0));
+        set("wipe_tower_center_pos_y", number(s.wipe_tower_y + s.wipe_tower_width / 2.0));
+        set("jobname", TemplateValue::of(s.input_name));
+        set("start_filament_gcode", each(TemplateValue::of(s.filament_start_gcode)));
+        fallback("required_nozzle_HRC", each(TemplateValue::of(0LL)));
+        fallback("filament_flush_volumetric_speed", each(number(flow > 0.0 ? flow : kSafeFlow)));
+        fallback("filament_notes", each(TemplateValue::of(std::string())));
+        // cura's own defaults: the heat zone's 16 mm, and the hop of a
+        // retraction.
+        fallback("switch_extruder_retraction_amount", number(16.0));
+        fallback("retraction_hop_height_after_extruder_switch", number(s.retract_lift));
+        set("inner_wall_speed", each(number(s.wall_speed)));
+        set("outer_wall_speed", each(number(outer_speed)));
+        set("initial_layer_speed",
+            each(number(s.first_layer_speed_percent ? s.wall_speed * s.first_layer_speed / 100.0 : s.first_layer_speed)));
+        set("outer_wall_line_width", number(outer_width));
+        set("line_width", number(s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter)));
+        set("extrusion_width", number(s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter)));
+        set("top_bottom_thickness", number(s.top_layers * s.layer_height));
+        // filament_cost is the print's cost in cura (the writer sets it as it
+        // goes) and the price per kg elsewhere.
+        if (s.machine_macros.dialect == "cura") {
+            set("filament_amount", number(0.0));
+            set("filament_cost", number(0.0));
+            // The estimate so far, as cura writes it (the writer updates it).
+            set("print_time", TemplateValue::of(std::string("0h 0m 0s")));
+        } else {
+            set("filament_cost", each(number(s.filament_cost)));
+        }
+        const double width = s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter);
+        set("wall_thickness", number(s.wall_count * width));
+        if (const double idle = first_number("idle_temperature"); idle > 0.0 || nozzle > 0.0)
+            set("material_standby_temperature", whole(idle > 0.0 ? idle : nozzle));
+        // Where the nozzle is and what is used; the writer sets them again at
+        // each layer change and at the end.
+        set("position", TemplateValue::of(std::vector<TemplateValue>{number(0.0), number(0.0), number(0.0)}));
+        set("e_retracted", each(number(0.0)));
+        set("extruded_volume", each(number(0.0)));
+        set("extruded_weight_total", number(0.0));
+        set("filament_weight", number(0.0));
+        // The profiles' names: the print preset is the print profile, the
+        // physical printer the printer (none named apart), cura's machine_name
+        // the printer.
+        const auto alias = [&](const char* name, const char* from) {
+            if (const auto it = v.find(from); it != v.end())
+                set(name, it->second);
+        };
+        alias("print_preset", "print_settings_id");
+        alias("printer_preset", "printer_settings_id");
+        alias("physical_printer_preset", "printer_settings_id");
+        alias("machine_name", "printer_settings_id");
+        // cura's date and time of slicing.
+        const std::time_t now = std::time(nullptr);
+        std::tm local{};
+#ifdef _WIN32
+        localtime_s(&local, &now);
+#else
+        localtime_r(&now, &local);
+#endif
+        char text[32];
+        std::strftime(text, sizeof text, "%d-%m-%Y", &local);
+        set("date", TemplateValue::of(std::string(text)));
+        std::strftime(text, sizeof text, "%H:%M:%S", &local);
+        set("time", TemplateValue::of(std::string(text)));
+    }
 
     // The rest of the list.
     for (const MacroVariable& m : kVariables) {
@@ -183,16 +312,34 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         if (const std::size_t under = name.find_last_of('_');
             m.equivalent.empty() && under != std::string::npos && under + 1 < name.size() &&
             name.find_first_not_of("0123456789", under + 1) == std::string::npos) {
-            const auto base = v.find(name.substr(0, under));
+            // Through the base's equivalent too (nozzle_temperature_initial_layer_1),
+            // and the last value for a head beyond the list (rule 8).
+            std::string base_name = name.substr(0, under);
+            if (!v.contains(base_name))
+                for (const MacroVariable& e : kVariables)
+                    if (e.name == base_name && !e.equivalent.empty()) {
+                        base_name = std::string(e.equivalent);
+                        break;
+                    }
+            const auto base = v.find(base_name);
             const std::size_t at = std::stoul(name.substr(under + 1));
-            if (base != v.end() && base->second.kind == TemplateValue::Kind::List && at < base->second.list.size()) {
-                v[name] = base->second.list[at];
+            if (base != v.end() && base->second.kind == TemplateValue::Kind::List && !base->second.list.empty()) {
+                v[name] = base->second.list[std::min(at, base->second.list.size() - 1)];
                 continue;
             }
         }
         v[name] = neutral(m.type);
         c.unfilled.insert(name);
     }
+}
+
+void name_profiles(Settings& settings, const std::string& printer, const std::string& filament,
+                   const std::string& print) {
+    for (const auto& [name, value] : {std::pair{"printer_settings_id", &printer},
+                                      std::pair{"filament_settings_id", &filament},
+                                      std::pair{"print_settings_id", &print}})
+        if (!value->empty() && !settings.variables.contains(name))
+            settings.variables[name] = {*value};
 }
 
 } // namespace tisma

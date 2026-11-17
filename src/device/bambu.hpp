@@ -98,8 +98,9 @@ struct BambuPrint {
 // The package the printer prints: a 3MF with Metadata/plate_1.gcode and its
 // MD5 in Metadata/plate_1.gcode.md5.
 std::string bambu_package(const std::string& gcode);
-// The «project_file» command for a package uploaded as `file`.
-nlohmann::json bambu_project_file(const BambuPrint& job, const std::string& file, const std::string& package_md5,
+// The «project_file» command for a package uploaded as `file`, with the
+// MD5 of its G-code (as the phone apps send it, tried on an A1 mini).
+nlohmann::json bambu_project_file(const BambuPrint& job, const std::string& file, const std::string& gcode_md5,
                                   int sequence);
 // Uploads the package by FTPS and starts it. `progress` gets the bytes sent
 // and the total.

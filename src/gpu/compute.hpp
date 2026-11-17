@@ -25,6 +25,24 @@ struct ContextOptions {
     bool allow_cpu_device = false;
 };
 
+// One Vulkan device as the driver describes it, for choose_device.
+struct DeviceCandidate {
+    enum class Kind { Discrete, Integrated, Virtual, Cpu, Other };
+    std::string name;
+    Kind kind = Kind::Other;
+    std::uint64_t local_memory = 0; // bytes in its device-local heaps
+    bool vulkan_1_1 = true;
+    bool compute = true; // a queue family with compute
+};
+
+// The device the engine computes on: a discrete GPU first, then an
+// integrated one, then a virtual one; among equals the one with the most
+// device-local memory (on a laptop with two GPUs, the discrete one). A
+// software device (Mesa's llvmpipe or lavapipe, SwiftShader, Microsoft's
+// Basic Render Driver), by its type or its name, only when allow_cpu.
+// Returns the index, or -1 with the reason in why when there is none.
+int choose_device(const std::vector<DeviceCandidate>& devices, bool allow_cpu, std::string* why = nullptr);
+
 // A Vulkan compute device. GPU use is optional (design rule 4 in PLAN.md):
 // every kernel has a CPU version that is the reference in the tests.
 class Context {
@@ -32,7 +50,9 @@ public:
     // Returns null when the engine was built without the GPU backend, when no
     // Vulkan loader or suitable device is present, or when the environment
     // variable TISMA_GPU is set to 0.
-    static std::unique_ptr<Context> create(const ContextOptions& options = {});
+    // With why, the reason when it returns null, in plain words, for the
+    // warning that says why the work stayed on the CPU.
+    static std::unique_ptr<Context> create(const ContextOptions& options = {}, std::string* why = nullptr);
 
     ~Context();
     Context(const Context&) = delete;

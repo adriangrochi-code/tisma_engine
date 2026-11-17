@@ -4,6 +4,7 @@
 #include "cli/cli.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
+#include "gcode/macro_variables.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -229,6 +230,9 @@ int cmd_pack_profile(std::span<const std::string_view> args, std::ostream& out, 
             settings = with_profile(settings, ProfileKind::Filament, p.filament->settings);
         if (p.print)
             settings = with_profile(settings, ProfileKind::Print, p.print->settings);
+        // The profiles' names for the machine's G-code (gcode_macros.md, rule 9 bis).
+        name_profiles(settings, p.printer.name, p.filament ? p.filament->name : std::string(),
+                      p.print ? p.print->name : std::string());
         const std::vector<std::string>& warnings = p.warnings;
         for (const std::string& w : warnings)
             err << "warning: " << w << "\n";

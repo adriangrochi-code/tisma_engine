@@ -7,6 +7,7 @@
 #include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -125,7 +126,27 @@ TEST_CASE("library: printed, delete, export and import; unsafe files refused who
     const json p = library_printed(lib, id, "2026-11-06", put(in / "ph.jpg", "JPG"), "nice");
     CHECK(p.at("printed")[0].at("photo") == "photos/1.jpg");
     CHECK(slurp(lib / id / "photos" / "1.jpg") == "JPG");
+    // Only a real day YYYY-MM-DD; nothing saved otherwise (local_library.md, rule 1; BH58).
+    for (const std::string bad : {"ayer", "2026-13-45", "2026-02-30", "2025-02-29", "2026-1-05", "2026-11-11T10:00:00Z"}) {
+        INFO(bad);
+        std::string out;
+        CHECK(run({"library", "printed", "--dir", lib.string(), "--entry", id, "--date", bad}, out) == 2);
+        CHECK(json::parse(out).at("code") == "usage");
+        CHECK_THAT(json::parse(out).at("error").get<std::string>(), Catch::Matchers::ContainsSubstring("YYYY-MM-DD"));
+    }
+    CHECK(library_show(lib, id).at("printed").size() == 1);
+    CHECK(library_printed(lib, id, "2024-02-29", std::nullopt, "").at("printed").size() == 2);
+    const json today = library_printed(lib, id, "", std::nullopt, "");
+    CHECK(today.at("printed").back().at("date").get<std::string>().size() == 10); // without --date, today
     library_export(lib, id, in / "hook.tismalib");
+    // A bare file name, in the current folder (BH57: "cannot create directories").
+    {
+        const fs::path was = fs::current_path();
+        fs::current_path(in);
+        CHECK_NOTHROW(library_export(lib, id, "bare.tismalib"));
+        fs::current_path(was);
+        CHECK(fs::exists(in / "bare.tismalib"));
+    }
     const json imported = library_import(in / "hook.tismalib", other, LibraryImport::Ask);
     CHECK(imported.at("name") == "Hook");
     CHECK(slurp(other / id / "photos" / "1.jpg") == "JPG");

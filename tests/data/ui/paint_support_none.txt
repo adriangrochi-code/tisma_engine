@@ -1,0 +1,4 @@
+# Forced support painted and then erased, or blocked under every overhang
+# with the automatic supports on: no support at all.
+slice
+expect-gcode-count ;TYPE:Support 0

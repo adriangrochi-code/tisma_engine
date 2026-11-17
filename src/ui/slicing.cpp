@@ -95,6 +95,7 @@ Settings without_gcode_settings(Settings s) {
     s.wall_speed = d.wall_speed, s.outer_wall_speed = d.outer_wall_speed, s.infill_speed = d.infill_speed;
     s.solid_infill_speed = d.solid_infill_speed, s.top_solid_infill_speed = d.top_solid_infill_speed;
     s.support_speed = d.support_speed, s.travel_speed = d.travel_speed, s.first_layer_speed = d.first_layer_speed;
+    s.first_layer_speed_percent = d.first_layer_speed_percent;
     s.max_speed = d.max_speed, s.corner_speed = d.corner_speed;
     s.bridge_speed = d.bridge_speed, s.gap_fill_speed = d.gap_fill_speed, s.over_bridges_speed = d.over_bridges_speed;
     s.small_loop_speed = d.small_loop_speed, s.speed_max_flow = d.speed_max_flow;

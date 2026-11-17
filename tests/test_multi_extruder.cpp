@@ -1,6 +1,7 @@
 // Several extruders (docs/spec/features/multi_extruder.md, rules 1 to 8 and
 // 16; tests ME1 to ME5 and ME10).
 
+#include "gcode/preview.hpp"
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
@@ -359,9 +360,11 @@ TEST_CASE("extruders: settings round trip and one extruder unchanged", "[extrude
     CHECK(back.gcode_toolchange == "T{next_extruder}");
     CHECK_THROWS_AS(parse_settings(R"({"machine": {"extruders": 17}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"retraction": {"toolchange_length": [-1]}})"), SettingsError);
-    Settings bad = base();
-    bad.extruder_infill = 3;
-    CHECK_THROWS_AS(check_settings(bad), SettingsError);
+    // An extruder the machine does not have is the first, not an error (rule 8 ter, ME14).
+    Settings missing = base();
+    missing.extruder_infill = 3;
+    CHECK_NOTHROW(check_settings(missing));
+    CHECK(kind_extruders(missing).infill == 1);
     // One extruder: no T, whatever the objects say.
     Settings one = base();
     one.extruders = 1;
@@ -857,6 +860,9 @@ TEST_CASE("nozzles: the purge after slicing, on the tower and into the objects (
     const Warning into = purge_of(infill).first;
     REQUIRE(into.kind == "purge");
     CHECK_THAT(into.message, !ContainsSubstring("0.00 g into the objects"));
+    // Into the infill alone: all of it in "into their infill" (color_mixing_plus.md, rule 40).
+    CHECK_THAT(into.message, ContainsSubstring("0.00 g into the rest)"));
+    CHECK_THAT(into.message, !ContainsSubstring("(0.00 g into their infill"));
     // A purge is a purge, wherever it goes: about as much in all.
     CHECK_THAT(into.value, WithinAbs(plain.value, 0.25 * plain.value));
     // A nozzle per filament: no purge to report.
@@ -960,4 +966,212 @@ TEST_CASE("extruders: each one heats to its first layer's temperature, then to i
     CHECK(start.find("S205") == std::string::npos);
     CHECK(layer2.find("M104 S205 T0") != std::string::npos);
     CHECK(layer2.find("M104 S225 T1") != std::string::npos);
+}
+
+TEST_CASE("extruders: each nozzle's own filament temperature, never 0 (multi_extruder.md, rule 8 bis, ME13)", "[extruders]") {
+    // PLA 210 and PETG 240, a part of each: extruder 1 (T1) at 240 before it
+    // first extrudes; with one temperature only, the second takes the first's.
+    for (const bool one_value : {false, true})
+        for (const bool own_start : {false, true}) {
+        Settings s = base();
+        // A machine's own start G-code that heats the first nozzle only.
+        if (own_start)
+            s.start_gcode = "M104 S[first_layer_temperature_0]\nM109 S[first_layer_temperature_0]\nG28";
+        s.extruder_walls = 1;
+        s.infill_density = 20.0;
+        s.extruder_infill = s.extruder_solid_infill = 2;
+        if (one_value)
+            s.variables["temperature"] = {"210"}, s.variables["first_layer_temperature"] = {"210"};
+        else
+            s.variables["temperature"] = {"210", "240"}, s.variables["first_layer_temperature"] = {"210", "240"};
+        const std::string text = gcode_of(cube(1), s);
+        const std::string want = one_value ? "210" : "240";
+        INFO((one_value ? "one temperature" : "two temperatures") << (own_start ? ", own start" : "") << "\n"
+                                                                   << text.substr(0, 1500));
+        // T1 heated before its first extrusion, and never set to 0.
+        const std::size_t t1 = text.find("\nT1");
+        REQUIRE(t1 != std::string::npos);
+        std::size_t extrusion = t1;
+        for (std::size_t at = text.find("\nG1 ", t1); at != std::string::npos; at = text.find("\nG1 ", at + 1)) {
+            const std::size_t end = text.find('\n', at + 1);
+            const std::string line = text.substr(at + 1, end - at - 1);
+            if (line.find(" X") != std::string::npos && line.find(" E") != std::string::npos) {
+                extrusion = at;
+                break;
+            }
+        }
+        REQUIRE(extrusion > t1);
+        const std::string before = text.substr(0, extrusion);
+        CHECK((before.find("S" + want + " T1") != std::string::npos || before.find("T1 S" + want) != std::string::npos));
+        CHECK(text.find("S0 T1") == std::string::npos);
+        CHECK(text.find("T1 S0") == std::string::npos);
+    }
+}
+
+TEST_CASE("extruders: a machine's toolchange at the start never addresses tool -1 nor leaves the first nozzle at 0 (BH49)",
+          "[extruders]") {
+    // The change to the first extruder, from none, runs the machine's own
+    // toolchange G-code with previous_extruder -1; this one cools the
+    // previous tool and switches the next one off.
+    for (const bool own_start : {true, false}) {
+        Settings s = base();
+        if (own_start)
+            s.start_gcode = "M104 T0 S220\nM109 T0 S220\nG28";
+        s.gcode_toolchange = "M104 T{previous_extruder} S-5\nM104 T{next_extruder} S0";
+        s.variables["temperature"] = {"220", "220"};
+        s.variables["first_layer_temperature"] = {"220", "220"};
+        const std::string text = gcode_of(cube(1), s);
+        INFO((own_start ? "own start" : "engine's start") << "\n" << text.substr(0, 1500));
+        CHECK(text.find("T-1") == std::string::npos);
+        // Before the first extrusion, the last temperature T0 gets is not 0.
+        std::size_t first = std::string::npos;
+        for (std::size_t at = text.find("\nG1 "); at != std::string::npos; at = text.find("\nG1 ", at + 1)) {
+            const std::string line = text.substr(at + 1, text.find('\n', at + 1) - at - 1);
+            if (line.find(" X") != std::string::npos && line.find(" E") != std::string::npos) {
+                first = at;
+                break;
+            }
+        }
+        REQUIRE(first != std::string::npos);
+        const std::string before = text.substr(0, first);
+        const auto last = [&](std::initializer_list<const char*> texts) {
+            std::ptrdiff_t at = -1;
+            for (const char* t : texts)
+                if (const std::size_t f = before.rfind(t); f != std::string::npos)
+                    at = std::max(at, std::ptrdiff_t(f));
+            return at;
+        };
+        const std::ptrdiff_t off = last({"T0 S0"}), on = last({"S220 T0", "T0 S220"});
+        REQUIRE(on >= 0);
+        CHECK(on > off);
+    }
+}
+
+TEST_CASE("extruders: one the machine does not have is the first, with a warning (multi_extruder.md, rule 8 ter, ME14)",
+          "[extruders]") {
+    // A cube with an overhang on one nozzle; the profile asks the support and
+    // its interface from extruder 5 (Prusa CORE One «SOLUBLE» profiles).
+    Settings s = base();
+    s.extruders = 1;
+    s.variables["temperature"] = {"210"};
+    s.support = true;
+    s.extruder_support = s.extruder_support_interface = 5;
+    REQUIRE_NOTHROW(check_settings(s));
+    const std::vector<Warning> warnings = capability_warnings(s);
+    const auto missing = std::count_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "missing_extruder"; });
+    CHECK(missing == 2);
+    const auto it = std::find_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "missing_extruder"; });
+    REQUIRE(it != warnings.end());
+    CHECK_THAT(it->message, ContainsSubstring("extruder 5"));
+    CHECK_THAT(it->message, ContainsSubstring("extruder 1 is used"));
+    CHECK(kind_extruders(s).support == 1);
+    CHECK(kind_extruders(s).support_interface == 1);
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 100, 100, 10);
+    add_box(p.mesh, 90, 90, 10, 115, 100, 12); // 15 mm out over nothing
+    p.objects = {{"ledge", 0, 24, 0, 0, 1}};
+    const std::string text = gcode_of(p, s);
+    CHECK_THAT(text, ContainsSubstring(";TYPE:Support material"));
+    CHECK_THAT(text, !ContainsSubstring("\nT4"));
+    CHECK_THAT(text, !ContainsSubstring("\nT1"));
+    // The bed's temperature from a missing extruder is still refused.
+    s.bed_temperature_from = 5;
+    CHECK_THROWS(check_settings(s));
+}
+
+TEST_CASE("extruders: a tool that stops printing waits at its idle temperature (multi_extruder.md, rule 8 quater, ME15)",
+          "[extruders]") {
+    // Two nozzles, a part of each on every layer; PLA 215 with idle 170.
+    // filament.idle_temperature, as the spec names it, is the machine's variable.
+    std::string written = settings_json(base());
+    written.insert(written.find('{') + 1, R"("filament": {"idle_temperature": 170},)");
+    Settings s = parse_settings(written);
+    REQUIRE(s.variables.contains("idle_temperature"));
+    CHECK(s.variables.at("idle_temperature") == std::vector<std::string>{"170"});
+    s.variables["temperature"] = {"215", "215"};
+    s.ooze_prevention = false;
+    const std::string text = gcode_of(two_colours(), s);
+    // Leaving a tool: down to 170; coming back to it: 215, waited for.
+    CHECK_THAT(text, ContainsSubstring("M104 S170 T0"));
+    CHECK_THAT(text, ContainsSubstring("M104 S170 T1"));
+    // Each M104 S170 T<n> is followed, before T<n> prints again, by M109 S215 T<n>.
+    for (const std::string tool : {"0", "1"}) {
+        std::size_t at = text.find("M104 S170 T" + tool);
+        int checked = 0;
+        while (at != std::string::npos && checked < 5) {
+            const std::size_t back = text.find("\nT" + tool + "\n", at);
+            if (back == std::string::npos)
+                break;
+            const std::size_t wait = text.find("M109 S215 T" + tool, at);
+            INFO("tool " << tool << " at " << at);
+            CHECK(wait != std::string::npos);
+            CHECK(wait > back);
+            const std::size_t extrude = text.find(" E", back);
+            CHECK(wait < extrude);
+            at = text.find("M104 S170 T" + tool, back);
+            ++checked;
+        }
+        CHECK(checked > 0);
+    }
+    // With ooze prevention, its own rule: no idle temperature.
+    s.ooze_prevention = true;
+    CHECK_THAT(gcode_of(two_colours(), s), !ContainsSubstring("S170"));
+    // Without an idle temperature, nothing changes.
+    s.ooze_prevention = false;
+    s.variables.erase("idle_temperature");
+    CHECK_THAT(gcode_of(two_colours(), s), !ContainsSubstring("back from idle"));
+}
+
+TEST_CASE("extruders: a tool change's time counts as preparation (print_time.md, rule 14)", "[extruders][time]") {
+    const auto seconds = [](const std::string& text, const std::string& which) {
+        const std::string key = "; estimated " + which + " = ";
+        const std::size_t at = text.find(key);
+        if (at == std::string::npos)
+            return 0.0;
+        return parse_duration(text.substr(at + key.size(), text.find('\n', at) - at - key.size()));
+    };
+    Settings s = base();
+    s.toolchange_length = {4.0};
+    // A change that goes to a corner and back and waits 2 s, as a dock would.
+    s.gcode_toolchange = "G1 X5 Y5 F6000\nG4 S2";
+    const std::string text = gcode_of(two_colours(), s);
+    // The changes in the print (the settings listed at the end hold the template too).
+    const std::size_t end = text.find("; estimated printing time");
+    REQUIRE(end != std::string::npos);
+    std::size_t changes = 0;
+    for (std::size_t at = text.find("\nG4 S2\n"); at < end; at = text.find("\nG4 S2\n", at + 1))
+        ++changes;
+    REQUIRE(changes >= 2);
+    const double prep = seconds(text, "preparation time");
+    // Without the template: the changes' retractions alone.
+    Settings plain = s;
+    plain.gcode_toolchange.clear();
+    const double moves = seconds(gcode_of(two_colours(), plain), "preparation time");
+    CHECK(moves > 0.0);
+    // With it: the waits on top, each once, the first tool's selection
+    // before the print too (the template's G1 has no known start: not timed).
+    CHECK_THAT(prep, Catch::Matchers::WithinAbs(moves + 2.0 * double(changes), 1.5));
+    CHECK(prep < seconds(text, "printing time"));
+}
+
+TEST_CASE("extruders: a change's purge on the wipe tower counts as preparation (print_time.md, rule 14)", "[extruders][time]") {
+    const auto seconds = [](const std::string& text, const std::string& which) {
+        const std::string key = "; estimated " + which + " = ";
+        const std::size_t at = text.find(key);
+        if (at == std::string::npos)
+            return 0.0;
+        return parse_duration(text.substr(at + key.size(), text.find('\n', at) - at - key.size()));
+    };
+    Settings s = base();
+    s.toolchange_length = {4.0};
+    const std::string plain = gcode_of(two_colours(), s);
+    s.wipe_tower = true;
+    const std::string tower = gcode_of(two_colours(), s);
+    REQUIRE(tower.find(";TYPE:Wipe tower") != std::string::npos);
+    // The purge blocks take time, and it goes to the preparation, inside the total.
+    const double before = seconds(plain, "preparation time"), after = seconds(tower, "preparation time");
+    INFO("preparation " << before << " s without the tower, " << after << " s with it");
+    CHECK(after > before + 10.0);
+    CHECK(after < seconds(tower, "printing time"));
+    CHECK(seconds(tower, "printing time") > seconds(plain, "printing time"));
 }

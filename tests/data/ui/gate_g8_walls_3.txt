@@ -1,0 +1,7 @@
+# Release gate G8: 3 walls on the 20 mm cube: 3 wall loops in the middle
+# layer, the default 20 % sparse infill inside (within 0.5 %).
+menu tab_prepare
+set walls.count 3
+slice
+expect-gcode-valid
+expect-middle-layer 3 19.5 20.5

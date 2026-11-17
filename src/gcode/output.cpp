@@ -12,11 +12,21 @@
 #include "slice/pipeline.hpp"
 
 #include <cctype>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <sstream>
+
+// iOS starts no other program (std::system is not there).
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+#define TISMA_NO_PROCESSES 1
+#else
+#define TISMA_NO_PROCESSES 0
+#endif
 
 namespace tisma {
 
@@ -148,8 +158,12 @@ std::string run_post_process(const Settings& s, const SlicedModel& model, const 
 #ifdef _WIN32
         command = "\"" + command + "\""; // cmd.exe drops the outer quotes
 #endif
+#if TISMA_NO_PROCESSES
+        errors += script + ": scripts cannot run on this system\n";
+#else
         if (const int status = std::system(command.c_str()); status != 0)
             errors += script + ": exited with " + std::to_string(status) + "\n";
+#endif
     }
     return errors;
 }

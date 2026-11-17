@@ -13,6 +13,7 @@ add_executable(tisma_tests
   test_stl.cpp
   test_mesh.cpp
   test_cli.cpp
+  test_gate_check.cpp
   test_node.cpp
   test_indexed_mesh.cpp
   test_level_set.cpp
@@ -35,6 +36,8 @@ add_executable(tisma_tests
   test_sites.cpp
   test_coverage.cpp
   test_surfaces.cpp
+  test_slicing_spec.cpp
+  test_perimeters_spec.cpp
   test_infill.cpp
   test_gcode.cpp
   test_resolution.cpp
@@ -45,6 +48,7 @@ add_executable(tisma_tests
   test_polyholes.cpp
   test_unsupported_walls.cpp
   test_c_cli.cpp
+  test_c_api.cpp
   test_number.cpp
   test_template.cpp
   test_binary.cpp
@@ -93,10 +97,12 @@ add_executable(tisma_tests
   test_orient.cpp
   test_catalog.cpp
   test_device.cpp
+  test_usb_camera.cpp
   test_cad.cpp
   test_sketch_io.cpp
   test_sketch_edit.cpp
   test_aero.cpp
+  test_support_sweep.cpp
   test_fasteners.cpp
   test_gears.cpp
   test_cloud.cpp
@@ -107,6 +113,8 @@ add_executable(tisma_tests
   test_xz.cpp
   test_pack_fetch.cpp
   test_print_host.cpp
+  test_ed25519.cpp
+  test_shared_library.cpp
 )
 # The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
 # tests drive it instead of the real tool.
@@ -124,6 +132,9 @@ add_executable(tisma_fake_secret_tool fake_secret_tool.cpp)
 add_dependencies(tisma_tests tisma_fake_secret_tool)
 target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SECRET_TOOL="$<TARGET_FILE:tisma_fake_secret_tool>")
 # The mock Tisma Cloud server around a program (the interface's cloud tests).
+add_executable(tisma_fake_print_host fake_print_host_main.cpp)
+target_link_libraries(tisma_fake_print_host PRIVATE tisma_core tisma_net tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)
+add_dependencies(tisma_tests tisma_fake_print_host)
 add_executable(tisma_mock_cloud mock_cloud_main.cpp)
 target_link_libraries(tisma_mock_cloud PRIVATE tisma_core tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
@@ -148,6 +159,24 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   # It takes every core for minutes: the simulated print, whose window
   # renders in software, does not run beside it (it starved past its timeout).
   set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores)
+  # AE8: the Benchy (bench/3DBenchy.stl.xz, CC0), unpacked with xz where
+  # there is one.
+  find_program(TISMA_XZ xz)
+  if(TISMA_XZ)
+    set(benchy_stl ${CMAKE_CURRENT_BINARY_DIR}/ae8_benchy.stl)
+    add_test(NAME aero_benchy_unpack
+             COMMAND ${CMAKE_COMMAND} -DXZ=${TISMA_XZ} -DIN=${PROJECT_SOURCE_DIR}/bench/3DBenchy.stl.xz -DOUT=${benchy_stl}
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/unxz.cmake)
+    set_tests_properties(aero_benchy_unpack PROPERTIES FIXTURES_SETUP benchy_stl)
+    add_test(NAME aero_benchy_ae8 COMMAND tisma_tests "[.aero-benchy]")
+    set_tests_properties(aero_benchy_ae8 PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores FIXTURES_REQUIRED benchy_stl
+                         ENVIRONMENT TISMA_BENCHY_STL=${benchy_stl})
+    # The support on hard parts in the three styles, the Benchy among them
+    # (tests/test_support_sweep.cpp; the owner's request, 2026-11-16).
+    add_test(NAME support_sweep COMMAND tisma_tests "[.support-sweep]")
+    set_tests_properties(support_sweep PROPERTIES TIMEOUT 900 RESOURCE_LOCK all_cores FIXTURES_REQUIRED benchy_stl
+                         ENVIRONMENT TISMA_BENCHY_STL=${benchy_stl})
+  endif()
 endif()
 
 # The random search for G-code the checker rejects (tests/fuzz_gcode.cpp); a
@@ -186,6 +215,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview
               --export ${CMAKE_CURRENT_BINARY_DIR}/ui_test.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_test.png)
+    set_tests_properties(ui_slice_export_screenshot PROPERTIES FIXTURES_SETUP ui_test_gcode)
+    # The G-code just exported, opened: it shows in Preview (QA, 2026-11-17).
+    add_test(NAME ui_gcode_opens_preview
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_test.gcode --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/gcode_opens_preview.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_gcode_opens_preview.png)
+    set_tests_properties(ui_gcode_opens_preview PROPERTIES FIXTURES_REQUIRED ui_test_gcode FAIL_REGULAR_EXPRESSION "error: "
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # Mesa's OpenGL keeps memory until exit; the leak checker would count it.
     # The ray tracing on the GPU against RayScene, the CPU reference: the same
     # shadow rays from the same surfaces must give the same answers.
@@ -346,6 +384,44 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_print_host_offline PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    # The overlays over the view (the wind's arrow, the streamlines, the
+    # sketch) show with OpenGL and with Vulkan.
+    foreach(graphics opengl vulkan)
+      add_test(NAME ui_aero_arrow_${graphics}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --graphics ${graphics}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/aero_arrow.txt --expect-color 4C9BFF:400
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_aero_arrow_${graphics}.png)
+      set_tests_properties(ui_aero_arrow_${graphics} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
+                           ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
+    # Closing with jobs under way: the process ends in under 3 s.
+    add_test(NAME ui_quit_busy
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/sphere.stl --lang es --size 1200x760 --cloud-server http://127.0.0.1:9
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/quit_busy.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_quit_busy.png)
+    set_tests_properties(ui_quit_busy PROPERTIES FAIL_REGULAR_EXPRESSION "error: " PASS_REGULAR_EXPRESSION "ui-script: quit: the program ended"
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 60)
+    # AstroBox and Repetier-Server, chosen by their word, asked by «Test».
+    add_test(NAME ui_print_host_kinds
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/print_host_kinds.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_print_host_kinds.png)
+    set_tests_properties(ui_print_host_kinds PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # The printer's camera: «Sin cámara» or a USB one (none on this machine).
+    add_test(NAME ui_usb_camera_choice
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/usb_camera_choice.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_usb_camera_choice.png)
+    set_tests_properties(ui_usb_camera_choice PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         FAIL_REGULAR_EXPRESSION "error: "
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     # Nothing listens on port 9 (discard) here: the download fails at once.
     add_test(NAME ui_pack_offline_first_run
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -380,7 +456,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # (--ui-script, tests/data/ui): the printer's page, and a number of the
     # print settings typed with a decimal comma; units, limits, a checkbox and
     # the purge volume (unit_fields); values near the top of their range (wide_limits).
-    foreach(script printer_fields print_fields unit_fields wide_limits)
+    foreach(script printer_fields print_fields unit_fields wide_limits flavor_choices retract_crossing_walls)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
@@ -477,7 +553,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # The Design tab (cad_design.md, stage D1) driven through the stand-in
     # solidcraft-cli: the tab, the primitives, the command line, sending to the
     # plate and editing again; without the component (CD21); hidden (CD1).
-    foreach(script aerodynamics design_tab design_parameters design_constraints design_operations design_sketch_edit design_sketch_fillet design_command design_hidden design_sketch fasteners gears structural_tab structural_analyze)
+    foreach(script aerodynamics design_tab design_timeline_marker design_shell_no_face design_tool_search design_radial design_dialog design_handles design_handles_op design_handles_move design_handles_extrude design_ring_move design_sketch_palette design_section design_parameters design_constraints design_operations design_sketch_edit design_sketch_erase design_sketch_fillet design_command design_hidden design_sketch fasteners gears structural_tab structural_analyze)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
@@ -489,6 +565,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # The analysis takes every core and, under ASan, about 160 s alone: more
     # time, and not beside the full drag test.
     set_tests_properties(ui_script_structural_analyze PROPERTIES TIMEOUT 900 RESOURCE_LOCK all_cores)
+    # Closing during an analysis stops it (the tester's report, 2026-11-14):
+    # far less than the analysis alone (about 160 s under ASan).
+    add_test(NAME ui_script_shutdown_during_analysis
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/shutdown_during_analysis.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_shutdown_during_analysis.png)
+    set_tests_properties(ui_script_shutdown_during_analysis PROPERTIES
+      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 60 RESOURCE_LOCK all_cores)
     # The timeline (rule 8): the stand-in refuses the body «Caja 2».
     add_test(NAME ui_script_design_timeline
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -554,6 +639,16 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/object_menu_actions.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_object_menu_actions.png)
     set_tests_properties(ui_script_object_menu_actions PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The 3D view's navigation (interface.md, «Navegación de la vista 3D»: UI17, UI18).
+    foreach(script navigation no_model_sites view_bar view_nav_buttons view_cube mix_changes mix_settings mix_match cut_connectors cut_pin mix_numbers mix_gradient palette_piece cut_parts paint_colors smart_fill undo_plate tour_points multi_select delete_one mix_paint_slots)
+      add_test(NAME ui_script_${script}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${script}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
+      set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300
+        FAIL_REGULAR_EXPRESSION "error: ")
+    endforeach()
     # The main button's arrow: the possible outputs only (interface.md, «Menús»).
     add_test(NAME ui_script_arrow_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -665,6 +760,36 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud.png)
     set_tests_properties(ui_script_cloud PROPERTIES TIMEOUT 300 ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_secrets.txt")
+    add_test(NAME ui_script_cloud_down
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_down.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_down.png)
+    set_tests_properties(ui_script_cloud_down PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_CLOUD_DOWN=1;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_down_secrets.txt")
+    add_test(NAME ui_script_library
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/library.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_library.png)
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/data/library/project_key.hex TISMA_LIBRARY_TEST_KEY)
+    string(STRIP "${TISMA_LIBRARY_TEST_KEY}" TISMA_LIBRARY_TEST_KEY)
+    set_tests_properties(ui_script_library PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_LIBRARY_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data/library;TISMA_LIBRARY_PROJECT_KEY=${TISMA_LIBRARY_TEST_KEY}")
+    add_test(NAME ui_script_library_open
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/library_open.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_library_open.png)
+    set_tests_properties(ui_script_library_open PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_LIBRARY_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data/library;TISMA_LIBRARY_PROJECT_KEY=${TISMA_LIBRARY_TEST_KEY};TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_library_open_secrets.txt")
+    add_test(NAME ui_script_library_no_key
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/library_no_key.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_library_no_key.png)
+    set_tests_properties(ui_script_library_no_key PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_LIBRARY_PROJECT_KEY=")
     add_test(NAME ui_script_cloud_default
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
@@ -678,6 +803,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_unreachable.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_unreachable.png)
     set_tests_properties(ui_script_cloud_unreachable PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    add_test(NAME ui_script_cloud_slice_402
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_slice_402.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_slice_402.png)
+    set_tests_properties(ui_script_cloud_slice_402 PROPERTIES TIMEOUT 300 FAIL_REGULAR_EXPRESSION "error: " ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_CLOUD_402=1;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_402_secrets.txt")
     add_test(NAME ui_script_cloud_slice
       COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
@@ -1004,6 +1136,27 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_settings_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_level_basic;ui_level_custom")
     set_tests_properties(ui_settings_basic ui_settings_custom_search PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    add_test(NAME ui_script_open_hint
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma> --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/open_hint.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_open_hint.png)
+    set_tests_properties(ui_script_open_hint PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300
+                         FAIL_REGULAR_EXPRESSION "error: ")
+    add_test(NAME ui_open_3mf_parts
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/box_parts.3mf --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/open_3mf_parts.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_open_3mf_parts.png)
+    set_tests_properties(ui_open_3mf_parts PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300
+                         FAIL_REGULAR_EXPRESSION "error: ")
+    add_test(NAME ui_paint_color_cli
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool paint
+              --paint color,2,133,128,5,3
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/paint_color_cli.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_color_cli.png)
+    set_tests_properties(ui_paint_color_cli PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300
+                         FAIL_REGULAR_EXPRESSION "error: ")
     set_tests_properties(ui_paint_save PROPERTIES FIXTURES_SETUP ui_paint)
     set_tests_properties(ui_paint_reopen PROPERTIES FIXTURES_REQUIRED ui_paint FIXTURES_SETUP ui_paint_b)
     set_tests_properties(ui_paint_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_paint;ui_paint_b")
@@ -1069,6 +1222,10 @@ if(Python3_Interpreter_FOUND)
       FAIL_REGULAR_EXPRESSION "error: ")
   endif()
 endif()
+
+# The release gate (docs/spec/RELEASE_GATE.md): the critical functions from
+# end to end through the interface, on Linux and Windows (label gate).
+include(${CMAKE_CURRENT_SOURCE_DIR}/gate.cmake)
 
 # The Windows installer's script builds (NSIS; packaging/windows/tisma.nsi),
 # where makensis is installed.

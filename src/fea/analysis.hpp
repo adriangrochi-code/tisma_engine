@@ -121,6 +121,9 @@ struct AnalysisReport {
     std::vector<LayerSafety> layer_safety; // one per layer
     std::array<std::size_t, 3> below{};    // voxels with safety below 1, 1.5 and 2
     double prepare_seconds = 0.0, solve_seconds = 0.0;
+    // Where each step ran: the GPU's name or "CPU". The solver has no GPU
+    // version yet; the slicing of the part as printed uses the GPU when given.
+    std::string slicing_device = "CPU", solver_device = "CPU";
     std::vector<AnalysisWarning> warnings;
     ResolutionCheck resolution;
     // The result means something: the solver converged, a fixture holds the

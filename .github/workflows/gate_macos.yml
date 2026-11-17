@@ -1,0 +1,55 @@
+name: Puerta de lanzamiento (macOS)
+
+# The release gate (docs/spec/RELEASE_GATE.md) on macOS, arm64 and Intel
+# (QA for the owner, 2026-11-16): the same gate tests as gate.yml, run on the
+# runner's own display. A workflow of its own so that macOS, slower and newer,
+# never holds back Linux and Windows: a release publishes the macOS packages
+# only when this passes (release.yml, publish_macos).
+on:
+  push:
+    branches:
+      - dev
+      - alpha
+      - main
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Puerta de lanzamiento (macOS ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja and OpenSSL 3
+        run: brew install ninja openssl@3
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Gate tests
+        # The runners have no GPU: the window's OpenGL context uses Apple's
+        # software renderer (tools/patch_glfw.cmake). Only here; a Mac run
+        # by a person never has it set.
+        env:
+          TISMA_SOFTWARE_GL: "1"
+        run: ctest --test-dir build -L gate --output-on-failure
+      - name: Screenshots of the gate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-macos-${{ matrix.arch }}
+          path: build/tests/gate/*.png
+          if-no-files-found: ignore

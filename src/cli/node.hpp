@@ -1,7 +1,12 @@
 #pragma once
 
 #include "mesh/mesh.hpp"
+#include "fea/analysis.hpp"
+#include "config/settings.hpp"
+#include "mesh/indexed_mesh.hpp"
 #include "project/engineering.hpp"
+
+#include <nlohmann/json_fwd.hpp>
 
 #include <array>
 #include <cstddef>
@@ -53,6 +58,15 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
 // Whether `analyze` was given the nodes' way (cloud.md, rule 19): with
 // --summary, --sandbox, --mode, --object or --instance.
 bool node_analyze_wanted(std::span<const std::string_view> args);
+
+// «Relleno mínimo» (structural_optimization.md, rules 2 to 4) for one part:
+// the uniform search, then the zones (unless no_zones) and the ribs (with
+// ribs). Returns the summary (mode, solid, found, density, min_safety,
+// required_safety, analyses, zones, ribs) and puts the proposed zones and
+// ribs as boxes into `result`. progress gets 0 to 1. Throws AnalysisError.
+nlohmann::json lightest_infill_search(const IndexedMesh& mesh, const TriangleMesh& part, const Settings& settings,
+                                      const AnalysisCase& c, const ProjectEngineering& e, bool no_zones, bool ribs,
+                                      const std::function<void(double)>& progress, nlohmann::json& result);
 
 // tisma-engine analyze <project> -o <result.tea> --summary <summary.json>
 //   --sandbox --mode <analyze|lightest-infill|resin-structure>

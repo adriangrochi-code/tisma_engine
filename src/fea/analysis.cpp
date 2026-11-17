@@ -2,6 +2,7 @@
 // directions, the solve and its summary. Own design; see PROVENANCE.md.
 
 #include "fea/analysis.hpp"
+#include "gpu/compute.hpp"
 #include "slice/placement.hpp"
 
 #include "config/settings.hpp"
@@ -154,6 +155,7 @@ struct Prepared {
     double voxel = 0.0;
     std::size_t part = 0, printed = 0;
     std::vector<AnalysisWarning> warnings;
+    std::string slicing_device = "CPU";
 };
 
 Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c, gpu::Context* gpu,
@@ -175,7 +177,19 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
         Settings designed = settings;
         designed.scale_x = designed.scale_y = designed.scale_z = 100.0;
         designed.hole_offset = 0.0;
-        sliced = slice_model(mesh, designed, gpu, infill_stress, nullptr, nullptr, nullptr, nullptr, modifiers);
+        try {
+            sliced = slice_model(mesh, designed, gpu, infill_stress, nullptr, nullptr, nullptr, nullptr, modifiers);
+            if (gpu)
+                p.slicing_device = gpu->device_name();
+        } catch (const AnalysisError&) {
+            throw;
+        } catch (const std::runtime_error& e) {
+            if (!gpu)
+                throw;
+            p.warnings.push_back({"gpu_fallback", std::string("the GPU ") + gpu->device_name() + " failed (" +
+                                                      e.what() + "), the part was sliced on the CPU"});
+            sliced = slice_model(mesh, designed, nullptr, infill_stress, nullptr, nullptr, nullptr, nullptr, modifiers);
+        }
         p.layers = sliced.layers;
     } else {
         double min_z = std::numeric_limits<double>::infinity(), max_z = -min_z;
@@ -271,6 +285,7 @@ AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const 
     out.part_voxels = p.part;
     out.direction = std::move(p.direction);
     out.warnings = std::move(p.warnings);
+    out.slicing_device = std::move(p.slicing_device);
     out.grid = std::move(p.grid);
     const VoxelGrid& g = out.grid;
 

@@ -583,6 +583,8 @@ std::vector<ObjectRow> object_rows(const PlateObject& object) {
     std::stable_sort(groups.begin(), groups.end(), [&](const std::string& a, const std::string& b) { return rank(a) < rank(b); });
     for (std::string& g : groups)
         out.push_back({ObjectRow::Kind::Settings, std::move(g), 0});
+    for (std::size_t k = 0; k < object.parts.size(); ++k)
+        out.push_back({ObjectRow::Kind::Part, {}, k});
     for (std::size_t k = 0; k < object.volumes.size(); ++k)
         out.push_back({ObjectRow::Kind::Volume, {}, k});
     for (std::size_t k = 0; k < object.ranges.size(); ++k)

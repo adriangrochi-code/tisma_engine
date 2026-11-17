@@ -44,6 +44,15 @@ public:
     void orbit(float dx, float dy);
     void pan(float dx, float dy, float viewport_height);
     void zoom(float steps);
+    // CAD-style navigation (interface.md, «Navegación de la vista 3D»):
+    // orbit_about turns the camera around a world point that stays still on
+    // the screen; zoom_toward zooms by the same 15 % per step so the point
+    // under the mouse (ray from the eye along ray_dir) stays under it.
+    void orbit_about(Vec3 pivot, float dx, float dy);
+    void zoom_toward(float steps, Vec3 ray_dir);
+    // The yaw and pitch that look along a direction (from the eye toward the
+    // target); the pitch is held within the orbit's limits.
+    static void angles_for(Vec3 forward, float& yaw, float& pitch);
 
     // Looks at the box from the current direction so that all of it shows.
     void fit(Vec3 min, Vec3 max, float aspect);

@@ -1,0 +1,18 @@
+# The assistant points at what each step names (PLAN.md, «Ayuda, lo que
+# sigue»): Open, the printer, the settings, the plate's tools and Slice.
+wait 3
+tour 5
+wait 2
+expect-tour-points open_button
+tour 6
+wait 2
+expect-tour-points printer_selector
+tour 7
+wait 2
+expect-tour-points quick_settings
+tour 8
+wait 2
+expect-tour-points plate_tools
+tour 9
+wait 2
+expect-tour-points slice_button

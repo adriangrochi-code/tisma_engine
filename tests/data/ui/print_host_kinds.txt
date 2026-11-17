@@ -1,0 +1,11 @@
+# AstroBox and Repetier-Server are kinds of network program too (devices.md,
+# «Tipos de conexión»): chosen by their word, «Test» asks them and says why
+# when they do not answer.
+host astrobox http://127.0.0.1:9
+host test
+host-wait
+expect-host code unreachable
+host repetier http://127.0.0.1:9
+host test
+host-wait
+expect-host code unreachable

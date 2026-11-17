@@ -1,0 +1,11 @@
+# Release gate G13 (docs/spec/RELEASE_GATE.md): Aerodynamics on the part,
+# simulated on a coarse lattice (16 cells across the part) to stay quick, gives a result with a pressure
+# coefficient on every face.
+menu mode_engineering
+expect-control tab_aerodynamics
+menu tab_aerodynamics
+expect-control aero_analyze
+aero-cells 16
+menu aero_analyze
+expect-aero 1
+expect-aero-faces

@@ -1,0 +1,13 @@
+# Release gate G7: a raft of 3 layers under the 20 mm cube with no skirt:
+# its first layer reaches past the part 1.5 + 3 mm (raft_expansion and
+# raft_first_layer_expansion, the exact value) up to 7.26 mm (the same
+# snapped out to the lines' grid; skirt_brim_raft.md, rule 15 and test R5),
+# within a bead; the part starts on top of it, 0.2 + 2 x 0.3 mm and the
+# 0.1 mm gap up.
+menu tab_prepare
+set adhesion.skirt_loops 0
+set adhesion.raft_layers 3
+slice
+expect-gcode-valid
+expect-first-layer support 0 4.5 4.4 7.36
+expect-part-bottom 0.85 0.95

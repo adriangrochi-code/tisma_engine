@@ -1,0 +1,6 @@
+# Release gate G14 (docs/spec/RELEASE_GATE.md): a printer of the published
+# pack, picked on the command line as the interface picks it, slices the cube
+# to checked G-code that starts with the printer's own start G-code.
+slice
+expect-gcode-valid
+expect-start-gcode

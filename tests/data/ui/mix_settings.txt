@@ -1,0 +1,27 @@
+# The colour mixing cards (color_mixing_plus.md, settings): their rows are on
+# the panel, and the colour prediction with each filament's TD changes a
+# blend's foreseen colour (rules 20 and 21).
+wait 3
+pref level advanced
+set machine.extruders 2
+add-mix 1 2
+click mixing.surface_depth
+select-all
+type 1,2
+key enter
+expect mixing.surface_depth 1.2
+click mixing.step
+select-all
+type 0,4
+key enter
+expect mixing.step 0.4
+click extrusion.transmission_distance
+select-all
+type 3
+key enter
+expect extrusion.transmission_distance [3.0]
+mix-color-mark
+set mixing.predictor "spectral"
+click mixing.predictor
+key escape
+expect-mix-color changed

@@ -1,0 +1,6 @@
+# Forced support painted with the supports off (QA, 2026-11-16: no support):
+# the supports go on, only under what is painted, and the slice has them.
+slice
+expect-gcode-count ;TYPE:Support 20
+expect-setting support.enabled true
+expect-setting support.automatic false

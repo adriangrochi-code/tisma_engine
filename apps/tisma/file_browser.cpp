@@ -9,6 +9,9 @@
 #include <windows.h>
 #include <commdlg.h>
 #endif
+#ifdef __APPLE__
+#include "file_dialog_macos.hpp"
+#endif
 
 #include "ui/text.hpp"
 
@@ -98,6 +101,15 @@ bool FileBrowser::run_native() {
     const BOOL ok = mode_ == Mode::Save ? GetSaveFileNameW(&ofn) : GetOpenFileNameW(&ofn);
     native_chosen_ = ok ? std::filesystem::path(std::wstring(file.data())) : std::filesystem::path();
     if (ok)
+        folder_ = native_chosen_.parent_path();
+    return true;
+}
+#elif defined(__APPLE__)
+// macOS's NSOpenPanel and NSSavePanel (file_dialog_macos.mm).
+bool FileBrowser::run_native() {
+    if (!macos_file_dialog(mode_ == Mode::Save, title_, extensions_, folder_, name_, native_chosen_))
+        return false;
+    if (!native_chosen_.empty())
         folder_ = native_chosen_.parent_path();
     return true;
 }

@@ -178,7 +178,8 @@ const std::map<std::string, InfillPattern>& infill_patterns() {
         {"concentric", InfillPattern::Concentric},
         {"hilbert", InfillPattern::Hilbert},
         {"archimedean", InfillPattern::Archimedean},
-        {"octagram", InfillPattern::Octagram}};
+        {"octagram", InfillPattern::Octagram},
+        {"honeycomb_3d", InfillPattern::Honeycomb3d}};
     return names;
 }
 
@@ -464,8 +465,10 @@ double nozzle_of(const Settings& settings, int extruder) {
 }
 
 KindExtruders kind_extruders(const Settings& s) {
-    KindExtruders k{s.extruder_walls,  s.extruder_infill,           s.extruder_solid_infill,
-                    s.extruder_support, s.extruder_support_interface, s.extruder_wipe_tower};
+    // One the machine does not have is the first (multi_extruder.md, rule 8 ter, ME14).
+    const auto have = [&](int e) { return e > std::max(s.extruders, 1) ? 1 : e; };
+    KindExtruders k{have(s.extruder_walls),   have(s.extruder_infill),           have(s.extruder_solid_infill),
+                    have(s.extruder_support), have(s.extruder_support_interface), have(s.extruder_wipe_tower)};
     if (!s.fine_walls_coarse_infill || s.extruders < 2)
         return k;
     // The finest and the coarsest nozzle, the first of equals.
@@ -552,6 +555,10 @@ const char* strict_parser_name(StrictParser parser) { return parser == StrictPar
 
 const char* top_one_wall_name(TopOneWall where) {
     return where == TopOneWall::Top ? "top" : where == TopOneWall::Topmost ? "topmost" : "none";
+}
+
+const char* vertical_shell_name(VerticalShell mode) {
+    return mode == VerticalShell::Disabled ? "disabled" : mode == VerticalShell::Partial ? "partial" : "enabled";
 }
 
 const char* draft_shield_name(DraftShield shield) {
@@ -765,6 +772,7 @@ std::optional<std::string> engine_setting_key(std::string_view key) {
         {"first_nozzle_temp", "first_layer_temperature"},
         {"bed_temp", "bed_temperature"},
         {"first_bed_temp", "first_layer_bed_temperature"},
+        {"idle_temperature", "idle_temperature"}, // multi_extruder.md, rule 8 quater
     };
     if (const auto t = temperatures.find(name); t != temperatures.end())
         return "machine.variables." + t->second;
@@ -800,6 +808,18 @@ namespace {
 // extrusion.flow in %, the rest to extrusion) and the group is dropped. A key
 // given in both places, or one the engine does not know, is an error.
 void material_aliases(json& root) {
+    // filament.idle_temperature (multi_extruder.md, rule 8 quater) is the
+    // material's, to machine.variables.idle_temperature.
+    if (const auto f = root.find("filament"); f != root.end() && f->is_object() && f->contains("idle_temperature")) {
+        json& m = root["material"];
+        if (m.is_null())
+            m = json::object();
+        if (m.is_object() && !m.contains("idle_temperature"))
+            m["idle_temperature"] = (*f)["idle_temperature"];
+        f->erase("idle_temperature");
+        if (f->empty())
+            root.erase(f);
+    }
     const auto it = root.find("material");
     if (it == root.end())
         return;
@@ -837,13 +857,14 @@ void material_aliases(json& root) {
         {"first_nozzle_temp", "first_layer_temperature"},
         {"bed_temp", "bed_temperature"},
         {"first_bed_temp", "first_layer_bed_temperature"},
+        {"idle_temperature", "idle_temperature"}, // multi_extruder.md, rule 8 quater
     };
     static const std::set<std::string> extrusion = {
         "min_purge_on_tower", "infill_max_speed", "infill_max_crossing_speed", "loading_speed", "loading_speed_start",
         "unloading_speed", "unloading_speed_start", "start_gcode", "end_gcode", "ramming", "purge_multiplier", "density",
         "cost", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "chamber_temperature",
         "chamber_min_temperature", "load_time", "unload_time", "toolchange_delay", "spool_weight", "shrinkage_xy",
-        "shrinkage_z", "type", "custom_parameters"};
+        "shrinkage_z", "type", "custom_parameters", "transmission_distance"};
     for (const auto& [key, value] : material.items()) {
         if (const auto t = temperatures.find(key); t != temperatures.end()) {
             variable(t->second, key, value);
@@ -942,7 +963,7 @@ Settings parse_checked(std::string_view text) {
             group == "fuzzy" || group == "vase" || group == "cad" || group == "placement" || group == "transform" || group == "arcs" ||
             group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
-            group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
+            group == "interlocking" || group == "painting" || group == "multi" || group == "mixing" || group == "curved" || group == "head" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin" ||
             group == "belt" || group == "print" || group == "calibration" || group == "object")
             continue;
@@ -1048,7 +1069,7 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
-                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
+                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall", "vertical_shell",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
                 "spread_count", "transition_length", "transition_angle", "transition_margin", "polyholes", "polyhole_margin",
                 "polyhole_twist", "polyhole_max_edges", "unsupported_last"},
@@ -1056,6 +1077,13 @@ Settings parse_checked(std::string_view text) {
         if (n == "generator") {
             s.wall_generator =
                 choice<WallGenerator>(g, n, k, {{"variable", WallGenerator::Variable}, {"fixed", WallGenerator::Fixed}});
+            return;
+        }
+        if (n == "vertical_shell") {
+            s.vertical_shell = choice<VerticalShell>(g, n, k,
+                                                     {{"disabled", VerticalShell::Disabled},
+                                                      {"partial", VerticalShell::Partial},
+                                                      {"enabled", VerticalShell::Enabled}});
             return;
         }
         if (n == "top_one_wall") {
@@ -1461,6 +1489,77 @@ Settings parse_checked(std::string_view text) {
         else
             s.fine_walls_coarse_infill = v.get<bool>();
     });
+    // Sublayers in the blends' zones (color_mixing_plus.md, rules 10 and 11).
+    read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill", "cadence_heights", "height_a",
+                                "height_b", "step", "surface_only", "surface_depth",
+                                "extra_walls", "purge_into_infill", "purge_infill_max", "predictor"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "extra_walls") { // rule 14
+            if (!v.is_number_integer() || v.get<int>() < 0 || v.get<int>() > 8)
+                fail(k, "must be a whole number from 0 to 8");
+            s.mix_extra_walls = v.get<int>();
+            return;
+        }
+        if (n == "surface_depth") { // rule 13
+            if (!v.is_number() || !(v.get<double>() >= 0.1 && v.get<double>() <= 5.0))
+                fail(k, "must be from 0.1 to 5 mm");
+            s.mix_surface_depth = v.get<double>();
+            return;
+        }
+        if (n == "surface_only") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.mix_surface_only = v.get<bool>();
+            return;
+        }
+        if (n == "step") { // rule 9
+            if (!v.is_number() || !(v.get<double>() == 0.0 || (v.get<double>() >= 0.01 && v.get<double>() <= 2.0)))
+                fail(k, "must be 0 (the layer height) or from 0.01 to 2 mm");
+            s.mix_step = v.get<double>();
+            return;
+        }
+        if (n == "height_a" || n == "height_b") { // rule 8; the machine's limits when slicing
+            if (!v.is_number() || !(v.get<double>() == 0.0 || (v.get<double>() >= 0.01 && v.get<double>() <= 2.0)))
+                fail(k, "must be 0 (the layer height) or from 0.01 to 2 mm");
+            (n == "height_a" ? s.mix_height_a : s.mix_height_b) = v.get<double>();
+            return;
+        }
+        if (n == "predictor") { // rules 20, 21
+            if (!v.is_string() || (v.get<std::string>() != "mixer" && v.get<std::string>() != "spectral"))
+                fail(k, "must be \"mixer\" or \"spectral\"");
+            s.mix_predictor = v.get<std::string>();
+            return;
+        }
+        if (n == "cadence_heights") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.mix_cadence_heights = v.get<bool>();
+            return;
+        }
+        if (n == "purge_infill_max") { // rule 35
+            if (!v.is_number() || !(v.get<double>() >= 0.0 && v.get<double>() <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.mix_purge_infill_max = v.get<double>();
+            return;
+        }
+        if (n == "purge_into_infill") { // rule 33
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.mix_purge_into_infill = v.get<bool>();
+            return;
+        }
+        if (n == "sub_min_height") {
+            if (!v.is_number() || !(v.get<double>() >= 0.01 && v.get<double>() <= 2.0))
+                fail(k, "must be from 0.01 to 2 mm");
+            s.mix_sub_min_height = v.get<double>();
+            return;
+        }
+        if (!v.is_boolean())
+            fail(k, "must be true or false");
+        (n == "subdivide" ? s.mix_subdivide : n == "sub_first_layer" ? s.mix_sub_first_layer : s.mix_sub_infill) =
+            v.get<bool>();
+    });
     // Curved layers (nonplanar.md) and the print head around the nozzle.
     read_group(root, "curved",
                {"mode", "pattern", "amplitude", "wavelength", "angle", "twist", "cone_angle", "fit_head", "flat_below",
@@ -1564,7 +1663,7 @@ Settings parse_checked(std::string_view text) {
     });
     // Resin printing (resin.md).
     read_group(root, "resin",
-               {"layer_height", "exposure", "bottom_exposure", "bottom_layers", "elephant_foot", "scale_x", "scale_y",
+               {"layer_height", "first_layer_height", "exposure", "bottom_exposure", "bottom_layers", "elephant_foot", "scale_x", "scale_y",
                 "scale_z", "lift_distance", "lift_speed", "bottom_lift_distance", "bottom_lift_speed", "retract_speed",
                 "wait_before_exposure", "wait_after_cure", "wait_after_lift", "light_pwm", "bottom_light_pwm",
                 "antialiasing", "density", "gamma", "z_correction_layers", "absolute_correction", "printer_name",
@@ -1610,6 +1709,8 @@ Settings parse_checked(std::string_view text) {
         };
         if (n == "layer_height")
             s.resin_layer_height = in(0.005, 0.5);
+        else if (n == "first_layer_height") // 0: resin.layer_height (resin.md, rule 1)
+            s.resin_first_layer_height = d == 0.0 ? 0.0 : in(0.005, 0.5);
         else if (n == "exposure" || n == "bottom_exposure")
             (n == "exposure" ? s.resin_exposure : s.resin_bottom_exposure) = above(600.0, "s");
         else if (n == "bottom_layers")
@@ -1734,7 +1835,7 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be a whole number from 0 to 1000");
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
-    read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
+    read_group(root, "infill", {"density", "angle", "angles", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
                                 "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width", "before_walls",
@@ -1842,6 +1943,20 @@ Settings parse_checked(std::string_view text) {
             s.infill_combine_max_height = {d, false};
             return;
         }
+        if (n == "angles") {
+            const char* what = "must be a list of up to 64 angles in degrees, from -360 to 360";
+            const json& v = g.at(n);
+            if (!v.is_array() || v.size() > 64)
+                fail(k, what);
+            std::vector<double> list;
+            for (const json& x : v) {
+                if (!x.is_number() || !(std::fabs(x.get<double>()) <= 360.0))
+                    fail(k, what);
+                list.push_back(x.get<double>());
+            }
+            s.infill_angles = std::move(list);
+            return;
+        }
         if (n == "combine_layers") {
             const double v = number(g, n, k);
             if (v != std::floor(v) || v < 1.0 || v > 20.0)
@@ -1877,7 +1992,7 @@ Settings parse_checked(std::string_view text) {
         }
     };
     read_group(root, "machine",
-               {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
+               {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "flavor_choices", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
                 "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
                 "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "heat_rate_nozzle", "heat_rate_bed",
@@ -2068,6 +2183,17 @@ Settings parse_checked(std::string_view text) {
                                                  : s.max_chamber_temp) = d;
                    } else if (n == "flavor") {
                        s.flavor = choice<GcodeFlavor>(g, n, k, flavors());
+                   } else if (n == "flavor_choices") {
+                       if (!v.is_array())
+                           fail(k, "must be a list of firmware names");
+                       s.flavor_choices.clear();
+                       for (const json& f : v) {
+                           const auto it = f.is_string() ? flavors().find(f.get<std::string>()) : flavors().end();
+                           if (it == flavors().end())
+                               fail(k, "must name firmwares that machine.flavor takes");
+                           if (std::find(s.flavor_choices.begin(), s.flavor_choices.end(), it->second) == s.flavor_choices.end())
+                               s.flavor_choices.push_back(it->second);
+                       }
                    } else if (n == "strict_parser") {
                        s.strict_parser = choice<StrictParser>(
                            g, n, k, {{"none", StrictParser::None}, {"anycubic", StrictParser::Anycubic}});
@@ -2184,6 +2310,8 @@ Settings parse_checked(std::string_view text) {
                                             ? &s.overhang_speeds[std::size_t(n.back() - '0')]
                                             : nullptr;
                    if (v.is_null()) { // not set: from the printer's profile
+                       if (n == "first_layer")
+                           s.first_layer_speed_percent = false;
                        if (share)
                            *share = {};
                        else
@@ -2201,9 +2329,22 @@ Settings parse_checked(std::string_view text) {
                        *share = {p, true};
                        return;
                    }
+                   if (n == "first_layer" && v.is_string()) { // "50%": of each extrusion's speed (gcode_motion.md, rule 2)
+                       const std::string t = v.get<std::string>();
+                       char* end = nullptr;
+                       const double p = std::strtod(t.c_str(), &end);
+                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) ||
+                           !(p <= 1000.0))
+                           fail(k, "must be a number of mm/s or a percentage from 0 to 1000 like \"50%\"");
+                       s.first_layer_speed = p;
+                       s.first_layer_speed_percent = true;
+                       return;
+                   }
                    const double d = number(g, n, k);
                    if (!(d > 0.0))
                        fail(k, "must be greater than 0");
+                   if (n == "first_layer")
+                       s.first_layer_speed_percent = false;
                    if (share)
                        *share = {d, false};
                    else if (n == "bridges" || n == "gap_fill" || n == "travel_z")
@@ -2236,7 +2377,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction",
                {"length", "speed", "lift", "min_travel", "unretract_speed", "restart_extra", "on_layer_change", "wipe",
-                "before_wipe", "after_wipe", "wipe_inward", "wipe_inward_distance", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
+                "before_wipe", "after_wipe", "wipe_inward", "wipe_inward_distance", "only_crossing_walls", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
                 "coast"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    // A tool change's (multi_extruder.md, rule 5): one value for
@@ -2259,13 +2400,15 @@ Settings parse_checked(std::string_view text) {
                        (n == "toolchange_length" ? s.toolchange_length : s.toolchange_restart_extra) = std::move(list);
                        return;
                    }
-                   if (n == "on_layer_change" || n == "wipe" || n == "firmware" || n == "wipe_inward") {
+                   if (n == "on_layer_change" || n == "wipe" || n == "firmware" || n == "wipe_inward" ||
+                       n == "only_crossing_walls") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       (n == "wipe"          ? s.wipe
-                        : n == "firmware"    ? s.firmware_retraction
-                        : n == "wipe_inward" ? s.wipe_inward
-                                             : s.retract_layer_change) = g.at(n).get<bool>();
+                       (n == "wipe"                  ? s.wipe
+                        : n == "firmware"            ? s.firmware_retraction
+                        : n == "wipe_inward"         ? s.wipe_inward
+                        : n == "only_crossing_walls" ? s.retract_only_crossing_walls
+                                                     : s.retract_layer_change) = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "wipe_inward_distance") { // mm, or % of the outer wall's width
@@ -2664,12 +2807,18 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be from 0.1 to 20 mm");
                    s.fuzzy_point_distance = v;
                });
-    read_group(root, "ironing", {"enabled", "surfaces", "flow", "spacing", "speed"},
+    read_group(root, "ironing", {"enabled", "surfaces", "flow", "spacing", "speed", "angle", "angle_fixed"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "enabled") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
                        s.ironing = g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "angle_fixed") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.ironing_angle_fixed = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "surfaces") {
@@ -2687,6 +2836,10 @@ Settings parse_checked(std::string_view text) {
                        if (!(v >= 0.01 && v <= 2.0))
                            fail(k, "must be from 0.01 to 2 mm");
                        s.ironing_spacing = v;
+                   } else if (n == "angle") {
+                       if (!(v >= -360.0 && v <= 360.0))
+                           fail(k, "must be from -360 to 360 degrees");
+                       s.ironing_angle = v;
                    } else {
                        if (!(v > 0.0 && v <= 1000.0))
                            fail(k, "must be more than 0 and at most 1000 mm/s");
@@ -2860,7 +3013,8 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section", "feedstock"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section", "feedstock",
+                "transmission_distance", "source_values"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "feedstock") { // pellets.md, rule 1
             s.material_feedstock = choice<Feedstock>(g, n, k, {{"filament", Feedstock::Filament}, {"pellet", Feedstock::Pellet}});
@@ -2891,6 +3045,32 @@ Settings parse_checked(std::string_view text) {
         }
         if (n == "custom_parameters") {
             s.filament_parameters = flat_parameters(g.at(n), k);
+            return;
+        }
+        if (n == "source_values") {
+            const json& v = g.at(n);
+            if (!v.is_object())
+                fail(k, "must be an object of name: value or [values]");
+            const auto as_text = [&](const json& x, const std::string& key) {
+                if (x.is_string())
+                    return x.get<std::string>();
+                if (x.is_number() || x.is_boolean())
+                    return x.dump();
+                fail(key, "values must be strings, numbers or booleans");
+            };
+            for (const auto& [name, value] : v.items()) {
+                if (name.empty() || std::any_of(name.begin(), name.end(), [](char c) {
+                        return static_cast<unsigned char>(c) < 0x20 || c == '[' || c == ']';
+                    }))
+                    fail(k + "." + name, "names must be text without line breaks or brackets");
+                std::vector<std::string> list;
+                if (value.is_array())
+                    for (const json& item : value)
+                        list.push_back(as_text(item, k + "." + name));
+                else
+                    list.push_back(as_text(value, k + "." + name));
+                s.source_values[name] = std::move(list);
+            }
             return;
         }
         if (n == "type") {
@@ -2942,6 +3122,20 @@ Settings parse_checked(std::string_view text) {
              : n == "toolchange_delay"      ? s.toolchange_delay
              : n == "load_time"             ? s.load_time
                                             : s.unload_time) = d;
+            return;
+        }
+        if (n == "transmission_distance") { // color_mixing_plus.md, rule 33: one value, or one per extruder
+            const json& v = g.at(n);
+            const char* what = "must be from 0 to 100 mm, or a list of them by extruder";
+            std::vector<double> list;
+            for (const json& x : v.is_array() ? v : json::array({v})) {
+                if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= 100.0))
+                    fail(k, what);
+                list.push_back(x.get<double>());
+            }
+            if (list.empty() || list.size() > std::size_t(kMaxExtruders))
+                fail(k, what);
+            s.transmission_distance = std::move(list);
             return;
         }
         // multi_extruder.md, rules 12 and 13: one value, or one per extruder.
@@ -3200,12 +3394,20 @@ void require_speeds(const Settings& settings) {
 }
 
 double fastest_extrusion(const Settings& s) {
-    const double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
+    double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
                                      s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed,
-                                     s.first_layer_speed, s.bridge_speed, s.gap_fill_speed, s.arcs_speed,
+                                     s.first_layer_speed_percent ? 0.0 : s.first_layer_speed, s.bridge_speed, s.gap_fill_speed, s.arcs_speed,
                                      s.over_bridges_speed.of(s.solid_infill_speed), s.small_loop_speed.of(s.wall_speed),
                                      s.first_layer_infill_speed.of(s.solid_infill_speed)});
+    if (s.first_layer_speed_percent) // the first layer at a share of each speed
+        fastest = std::max(fastest, fastest * s.first_layer_speed / 100.0);
     return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
+}
+
+double first_layer_of(const Settings& s, double own) {
+    if (!(s.first_layer_speed > 0.0))
+        return own;
+    return s.first_layer_speed_percent ? own * s.first_layer_speed / 100.0 : s.first_layer_speed;
 }
 
 double extruded_section(BeadSection section, double width, double height) {
@@ -3314,6 +3516,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"wipe_tower.purge_volumes", json(s.purge_volumes).dump()},
         {"extrusion.purge_multiplier", json(s.purge_multiplier).dump()},
         {"extrusion.min_purge_on_tower", json(s.min_purge_on_tower).dump()},
+        {"extrusion.transmission_distance", json(s.transmission_distance).dump()},
         {"mmu.cooling_tube_length", num(s.mmu_cooling_tube_length)},
         {"mmu.cooling_tube_position", num(s.mmu_cooling_tube_position)},
         {"mmu.parking_position", num(s.mmu_parking_position)},
@@ -3361,6 +3564,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"ironing.flow", num(s.ironing_flow)},
         {"ironing.spacing", num(s.ironing_spacing)},
         {"ironing.speed", num(s.ironing_speed)},
+        {"ironing.angle", num(s.ironing_angle)},
+        {"ironing.angle_fixed", flag(s.ironing_angle_fixed)},
         {"review.nozzle_force", num(s.review_nozzle_force)},
         {"review.bed_adhesion", num(s.review_bed_adhesion)},
         {"review.max_deflection", num(s.review_max_deflection)},
@@ -3409,8 +3614,23 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"head.clearance_radius", num(s.head_clearance_radius)},
         {"head.profile", json(s.head_profile).dump()},
         {"multi.color_mixing", s.color_mixing ? flag(*s.color_mixing) : "auto"},
+        {"mixing.subdivide", flag(s.mix_subdivide)},
+        {"mixing.sub_min_height", num(s.mix_sub_min_height)},
+        {"mixing.sub_first_layer", flag(s.mix_sub_first_layer)},
+        {"mixing.sub_infill", flag(s.mix_sub_infill)},
+        {"mixing.cadence_heights", flag(s.mix_cadence_heights)},
+        {"mixing.height_a", num(s.mix_height_a)},
+        {"mixing.height_b", num(s.mix_height_b)},
+        {"mixing.step", num(s.mix_step)},
+        {"mixing.surface_only", flag(s.mix_surface_only)},
+        {"mixing.surface_depth", num(s.mix_surface_depth)},
+        {"mixing.extra_walls", std::to_string(s.mix_extra_walls)},
+        {"mixing.purge_into_infill", flag(s.mix_purge_into_infill)},
+        {"mixing.purge_infill_max", num(s.mix_purge_infill_max)},
+        {"mixing.predictor", s.mix_predictor},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
+        {"infill.angles", json(s.infill_angles).dump()},
         {"infill.pattern", pattern},
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
         {"infill.width", num(s.infill_width)},
@@ -3483,6 +3703,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.display_mirror_x", flag(s.display_mirror_x)},
         {"machine.display_mirror_y", flag(s.display_mirror_y)},
         {"resin.layer_height", num(s.resin_layer_height)},
+        {"resin.first_layer_height", num(s.resin_first_layer_height)},
         {"resin.exposure", num(s.resin_exposure)},
         {"resin.bottom_exposure", num(s.resin_bottom_exposure)},
         {"resin.bottom_layers", std::to_string(s.resin_bottom_layers)},
@@ -3536,7 +3757,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.top_solid_infill", speed(s.top_solid_infill_speed)},
         {"speed.support", speed(s.support_speed)},
         {"speed.travel", speed(s.travel_speed)},
-        {"speed.first_layer", speed(s.first_layer_speed)},
+        {"speed.first_layer", share(Speed{s.first_layer_speed, s.first_layer_speed_percent})},
         {"speed.max", speed(s.max_speed)},
         {"speed.max_flow", num(s.speed_max_flow)},
         {"speed.bridges", speed(s.bridge_speed)},
@@ -3579,6 +3800,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.before_wipe", num(s.before_wipe)},
         {"retraction.after_wipe", num(s.after_wipe)},
         {"retraction.wipe_inward", flag(s.wipe_inward)},
+        {"retraction.only_crossing_walls", flag(s.retract_only_crossing_walls)},
         {"retraction.wipe_inward_distance", s.wipe_inward_distance.percent ? num(s.wipe_inward_distance.value) + "%"
                                                                             : num(s.wipe_inward_distance.value)},
         {"retraction.coast", num(s.coast)},
@@ -3601,6 +3823,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.polyhole_max_edges", std::to_string(s.polyhole_max_edges)},
         {"walls.staggered", flag(s.walls_staggered)},
         {"walls.top_one_wall", top_one_wall_name(s.top_one_wall)},
+        {"walls.vertical_shell", vertical_shell_name(s.vertical_shell)},
         {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
         {"walls.extra_if_needed", flag(s.extra_if_needed)},
         {"walls.avoid_curled_overhangs", flag(s.avoid_curled_overhangs)},
@@ -3834,6 +4057,7 @@ std::string settings_json(const Settings& s) {
           {"polyhole_max_edges", s.polyhole_max_edges},
           {"staggered", s.walls_staggered},
           {"top_one_wall", top_one_wall_name(s.top_one_wall)},
+          {"vertical_shell", vertical_shell_name(s.vertical_shell)},
           {"first_layer_one_wall", s.first_layer_one_wall},
           {"extra_if_needed", s.extra_if_needed},
           {"avoid_curled_overhangs", s.avoid_curled_overhangs},
@@ -3910,6 +4134,7 @@ std::string settings_json(const Settings& s) {
         {"belt", {{"enabled", s.belt_enabled}, {"angle", s.belt_angle}, {"belt_is_z", s.belt_is_z}}},
         {"resin",
          {{"layer_height", s.resin_layer_height},
+          {"first_layer_height", s.resin_first_layer_height},
           {"exposure", s.resin_exposure},
           {"bottom_exposure", s.resin_bottom_exposure},
           {"bottom_layers", s.resin_bottom_layers},
@@ -3963,6 +4188,21 @@ std::string settings_json(const Settings& s) {
         {"multi",
          {{"fine_walls_coarse_infill", s.fine_walls_coarse_infill},
           {"color_mixing", s.color_mixing ? ordered_json(*s.color_mixing) : ordered_json(nullptr)}}},
+        {"mixing",
+         {{"subdivide", s.mix_subdivide},
+          {"sub_min_height", s.mix_sub_min_height},
+          {"sub_first_layer", s.mix_sub_first_layer},
+          {"sub_infill", s.mix_sub_infill},
+          {"cadence_heights", s.mix_cadence_heights},
+          {"height_a", s.mix_height_a},
+          {"height_b", s.mix_height_b},
+          {"step", s.mix_step},
+          {"surface_only", s.mix_surface_only},
+          {"surface_depth", s.mix_surface_depth},
+          {"extra_walls", s.mix_extra_walls},
+          {"purge_into_infill", s.mix_purge_into_infill},
+          {"purge_infill_max", s.mix_purge_infill_max},
+          {"predictor", s.mix_predictor}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},
@@ -3996,6 +4236,7 @@ std::string settings_json(const Settings& s) {
         {"infill",
          {{"density", s.infill_density},
           {"angle", s.infill_angle},
+          {"angles", s.infill_angles},
           {"pattern", pattern},
           {"wall_overlap", s.infill_wall_overlap},
           {"width", s.infill_width},
@@ -4086,7 +4327,7 @@ std::string settings_json(const Settings& s) {
           {"top_solid_infill", speed(s.top_solid_infill_speed)},
           {"support", speed(s.support_speed)},
           {"travel", speed(s.travel_speed)},
-          {"first_layer", speed(s.first_layer_speed)},
+          {"first_layer", share(Speed{s.first_layer_speed, s.first_layer_speed_percent})},
           {"max", speed(s.max_speed)},
           {"max_flow", s.speed_max_flow},
           {"bridges", speed(s.bridge_speed)},
@@ -4119,6 +4360,7 @@ std::string settings_json(const Settings& s) {
           {"before_wipe", s.before_wipe},
           {"after_wipe", s.after_wipe},
           {"wipe_inward", s.wipe_inward},
+          {"only_crossing_walls", s.retract_only_crossing_walls},
           {"wipe_inward_distance", s.wipe_inward_distance.percent
                                        ? ordered_json(json(s.wipe_inward_distance.value).dump() + "%")
                                        : ordered_json(s.wipe_inward_distance.value)},
@@ -4231,7 +4473,9 @@ std::string settings_json(const Settings& s) {
                                                                       : "top"},
           {"flow", s.ironing_flow},
           {"spacing", s.ironing_spacing},
-          {"speed", s.ironing_speed}}},
+          {"speed", s.ironing_speed},
+          {"angle", s.ironing_angle},
+          {"angle_fixed", s.ironing_angle_fixed}}},
         {"review",
          {{"nozzle_force", s.review_nozzle_force},
           {"bed_adhesion", s.review_bed_adhesion},
@@ -4263,6 +4507,7 @@ std::string settings_json(const Settings& s) {
           {"end_gcode", s.filament_end_gcode},
           {"purge_multiplier", s.purge_multiplier},
           {"min_purge_on_tower", s.min_purge_on_tower},
+          {"transmission_distance", s.transmission_distance},
           {"loading_speed", s.loading_speed},
           {"loading_speed_start", s.loading_speed_start},
           {"unloading_speed", s.unloading_speed},
@@ -4308,6 +4553,18 @@ std::string settings_json(const Settings& s) {
     };
     if (!s.machine_macros.empty())
         root["machine"]["macros"] = machine_macros_json(s.machine_macros);
+    if (!s.source_values.empty()) {
+        ordered_json values = ordered_json::object();
+        for (const auto& [name, items] : s.source_values)
+            values[name] = items.size() == 1 ? ordered_json(items.front()) : ordered_json(items);
+        root["extrusion"]["source_values"] = std::move(values);
+    }
+    if (!s.flavor_choices.empty()) {
+        ordered_json choices = ordered_json::array();
+        for (const GcodeFlavor f : s.flavor_choices)
+            choices.push_back(flavor_name(f));
+        root["machine"]["flavor_choices"] = choices;
+    }
     return root.dump(2) + "\n";
 }
 
@@ -4419,12 +4676,10 @@ void check_settings(const Settings& s) {
             if (on)
                 throw SettingsError(std::string(key) + ": not with the interlocking waves (infill.waves)");
     }
-    // An extrusion's extruder must be one the machine has (multi_extruder.md, rule 2).
-    for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
-                                 {"extruders.solid_infill", s.extruder_solid_infill}, {"extruders.support", s.extruder_support},
-                                 {"extruders.support_interface", s.extruder_support_interface},
-                                 {"extruders.wipe_tower", s.extruder_wipe_tower},
-                                 {"extruders.bed_temperature_from", s.bed_temperature_from}})
+    // The bed's temperature from an extruder the machine has (multi_extruder.md,
+    // rule 2); an extrusion's extruder it does not have is the first, with a
+    // warning (rule 8 ter, ME14: capability_warnings).
+    for (const auto& [key, e] : {std::pair{"extruders.bed_temperature_from", s.bed_temperature_from}})
         if (e > s.extruders) {
             std::snprintf(text, sizeof text, "%s: extruder %d, but the machine has %d (machine.extruders)", key, e,
                           s.extruders);
@@ -4435,44 +4690,40 @@ void check_settings(const Settings& s) {
                       s.object_extruder, s.extruders);
         throw SettingsError(text);
     }
-    if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
-        std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
-                      s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+    // A bead's width (perimeters.md, rule 8, P15): more than its layer's
+    // height and at most three nozzles; under a quarter of the nozzle it
+    // slices with a warning (capability_warnings). 10 mm of infill or
+    // support from a 0.4 nozzle sliced and passed the G-code check (the spec
+    // team's BH5).
+    const auto bead = [&](const char* key, double width, double height) {
+        if (width > height && width <= 3.0 * nozzle)
+            return;
+        std::snprintf(text, sizeof text,
+                      "%s: %.3g mm cannot come out of a %.3g mm nozzle in %.3g mm layers (more than %.3g, up to %.3g mm)",
+                      key, width, nozzle, height, height, 3.0 * nozzle);
         throw SettingsError(text);
-    }
-    if (s.outer_wall_width > 0.0 && (s.outer_wall_width < 0.25 * nozzle || s.outer_wall_width > 4.0 * nozzle)) {
-        std::snprintf(text, sizeof text, "walls.outer_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
-                      s.outer_wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
-        throw SettingsError(text);
-    }
-    // The other beads by the same rule: 10 mm of infill or support from a 0.4
-    // nozzle sliced and passed the G-code check (the spec team's BH5).
+    };
+    bead("walls.width", s.wall_width, s.layer_height);
+    if (s.outer_wall_width > 0.0)
+        bead("walls.outer_width", s.outer_wall_width, s.layer_height);
     for (const auto& [key, width] : std::initializer_list<std::pair<const char*, double>>{
              {"infill.width", s.infill_width},
              {"surfaces.solid_width", s.solid_width},
              {"surfaces.top_width", s.top_width},
              {"support.width", s.support_width.value > 0.0 ? s.support_width.of(s.layer_height) : 0.0}})
-        if (width > 0.0 && (width < 0.25 * nozzle || width > 4.0 * nozzle)) {
-            std::snprintf(text, sizeof text, "%s: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)", key,
-                          width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
-            throw SettingsError(text);
-        }
+        if (width > 0.0)
+            bead(key, width, s.layer_height);
     // The thin walls' least bead: a minimum, so only its top (the spec team's
     // BH5, again: 9 mm on a 0.4 nozzle laid an over-wide bead).
-    if (const double least = s.wall_min_line_width.of(nozzle); least > 4.0 * nozzle) {
+    if (const double least = s.wall_min_line_width.of(nozzle); least > 3.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.min_line_width: %.3g mm cannot come out of a %.3g mm nozzle (up to %.3g mm)",
-                      least, nozzle, 4.0 * nozzle);
+                      least, nozzle, 3.0 * nozzle);
         throw SettingsError(text);
     }
     // The first layer's bead, by the same rule: 20 mm on a 0.4 nozzle spilt
     // past the skirt and the G-code failed its own check (the spec team's BH1).
-    if (const double first = s.first_line_width.of(s.first_layer_height);
-        s.first_line_width.value > 0.0 && (first < 0.25 * nozzle || first > 4.0 * nozzle)) {
-        std::snprintf(text, sizeof text,
-                      "layers.first_line_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)", first,
-                      nozzle, 0.25 * nozzle, 4.0 * nozzle);
-        throw SettingsError(text);
-    }
+    if (s.first_line_width.value > 0.0)
+        bead("layers.first_line_width", s.first_line_width.of(s.first_layer_height), s.first_layer_height);
 }
 
 } // namespace tisma

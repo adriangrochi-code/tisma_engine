@@ -1,0 +1,20 @@
+{"format": "tisma-library-index", "version": 1, "generated": "2026-11-16T12:00:00Z", "sequence": 7, "models": [
+ {"id": "m1", "revision": 1, "published": "2026-11-10", "name": "Engranaje recto", "description": "Un engranaje de 20 dientes.",
+  "tags": ["mecánica", "engranajes"], "license": "CC-BY-4.0", "author": {"account": "a1", "name": "Ana"},
+  "thumbnail": "gear", "size": @SIZE@, "checked": true,
+  "files": [{"path": "engranaje.3mf", "role": "project", "size": @SIZE@, "sha256": "@SHA@"}],
+  "swarm": {"protocol": "libp2p/tisma-library/1", "piece_size": 1048576, "piece_roots": {"@SHA@": "@ROOT@"}}},
+ {"id": "m2", "revision": 2, "published": "2026-11-11", "name": "Soporte de teléfono", "description": "Para el escritorio.",
+  "tags": ["hogar"], "license": "CC0-1.0", "author": {"account": "a2", "name": "Bruno"},
+  "thumbnail": "", "size": 2000, "checked": false,
+  "files": [{"path": "soporte.3mf", "role": "project", "size": 2000, "sha256": "BB22"}],
+  "swarm": {"protocol": "libp2p/tisma-library/1", "piece_size": 1048576, "piece_roots": {"bb22": "0000000000000000000000000000000000000000000000000000000000000000"}}},
+ {"id": "m3", "revision": 1, "published": "2026-11-12", "name": "Pieza bloqueada", "description": "",
+  "tags": [], "license": "MIT", "author": {"account": "a3", "name": "Carla"},
+  "thumbnail": "", "size": 10, "checked": false,
+  "files": [{"path": "x.3mf", "role": "project", "size": 10, "sha256": "CC33"}]},
+ {"id": "m4", "revision": 1, "published": "2026-11-12", "name": "Con G-code", "description": "",
+  "tags": [], "license": "MIT", "author": {"account": "a4", "name": "Dario"},
+  "thumbnail": "", "size": 10, "checked": false,
+  "files": [{"path": "y.gcode", "role": "project", "size": 10, "sha256": "DD44"}]}
+]}

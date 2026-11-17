@@ -10,15 +10,22 @@
 // HTTP Digest (RFC 7616) for its user and password, and Duet's RepRapFirmware
 // in standalone mode (the RepRapFirmware wiki, «HTTP requests» and «Object
 // Model Documentation»: rr_connect, rr_upload, rr_gcode, rr_model,
-// rr_disconnect). Own design; see PROVENANCE.md.
+// rr_disconnect). AstroBox has no published API: it is a fork of OctoPrint
+// and answers OctoPrint's version and upload calls (devices.md, rule 24), so
+// only those. Repetier-Server's Web API (repetier-server.com, «Web API»):
+// /printer/info, /printer/api/<slug>?a=<command> with the key in x-api-key,
+// and the upload of a file into the printer's models or jobs. Own design;
+// see PROVENANCE.md.
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;
@@ -26,6 +33,7 @@ struct HostConfig {
     std::string api_key; // a secret: never logged
     std::string user, password; // PrusaLink's Digest login, Duet's board password (secrets too;
                                 // Duet: «reprap» when empty, its default)
+    std::string printer; // Repetier-Server: the printer's slug on the server; empty, its first printer
     int timeout_s = 20;
 };
 
@@ -70,11 +78,22 @@ struct HostLimits : HostResult {
 };
 HostLimits host_limits(const HostConfig& host);
 
+// Moonraker found on the network (printer_connections.md, «Búsqueda en la
+// red»: its `_moonraker._tcp` services, each confirmed by GET /server/info):
+// of the candidates (the service's instance name and address), the ones that
+// answer, each address once, with what the server says it is.
+struct FoundHost {
+    std::string name, url, server;
+};
+std::vector<FoundHost> confirm_moonraker(const std::vector<std::pair<std::string, std::string>>& candidates,
+                                         int timeout_s = 3);
+
 // The engine's words for a host kind ("octoprint", "moonraker", "prusalink",
-// "duet"); false for another word.
+// "duet", "astrobox", "repetier"); false for another word.
 bool host_kind_from(const std::string& word, HostKind& out);
 // Back: the word host_kind_from reads, and the name a person knows it by
-// («OctoPrint», «Klipper (Moonraker)», «PrusaLink», «Duet»).
+// («OctoPrint», «Klipper (Moonraker)», «PrusaLink», «Duet», «AstroBox»,
+// «Repetier-Server»).
 const char* host_kind_word(HostKind kind);
 const char* host_kind_name(HostKind kind);
 

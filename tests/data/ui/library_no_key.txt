@@ -1,0 +1,8 @@
+# A build without the project's key (TISMA_UPDATES_KEY) cannot check the
+# library's index: it says so instead of failing (QA, 2026-11-16). Más ›
+# Biblioteca opens it too.
+menu more
+menu library
+wait 5
+expect-text No disponible en esta versión
+expect-no-control library_count

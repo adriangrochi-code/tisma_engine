@@ -236,6 +236,43 @@ TEST_CASE("speeds: the first layer's solid infill at speed.first_layer_infill, p
     CHECK(first_layer(s) == std::pair{std::set<double>{50.0}, std::set<double>{30.0}});
 }
 
+TEST_CASE("speeds: speed.first_layer sets every first-layer extrusion, or a share of each (gcode_motion.md, rule 2)",
+          "[gcode][speeds]") {
+    Settings s = test_printer();
+    s.wall_speed = 20.0;
+    s.outer_wall_speed = {20.0, false};
+    s.solid_infill_speed = 40.0;
+    s.first_layer_infill_speed = {};
+    s.min_layer_time = 0.0; // no slowing down for cooling
+    const auto first_layer = [&](const Settings& settings) {
+        std::map<std::string, std::set<double>> by_type;
+        for (const Move& m : moves_of(gcode_of(cube(20.0f, 2.0f), settings)))
+            if (extrudes(m) && m.z == "0.200")
+                by_type[m.type].insert(m.feed / 60.0);
+        return by_type;
+    };
+    // In mm/s: not a cap; the walls, slower at 20, go at 30 too.
+    s.first_layer_speed = 30.0;
+    std::map<std::string, std::set<double>> f = first_layer(s);
+    CHECK(f["Perimeter"] == std::set<double>{30.0});
+    CHECK(f["External perimeter"] == std::set<double>{30.0});
+    CHECK(f["Solid infill"] == std::set<double>{30.0});
+    // "50%": each at half its own.
+    s.first_layer_speed = 50.0;
+    s.first_layer_speed_percent = true;
+    f = first_layer(s);
+    CHECK(f["Perimeter"] == std::set<double>{10.0});
+    CHECK(f["External perimeter"] == std::set<double>{10.0});
+    CHECK(f["Solid infill"] == std::set<double>{20.0});
+    // Read and written as a percentage.
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(back.first_layer_speed == 50.0);
+    CHECK(back.first_layer_speed_percent);
+    CHECK(parse_settings(R"({"speed": {"first_layer": "50%"}})").first_layer_speed_percent);
+    CHECK_FALSE(parse_settings(R"({"speed": {"first_layer": 25}})").first_layer_speed_percent);
+    CHECK_THROWS(parse_settings(R"({"speed": {"first_layer": "50"}})"));
+}
+
 TEST_CASE("speeds: moves in Z at speed.travel_z (speeds_accels.md, rule 4; V4)", "[gcode][speeds]") {
     Settings s = test_printer();
     s.retract_lift = 0.4;

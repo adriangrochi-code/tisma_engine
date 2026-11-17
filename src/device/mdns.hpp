@@ -25,7 +25,8 @@ struct MdnsService {
     int port = 0;
     std::map<std::string, std::string> txt; // «path» → «/», «model» → …
     // The program's address: http://address:port + path (OctoPrint's
-    // Discovery documentation: the server is the service's plus «path»).
+    // Discovery documentation: the server is the service's plus «path»;
+    // Moonraker's `_moonraker._tcp` service: plus «route_prefix»).
     std::string url() const;
 };
 

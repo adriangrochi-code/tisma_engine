@@ -61,6 +61,13 @@ private:
     std::array<std::vector<Tree>, kPaintChannels> trees_;
 };
 
+// The colour marks read through a table of slots (color_mixing_plus.md, MX33):
+// mark k is slot k, and slots[k - 1] the filament or blend it prints with (0:
+// the part's own, as unpainted). Marks past the table are the part's own too.
+// An empty table leaves the marks as they are: each one is its number. Only
+// the colour channel changes.
+Painting with_color_slots(const Painting& painting, const std::vector<int>& slots);
+
 // Each painted piece of triangle t with its mark (never 0), as the corners of
 // a smaller triangle with the same winding.
 void for_each_painted(const Painting& painting, PaintChannel channel, std::size_t triangle, const Vec3f& a,

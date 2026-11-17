@@ -1,0 +1,21 @@
+# Release gate G6: the supports, turned on by hand, stay on through a change
+# of printer and of filament; a print profile that has them off turns them
+# off with the notice; on again by hand, undo (which takes back plate steps,
+# not the settings) leaves them on.
+set support.enabled true
+wait 3
+choose-profile printer Marlin 256 × 256 mm
+wait 3
+expect-setting support.enabled true
+choose-profile filament PETG
+wait 3
+expect-setting support.enabled true
+choose-profile print 0.20 mm
+wait 3
+expect-setting support.enabled false
+expect-toast Los soportes quedaron apagados con el cambio
+set support.enabled true
+wait 3
+key ctrl+z
+wait 3
+expect-setting support.enabled true

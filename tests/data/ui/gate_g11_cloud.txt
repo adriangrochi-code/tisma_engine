@@ -1,0 +1,20 @@
+# Release gate G11: slicing in the cloud against a master of test (the
+# engine slices the project as the nodes do): the G-code that comes back is,
+# byte for byte, the one sliced here.
+slice
+keep-gcode gate_g11_local.gcode
+menu more
+menu cloud_slice
+expect-control cloud_window
+cloud-wait
+cloud-field email ana@example.com
+cloud-field password secret123
+menu cloud_login
+cloud-wait
+expect-cloud logged yes
+menu cloud_close
+menu more
+menu cloud_slice
+cloud-slice-wait
+expect-cloud viewer yes
+expect-gcode-same gate_g11_local.gcode

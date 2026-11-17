@@ -35,6 +35,7 @@ using namespace tisma;
 using namespace tisma::ui;
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
 
 namespace {
 
@@ -143,6 +144,49 @@ TEST_CASE("ui: the camera frames a box and moves with the mouse", "[ui]") {
     const Vec3 before = cam.target;
     cam.pan(10, 0, 800);
     CHECK(dot(cam.target - before, cam.right()) < 0.0f);
+}
+
+TEST_CASE("ui: CAD navigation keeps the pivot and the point under the mouse still (interface.md, UI17)", "[ui]") {
+    for (bool ortho : {false, true}) {
+        OrbitCamera cam;
+        cam.orthographic = ortho;
+        cam.target = {10, 20, 5};
+        cam.distance = 300.0f;
+        cam.set_view(StandardView::Iso);
+        const auto on_screen = [&](Vec3 p) { return transform_point(cam.projection(1.5f) * cam.view(), p); };
+        // Orbiting about a point of the model off the target: it stays put.
+        const Vec3 pivot{40, -15, 30};
+        const Vec3 at = on_screen(pivot);
+        cam.orbit_about(pivot, 37.0f, -21.0f);
+        const Vec3 after = on_screen(pivot);
+        CHECK_THAT(double(after.x), WithinAbs(at.x, 1e-3));
+        CHECK_THAT(double(after.y), WithinAbs(at.y, 1e-3));
+        CHECK(std::abs(cam.yaw - (25.0f * float(std::numbers::pi) / 180.0f - 37.0f * 0.008f)) < 1e-4f);
+        // Zooming toward the mouse: the point the ray meets keeps its pixel
+        // and comes nearer.
+        const Vec3 e = cam.eye();
+        const Vec3 dir = normalize(cam.forward() + cam.right() * 0.2f - cam.up() * 0.1f);
+        const Vec3 p = e + dir * (cam.lens_distance() / dot(dir, cam.forward()) * 0.7f);
+        const Vec3 p0 = on_screen(p);
+        const float d = cam.distance;
+        cam.zoom_toward(2.0f, dir);
+        const Vec3 p1 = on_screen(p);
+        CHECK_THAT(double(p1.x), WithinAbs(p0.x, 1e-3));
+        CHECK_THAT(double(p1.y), WithinAbs(p0.y, 1e-3));
+        CHECK_THAT(double(cam.distance), WithinRel(double(d) * 0.85 * 0.85, 1e-4));
+    }
+    // The angles of a direction give that direction back.
+    for (Vec3 f : {Vec3{0, 1, 0}, Vec3{1, 0, 0}, Vec3{0.3f, -0.5f, -0.6f}, Vec3{-1, 1, 1}}) {
+        OrbitCamera cam;
+        OrbitCamera::angles_for(f, cam.yaw, cam.pitch);
+        const Vec3 g = normalize(f), h = cam.forward();
+        CHECK(dot(g, h) > 0.9999f);
+    }
+    OrbitCamera down;
+    down.yaw = 0.4f;
+    OrbitCamera::angles_for(Vec3{0, 0, -1}, down.yaw, down.pitch);
+    CHECK(down.forward().z < -0.999f);
+    CHECK_THAT(double(down.yaw), WithinAbs(0.4, 1e-6));
 }
 
 TEST_CASE("ui: the orthographic view keeps sizes whatever the depth (preview.md, rule 10)", "[ui]") {

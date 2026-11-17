@@ -1,0 +1,8 @@
+# Release gate G10 (QA, 2026-11-16): a settings file with only the supports,
+# opened with the model, changes only them: the G-code still homes, heats
+# the bed and the nozzle before the first extrusion and stays on the bed.
+expect-setting support.enabled true
+slice
+expect-gcode-valid
+expect-gcode-count ;TYPE:Support 1
+expect-gcode-ready

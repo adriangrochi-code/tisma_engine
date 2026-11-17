@@ -1,5 +1,6 @@
 #include "adhesion/adhesion.hpp"
 #include "config/settings.hpp"
+#include "gcode/macro_variables.hpp"
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
 #include "gcode/template.hpp"
@@ -13,6 +14,7 @@
 #include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -140,9 +142,12 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK(render_template("{print_bed_max[0]}x{print_bed_max[1]}", c, "t") == "250x220");
     CHECK(render_template("{printable_height}", c, "t") == render_template("{max_print_height}", c, "t"));
     // One the engine cannot fill yet: a neutral value, named for the log.
-    CHECK(c.unfilled.contains("curr_bed_type"));
-    CHECK(render_template("[curr_bed_type]", c, "t").empty());
-    CHECK(c.unfilled_used.contains("curr_bed_type"));
+    REQUIRE_FALSE(c.unfilled.empty());
+    const std::string unfilled = *c.unfilled.begin();
+    render_template("[" + unfilled + "]", c, "t");
+    CHECK(c.unfilled_used.contains(unfilled));
+    // No plate chosen: Bambu Studio's «Cool Plate» (rule 10 quater).
+    CHECK(render_template("[curr_bed_type]", c, "t") == "Cool Plate");
     // An index past the list's end gives its last value, named for the log
     // (rule 10 quater, BH45); one too large to read, or with an unknown
     // variable in it, fails.
@@ -160,6 +165,171 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK_FALSE(bc.unfilled.contains("curr_bed_type"));
     // A name that is in no list still fails (rule 5, GM6).
     CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
+}
+
+TEST_CASE("a computed number as the printers' G-code writes it; integer division (gcode_macros.md, rule 3, GM23)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"200"};
+    s.nozzle_diameter = 0.4;
+    TemplateContext c = template_context(s, SlicedModel{});
+    const std::pair<const char*, const char*> cases[] = {
+        {"{60}", "60"},           {"{2.5}", "2.5"},           {"{21/2.4053*60}", "523.843"},
+        {"{1/3}", "0"},           {"{100.0}", "100"},         {"{2/3*1000000}", "0"},
+        {"{0.1+0.2}", "0.3"},     {"{10/4}", "2"},            {"{first_layer_temperature[0]/3}", "66"},
+        {"{nozzle_diameter[0]*2}", "0.8"}, {"{1e-7*3}", "3e-07"}, {"{123456789.123}", "1.23457e+08"},
+    };
+    for (const auto& [text, expected] : cases)
+        CHECK(render_template(text, c, "t") == expected);
+}
+
+TEST_CASE("the machine's G-code takes the original program's branches (gcode_macros.md, rule 9 bis, GM22)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"215"};
+    s.abrasive = true;
+    s.high_flow_nozzle = {true};
+    s.retract_lift = 0.4;
+    s.accel_outer_wall = 1500.0;
+    s.wall_count = 2;
+    s.wall_width = 0.45;
+    s.chamber_temperature = 45.0;
+    s.filament_density = 1.24;
+    name_profiles(s, "Original Prusa XL HF0.6", "Prusament PLA", "0.20mm SPEED");
+    TemplateContext c = template_context(s, SlicedModel{});
+    CHECK(render_template("{if filament_abrasive[0]}A{else}N{endif}", c, "t") == "A");
+    CHECK(render_template("M862.1 F{(nozzle_high_flow[0] ? 1 : 0)}", c, "t") == "M862.1 F1");
+    CHECK(render_template("[nozzle_volume_type]", c, "t") == "High Flow");
+    CHECK(render_template("{zhop}", c, "t") == "0.4");
+    CHECK(render_template("{outer_wall_acceleration[0]}", c, "t") == "1500");
+    CHECK(render_template("{print_sequence}", c, "t") == "by layer");
+    CHECK(render_template("{timelapse_type}", c, "t") == "0");
+    CHECK(render_template("[print_preset];[printer_preset];[physical_printer_preset];[machine_name]", c, "t") ==
+          "0.20mm SPEED;Original Prusa XL HF0.6;Original Prusa XL HF0.6;Original Prusa XL HF0.6");
+    CHECK(render_template("[filament_settings_id]", c, "t") == "Prusament PLA");
+    CHECK(render_template("{build_volume_temperature};{wall_thickness};{material_standby_temperature}", c, "t") ==
+          "45;0.9;215");
+    // The old [variable_index] form through another program's name, for a
+    // second head the list does not have: the last value.
+    CHECK(render_template("[nozzle_temperature_initial_layer_1]", c, "t") == "215");
+    // The second round (QA, 17-11-2026).
+    CHECK(render_template("{wipe_tower_center_pos_valid}", c, "t") == "false");
+    CHECK(render_template("{required_nozzle_HRC[0]}", c, "t") == "0");
+    CHECK(std::stod(render_template("{top_bottom_thickness}", c, "t")) ==
+          Catch::Approx(s.top_layers * s.layer_height));
+    CHECK_FALSE(c.unfilled.contains("inner_wall_speed"));
+    CHECK_FALSE(c.unfilled.contains("outer_wall_line_width"));
+    CHECK_FALSE(c.unfilled.contains("filament_notes"));
+    CHECK(render_template("{wipe_tower_center_pos_x}", c, "t") ==
+          render_template("{" + std::to_string(s.wipe_tower_x + s.wipe_tower_width / 2.0) + "}", c, "t"));
+    CHECK(render_template("{line_width}", c, "t") == "0.45");
+    CHECK_FALSE(c.unfilled.contains("jobname"));
+    CHECK(render_template("{switch_extruder_retraction_amount};{retraction_hop_height_after_extruder_switch}", c, "t") ==
+          "16;0.4");
+    // A pack value replaces a default (the filament says it is abrasive).
+    Settings given = s;
+    given.abrasive = false;
+    given.source_values["required_nozzle_HRC"] = {"40"};
+    given.source_values["filament_abrasive"] = {"1"};
+    TemplateContext gc = template_context(given, SlicedModel{});
+    CHECK(render_template("{required_nozzle_HRC[0]}", gc, "t") == "40");
+    CHECK(render_template("{if filament_abrasive[0]}A{else}N{endif}", gc, "t") == "A");
+    CHECK(render_template("[date]", c, "t").size() == 10);
+    CHECK(render_template("[time]", c, "t").size() == 8);
+    for (const char* name : {"filament_abrasive", "nozzle_high_flow", "zhop", "outer_wall_acceleration", "print_sequence",
+                             "timelapse_type", "print_preset", "printer_preset", "physical_printer_preset",
+                             "print_settings_id", "machine_name", "notes", "e_retracted", "position",
+                             "extruded_weight_total", "filament_weight", "build_volume_temperature", "wall_thickness",
+                             "material_standby_temperature", "nozzle_temperature_initial_layer_1", "date", "time",
+                             "long_retraction_when_cut", "has_single_extruder_multi_material_priming"})
+        CHECK_FALSE(c.unfilled.contains(name));
+    // Where the nozzle is and what it used, at the end.
+    s.start_gcode = "G28";
+    s.end_gcode = "; at {position[2]} used {extruded_weight_total} g, {e_retracted[0]} pulled back";
+    const std::string g = cube_gcode(s);
+    const std::size_t at = g.find("; at ");
+    REQUIRE(at != std::string::npos);
+    const std::string end = g.substr(at, g.find('\n', at) - at);
+    CHECK(end.find("; at 0 ") == std::string::npos);
+    CHECK(end.find("used 0 g") == std::string::npos);
+}
+
+TEST_CASE("ceil, and a condition opening and closing on one line with an extruder index (gcode_macros.md, GM16, GM17)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["filament_type"] = {"PETG", "PLA"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // GM16.
+    CHECK(render_template("{ceil(2.1)}", c, "t") == "3");
+    CHECK(render_template("{ceil(3)}", c, "t") == "3");
+    CHECK(render_template("{ceil(-2.5)}", c, "t") == "-2");
+    // GM17: inside a word, with an index, on one line.
+    CHECK(render_template("M104 T1 S{if filament_type[1] == \"PLA\"}215{else}240{endif}", c, "t") == "M104 T1 S215");
+    CHECK(render_template("M104 T0 S{if filament_type[0] == \"PLA\"}215{else}240{endif}", c, "t") == "M104 T0 S240");
+    CHECK(render_template("M104 S{if filament_type[0]==\"PLA\"}1{elsif filament_type[0]==\"PETG\"}2{else}3{endif} ; x", c, "t") ==
+          "M104 S2 ; x");
+}
+
+TEST_CASE("a list where a number is expected, and numbers written as texts (gcode_macros.md, rule 10 bis bis, GM15, BH50)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["a"] = {"5000", "5000"};
+    s.variables["acc"] = {"1000", "3000"};
+    s.variables["one"] = {"7"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // The minimal case: a list of two in a condition.
+    CHECK(render_template("{if a > 0}yes{endif}", c, "t") == "yes");
+    CHECK(render_template("{if one == 7}yes{endif}", c, "t") == "yes");
+    // The extruder in use picks the value, in sums, comparisons and the old form.
+    c.variables["current_extruder"] = TemplateValue::of(1LL);
+    CHECK(render_template("{acc / 2}", c, "t") == "1500");
+    CHECK(render_template("{if acc >= 3000}M204 S[acc]{endif}", c, "t") == "M204 S3000");
+    c.variables["current_extruder"] = TemplateValue::of(0LL);
+    CHECK(render_template("[acc]", c, "t") == "1000");
+    CHECK(render_template("{acc[1]}", c, "t") == "3000");
+    // Numbers that come as texts count as numbers.
+    c.variables["speed"] = TemplateValue::of(std::vector<TemplateValue>{TemplateValue::of(std::string("120")),
+                                                                         TemplateValue::of(std::string("80"))});
+    c.variables["pct"] = TemplateValue::of(std::string("50%"));
+    CHECK(render_template("{if speed > 100}fast{else}slow{endif}", c, "t") == "fast");
+    CHECK(render_template("{speed * 60}", c, "t") == "7200");
+    CHECK(render_template("{speed + 1}", c, "t") == "121");
+    CHECK(render_template("{if pct < 60}low{endif}", c, "t") == "low");
+    // Texts that are not numbers still join and compare as texts.
+    CHECK(render_template("{\"T\" + 1}", c, "t") == "T1");
+    CHECK(render_template("{if \"PLA\" == \"PLA\"}same{endif}", c, "t") == "same");
+}
+
+TEST_CASE("a block of statements: local, assignments, if then elsif else endif, written texts (gcode_macros.md, GM18)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"215", "240"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // GM18.
+    CHECK(render_template("{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n\"A\" + a + \"\n\";\n}", c, "t") == "A3\n");
+    // The minimal case from the pack: nothing written.
+    CHECK(render_template("{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n}", c, "t").empty());
+    // elsif, else, nested; a condition starting the block.
+    const std::string block = "{if b == 1 then \"one\";\nelsif b == 2 then\n  if 1 then \"two\"; endif\nelse \"many\";\nendif}";
+    for (const auto& [b, want] : {std::pair{1, "one"}, {2, "two"}, {5, "many"}}) {
+        TemplateContext d = c;
+        d.variables["b"] = TemplateValue::of(static_cast<long long>(b));
+        CHECK(render_template(block, d, "t") == want);
+    }
+    // Text around it and an indexed engine variable.
+    CHECK(render_template("M109 S{local t = first_layer_temperature[1];\nif t > 230 then t - 5; else t; endif}", c, "t") ==
+          "M109 S235");
+    // What a two-head toolchange uses: a wait flag, the layer and the tools,
+    // a text joined to a number, the next tool's temperature, the position.
+    TemplateContext t = c;
+    t.variables["next_extruder"] = TemplateValue::of(1LL);
+    CHECK(render_template("{if wait_for_extruder_temp and not((layer_num < 0) and (next_extruder == initial_tool)) then\n"
+                          "\"M109 T\" + next_extruder + \" S\" + first_layer_temperature[next_extruder] + \"\n\";\nendif}",
+                          t, "t")
+              .find("M109 T1 S240") != std::string::npos);
+    CHECK_NOTHROW(render_template("{position[2] = position[2] + 2.0;}", t, "t"));
+    // An if without its endif fails.
+    CHECK_THROWS_AS(render_template("{if 1 then \"x\";}", c, "t"), TemplateError);
 }
 
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
@@ -293,6 +463,42 @@ TEST_CASE("retraction: around long travels only, and E comes back to where it wa
     }
     CHECK(retractions > 0);
     CHECK_FALSE(retracted);
+}
+
+TEST_CASE("retraction.only_crossing_walls: travels inside the part do not retract (toolpath_time.md, rule 5, TT6)", "[gcode]") {
+    // The cube with infill: its travels stay inside, between infill lines
+    // and layers; only the first one, from outside, crosses a wall.
+    Settings s = test_printer();
+    s.infill_density = 20.0;
+    const auto retractions = [](const std::string& gcode) {
+        std::size_t n = 0;
+        double e = 0.0;
+        for (const std::string& l : lines_of(gcode)) {
+            if (l.rfind("G92 E", 0) == 0) {
+                e = std::stod(l.substr(5));
+                continue;
+            }
+            if (l.rfind("G1", 0) != 0 || l.find(" X") != std::string::npos || l.find(" Y") != std::string::npos)
+                continue;
+            const std::size_t at = l.find(" E");
+            if (at == std::string::npos)
+                continue;
+            const double ne = std::stod(l.substr(at + 2));
+            n += ne < e ? 1 : 0;
+            e = ne;
+        }
+        return n;
+    };
+    const std::size_t by_length = retractions(cube_gcode(s));
+    s.retract_only_crossing_walls = true;
+    const std::string inside = cube_gcode(s);
+    const std::size_t crossing = retractions(inside);
+    INFO(by_length << " retractions by length, " << crossing << " only crossing walls");
+    CHECK(by_length > 20);
+    CHECK(crossing <= 2);
+    // The settings round trip.
+    CHECK(parse_settings(settings_json(s)).retract_only_crossing_walls);
+    CHECK_FALSE(parse_settings("{}").retract_only_crossing_walls);
 }
 
 TEST_CASE("travels go round the hole of a tube instead of across it", "[gcode]") {
@@ -2758,10 +2964,11 @@ TEST_CASE("a cura printer's own G-code: only {name}, and the extrusion its start
     const std::vector<double> e = e_values(g);
     REQUIRE(e.size() > 10);
     CHECK(e == e_values(cube_gcode(absolute)));
-    // Not the simple version: only the log's note of the name left as written.
+    // Not the simple version: a visible warning naming the variable left
+    // unfilled (gcode_macros.md, rule 9 bis).
     for (const Warning& w : warnings)
         if (w.kind == "gcode_macro") {
-            CHECK(w.severity == "information");
+            CHECK(w.severity == "warning");
             CHECK_THAT(w.message, Catch::Matchers::ContainsSubstring("no_such_cura_name"));
         }
 }
@@ -2882,6 +3089,31 @@ TEST_CASE("Bambu Lab's own variables are filled, and a list read past its end gi
     }));
 }
 
+TEST_CASE("the Bambu Lab H3C's start G-code: its nozzle by physical number (gcode_macros.md, rule 10 quater)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.nozzle_diameter = 0.2;
+    TemplateContext c = template_context(s, SlicedModel{});
+    CHECK(render_template("{if (nozzle_diameter_at_nozzle_id[initial_no_support_nozzle_id] == 0.2)}fine{else}std{endif}"
+                          " safe {fins_extrude_safe_temp[0]}",
+                          c, "machine.start_gcode") == "fine safe 0");
+    s.nozzle_diameter = 0.4;
+    s.nozzle_diameters = {0.4, 0.6, 0.4, 0.8};
+    s.variables["fins_extrude_safe_temp"] = {"240"};
+    TemplateContext four = template_context(s, SlicedModel{});
+    CHECK(render_template("{has_tpu_in_first_layer} {long_retraction_when_ec}", four, "machine.start_gcode") ==
+          "false false");
+    Settings tpu = s;
+    tpu.filament_type = "tpu";
+    tpu.variables["long_retraction_when_ec"] = {"1"};
+    TemplateContext tc = template_context(tpu, SlicedModel{});
+    CHECK(render_template("{if has_tpu_in_first_layer}tpu{endif} {if long_retraction_when_ec}long{endif}", tc,
+                          "machine.start_gcode") == "tpu long");
+    CHECK(render_template("{nozzle_diameter_at_nozzle_id[1]} {nozzle_diameter_at_nozzle_id[3]} "
+                          "{initial_no_support_nozzle_id} {fins_extrude_safe_temp[0]}",
+                          four, "machine.start_gcode") == "0.6 0.8 0 240");
+}
+
 TEST_CASE("OrcaSlicer and Creality Print filaments' own G-code names (gcode_variables.md, 2026-11-10)", "[gcode][macros]") {
     Settings s = test_printer();
     TemplateContext c = template_context(s, SlicedModel{});
@@ -2982,7 +3214,8 @@ TEST_CASE("support: small extrusions at speed.small_support (orca_2_5.md, rule 1
     s.support_interface_speed = {};
     s.gcode_resolution = 0.0;
     s.min_layer_time = 0.0;      // no slowing down for cooling
-    s.first_layer_speed = 100.0; // nor on the first layer
+    s.first_layer_speed = 100.0; // nor on the first layer: 100 % of each speed (gcode_motion.md, rule 2)
+    s.first_layer_speed_percent = true;
     s.speed_max_flow = 0.0;
     // Each support path (extrusions between two moves that do not extrude)
     // with its length and its feeds.
@@ -3220,4 +3453,35 @@ TEST_CASE("the preview's legend adds up to the G-code it shows", "[gcode]") {
     REQUIRE(p.estimated_seconds > 0.0);
     CHECK(p.moves_seconds <= p.estimated_seconds + 1.0);
     CHECK(p.moves_seconds >= 0.75 * p.estimated_seconds);
+}
+
+TEST_CASE("ironing: its angle over the top fill's, or fixed (ironing.md, IR8)", "[gcode][ironing]") {
+    // IR2's cube, 9.8 mm high: the top fill at 45 degrees.
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 9.8);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.min_layer_time = 0.0;
+    s.ironing = true;
+    // The direction of the long ironing lines, 0 to 180 degrees.
+    const auto direction = [&](double angle, bool fixed) {
+        Settings w = s;
+        w.ironing_angle = angle;
+        w.ironing_angle_fixed = fixed;
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, w), w);
+        std::map<long, double> by;
+        for (const Extrusion& x : extrusions(out.str()))
+            if (x.type == "Ironing" && x.length() > 1.0) {
+                double a = std::atan2(x.y1 - x.y0, x.x1 - x.x0) * 180.0 / std::numbers::pi;
+                a = std::fmod(a + 360.0, 180.0);
+                by[std::lround(a) % 180] += x.length();
+            }
+        REQUIRE_FALSE(by.empty());
+        return std::max_element(by.begin(), by.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->first;
+    };
+    CHECK(direction(45.0, false) == 90); // IR2, the default
+    CHECK(direction(90.0, false) == 135);
+    CHECK(direction(90.0, true) == 90);
+    CHECK(direction(-1.0, false) == 90); // negative: the default
 }

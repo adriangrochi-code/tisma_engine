@@ -37,6 +37,10 @@ public:
 
 // What templates see: the print's variables, and the globals that templates
 // set for the ones after them (rule 6).
+// The printer's number of heads, set by the writer for rule 8 of
+// gcode_macros.md (a variable no G-code names).
+inline constexpr const char* kExtrudersVariable = "__extruders";
+
 struct TemplateContext {
     std::map<std::string, TemplateValue, std::less<>> variables;
     std::map<std::string, TemplateValue, std::less<>> globals;
@@ -58,6 +62,10 @@ struct TemplateContext {
     // settings and gave a safe value instead of 0 (gcode_macros.md, rule 10
     // quater), and those a template used, for the log.
     std::set<std::string, std::less<>> estimated, estimated_used;
+    // Variables given the value they take when the profile does not say
+    // (gcode_macros.md, rule 9 bis): the pack's machine and source values
+    // still replace them.
+    std::set<std::string, std::less<>> defaults;
     // A feed of 0 in a rendered line (F0) is written as this one, mm/min
     // (rule 10 quater; 0: left as it is), and counted.
     double zero_feed = 0.0;

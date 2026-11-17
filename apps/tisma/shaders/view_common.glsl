@@ -14,6 +14,7 @@ layout(set = 0, binding = 0, std140) uniform Frame {
     vec4 grid;            // x: mm between grid lines, y: every how many lines a major one
     vec4 colours[16];     // the line kinds' colours
     vec4 face_eye;        // what the preview's drawn faces face: the eye (w 1), or towards it (w 0)
+    vec4 section;         // xyz: the section plane's normal (zero: none), w: its offset
 } frame;
 
 layout(push_constant) uniform Draw {
@@ -21,7 +22,7 @@ layout(push_constant) uniform Draw {
     vec4 extra;    // xyz: the model drawn this far from its mesh; the background's bottom
     uvec4 preview; // x: the line kinds drawn (bit k), y: colour by (0 kind, 1 speed, 2 width, 3 height),
                    // z, w: the first and the last layer shown
-    vec4 range;    // xy: the colour ramp's range; z: 1 with the beads' grooves
+    vec4 range;    // xy: the colour ramp's range; z: 1 with the beads' grooves; w: 1 cut by the section (the models)
     vec4 model[3]; // rows of an affine map of a model's mesh: the chosen one turned and scaled before it is redone
 } draw;
 

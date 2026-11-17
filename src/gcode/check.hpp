@@ -45,6 +45,10 @@ struct GcodeLimits {
     bool mmu = false;
     double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
+    // A printer's profile (a bed and a start G-code): its nozzle must be heated (M104 or M109 with
+    // a temperature) before the first extrusion, unless a printer macro may
+    // heat it (then a note). Without a printer, nothing is known to heat.
+    bool require_heat = false;
     // The dialect (gcode_extras.md, rule 6): the extruder's axis ('A' on Mach3
     // and Machinekit; 0: none, no_extrusion) and the letter of M106's value.
     char e_axis = 'E';
