@@ -276,29 +276,53 @@ double support_xy_gap(const Settings& settings) {
 }
 
 // The walls of a region, `count` of them, by the settings' generator.
+// From this many islands in a layer, walls_of makes each island's walls on its own.
+constexpr std::size_t kWallsByIsland = 16;
+
 LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
     if (settings.wall_generator == WallGenerator::Fixed)
         return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill, beading.outer_width, beading.overlap);
     beading.wall_count = count;
+    const double outer = outer_bead(beading);
+    const auto island_walls = [&](const Polygons& island) {
+        LayerWalls part = layer_walls(island, beading);
+        if (walls_leave_gap(island, part.toolpaths, outer, beading.preferred_width))
+            part = fixed_walls(island, settings.wall_width, count, settings.wall_gap_fill, beading.outer_width, beading.overlap);
+        return part;
+    };
+    const auto joined = [](std::vector<LayerWalls>& parts) {
+        LayerWalls out;
+        for (LayerWalls& part : parts) {
+            for (Toolpath& t : part.toolpaths)
+                out.toolpaths.push_back(std::move(t));
+            for (Toolpath& t : part.gaps)
+                out.gaps.push_back(std::move(t));
+            out.infill.insert(out.infill.end(), part.infill.begin(), part.infill.end());
+        }
+        return out;
+    };
+    // Many islands: each on its own, in parallel. One Voronoi diagram of a
+    // layer of 400 posts cost more than the 400 small ones (its point
+    // location walks across the whole layer), and the islands' walls do not
+    // see each other.
+    {
+        std::vector<Polygons> islands = split_islands(region);
+        if (islands.size() >= kWallsByIsland) {
+            std::vector<LayerWalls> parts(islands.size());
+            tbb::parallel_for(std::size_t(0), islands.size(), [&](std::size_t i) { parts[i] = island_walls(islands[i]); });
+            return joined(parts);
+        }
+    }
     LayerWalls walls = layer_walls(region, beading);
     // A stretch of the outline the variable walls left bare: those islands
     // get walls of one width instead (the support sweep, 2026-11-16: the
     // face of a T's stem lost every wall from its inner corner).
-    const double outer = outer_bead(beading);
     if (!walls_leave_gap(region, walls.toolpaths, outer, beading.preferred_width))
         return walls;
-    LayerWalls out;
-    for (const Polygons& island : split_islands(region)) {
-        LayerWalls part = layer_walls(island, beading);
-        if (walls_leave_gap(island, part.toolpaths, outer, beading.preferred_width))
-            part = fixed_walls(island, settings.wall_width, count, settings.wall_gap_fill, beading.outer_width, beading.overlap);
-        for (Toolpath& t : part.toolpaths)
-            out.toolpaths.push_back(std::move(t));
-        for (Toolpath& t : part.gaps)
-            out.gaps.push_back(std::move(t));
-        out.infill.insert(out.infill.end(), part.infill.begin(), part.infill.end());
-    }
-    return out;
+    std::vector<LayerWalls> parts;
+    for (const Polygons& island : split_islands(region))
+        parts.push_back(island_walls(island));
+    return joined(parts);
 }
 
 // Only the outer wall over a top surface (walls_extra.md, rule 10): the

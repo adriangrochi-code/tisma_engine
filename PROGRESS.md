@@ -14969,3 +14969,14 @@ para el LBM D3Q19.
 - **Probado:** prueba nueva `islands: many are ordered through a grid, the tour near a lawnmower's (Q9)` (400 postes:
   verificación limpia, 2149 mm de viaje por capa contra 1600 de una pasada en zigzag); `[gcode]`, `[determinism]`,
   `[check]` en verde.
+
+## 2026-11-17 — bloque nocturno: paredes por isla con muchas islas
+
+- Muestreo con gdb del laminado de 400 cilindros: casi todo el tiempo está en el Voronoi de las paredes
+  (`VoronoiDiagram::locate` e `insert`), un diagrama para la capa entera. Ahora, con 16 islas o más en una capa,
+  `walls_of` hace las paredes de cada isla por separado y en paralelo (las de una isla no ven a las otras); con menos,
+  el camino de antes.
+- **Medido** (rejilla de 400 cilindros de 6 mm, 64 lados): 100 capas, `slice_ms` 3709 → 2389; 25 capas, 1709 → 1012.
+  El mismo filamento (85 811 mm) y los mismos tramos por tipo; 70 líneas más de 5,45 millones.
+- **Probado:** las 1124 pruebas sin interfaz en verde.
+- **Siguiente:** el `locate` del Voronoi en una isla grande con miles de sitios (PLAN.md, sigue abierto).
