@@ -267,15 +267,36 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
     }
     {
         // An end G-code left as an unevaluated expression (the Z-Bolt Classic
-        // of the pack): its lines start with a quote or a '+'.
+        // of the pack) is a problem; a Klipper macro named with '_' is a
+        // command, and other odd lines of the machine's G-code (//M85,
+        // ==========, a lone quote) are notes (FW12).
         Settings z = test_printer();
+        z.gcode_before_layer = "_ON_LAYER_CHANGE";
+        z.start_gcode = "//M85 S0\n==========\n\"\n" + z.start_gcode;
         z.end_gcode = "'M104 S0 ;extruder heater off' + ('\nM140 S0 ;off' if machine_heated_bed else '') + '\n"
-                      "+ 'G1 X0'\n@pause\n$H\nEND_PRINT";
+                      "+ 'G1 X0'\n@pause\n$H\nEND_PRINT\n_SP_PRINT_END";
         const Output o = slice_and_write(cube(), z);
+        REQUIRE(o.gcode.find("\n_ON_LAYER_CHANGE") != std::string::npos);
         const GcodeCheck c = check_gcode(o.gcode, o.limits);
-        REQUIRE(c.problems.size() == 2);
+        REQUIRE(c.problems.size() == 1);
         CHECK(c.problems[0].message.find("not a G-code command: ''M104'") != std::string::npos);
-        CHECK(c.problems[1].message.find("not a G-code command: '+'") != std::string::npos);
+        int notes = 0;
+        for (const GcodeProblem& n : c.notes)
+            notes += n.message.starts_with("not a G-code command") ? 1 : 0;
+        CHECK(notes == 4); // //M85, ==========, ", +
+    }
+    {
+        // In what the engine writes, a line that is not a command is a problem.
+        const Settings s = test_printer();
+        const Output o = slice_and_write(cube(), s);
+        std::string g = o.gcode;
+        std::size_t at = g.find("\n;TYPE:");
+        while (g.compare(at, 13, "\n;TYPE:Custom") == 0)
+            at = g.find("\n;TYPE:", at + 1);
+        g.insert(g.find('\n', at + 1) + 1, "//M85\n");
+        const GcodeCheck c = check_gcode(g, o.limits);
+        REQUIRE(c.problems.size() == 1);
+        CHECK(c.problems[0].message.find("not a G-code command: '//M85'") != std::string::npos);
     }
 }
 
