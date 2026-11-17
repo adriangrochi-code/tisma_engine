@@ -14989,3 +14989,8 @@ para el LBM D3Q19.
 - Las 1124 pruebas sin interfaz con `-fsanitize=address,undefined` (Debug), sobre 4328f11 (todo lo de esta noche):
   en verde, ningún error de memoria ni comportamiento indefinido. La primera corrida no llegó a compilar: el disco se
   llenó con los G-code de los bancos (se borraron); la segunda reusó la compilación ASan de la copia de CI.
+- **macOS, clics del guion (G13 estructural «fixed», G11 «no menu entry»):** con la ventana con foco, el backend de
+  ImGui manda cada cuadro la posición real del cursor; el guion ponía la suya solo en el primer cuadro del clic, y el
+  clic caía donde estaba el cursor real (en Xvfb la ventana no tiene foco y no pasaba). Ahora el guion repite su
+  posición en cada cuadro, después del backend. Linux: puerta 65/65 y los 108 `ui_script_*` pasan. macOS: se ve en
+  la próxima corrida.

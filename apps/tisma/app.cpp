@@ -1822,6 +1822,7 @@ private:
         std::string verb, key, value;
     };
     std::vector<ScriptStep> script_; // --ui-script
+    std::optional<ImVec2> script_mouse_; // where the script last put the pointer
     bool script_check(const ScriptStep& step, int f);
     std::size_t script_at_ = 0;      // the step playing
     int script_frame_ = 0;           // frames into it
@@ -28104,6 +28105,15 @@ void App::script_input() {
     if (script_at_ >= script_.size() || ImGui::GetFrameCount() < 3)
         return;
     ImGuiIO& io = ImGui::GetIO();
+    // The script's pointer, again each frame: with the window focused the
+    // backend sends the real cursor's place every frame (macOS on the CI),
+    // and it took the click elsewhere.
+    if (script_mouse_)
+        io.AddMousePosEvent(script_mouse_->x, script_mouse_->y);
+    const auto script_mouse = [&](float x, float y) {
+        script_mouse_ = ImVec2(x, y);
+        io.AddMousePosEvent(x, y);
+    };
     const ScriptStep& step = script_[script_at_];
     const int f = script_frame_++;
     const auto next = [&] {
@@ -28171,7 +28181,7 @@ void App::script_input() {
         if (it == g_field_rects.end())
             return fail_step("its field is not on the screen");
         const ImVec4 r = it->second;
-        io.AddMousePosEvent(0.5f * (r.x + r.z), 0.5f * (r.y + r.w));
+        script_mouse(0.5f * (r.x + r.z), 0.5f * (r.y + r.w));
         if (f == 5)
             io.AddMouseButtonEvent(0, true);
         else if (f == 6)
@@ -28480,7 +28490,7 @@ void App::script_input() {
     } else if (step.verb == "right-click-plate") { // a right click on the plate, away from the models
         const ImVec2 at(view_pos_.x + 0.8f * view_size_.x, view_pos_.y + 0.3f * view_size_.y);
         if (f == 0) {
-            io.AddMousePosEvent(at.x, at.y);
+            script_mouse(at.x, at.y);
         } else if (f == 1) {
             if (pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()))
                 return fail_step("a model is under the point");
@@ -28495,7 +28505,7 @@ void App::script_input() {
         if (std::sscanf((step.key + " " + step.value).c_str(), "%f %f", &x, &y) != 2)
             return fail_step("needs x and y");
         if (f == 0)
-            io.AddMousePosEvent(x, y);
+            script_mouse(x, y);
         else if (f == 1)
             io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
         else if (f == 2)
@@ -28505,7 +28515,7 @@ void App::script_input() {
     } else if (step.verb == "right-click-model") { // a right click in the middle of the view, on a model: its menu
         const ImVec2 at(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 0.5f * view_size_.y);
         if (f == 0) {
-            io.AddMousePosEvent(at.x, at.y);
+            script_mouse(at.x, at.y);
         } else if (f == 1) {
             if (!pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()))
                 return fail_step("no model under the point");
@@ -28518,7 +28528,7 @@ void App::script_input() {
     } else if (step.verb == "click-model") { // a left click in the middle of the view, on a model
         const ImVec2 at(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 0.5f * view_size_.y);
         if (f == 0) {
-            io.AddMousePosEvent(at.x, at.y);
+            script_mouse(at.x, at.y);
         } else if (f == 1) {
             // Made ahead: taken from its job, or the job still running.
             const bool ahead = indexes_version_ == plate_version_ || index_job_.running();
@@ -28544,7 +28554,7 @@ void App::script_input() {
         if (it == g_menu_rects.end())
             return f >= 30 && f < 1000 ? fail_step("no menu entry of that name is on the screen") : void();
         const ImVec4 r = it->second;
-        io.AddMousePosEvent(0.5f * (r.x + r.z), 0.5f * (r.y + r.w));
+        script_mouse(0.5f * (r.x + r.z), 0.5f * (r.y + r.w));
         // The entry moved since the last frame (a result arriving in the
         // background grew the panel above it): a press and a release on two
         // places is no click, so the hover starts again where it is now (G13
@@ -28569,7 +28579,7 @@ void App::script_input() {
             return f >= 30 ? fail_step("no slider of that name is on the screen") : void();
         const ImVec4 r = it->second;
         const float t = float(std::atof(step.value.c_str()));
-        io.AddMousePosEvent(r.x + t * (r.z - r.x), 0.5f * (r.y + r.w));
+        script_mouse(r.x + t * (r.z - r.x), 0.5f * (r.y + r.w));
         if (script_frame_ < 1000)
             script_frame_ = 1000;
         else if (f == 1002)
@@ -28594,7 +28604,7 @@ void App::script_input() {
         const ImVec4 r = drag_rect_;
         const int k = f - 1000; // 0: on A, 1: pressed, 2..n+1: moving, n+2: let go
         const float t = k <= 1 ? a : k <= n + 1 ? a + (b - a) * float(k - 1) / float(n) : b;
-        io.AddMousePosEvent(r.x + t * (r.z - r.x), 0.5f * (r.y + r.w));
+        script_mouse(r.x + t * (r.z - r.x), 0.5f * (r.y + r.w));
         if (k == 1)
             io.AddMouseButtonEvent(0, true);
         else if (k == n + 2)
@@ -28610,14 +28620,14 @@ void App::script_input() {
         const ImVec2 p(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
         constexpr int kSteps = 10; // 0: there, 1: pressed, 2..11: moving, 12: let go
         if (f == 0) {
-            io.AddMousePosEvent(p.x, p.y);
+            script_mouse(p.x, p.y);
             if (with_shift)
                 io.AddKeyEvent(ImGuiMod_Shift, true), io.AddKeyEvent(ImGuiKey_LeftShift, true);
         } else if (f == 1) {
             io.AddMouseButtonEvent(button, true);
         } else if (f <= kSteps + 1) {
             const float t = float(f - 1) / float(kSteps);
-            io.AddMousePosEvent(p.x + dx * t, p.y + dy * t);
+            script_mouse(p.x + dx * t, p.y + dy * t);
         } else if (f == kSteps + 2) {
             io.AddMouseButtonEvent(button, false);
         } else if (f == kSteps + 3) {
@@ -28631,7 +28641,7 @@ void App::script_input() {
         std::sscanf(step.value.c_str(), "%f %f", &x, &y);
         const int button = step.key == "right" ? 1 : step.key == "middle" ? 2 : 0;
         if (f == 0)
-            io.AddMousePosEvent(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
+            script_mouse(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
         else if (f == 1 || f == 3)
             io.AddMouseButtonEvent(button, true);
         else if (f == 2 || f == 4)
@@ -28642,7 +28652,7 @@ void App::script_input() {
         float x = 0.5f, y = 0.5f, n = 1.0f;
         std::sscanf((step.key + " " + step.value).c_str(), "%f %f %f", &x, &y, &n);
         if (f == 0)
-            io.AddMousePosEvent(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
+            script_mouse(view_pos_.x + x * view_size_.x, view_pos_.y + y * view_size_.y);
         else if (f == 1)
             io.AddMouseWheelEvent(0.0f, n);
         else if (f >= 4)
@@ -28656,7 +28666,7 @@ void App::script_input() {
                 return script_frame_ < 30 ? void() : fail_step("the view cube does not show it");
             const ImVec2 p = home ? ImVec2(0.5f * (home_rect->second.x + home_rect->second.z), 0.5f * (home_rect->second.y + home_rect->second.w))
                                   : spot->second;
-            io.AddMousePosEvent(p.x, p.y);
+            script_mouse(p.x, p.y);
             script_frame_ = 100;
         } else if (f == 101) {
             io.AddMouseButtonEvent(0, true);
@@ -29325,11 +29335,11 @@ void App::script_input() {
         if (std::sscanf((step.key + " " + step.value).c_str(), "%f %f %f %f", &x0, &y0, &x1, &y1) != 4)
             return fail_step("paint-drag takes x0 y0 x1 y1");
         if (f == 0)
-            io.AddMousePosEvent(x0, y0);
+            script_mouse(x0, y0);
         else if (f == 2)
             io.AddMouseButtonEvent(0, true);
         else if (f == 4)
-            io.AddMousePosEvent(x1, y1);
+            script_mouse(x1, y1);
         else if (f == 6)
             io.AddMouseButtonEvent(0, false);
         else if (f >= 8)
@@ -29386,7 +29396,7 @@ void App::script_input() {
         if (f == 0)
             drag_from_ = ImVec2(0.5f * (it->second.x + it->second.z), 0.5f * (it->second.y + it->second.w));
         if (f == 0)
-            io.AddMousePosEvent(drag_from_.x, drag_from_.y);
+            script_mouse(drag_from_.x, drag_from_.y);
         else if (f == 2 || f == 4)
             io.AddMouseButtonEvent(0, true);
         else if (f == 3 || f == 5)
@@ -29402,11 +29412,11 @@ void App::script_input() {
         if (f == 0)
             drag_from_ = ImVec2(0.5f * (it->second.x + it->second.z), 0.5f * (it->second.y + it->second.w));
         if (f == 0)
-            io.AddMousePosEvent(drag_from_.x, drag_from_.y);
+            script_mouse(drag_from_.x, drag_from_.y);
         else if (f == 2)
             io.AddMouseButtonEvent(0, true);
         else if (f >= 3 && f <= 11)
-            io.AddMousePosEvent(drag_from_.x + dx * float(f - 3) / 8.0f, drag_from_.y + dy * float(f - 3) / 8.0f);
+            script_mouse(drag_from_.x + dx * float(f - 3) / 8.0f, drag_from_.y + dy * float(f - 3) / 8.0f);
         else if (f == 13)
             io.AddMouseButtonEvent(0, false);
         else if (f >= 15)
