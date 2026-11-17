@@ -183,11 +183,18 @@ jobs:
           container=$(xcrun simctl get_app_container "$device" net.tismaservidores.tisma data)
           python3 -I tools/gate_ios_check.py "$container" "$RUNNER_TEMP/gate/3DBenchy.stl" 7125 7126 7127 7128
           echo "Release gate G16 (iPhone): passed" >> "$GITHUB_STEP_SUMMARY"
+      - name: The app's own log on the simulator (on failure)
+        if: failure()
+        run: |
+          xcrun simctl spawn "$device" log show --last 30m --style compact --predicate 'process == "Tisma"' \
+            > "$RUNNER_TEMP/gate-app.txt" 2>&1 || true
+          grep -E "TISMA-|ENGINE-" "$RUNNER_TEMP/gate-app.txt" | tail -40 || true
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: release-gate-ios
           path: |
+            ${{ runner.temp }}/gate-app.txt
             ${{ runner.temp }}/gate-xcodebuild.log
             ${{ runner.temp }}/gate.xcresult
             ${{ runner.temp }}/mockprinters.log

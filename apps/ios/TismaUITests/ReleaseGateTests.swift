@@ -61,7 +61,7 @@ final class ReleaseGateTests: XCTestCase {
         XCTAssertTrue(plate.waitForExistence(timeout: 20), "the app opens \(name)")
         if !plate.isSelected { plate.tap() }
         let model = app.staticTexts["plate_model"]
-        XCTAssertTrue(model.waitForExistence(timeout: 30), "the plate names a model")
+        XCTAssertTrue(model.waitForExistence(timeout: 30), "the plate names \(name) (on screen: \(screen()))")
         XCTAssertTrue(wait(60) { model.label == name }, "\(name) is on the plate (it shows «\(model.label)»)")
         let info = app.staticTexts["plate_info"]
         XCTAssertTrue(wait(60) { info.exists && (size == nil || info.label.hasPrefix(size!)) },
@@ -143,6 +143,7 @@ final class ReleaseGateTests: XCTestCase {
     }
 
     private func screen() -> String {
-        app.staticTexts.allElementsBoundByIndex.prefix(40).map { $0.label }.joined(separator: " | ")
+        let alerts = app.alerts.allElementsBoundByIndex.map { "alert «\($0.label)»" }
+        return (alerts + app.staticTexts.allElementsBoundByIndex.prefix(40).map { $0.label }).joined(separator: " | ")
     }
 }

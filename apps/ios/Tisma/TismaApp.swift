@@ -39,6 +39,8 @@ struct RootView: View {
     @AppStorage("plate.opened") private var openedPath = ""
     @AppStorage("wizard.done") private var wizardDone = false
     @Environment(\.scenePhase) private var phase
+    /// A file handed over by another app that could not be read (it is said, not dropped in silence).
+    @State private var openProblem: String?
 
     var body: some View {
         TabView(selection: $tab) {
@@ -53,7 +55,14 @@ struct RootView: View {
         .fullScreenCover(isPresented: Binding(get: { !wizardDone }, set: { _ in })) { WizardView() }
         // «Compartir con Tisma» from another app (MA5): the model goes onto the plate.
         .onOpenURL { url in
-            if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 }
+            NSLog("TISMA-OPEN %@", url.absoluteString)
+            if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 } else {
+                NSLog("TISMA-OPEN could not read %@", url.path)
+                openProblem = String(format: String(localized: "Tisma could not open %@."), url.lastPathComponent)
+            }
+        }
+        .alert(openProblem ?? "", isPresented: Binding(get: { openProblem != nil }, set: { if !$0 { openProblem = nil } })) {
+            Button("OK") { openProblem = nil }
         }
         // A model opened from the library (rule 8 octies) shows the plate.
         .onReceive(NotificationCenter.default.publisher(for: .tismaShowPlate)) { _ in tab = 0 }

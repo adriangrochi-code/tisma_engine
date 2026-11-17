@@ -260,3 +260,4 @@
 "The model could not be downloaded." = "No se pudo bajar el modelo.";
 
 "triangles" = "triángulos";
+"Tisma could not open %@." = "Tisma no pudo abrir %@.";
