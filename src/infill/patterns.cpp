@@ -11,7 +11,11 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <numbers>
+#include <utility>
+
+#include <oneapi/tbb/parallel_for.h>
 
 namespace tisma {
 namespace {
@@ -45,11 +49,7 @@ struct Frame {
     // Clips the open paths to the region, joins the pieces along its boundary
     // (ends at most max_join units apart along it) and turns them back.
     std::vector<Toolpath> clip(const Polygons& paths, double max_join, double width) const {
-        Clipper2Lib::Clipper64 clipper;
-        clipper.AddOpenSubject(paths);
-        clipper.AddClip(turned);
-        Polygons closed, open;
-        clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+        Polygons open = clip_in_strips(paths);
         open.erase(std::remove_if(open.begin(), open.end(), [](const Polygon& p) { return p.size() < 2; }),
                    open.end());
         // Across the frame, then along it, so that the joins and the order are stable.
@@ -71,6 +71,101 @@ struct Frame {
                                     width});
             out.push_back(std::move(t));
         }
+        return out;
+    }
+
+    // The open paths inside the region. Clipper2's sweep keeps every edge that
+    // crosses the current row active, so a large region full of short
+    // segments (Hilbert, Archimedes) costs more than linearly: 4x the area,
+    // 9x the time. Wide regions are cut into vertical strips, clipped apart
+    // (in parallel) and the pieces joined again where they meet on a strip's
+    // edge. The strips depend only on the paths, not on the cores.
+    Polygons clip_in_strips(const Polygons& paths) const {
+        std::size_t points = 0;
+        for (const Polygon& p : paths)
+            points += p.size();
+        const std::int64_t lo = xmin - 1, hi = xmax + 1, top = ymax + 1, bottom = ymin - 1;
+        // About 16k points or 40 mm a strip, whichever gives more.
+        const std::size_t strips = std::min<std::size_t>(
+            64, std::max<std::size_t>(points / 16384, std::size_t((hi - lo) / to_units(40.0))) + 1);
+        if (strips == 1)
+            return clip_open(paths, turned);
+        std::vector<std::int64_t> cuts(strips + 1);
+        for (std::size_t i = 0; i <= strips; ++i)
+            cuts[i] = lo + std::int64_t(double(hi - lo) * double(i) / double(strips));
+        // The region with a margin past the strip, so that the cut ends stay
+        // strictly inside it and come out unchanged.
+        const std::int64_t margin = std::max<std::int64_t>(to_units(1.0), (hi - lo) / std::int64_t(strips) / 8);
+        std::vector<Polygons> pieces(strips);
+        tbb::parallel_for(std::size_t(0), strips, [&](std::size_t i) {
+            const Clipper2Lib::Rect64 rect(cuts[i], bottom, cuts[i + 1], top);
+            const Clipper2Lib::Rect64 wide(cuts[i] - margin, bottom - margin, cuts[i + 1] + margin, top + margin);
+            pieces[i] = clip_open(Clipper2Lib::RectClipLines(rect, paths), Clipper2Lib::RectClip(wide, turned));
+        });
+        return join_at_cuts(std::move(pieces), cuts);
+    }
+
+    static Polygons clip_open(const Polygons& paths, const Polygons& region) {
+        if (paths.empty() || region.empty())
+            return {};
+        Clipper2Lib::Clipper64 clipper;
+        clipper.AddOpenSubject(paths);
+        clipper.AddClip(region);
+        Polygons closed, open;
+        clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+        return open;
+    }
+
+    // Joins the pieces whose ends meet on an inner cut: the same point, made
+    // by the same rectangle edge in both strips.
+    static Polygons join_at_cuts(std::vector<Polygons> strips, const std::vector<std::int64_t>& cuts) {
+        Polygons all;
+        for (Polygons& s : strips)
+            for (Polygon& p : s)
+                if (p.size() >= 2)
+                    all.push_back(std::move(p));
+        const auto on_cut = [&](const Point64& q) {
+            return std::binary_search(cuts.begin() + 1, cuts.end() - 1, q.x);
+        };
+        // end = 2 * piece + (0: front, 1: back)
+        std::map<std::pair<std::int64_t, std::int64_t>, std::vector<std::size_t>> at;
+        for (std::size_t k = 0; k < all.size(); ++k)
+            for (int e = 0; e < 2; ++e) {
+                const Point64& q = e ? all[k].back() : all[k].front();
+                if (on_cut(q))
+                    at[{q.x, q.y}].push_back(2 * k + std::size_t(e));
+            }
+        std::vector<std::size_t> mate(2 * all.size(), SIZE_MAX);
+        for (const auto& [point, ends] : at)
+            if (ends.size() == 2 && ends[0] / 2 != ends[1] / 2) {
+                mate[ends[0]] = ends[1];
+                mate[ends[1]] = ends[0];
+            }
+        std::vector<char> used(all.size(), 0);
+        Polygons out;
+        const auto walk = [&](std::size_t k, int free_end) {
+            Polygon chain;
+            for (;;) {
+                used[k] = 1;
+                Polygon& p = all[k];
+                if (free_end == 1) // enters by its back: read it backwards
+                    std::reverse(p.begin(), p.end());
+                chain.insert(chain.end(), chain.empty() ? p.begin() : p.begin() + 1, p.end());
+                const std::size_t far = 2 * k + std::size_t(1 - free_end);
+                const std::size_t next = mate[far];
+                if (next == SIZE_MAX || used[next / 2])
+                    break;
+                k = next / 2;
+                free_end = int(next % 2);
+            }
+            out.push_back(std::move(chain));
+        };
+        for (std::size_t k = 0; k < all.size(); ++k)
+            if (!used[k] && (mate[2 * k] == SIZE_MAX || mate[2 * k + 1] == SIZE_MAX))
+                walk(k, mate[2 * k] == SIZE_MAX ? 0 : 1);
+        for (std::size_t k = 0; k < all.size(); ++k) // closed chains, if any
+            if (!used[k])
+                walk(k, 0);
         return out;
     }
 };
@@ -137,6 +232,40 @@ std::vector<Toolpath> honeycomb_fill(const Polygons& region, double side, double
         waves.push_back(std::move(wave));
     }
     return f.clip(waves, kMaxJoin * h, width);
+}
+
+std::vector<Toolpath> honeycomb3d_fill(const Polygons& region, double spacing, double z, double principal_degrees,
+                                       double width) {
+    if (!(spacing > 0.0) || region.empty())
+        return {};
+    const Frame f(region, width, principal_degrees);
+    if (f.turned.empty())
+        return {};
+    // Along a row, a period of 2 spacings: along at +a, a slant down to -a,
+    // along at -a, a slant up; a, from 0 to a quarter period, a triangle wave
+    // in z of that period (straight rows, then full zigzags, then straight).
+    const double period = 2.0 * spacing * kUnitsPerMm, quarter = period / 4.0;
+    const double phase = z * kUnitsPerMm / period;
+    const double a = quarter * std::fabs(2.0 * (phase - std::floor(phase)) - 1.0);
+    const double gap = spacing * kUnitsPerMm;
+    const auto n0 = static_cast<std::int64_t>(std::floor(double(f.xmin) / period)) - 1;
+    const auto n1 = static_cast<std::int64_t>(std::ceil(double(f.xmax) / period)) + 1;
+    Polygons rows;
+    for (auto m = static_cast<std::int64_t>(std::floor(double(f.ymin) / gap)) - 1; double(m) * gap <= double(f.ymax) + gap;
+         ++m) {
+        const double y = double(m) * gap, sign = m % 2 == 0 ? 1.0 : -1.0;
+        Polygon row;
+        row.reserve(std::size_t(4 * (n1 - n0 + 1)));
+        for (std::int64_t n = n0; n <= n1; ++n) {
+            const double x = double(n) * period;
+            row.push_back({std::llround(x + a), std::llround(y + sign * a)});
+            row.push_back({std::llround(x + 2.0 * quarter - a), std::llround(y + sign * a)});
+            row.push_back({std::llround(x + 2.0 * quarter + a), std::llround(y - sign * a)});
+            row.push_back({std::llround(x + period - a), std::llround(y - sign * a)});
+        }
+        rows.push_back(std::move(row));
+    }
+    return f.clip(rows, kMaxJoin * gap, width);
 }
 
 namespace {

@@ -56,8 +56,18 @@ const std::set<std::string>& known_keys() {
         std::set<std::string> k;
         for (const auto& [key, value] : describe(Settings{}))
             k.insert(key);
+        // The filament's material type, which the settings' file writes only
+        // when given (profile_pack_format.md, print profiles, rule 6, PF9).
+        k.insert("extrusion.type");
+        // A filament's own retraction and travels, objects of their own
+        // (retraction_travel.md, rule 10; PF10).
+        k.insert("extrusion.retraction");
+        k.insert("extrusion.travel");
         k.insert("machine.variables");
+        // The firmwares a printer may run (PF15), written only when given.
+        k.insert("machine.flavor_choices");
         k.insert("machine.macros");
+        k.insert("extrusion.source_values");
         return k;
     }();
     return keys;
@@ -280,7 +290,8 @@ bool safe_pack_path(std::string_view path) {
     return true;
 }
 
-Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings) {
+Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings,
+                             std::string* print_defaults) {
     const json j = parse_object(model_json, "printer model");
     if (text(j, "format") != "tisma-pack-model")
         throw PackError("not a pack printer model (\"format\" must be \"tisma-pack-model\")");
@@ -344,6 +355,33 @@ Profile pack_printer_profile(std::string_view model_json, const std::string& var
     if ((technology == "sla" || technology == "fff") &&
         !(settings.contains("machine") && settings.at("machine").is_object() && settings.at("machine").contains("technology")))
         settings["machine"]["technology"] = technology == "sla" ? "msla" : "fdm";
+    // A resin printer's plate is its display, from (0, 0) (resin.md, RE3):
+    // without a bed of its own, the display's rectangle, as the panel makes
+    // it when the technology changes. An empty bed put the part at 0, 0, off
+    // the display, and nothing sliced.
+    if (settings.contains("machine") && settings.at("machine").is_object() &&
+        settings.at("machine").value("technology", std::string()) == "msla" &&
+        (!settings.at("machine").contains("bed") || settings.at("machine").at("bed").empty())) {
+        const Settings defaults;
+        const json& m = settings.at("machine");
+        const double w = m.contains("display_width") && m.at("display_width").is_number() ? m.at("display_width").get<double>()
+                                                                                          : defaults.display_width;
+        const double h = m.contains("display_height") && m.at("display_height").is_number() ? m.at("display_height").get<double>()
+                                                                                            : defaults.display_height;
+        settings["machine"]["bed"] = json::array({json::array({0.0, 0.0}), json::array({w, 0.0}), json::array({w, h}),
+                                                  json::array({0.0, h})});
+    }
+    // A printer's purge volumes are a print setting here (PF8): the print's default.
+    json carried = json::object();
+    if (settings.contains("wipe_tower") && settings.at("wipe_tower").is_object() &&
+        settings.at("wipe_tower").contains("purge_volumes")) {
+        carried["wipe_tower"]["purge_volumes"] = settings.at("wipe_tower").at("purge_volumes");
+        settings["wipe_tower"].erase("purge_volumes");
+        if (settings.at("wipe_tower").empty())
+            settings.erase("wipe_tower");
+    }
+    if (print_defaults)
+        *print_defaults = carried.dump();
     const json profile{{"format", "tisma-profile"},
                        {"version", 2},
                        {"kind", "printer"},
@@ -395,15 +433,20 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     // names (profile_pack_format.md, source_values): the variables of a
     // machine's own G-code that the engine has no setting for
     // (temperature_vitrification...), as machine.variables, under any the
-    // profile already sets.
+    // profile already sets. Those a filament profile does not keep there (a
+    // name without «temperature», such as activate_air_filtration) go to
+    // extrusion.source_values: dropped with the profile before, so the Bambu
+    // Lab X1's filament G-code could not run (the release gate's G14).
     if (kind == "filament" && j.contains("source_values") && j.at("source_values").is_object() &&
         j.at("source_values").contains("values") && j.at("source_values").at("values").is_object()) {
         json& variables = profile["settings"]["machine"]["variables"];
         if (!variables.is_object())
             variables = json::object();
+        json source = json::object();
         for (const auto& [name, value] : j.at("source_values").at("values").items()) {
             if (variables.contains(name) || name.empty() || name.find_first_of("[]\n") != std::string::npos)
                 continue;
+            json& place = setting_kind("machine", "variables", name) == ProfileKind::Filament ? variables : source;
             if (value.is_array()) {
                 json list = json::array();
                 for (const json& item : value)
@@ -412,17 +455,21 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                     else if (item.is_boolean())
                         list.push_back(item.get<bool>() ? "true" : "false");
                 if (!list.empty())
-                    variables[name] = list;
+                    place[name] = list;
             } else if (value.is_number() || value.is_string()) {
-                variables[name] = value;
+                place[name] = value;
             } else if (value.is_boolean()) {
-                variables[name] = value.get<bool>() ? "true" : "false";
+                place[name] = value.get<bool>() ? "true" : "false";
             }
         }
+        // Before anything is added to the settings: a reference into them
+        // does not outlive an insertion (the vector of an ordered object).
         if (variables.empty())
             profile["settings"]["machine"].erase("variables");
         if (profile["settings"]["machine"].empty())
             profile["settings"].erase("machine");
+        if (!source.empty())
+            profile["settings"]["extrusion"]["source_values"] = std::move(source);
     }
     if (kind == "resin" || kind == "resin_print") {
         profile["kind"] = kind == "resin" ? "filament" : "print";
@@ -432,7 +479,7 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     // other programs keep them) go to the printer profile, not lost (BH27);
     // another kind's are left out with a warning.
     const std::optional<ProfileKind> own = profile_kind_from_name(text(profile, "kind"));
-    json printer_part = json::object();
+    json printer_part = json::object(), filament_part = json::object();
     if (own && *own != ProfileKind::Printer) {
         json& settings = profile["settings"];
         for (auto& [group, keys] : settings.items()) {
@@ -443,6 +490,9 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                     continue;
                 if (*k == ProfileKind::Printer)
                     printer_part[group][key] = value;
+                else if (*own == ProfileKind::Print && ((group == "extrusion" && key == "bridge_flow_ratio") ||
+                                                         (group == "resin" && key == "bottom_layers")))
+                    filament_part[group][key] = value; // the print's bridges' flow (PF7), a resin print's base (PF11)
                 else
                     warnings.push_back(where + ": " + group + "." + key + " is a " + std::string(profile_kind_name(*k)) +
                                        " setting: left out");
@@ -458,6 +508,7 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
         profile["version"] = 2;
     }
     out.printer_settings = printer_part.dump();
+    out.filament_settings = filament_part.dump();
     try {
         out.profile = parse_profile(profile.dump());
     } catch (const SettingsError& e) {
@@ -466,6 +517,10 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     if (j.contains("compatible") && j.at("compatible").is_number_integer())
         out.compatible = j.at("compatible").get<int>();
     out.generic = j.value("generic", false);
+    if (j.contains("compatible_prints") && j.at("compatible_prints").is_array())
+        for (const json& p : j.at("compatible_prints"))
+            if (p.is_string() && !p.get<std::string>().empty())
+                out.compatible_prints.push_back(p.get<std::string>());
     if (j.contains("nozzle") && j.at("nozzle").is_number())
         out.nozzle = j.at("nozzle").get<double>();
     out.license = text(j, "license");

@@ -203,3 +203,46 @@ TEST_CASE("fuzzy skin: a wall over nothing stays smooth, as a bridge (orca_2_5.m
     const auto [lo2, hi2] = radii(rough, first_cap + 1, 0);
     CHECK(hi2 - lo2 > 0.2);
 }
+
+TEST_CASE("fuzzy skin: painted, it ends at the painted border, not a bead past it (rule 4)", "[fuzzy][paint]") {
+    // Two boxes side by side make one 20 mm cube; the +X face of the y < 10
+    // half painted fuzzy. The outer wall by +X past y = 10 keeps its line.
+    TriangleMesh mesh;
+    const auto box = [&](float y0, float y1) {
+        const Vec3f v[8] = {{0, y0, 0}, {20, y0, 0}, {20, y1, 0}, {0, y1, 0},
+                            {0, y0, 10}, {20, y0, 10}, {20, y1, 10}, {0, y1, 10}};
+        const int faces[6][4] = {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4}, {1, 2, 6, 5}, {2, 3, 7, 6}, {3, 0, 4, 7}};
+        for (const auto& f : faces) {
+            mesh.add_triangle(v[f[0]], v[f[1]], v[f[2]]);
+            mesh.add_triangle(v[f[0]], v[f[2]], v[f[3]]);
+        }
+    };
+    box(0, 10);
+    box(10, 20);
+    Settings s;
+    s.wall_width = s.outer_wall_width = 0.4;
+    s.gpu = GpuMode::Off;
+    Painting p;
+    for (std::size_t t = 0; t < 12; ++t) {
+        bool on = true;
+        for (int k = 0; k < 3; ++k)
+            on = on && mesh.corner(t, k).x > 19.9f;
+        if (on)
+            p.set_tree(PaintChannel::Fuzzy, t, {1});
+    }
+    const SlicedModel m = slice_model(weld_exact(mesh), s, nullptr, nullptr, &p);
+    double before = 0.0, past = 0.0;
+    for (const Toolpath& t : m.walls[20].toolpaths)
+        if (t.index == 0)
+            for (const ToolpathPoint& q : t.points) {
+                if (q.p.x < 19.0)
+                    continue;
+                const double away = std::fabs(q.p.x - 19.8);
+                if (q.p.y > 2 && q.p.y < 9.8)
+                    before = std::max(before, away);
+                if (q.p.y > 10.15 && q.p.y < 18)
+                    past = std::max(past, away);
+            }
+    CHECK(before > 0.2);
+    CHECK(past < 0.01);
+}

@@ -1,0 +1,5 @@
+# Release gate G2: the Benchy with the default profile slices to checked
+# G-code, as big as the model (60.0 x 31.0 x 48.0 mm), within 0.1 mm.
+slice
+expect-gcode-valid
+expect-part-size 60.0 31.0 48.0

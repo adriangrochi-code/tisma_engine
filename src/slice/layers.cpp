@@ -70,6 +70,19 @@ std::vector<char> same_crossings(std::span<const float> values, std::span<const 
 
 namespace {
 
+// Cracks in a section (slicing.md, rule 7): those up to twice the closing
+// radius always close; then the open ends still left are joined by a
+// straight stretch up to kCrackJoin apart, nearest first. A wider crack
+// leaves the section open: the caller drops it and counts it.
+constexpr double kCrackJoin = 10.0; // mm: closes the spec's 5 mm (C7), not its 12 mm (C8)
+
+void close_cracks(std::vector<Contour>& contours, double radius) {
+    close_gaps(contours, 2.0 * radius);
+    if (std::any_of(contours.begin(), contours.end(), [](const Contour& c) { return !c.closed; }))
+        close_gaps(contours, kCrackJoin);
+}
+
+
 // Corners in one line seen from above, exactly: products of float
 // differences, which double holds without rounding.
 bool upright(const IndexedMesh& mesh, const std::array<std::uint32_t, 3>& tri) {
@@ -174,7 +187,7 @@ std::vector<std::vector<Contour>> assemble(const IndexedMesh& mesh, std::span<co
                 runs[k].all_closed = runs[k].all_closed && c.closed;
             }
             if (max_gap > 0.0)
-                close_gaps(out[l], max_gap);
+                close_cracks(out[l], max_gap);
         }
     });
     if (same_section)
@@ -196,7 +209,7 @@ std::vector<std::vector<Contour>> assemble(const IndexedMesh& mesh, std::span<co
                 contours[c].points.push_back(edge_crossing(mesh, values, isos[l], e));
         }
         if (max_gap > 0.0)
-            close_gaps(contours, max_gap);
+            close_cracks(contours, max_gap);
     });
     return out;
 }

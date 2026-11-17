@@ -6,6 +6,7 @@ refused. Skipped (exit 0 with a note) without openssl 3."""
 
 import base64
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -102,6 +103,128 @@ class SignRelease(unittest.TestCase):
         package.write_bytes(package.read_bytes()[:-1] + b"y")
         with self.assertRaisesRegex(sign_release.Failure, "SHA-256"):
             sign_release.sign_folder(self.folder, "1.0.0", self.key, OPENSSL)
+
+
+class CreateKey(unittest.TestCase):
+    """create-key: the key made on the stick that is plugged in, never replaced,
+    copied to a second stick; folders stand for the sticks."""
+
+    def setUp(self):
+        self.work = pathlib.Path(tempfile.mkdtemp())
+        self.plugged = set()
+        self.lock = self.work / "config" / "clave_bloqueada.txt"
+        self.old_lock = os.environ.get("TISMA_KEY_LOCK")
+        os.environ["TISMA_KEY_LOCK"] = str(self.lock)
+
+    def tearDown(self):
+        if self.old_lock is None:
+            os.environ.pop("TISMA_KEY_LOCK", None)
+        else:
+            os.environ["TISMA_KEY_LOCK"] = self.old_lock
+        shutil.rmtree(self.work)
+
+    def stick(self, name):
+        path = self.work / name
+        path.mkdir()
+        return str(path)
+
+    def args(self, **kw):
+        base = dict(drive=None, wait=5, no_backup=False, backup_wait=5, no_github=True, repo=None, openssl=OPENSSL)
+        base.update(kw)
+        return type("Args", (), base)
+
+    def plug_after(self, sticks):
+        """drives(): each wait takes what is plugged in, then sees the next
+        stick of `sticks` plugged in at its first look."""
+        queue = list(sticks)
+        calls = [0]
+
+        def drives():
+            calls[0] += 1
+            if calls[0] % 2 == 0 and queue:
+                self.plugged.add(queue.pop(0))
+            return set(self.plugged)
+        return drives
+
+    def test_made_on_the_stick_plugged_in_and_copied(self):
+        self.plugged.add(self.stick("other"))  # already there: not used
+        first, second = self.stick("first"), self.stick("second")
+        drives = self.plug_after([first, second])
+        public = sign_release.create_key(self.args(), drives, poll=0)
+        key = pathlib.Path(first) / "tisma" / "clave.pem"
+        self.assertTrue(key.is_file())
+        self.assertFalse((self.work / "other" / "tisma").exists())
+        self.assertEqual(sign_release.public_key_raw(OPENSSL, key).hex(), public)
+        self.assertEqual((pathlib.Path(first) / "tisma" / "clave_publica.txt").read_text().strip(), public)
+        self.assertEqual(len(public), 64)
+        copy = pathlib.Path(second) / "tisma" / "clave.pem"
+        self.assertEqual(copy.read_bytes(), key.read_bytes())
+        self.assertFalse(list(pathlib.Path(first, "tisma").glob("*.nueva")))
+
+    def test_a_key_there_is_never_replaced(self):
+        first = self.stick("first")
+        key = make_key(self.work, "old.pem")
+        (pathlib.Path(first) / "tisma").mkdir()
+        shutil.copyfile(key, pathlib.Path(first) / "tisma" / "clave.pem")
+        before = key.read_bytes()
+        public = sign_release.create_key(self.args(drive=first, no_backup=True), lambda: set(), poll=0)
+        self.assertEqual((pathlib.Path(first) / "tisma" / "clave.pem").read_bytes(), before)
+        self.assertEqual(public, sign_release.public_key_raw(OPENSSL, key).hex())
+
+    def test_another_key_on_the_backup_is_refused(self):
+        first, second = self.stick("first"), self.stick("second")
+        (pathlib.Path(second) / "tisma").mkdir()
+        other = make_key(pathlib.Path(second) / "tisma", "clave.pem")
+        before = other.read_bytes()
+        with self.assertRaisesRegex(sign_release.Failure, "otra clave"):
+            sign_release.create_key(self.args(drive=first), self.plug_after([second]), poll=0)
+        self.assertEqual(other.read_bytes(), before)
+
+    def test_locked_after_the_first_time(self):
+        first, empty = self.stick("first"), self.stick("empty")
+        public = sign_release.create_key(self.args(drive=first, no_backup=True), lambda: set(), poll=0)
+        self.assertEqual(self.lock.read_text().strip(), public)
+        # An empty stick gets no new key.
+        with self.assertRaisesRegex(sign_release.Failure, "bloqueada"):
+            sign_release.create_key(self.args(drive=empty, no_backup=True), lambda: set(), poll=0)
+        self.assertFalse((pathlib.Path(empty) / "tisma").exists())
+        # A stick with another key is refused; the first one still works.
+        other = self.stick("other")
+        (pathlib.Path(other) / "tisma").mkdir()
+        make_key(pathlib.Path(other) / "tisma", "clave.pem")
+        with self.assertRaisesRegex(sign_release.Failure, "otra clave"):
+            sign_release.create_key(self.args(drive=other, no_backup=True), lambda: set(), poll=0)
+        self.assertEqual(sign_release.create_key(self.args(drive=first, no_backup=True), lambda: set(), poll=0), public)
+
+    def test_on_its_own_with_github(self):
+        """The variable set and the drafts looked for, with no question; a key
+        already in GitHub locks a new computer too."""
+        calls = []
+
+        def gh(args):
+            calls.append(args[1:3])
+            if args[1:3] == ["variable", "get"]:
+                raise sign_release.Failure("not found")
+            out = b"[]" if args[1:3] == ["release", "list"] else b""
+            return subprocess.CompletedProcess(args, 0, out, b"")
+        first = self.stick("first")
+        public = sign_release.create_key(self.args(drive=first, no_backup=True, no_github=False), lambda: set(),
+                                         poll=0, gh=gh)
+        self.assertIn(["variable", "set"], calls)
+        self.assertIn(["release", "list"], calls)
+        self.lock.unlink()  # another computer: GitHub still holds the key
+
+        def gh_set(args):
+            if args[1:3] == ["variable", "get"]:
+                return subprocess.CompletedProcess(args, 0, (public + "\n").encode(), b"")
+            return gh(args)
+        with self.assertRaisesRegex(sign_release.Failure, "bloqueada"):
+            sign_release.create_key(self.args(drive=self.stick("new"), no_backup=True, no_github=False),
+                                    lambda: set(), poll=0, gh=gh_set)
+
+    def test_no_stick(self):
+        with self.assertRaisesRegex(sign_release.Failure, "ningún pendrive"):
+            sign_release.create_key(self.args(wait=0.05), lambda: set(), poll=0.01)
 
 
 if __name__ == "__main__":

@@ -141,6 +141,23 @@ TEST_CASE("resin: the run-length coding of an image", "[resin]") {
     CHECK_THROWS_AS(decode_goo_image(data, int(total) - 1, 1), ResinError);
 }
 
+TEST_CASE("resin RE11: the first layer resin.first_layer_height, the rest resin.layer_height (rule 1)", "[resin]") {
+    Settings s = base();
+    s.resin_first_layer_height = 0.1;
+    const ResinPrint p = slice_resin(cube(), s);
+    REQUIRE(p.layers.size() == 199); // one fewer than RE1's 200
+    CHECK_THAT(p.layers[0].z, WithinAbs(0.1, 1e-9));
+    CHECK_THAT(p.layers[1].z, WithinAbs(0.15, 1e-9));
+    CHECK_THAT(p.layers.back().z, WithinAbs(10.0, 1e-9));
+    // Read and written; 0 is resin.layer_height.
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(back.resin_first_layer_height == 0.1);
+    CHECK(parse_settings(R"({"resin": {"first_layer_height": 0}})").resin_first_layer_height == 0.0);
+    CHECK_THROWS(parse_settings(R"({"resin": {"first_layer_height": 2}})"));
+    s.resin_first_layer_height = 0.0;
+    CHECK(slice_resin(cube(), s).layers.size() == 200);
+}
+
 TEST_CASE("resin RE1: the GOO file of a cube", "[resin]") {
     const Settings s = base();
     const ResinPrint p = slice_resin(cube(), s);

@@ -137,6 +137,23 @@ TEST_CASE("a profile takes only its own settings", "[profiles]") {
     CHECK(same_profile(ProfileKind::Print, print, source));
 }
 
+TEST_CASE("a printer profile brings its machine G-code and takes the old one away", "[profiles]") {
+    // The pack printer's own start G-code (machine.macros) is written only
+    // when given: a printer chosen over the defaults kept none of it (the
+    // release gate's G14, 2026-11-16).
+    Settings pack_printer;
+    pack_printer.machine_macros.dialect = "prusaslicer";
+    pack_printer.machine_macros.templates["start"] = "G28 ; home\nG1 Z5";
+    const Settings base;
+    const Settings chosen = with_profile(base, ProfileKind::Printer, pack_printer);
+    CHECK(chosen.machine_macros == pack_printer.machine_macros);
+    // Another printer without one: none is left.
+    const Settings back = with_profile(chosen, ProfileKind::Printer, base);
+    CHECK(back.machine_macros.empty());
+    // A filament or print profile leaves it alone.
+    CHECK(with_profile(chosen, ProfileKind::Filament, base).machine_macros == pack_printer.machine_macros);
+}
+
 TEST_CASE("profile files are read back and reject settings of another kind", "[profiles]") {
     Profile p;
     p.kind = ProfileKind::Filament;

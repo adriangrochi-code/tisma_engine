@@ -1,0 +1,6 @@
+# Release gate G2 (docs/spec/RELEASE_GATE.md): the 20 mm cube with the
+# default profile slices to checked G-code with layers, filament and time,
+# and the part's extrusions span 20 mm each way, within 0.1 mm.
+slice
+expect-gcode-valid
+expect-part-size 20 20 20

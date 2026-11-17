@@ -233,7 +233,10 @@ boceto (`L`, `C`, `REC`…) contestan «Próximamente» hasta la etapa D2.
 
 Las piezas las construye el componente de diseño, `solidcraft-cli` (SolidCraft 0.30.0), que el paquete lleva en la
 carpeta `solidcraft/` junto al programa (`--solidcraft <ruta>` usa otro; las pruebas usan un sustituto). Si falta o
-no responde, la pestaña dice «Falta el componente de diseño» y el resto del programa sigue igual. Un objeto que
+no responde, la pestaña dice «Falta el componente de diseño», con su versión y la carpeta donde lo buscó, y el resto
+del programa sigue igual. Una compilación propia no lo trae: `-DTISMA_SOLIDCRAFT=ON` lo baja (la versión fija, con su
+SHA-256 de `THIRD_PARTY.md`) y lo pone en `solidcraft/` junto a `tisma`, con sus licencias; está apagado por defecto
+porque las pruebas usan su sustituto. Un objeto que
 salió de Diseño tiene «Editar en Diseño» en su menú: al mandarlo de nuevo reemplaza su malla y conserva el lugar, los
 ajustes, los modificadores y lo pintado. En Preparar, Boceto y Primitiva (tira de herramientas y menú de la placa)
 abren Diseño. La preferencia «Pestaña Diseño» (`ui.cad_design`) la oculta.
@@ -471,7 +474,7 @@ tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot 
 
 Varios STL en la línea de comandos arman una placa: el primero la abre y los demás se suman. `--tool
 move|rotate|scale|lay|paint` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
-`--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`). `--level basic|normal|advanced|custom` elige el nivel del
+`--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`); `--paint color,N,X,Y,Z,RADIO` pinta con el filamento o la mezcla N (de 1 a 16). `--level basic|normal|advanced|custom` elige el nivel del
 panel, `--search TEXTO` va al primer ajuste que encuentra, `--single-column` muestra todo junto y `--choose-settings`
 abre «Elegir ajustes…»; `--credits` abre Créditos y fuentes. `--ortho` y `--labels` hacen lo de K y E. `--section printer/SECCIÓN` abre la configuración de la impresora en esa sección
 (`machine`, `nozzle`, `limits`, `gcode`, `calibration`, `connection`, `notes`), y `--profile "printer=Marca Modelo 0.4 mm"`

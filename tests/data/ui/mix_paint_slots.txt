@@ -1,0 +1,23 @@
+# Painting with blends (color_mixing_plus.md, «Pintar con mezclas»: MX33): the
+# paint holds 16 colours, by default the first 16 by number; unticking blend
+# 5 frees its mark for blend 20; with 16 in use, another one warns and stays
+# out.
+wait 3
+set machine.extruders 4
+filament-color 1 #FFFFFF
+filament-color 2 #000000
+filament-color 3 #FF0000
+filament-color 4 #0000FF
+open-mixing
+wait 3
+menu quick_palette.3
+wait 2
+expect-paint-slot 5 5
+expect-paint-slot 16 16
+mix-paint 0 off
+expect-paint-slot 5 0
+mix-paint 15 on
+expect-paint-slot 5 20
+mix-paint 16 on
+wait 2
+expect-text La pintura admite 16 colores

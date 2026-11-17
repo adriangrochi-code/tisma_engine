@@ -183,11 +183,120 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         CHECK(c.ok());
         REQUIRE(c.notes.size() == 1);
         CHECK_THAT(c.notes[0].message, ContainsSubstring("heater set to 0"));
+
         // Set to 0 after the macro, it is a problem again.
         std::string g = macro.gcode;
         g.insert(g.find(";LAYER_CHANGE\n;Z:1.000"), "M104 S0\n");
         CHECK_THAT(problems_of(check_gcode(g, macro.limits)), ContainsSubstring("heater set to 0"));
     }
+    {
+        // A printer's profile (a bed and a start G-code) that never sets the
+        // nozzle's temperature: refused (QA, 2026-11-16: a partial settings
+        // file left the print unheated and the check said nothing); after a
+        // printer macro, only a note.
+        Settings h = test_printer();
+        h.start_gcode = "G28\nG1 Z5 F600";
+        h.variables["temperature"] = {"210"};
+        const Output ho = slice_and_write(cube(), h);
+        GcodeLimits heat = ho.limits;
+        heat.require_heat = true;
+        std::string g2 = ho.gcode;
+        for (const char* m : {"M104", "M109"})
+            for (std::size_t at = g2.find(m); at != std::string::npos; at = g2.find(m))
+                g2.replace(at, 4, "M117");
+        CHECK_THAT(problems_of(check_gcode(g2, heat)), ContainsSubstring("before any nozzle temperature"));
+        CHECK(check_gcode(ho.gcode, heat).ok());
+        const std::size_t home = g2.find("G28");
+        REQUIRE(home != std::string::npos);
+        g2.insert(home, "START_PRINT\n");
+        const GcodeCheck noted = check_gcode(g2, heat);
+        CHECK(noted.ok());
+        CHECK(!noted.notes.empty());
+         // The ways firmwares set a nozzle (gcode_firmware.md, rule 1, FW11):
+        // M109 R, M104/M109 T<n>, RepRapFirmware's G10 P S and M568 P S.
+        for (const char* set : {"M109 R210\n", "M104 T0 S210\n", "G10 P0 S210\n", "M568 P0 S210\n"}) {
+            CAPTURE(set);
+            std::string g3 = ho.gcode;
+            for (const char* m : {"M104", "M109"})
+                for (std::size_t at = g3.find(m); at != std::string::npos; at = g3.find(m))
+                    g3.replace(at, 4, "M117");
+            g3.insert(g3.find("G28"), set);
+            CHECK(check_gcode(g3, heat).ok());
+        }
+        // Heated and printing with T1 on a printer of one extruder (the Sovol
+        // SV04 in mode 02): «T1;» with its comment glued on.
+        {
+            std::string g4 = ho.gcode;
+            for (const char* m : {"M104", "M109"})
+                for (std::size_t at = g4.find(m); at != std::string::npos; at = g4.find(m))
+                    g4.replace(at, 4, "M117");
+            g4.insert(g4.find("G28"), "M104 T1 S215\nM109 T1 S215\nT1;\n");
+            CHECK(check_gcode(g4, heat).ok());
+        }
+        // A printer with no heater (a filament at 0 °C, Cocoa Press): not asked for.
+        Settings cold = h;
+        cold.variables["temperature"] = {"0"};
+        CHECK_FALSE(gcode_limits(slice_model(cube(), cold), cold).require_heat);
+    }
+    {
+        // Each heater on its own: a start that only heats the bed still gets
+        // the nozzle (the Deltacomb DC-20).
+        Settings d = test_printer();
+        d.start_gcode = "M140 S55\nG28";
+        d.variables["temperature"] = {"215"};
+        const Output o = slice_and_write(cube(), d);
+        const std::string head = o.gcode.substr(0, o.gcode.find(";LAYER_CHANGE"));
+        CHECK(head.find("M104 S215") != std::string::npos);
+        CHECK(head.find("M109 S215") != std::string::npos);
+        CHECK(head.find("M190") == std::string::npos); // the bed is the start's own
+    }
+    {
+        // The simple version always homes (gcode_macros.md, rule 10 bis, GM21):
+        // the machine's own start cannot be read, the simple one has no G28.
+        Settings m = test_printer();
+        m.start_gcode = "G1 Z5 F600";
+        m.variables["temperature"] = {"210"};
+        m.machine_macros.dialect = "prusaslicer";
+        m.machine_macros.templates["start"] = "G28\nM104 S{no_such_variable}";
+        const Output o = slice_and_write(cube(), m);
+        const std::size_t home = o.gcode.find("\nG28");
+        const std::size_t first_layer = o.gcode.find(";LAYER_CHANGE");
+        REQUIRE(home != std::string::npos);
+        CHECK(home < first_layer);
+        CHECK(o.gcode.find("M104 S{") == std::string::npos);
+    }
+    {
+        // An end G-code left as an unevaluated expression (the Z-Bolt Classic
+        // of the pack): its lines start with a quote or a '+'.
+        Settings z = test_printer();
+        z.end_gcode = "'M104 S0 ;extruder heater off' + ('\nM140 S0 ;off' if machine_heated_bed else '') + '\n"
+                      "+ 'G1 X0'\n@pause\n$H\nEND_PRINT";
+        const Output o = slice_and_write(cube(), z);
+        const GcodeCheck c = check_gcode(o.gcode, o.limits);
+        REQUIRE(c.problems.size() == 2);
+        CHECK(c.problems[0].message.find("not a G-code command: ''M104'") != std::string::npos);
+        CHECK(c.problems[1].message.find("not a G-code command: '+'") != std::string::npos);
+    }
+}
+
+TEST_CASE("G-code check: a move down through what is already printed", "[gcode][check]") {
+    // The cube's 30th layer, then a travel that drops to Z 2 and back over
+    // the part: it runs through the layers already printed there.
+    const Settings s = test_printer();
+    const Output o = slice_and_write(cube(), s);
+    std::string g = o.gcode;
+    std::size_t at = 0;
+    for (int n = 0; n < 31; ++n)
+        at = g.find(";LAYER_CHANGE", at + 1);
+    REQUIRE(at != std::string::npos);
+    // Before the 31st layer, over the cube's middle: down to Z 2, then up.
+    const double cx = 0.5 * (o.limits.min_x + o.limits.max_x), cy = 0.5 * (o.limits.min_y + o.limits.max_y);
+    std::ostringstream dive;
+    dive << "G0 X" << cx << " Y" << cy << "\nG0 Z2\nG0 X" << cx + 1.0 << "\nG0 Z8\n";
+    g.insert(at, dive.str());
+    const GcodeCheck c = check_gcode(g, o.limits);
+    CHECK_THAT(problems_of(c), ContainsSubstring("moves through what is already printed"));
+    CHECK(check_gcode(o.gcode, o.limits).ok());
 }
 
 TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
@@ -438,4 +547,21 @@ TEST_CASE("check limits: the highest layer, not the last (fuzz seed 20261104, ru
     s.ramping_lift = false;
     const GcodeLimits limits = gcode_limits(model, s);
     CHECK(limits.max_z >= 5.938 + 0.15 - 1e-9);
+}
+
+TEST_CASE("islands: many are ordered through a grid, the tour near a lawnmower's (Q9)", "[gcode][check]") {
+    // 20 x 20 posts: past kIslandsAllPairs islands the order uses a grid and
+    // 2-opt over near neighbours. Every post prints, and a layer's travel
+    // stays near a lawnmower path over the posts (400 x 4 mm).
+    IndexedMesh posts;
+    for (int i = 0; i < 20; ++i)
+        for (int j = 0; j < 20; ++j)
+            add_box(posts, 4.0f * float(i), 4.0f * float(j), 0, 4.0f * float(i) + 2, 4.0f * float(j) + 2, 0.6f);
+    const Settings s = test_printer();
+    const Output o = slice_and_write(posts, s);
+    const GcodeCheck c = check_gcode(o.gcode, o.limits);
+    INFO(problems_of(c));
+    REQUIRE(c.ok());
+    const double per_layer = c.stats.travel_path / double(c.stats.layers);
+    CHECK(per_layer < 400 * 4.0 * 1.6);
 }

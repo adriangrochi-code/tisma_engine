@@ -29,13 +29,13 @@ void check(VkResult r, const char* what) {
         throw std::runtime_error(std::string("vulkan: ") + what + " failed (" + std::to_string(int(r)) + ")");
 }
 
-int device_rank(VkPhysicalDeviceType type) {
+DeviceCandidate::Kind device_kind(VkPhysicalDeviceType type) {
     switch (type) {
-    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return 4;
-    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return 3;
-    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: return 2;
-    case VK_PHYSICAL_DEVICE_TYPE_CPU: return 1;
-    default: return 0;
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return DeviceCandidate::Kind::Discrete;
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return DeviceCandidate::Kind::Integrated;
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: return DeviceCandidate::Kind::Virtual;
+    case VK_PHYSICAL_DEVICE_TYPE_CPU: return DeviceCandidate::Kind::Cpu;
+    default: return DeviceCandidate::Kind::Other;
     }
 }
 
@@ -367,11 +367,16 @@ struct Context::Impl {
     }
 };
 
-std::unique_ptr<Context> Context::create(const ContextOptions& options) {
-    if (const char* env = std::getenv("TISMA_GPU"); env && std::strcmp(env, "0") == 0)
+std::unique_ptr<Context> Context::create(const ContextOptions& options, std::string* why) {
+    const auto fail = [why](std::string reason) {
+        if (why)
+            *why = std::move(reason);
         return nullptr;
+    };
+    if (const char* env = std::getenv("TISMA_GPU"); env && std::strcmp(env, "0") == 0)
+        return fail("the GPU is turned off (TISMA_GPU=0)");
     if (!load_vulkan())
-        return nullptr; // no Vulkan loader on this machine
+        return fail("this computer has no Vulkan driver (install or update the graphics driver)");
     auto impl = std::make_unique<Impl>();
     try {
         VkApplicationInfo app{};
@@ -381,39 +386,49 @@ std::unique_ptr<Context> Context::create(const ContextOptions& options) {
         VkInstanceCreateInfo ici{};
         ici.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         ici.pApplicationInfo = &app;
-        if (vkCreateInstance(&ici, nullptr, &impl->instance) != VK_SUCCESS)
-            return nullptr;
+        if (const VkResult r = vkCreateInstance(&ici, nullptr, &impl->instance); r != VK_SUCCESS)
+            return fail("the Vulkan driver did not start (vkCreateInstance returned " + std::to_string(int(r)) + ")");
         if (!impl->vk.load(impl->instance))
-            return nullptr;
+            return fail("the Vulkan driver lacks functions the engine needs");
 
         std::uint32_t count = 0;
         impl->vk.vkEnumeratePhysicalDevices(impl->instance, &count, nullptr);
         std::vector<VkPhysicalDevice> devices(count);
         impl->vk.vkEnumeratePhysicalDevices(impl->instance, &count, devices.data());
-        int best_rank = 0;
+        devices.resize(count);
+        std::vector<DeviceCandidate> candidates;
+        std::vector<std::uint32_t> compute_family;
         for (VkPhysicalDevice d : devices) {
             VkPhysicalDeviceProperties props;
             impl->vk.vkGetPhysicalDeviceProperties(d, &props);
-            if (props.apiVersion < VK_API_VERSION_1_1)
-                continue;
-            const int rank = device_rank(props.deviceType);
-            if (rank == 0 || (rank == 1 && !options.allow_cpu_device) || rank <= best_rank)
-                continue;
+            DeviceCandidate c;
+            c.name = props.deviceName;
+            c.kind = device_kind(props.deviceType);
+            c.vulkan_1_1 = props.apiVersion >= VK_API_VERSION_1_1;
+            VkPhysicalDeviceMemoryProperties memory;
+            impl->vk.vkGetPhysicalDeviceMemoryProperties(d, &memory);
+            for (std::uint32_t h = 0; h < memory.memoryHeapCount; ++h)
+                if (memory.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+                    c.local_memory += memory.memoryHeaps[h].size;
             std::uint32_t families = 0;
             impl->vk.vkGetPhysicalDeviceQueueFamilyProperties(d, &families, nullptr);
             std::vector<VkQueueFamilyProperties> fam(families);
             impl->vk.vkGetPhysicalDeviceQueueFamilyProperties(d, &families, fam.data());
-            for (std::uint32_t f = 0; f < families; ++f)
-                if (fam[f].queueFlags & VK_QUEUE_COMPUTE_BIT) {
-                    best_rank = rank;
-                    impl->physical = d;
-                    impl->queue_family = f;
-                    impl->name = props.deviceName;
-                    break;
-                }
+            std::uint32_t family = UINT32_MAX;
+            for (std::uint32_t f = 0; f < families && family == UINT32_MAX; ++f)
+                if (fam[f].queueFlags & VK_QUEUE_COMPUTE_BIT)
+                    family = f;
+            c.compute = family != UINT32_MAX;
+            candidates.push_back(std::move(c));
+            compute_family.push_back(family);
         }
-        if (!impl->physical)
-            return nullptr;
+        std::string reason;
+        const int chosen = choose_device(candidates, options.allow_cpu_device, &reason);
+        if (chosen < 0)
+            return fail(reason);
+        impl->physical = devices[std::size_t(chosen)];
+        impl->queue_family = compute_family[std::size_t(chosen)];
+        impl->name = candidates[std::size_t(chosen)].name;
         impl->vk.vkGetPhysicalDeviceMemoryProperties(impl->physical, &impl->memory);
 
         const float priority = 1.0f;
@@ -426,21 +441,22 @@ std::unique_ptr<Context> Context::create(const ContextOptions& options) {
         dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         dci.queueCreateInfoCount = 1;
         dci.pQueueCreateInfos = &qci;
-        if (impl->vk.vkCreateDevice(impl->physical, &dci, nullptr, &impl->device) != VK_SUCCESS)
-            return nullptr;
+        if (const VkResult r = impl->vk.vkCreateDevice(impl->physical, &dci, nullptr, &impl->device); r != VK_SUCCESS)
+            return fail("the GPU " + impl->name + " did not open (vkCreateDevice returned " + std::to_string(int(r)) + ")");
         if (!impl->vk.load(impl->device))
-            return nullptr;
+            return fail("the GPU " + impl->name + " lacks functions the engine needs");
         impl->vk.vkGetDeviceQueue(impl->device, impl->queue_family, 0, &impl->queue);
 
         VkCommandPoolCreateInfo cpi{};
-
         cpi.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         cpi.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         cpi.queueFamilyIndex = impl->queue_family;
-        if (impl->vk.vkCreateCommandPool(impl->device, &cpi, nullptr, &impl->command_pool) != VK_SUCCESS)
-            return nullptr;
+        if (const VkResult r = impl->vk.vkCreateCommandPool(impl->device, &cpi, nullptr, &impl->command_pool); r != VK_SUCCESS)
+            return fail("the GPU " + impl->name + " refused a command pool (" + std::to_string(int(r)) + ")");
+    } catch (const std::exception& e) {
+        return fail(std::string("Vulkan failed: ") + e.what());
     } catch (...) {
-        return nullptr;
+        return fail("Vulkan failed");
     }
     return std::unique_ptr<Context>(new Context(std::move(impl)));
 }

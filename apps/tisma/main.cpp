@@ -203,14 +203,20 @@ int main(int argc, char** argv) {
             std::istringstream in(text);
             tisma::ui::AppOptions::Stroke stroke;
             std::string mark;
+            // color,N,...: N the filament or blend number the faces print with (1 to 16).
+            const bool color = text.rfind("color ", 0) == 0;
             if (!(in >> stroke.channel >> mark >> stroke.x >> stroke.y >> stroke.z >> stroke.radius) ||
-                (stroke.channel != "support" && stroke.channel != "seam" && stroke.channel != "fuzzy") ||
-                (mark != "enforce" && mark != "block") ||
+                (stroke.channel != "support" && stroke.channel != "seam" && stroke.channel != "fuzzy" && !color) ||
+                (color ? !(std::atoi(mark.c_str()) >= 1 && std::atoi(mark.c_str()) <= 16 && mark.find_first_not_of("0123456789") == std::string::npos)
+                       : mark != "enforce" && mark != "block" && mark != "erase") ||
                 !(stroke.radius > 0.0f)) {
-                std::fprintf(stderr, "error: --paint must be support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS\n");
+                std::fprintf(stderr, "error: --paint must be support|seam|fuzzy,enforce|block|erase,X,Y,Z,RADIUS or color,N,X,Y,Z,RADIUS (N from 1 to 16)\n");
                 return 2;
             }
+            if (color)
+                stroke.color = std::atoi(mark.c_str());
             stroke.block = mark == "block";
+            stroke.erase = mark == "erase";
             options.strokes.push_back(stroke);
         } else if (arg == "--look") {
             std::string text = value();
@@ -313,6 +319,8 @@ int main(int argc, char** argv) {
             options.view_check = false;
         } else if (arg == "--compare-view") {
             options.compare_view = value();
+        } else if (arg == "--expect-color") { // RRGGBB:N, with --screenshot: at least N pixels of that colour (±12)
+            options.expect_color = value();
         } else if (arg == "--ray-check") {
             options.ray_check = true;
         } else if (arg == "--moire-check") {

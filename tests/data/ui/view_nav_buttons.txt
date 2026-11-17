@@ -1,0 +1,47 @@
+# Navigation by default as in Tinkercad (interface.md, «Navegación de la
+# vista 3D», rules 1 and 2; the owner, 2026-11-16): a right click without
+# moving opens the menu, a right drag turns the view, with Shift it moves it,
+# the wheel pressed moves it too. Under the view cube, a column of round
+# buttons: home view, frame the chosen, zoom in, zoom out, perspective or
+# orthographic.
+wait 3
+right-click-model 0
+expect-control add_instance
+key escape
+camera-mark
+mouse right 0.5 0.5 60 0
+expect-camera turned
+camera-mark
+mouse right 0.3 0.3 60 20 shift
+expect-camera moved
+camera-mark
+mouse middle 0.3 0.3 60 30
+expect-camera moved
+expect-control view_home_button
+expect-control view_fit_selected
+expect-control view_zoom_in
+expect-control view_zoom_out
+expect-control view_projection
+expect-apart view_home_button view_home
+camera-mark
+menu view_zoom_in
+wait 2
+expect-camera nearer
+camera-mark
+menu view_zoom_out
+wait 2
+expect-camera farther
+menu view_projection
+wait 2
+menu view_projection
+menu view_home_button
+wait 10
+expect-camera home
+click-model 0
+menu view_zoom_out
+menu view_zoom_out
+wait 2
+camera-mark
+menu view_fit_selected
+wait 5
+expect-camera nearer

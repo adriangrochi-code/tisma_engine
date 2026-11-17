@@ -5,6 +5,7 @@ of `assets/brand/icons/`: 24×24, one gray (`#808080`) that the interface recolo
 
 | Icon | Use |
 |---|---|
+| `library` | The library of Tisma's models, in the top bar (two books and one leaning, 2026-11-16) |
 | `tool_add` | Add a model to the plate |
 | `tool_sketch` | Start a sketch in the Design tab (cad_design.md, rule 3) |
 | `tool_primitive` | Add a primitive in the Design tab |

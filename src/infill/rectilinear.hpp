@@ -31,10 +31,16 @@ struct DepthField;
 // the grid across the lines (the cubic infill's planes with the height).
 // `max_join` (mm), when given, is how far apart along the boundary joined
 // ends may be instead (infill.max_link, surfaces_infill.md rule 7).
+// `join_inside`, when given, holds the joins: one is made only when its whole
+// stretch lies inside it (a bridge's, over what holds it; toolpath_time.md, rule 1).
+// `whole`, with fit: a whole number of lines spans each piece from edge to
+// edge, a little closer than `spacing` when it does not divide the width
+// (bridges: no strip left bare along an edge, research map Q10).
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect = false, bool fit = false, bool monotonic = false,
-                                       double overlap = 0.0, double shift = 0.0, double max_join = 0.0);
+                                       double overlap = 0.0, double shift = 0.0, double max_join = 0.0,
+                                       const Polygons* join_inside = nullptr, bool whole = false);
 
 // The infill toolpaths of one layer.
 struct LayerFill {
@@ -77,6 +83,7 @@ struct FillParams {
     double overlap = 0.0; // neighbouring lines' overlap (bead_overlap of the layer's height, perimeters.md rule 1)
     double max_link = 0.0; // mm along the walls the sparse lines may be joined over (infill.max_link); 0: 3 spacings
     SurfacePattern bottom_pattern = SurfacePattern::Rectilinear; // the bottom surfaces (surfaces.bottom_pattern)
+    std::vector<double> angles; // the layer's angle, cycled (infill.angles, Q18); empty: angle and angle + 90
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
@@ -105,6 +112,11 @@ struct FillParams {
 //  - lightning: none here, since each layer's branches come from the layer
 //    above's (lightning_layers).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
+
+// The angle of layer `layer`'s lines: angles[layer % size] when the list is
+// given, else angle, plus 90 on odd layers.
+double layer_angle(double angle, const std::vector<double>& angles, std::size_t layer);
+inline double layer_angle(const FillParams& p, std::size_t layer) { return layer_angle(p.angle, p.angles, layer); }
 
 // Every how many layers fill_layer gives the same toolpaths for the same
 // surfaces: the directions turn with the layer number alone (2, or 6 with

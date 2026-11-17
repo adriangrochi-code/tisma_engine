@@ -197,6 +197,20 @@ std::vector<Stroke> label_strokes(const std::string& text, double width, double 
 void add_label(TriangleMesh& mesh, const std::string& text, double x, double z, double face_y, bool towards_minus_y,
                double height, double stroke, double depth);
 
+// The blend palette (calibration_models.md, "Piezas para medir", CM8;
+// color_mixing_plus.md, rule 22): a base 1 mm high, for filament 1, and on it
+// one 15 by 15 by 2 mm sample per blend of the quick palette, in its order:
+// from the front left along X, rows of 5 towards the back, 3 mm between
+// samples and around the base; in front of each, 1 mm away, its number (1 to
+// `count`) in relief, 4 mm high, part of the base. Centred on the origin,
+// standing on z = 0. samples[k] prints with the k-th blend.
+struct PalettePiece {
+    TriangleMesh base;
+    std::vector<TriangleMesh> samples;
+    double width = 0.0, depth = 0.0; // mm, of the base
+};
+PalettePiece palette_piece(std::size_t count);
+
 // What the user measured on the printed dimensional test, in mm.
 struct Measurements {
     double x = 0.0, y = 0.0, z = 0.0, hole = 0.0;

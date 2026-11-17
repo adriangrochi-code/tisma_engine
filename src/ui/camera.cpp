@@ -3,6 +3,7 @@
 #include "ui/camera.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <numbers>
 
 namespace tisma::ui {
@@ -72,6 +73,41 @@ void OrbitCamera::pan(float dx, float dy, float viewport_height) {
 
 void OrbitCamera::zoom(float steps) {
     distance = std::clamp(distance * std::pow(kZoomStep, steps), kMinDistance, kMaxDistance);
+}
+
+void OrbitCamera::orbit_about(Vec3 pivot, float dx, float dy) {
+    // The rotation that takes the old camera frame to the new one, applied to
+    // the target about the pivot: the eye goes along, so the pivot keeps its
+    // place in the frame and on the screen.
+    const Vec3 r0 = right(), u0 = up(), f0 = forward();
+    orbit(dx, dy);
+    const Vec3 r1 = right(), u1 = up(), f1 = forward();
+    const Vec3 v = target - pivot;
+    const float a = dot(v, r0), b = dot(v, u0), c = dot(v, f0);
+    target = pivot + r1 * a + u1 * b + f1 * c;
+}
+
+void OrbitCamera::zoom_toward(float steps, Vec3 ray_dir) {
+    // A scaling of the camera about a point on the mouse ray keeps that point
+    // on the same pixel; the point is where the ray meets the target's plane.
+    const Vec3 e = eye(), fw = forward();
+    const float lens = lens_distance(), before = distance, along = dot(ray_dir, fw);
+    zoom(steps);
+    if (along <= 1e-6f)
+        return;
+    const Vec3 c = e + ray_dir * (lens / along);
+    target = c + (target - c) * (distance / before);
+}
+
+void OrbitCamera::angles_for(Vec3 forward, float& yaw, float& pitch) {
+    const float len = length(forward);
+    if (len <= 0.0f)
+        return;
+    const Vec3 f = forward * (1.0f / len);
+    pitch = std::clamp(-std::asin(std::clamp(f.z, -1.0f, 1.0f)), kMinPitch, kMaxPitch);
+    // Straight up or down the yaw is free: the current one is kept.
+    if (std::abs(f.x) + std::abs(f.y) > 1e-5f)
+        yaw = std::atan2(-f.x, f.y);
 }
 
 void OrbitCamera::fit(Vec3 min, Vec3 max, float aspect) {

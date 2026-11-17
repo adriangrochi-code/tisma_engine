@@ -275,3 +275,49 @@ TEST_CASE("tree support sliced with the GPU gives the CPU's G-code", "[gpu][dist
     CHECK(cpu.find(";TYPE:Support") != std::string::npos);
     CHECK(gcode(&ctx) == cpu);
 }
+
+TEST_CASE("the compute device: the discrete GPU, never a software one unless allowed", "[gpu]") {
+    using K = gpu::DeviceCandidate::Kind;
+    // A laptop like the tester's (2026-11-14): the integrated GPU listed first,
+    // the discrete one after, and a software device.
+    const std::vector<gpu::DeviceCandidate> laptop = {
+        {"Intel(R) UHD Graphics", K::Integrated, 128ull << 20},
+        {"NVIDIA GeForce RTX 4060 Laptop GPU", K::Discrete, 8ull << 30},
+        {"llvmpipe (LLVM 17.0.6, 256 bits)", K::Cpu, 0},
+    };
+    CHECK(gpu::choose_device(laptop, false) == 1);
+    CHECK(gpu::choose_device(laptop, true) == 1);
+    // Two of a kind: the one with more device memory.
+    CHECK(gpu::choose_device({{"small", K::Discrete, 2ull << 30}, {"large", K::Discrete, 16ull << 30}}, false) == 1);
+    // A software device known by its name though its driver says otherwise.
+    const std::vector<gpu::DeviceCandidate> software = {{"Microsoft Basic Render Driver", K::Integrated, 0},
+                                                        {"lavapipe", K::Other, 0}};
+    std::string why;
+    CHECK(gpu::choose_device(software, false, &why) == -1);
+    CHECK(why.find("Microsoft Basic Render Driver") != std::string::npos);
+    CHECK(gpu::choose_device(software, true) == 0);
+    // A GPU without Vulkan 1.1 or a compute queue is passed over.
+    gpu::DeviceCandidate old{"old", K::Discrete, 4ull << 30};
+    old.vulkan_1_1 = false;
+    CHECK(gpu::choose_device({old, {"igpu", K::Integrated, 0}}, false) == 1);
+    why.clear();
+    CHECK(gpu::choose_device({}, false, &why) == -1);
+    CHECK_FALSE(why.empty());
+}
+
+TEST_CASE("without a device, the context says why", "[gpu]") {
+    // TISMA_GPU=0 turns it off: the reason names it.
+#ifdef _WIN32
+    _putenv_s("TISMA_GPU", "0");
+#else
+    setenv("TISMA_GPU", "0", 1);
+#endif
+    std::string why;
+    CHECK(gpu::Context::create({}, &why) == nullptr);
+    CHECK_FALSE(why.empty());
+#ifdef _WIN32
+    _putenv_s("TISMA_GPU", "");
+#else
+    unsetenv("TISMA_GPU");
+#endif
+}

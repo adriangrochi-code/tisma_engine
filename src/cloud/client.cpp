@@ -224,6 +224,38 @@ std::string plans_with(const std::vector<Plan>& plans, std::string_view job_clas
     return out;
 }
 
+bool Client::status(ServiceStatus& status, Failure& error) {
+    const net::Response r = net::perform(api("GET", url_ + "/v1/status", std::string(), 15));
+    if (!r.ok()) {
+        error = failure(r);
+        return false;
+    }
+    const nlohmann::json j = nlohmann::json::parse(r.body, nullptr, false);
+    if (!j.is_object() || !j.contains("status") || !j["status"].is_string()) {
+        error = unexpected();
+        return false;
+    }
+    const auto text = [&](const char* key) {
+        return j.contains(key) && j[key].is_string() ? j[key].get<std::string>() : std::string();
+    };
+    status = ServiceStatus{};
+    status.status = text("status");
+    status.label_es = text("label_es");
+    status.label_en = text("label_en");
+    status.message_es = text("message_es");
+    status.message_en = text("message_en");
+    status.checked_at = text("checked_at");
+    if (j.contains("unavailable") && j["unavailable"].is_array())
+        for (const nlohmann::json& c : j["unavailable"])
+            if (c.is_string())
+                status.unavailable.push_back(c.get<std::string>());
+    if (j.contains("longest_wait_s") && j["longest_wait_s"].is_number())
+        status.longest_wait_s = j["longest_wait_s"].get<double>();
+    if (j.contains("nodes_online") && j["nodes_online"].is_number_integer())
+        status.nodes_online = j["nodes_online"].get<int>();
+    return true;
+}
+
 bool Client::plans(std::vector<Plan>& plans, Failure& error) {
     const net::Response r = net::perform(api("GET", url_ + "/v1/plans", token_, 30));
     if (!r.ok()) {

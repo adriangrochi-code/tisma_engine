@@ -167,10 +167,17 @@ ToolPlan plan_tools(const SlicedModel& model, const Settings& s) {
     for (std::size_t l = 0; l < n; ++l) {
         std::vector<int>& order = plan.order[l];
         order.clear();
-        if (used[l][std::size_t(current)])
+        // A layer with sublayers in its own order, the lowest first
+        // (color_mixing_plus.md, rule 10); the rest of its extruders after.
+        if (l < model.tool_order.size())
+            for (const int e : model.tool_order[l])
+                if (e >= 1 && e <= kMaxExtruders && used[l][std::size_t(e)] &&
+                    std::find(order.begin(), order.end(), e) == order.end())
+                    order.push_back(e);
+        if (order.empty() && used[l][std::size_t(current)])
             order.push_back(current);
         for (int e = 1; e <= kMaxExtruders; ++e)
-            if (used[l][std::size_t(e)] && e != current)
+            if (used[l][std::size_t(e)] && std::find(order.begin(), order.end(), e) == order.end())
                 order.push_back(e);
         if (order.empty())
             order.push_back(0);

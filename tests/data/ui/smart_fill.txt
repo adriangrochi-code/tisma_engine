@@ -1,0 +1,13 @@
+# The smart fill (model_tools.md, rule 27; MT30): on a cylinder at 30°, a
+# click on its side paints all the side (2 pi 10 x 20, about 1257 mm2) and
+# not the caps (90° away); on the cap, the cap alone (pi 10², about 314).
+wait 3
+add-cylinder
+wait 2
+menu tool_paint
+wait 1
+expect-control smart_fill
+smart-fill 1 side 30
+expect-paint-area 1200 1300
+smart-fill 1 top 30
+expect-paint-area 1500 1600

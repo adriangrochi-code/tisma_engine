@@ -29,6 +29,7 @@ struct TreeParams {
     double xy_gap = 0.6;           // mm between a branch and the part
     double bead = 0.4;             // mm, the line width: tips are never closer than two
     int z_gap_layers = 1;          // empty layers between the support and the part above it
+    const std::vector<int>* gap_above = nullptr; // the same layer by layer (SupportParams::gap_above); null: z_gap_layers
     int interface_layers = 3;      // dense layers right under what overhangs, over the tips
 };
 

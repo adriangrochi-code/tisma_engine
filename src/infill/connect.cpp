@@ -14,7 +14,8 @@ namespace tisma {
 
 using Clipper2Lib::Point64;
 
-Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, double max_arc, double row_step) {
+Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, double max_arc, double row_step,
+                             const Polygons* allowed) {
     struct End {
         std::size_t poly = 0, edge = 0;
         double s = 0.0;        // arc length from the polygon's first vertex
@@ -164,14 +165,6 @@ Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, d
             i = parent[i] = parent[parent[i]];
         return i;
     };
-    for (const Join& j : joins) {
-        if (link[j.from] != kNone || link[j.to] != kNone || root(j.from / 2) == root(j.to / 2))
-            continue;
-        link[j.from] = j.to;
-        link[j.to] = j.from;
-        forward[j.from] = true;
-        parent[root(j.from / 2)] = root(j.to / 2);
-    }
     // The boundary vertices strictly between end x and end y, going forward or back.
     auto between = [&](std::size_t x, std::size_t y, Polygon& out) {
         const End& ex = ends[x];
@@ -193,6 +186,47 @@ Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, d
             k = forward[x] ? (k + 1) % n : (k + n - 1) % n;
         }
     };
+    // A piece's end point: even ends are its front, odd ones its back.
+    auto end_point = [&](std::size_t e) { return e % 2 == 0 ? pieces[e / 2].front() : pieces[e / 2].back(); };
+    auto inside = [&](const Point64& p) {
+        int winding = 0;
+        for (const Polygon& poly : *allowed) {
+            const auto where = Clipper2Lib::PointInPolygon(p, poly);
+            if (where == Clipper2Lib::PointInPolygonResult::IsOn)
+                return true;
+            if (where == Clipper2Lib::PointInPolygonResult::IsInside)
+                winding += Clipper2Lib::IsPositive(poly) ? 1 : -1;
+        }
+        return winding > 0;
+    };
+    auto stretch_inside = [&](std::size_t from, std::size_t to) {
+        Polygon stretch{end_point(from)};
+        between(from, to, stretch);
+        stretch.push_back(end_point(to));
+        for (std::size_t k = 0; k < stretch.size(); ++k) {
+            if (!inside(stretch[k]))
+                return false;
+            if (k + 1 < stretch.size() &&
+                !inside({(stretch[k].x + stretch[k + 1].x) / 2, (stretch[k].y + stretch[k + 1].y) / 2}))
+                return false;
+        }
+        return true;
+    };
+    for (const Join& j : joins) {
+        if (link[j.from] != kNone || link[j.to] != kNone || root(j.from / 2) == root(j.to / 2))
+            continue;
+        if (allowed) {
+            forward[j.from] = true; // the stretch goes forward from `from`
+            const bool ok = stretch_inside(j.from, j.to);
+            forward[j.from] = false;
+            if (!ok)
+                continue;
+        }
+        link[j.from] = j.to;
+        link[j.to] = j.from;
+        forward[j.from] = true;
+        parent[root(j.from / 2)] = root(j.to / 2);
+    }
     Polygons out;
     std::vector<bool> used(pieces.size(), false);
     auto walk = [&](std::size_t start) {

@@ -1,0 +1,13 @@
+# A blend's number follows the filaments (color_mixing_plus.md, «Número de una
+# mezcla»; the spec team's MX30): from 2 to 4 filaments blend #3 becomes #5
+# and the cube follows it; with 1 filament, the blend of 1 and 2 is off and the
+# cube prints with filament 1.
+wait 3
+set machine.extruders 2
+add-mix 1 2
+expect-extruder 0 3
+set machine.extruders 4
+expect-extruder 0 5
+set machine.extruders 1
+expect-extruder 0 1 off
+expect-toast filamento que ya no está

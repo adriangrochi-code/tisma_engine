@@ -1,0 +1,27 @@
+# Release gate G15: closing with a slice, a slice in the cloud and an
+# aerodynamic analysis under way ends the process in under 3 s.
+menu more
+menu cloud_slice
+expect-control cloud_window
+cloud-wait
+cloud-field email ana@example.com
+cloud-field password secret123
+menu cloud_login
+cloud-wait
+expect-cloud logged yes
+menu cloud_close
+set support.enabled true
+menu mode_engineering
+menu tab_aerodynamics
+expect-control aero_analyze
+menu aero_quality
+menu aero_quality_fast
+menu aero_analyze
+expect-running aero
+menu more
+menu cloud_slice
+expect-busy cloud
+press-slice
+expect-busy slice
+expect-running aero
+quit

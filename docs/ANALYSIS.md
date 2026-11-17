@@ -111,6 +111,7 @@ El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija 
              "loose": 0, "analysed": 618028},
   "solver": {"preconditioner": "multigrid", "levels": 6, "iterations": 54, "residual": 6.99e-09,
              "tolerance": 1e-08, "converged": true, "prepare_seconds": 0.025, "solve_seconds": 29.3},
+  "devices": {"slicing": "NVIDIA GeForce RTX 4060", "solver": "CPU"},
   "result": {"max_displacement_mm": 0.1024, "max_von_mises_mpa": 27.12, "min_safety": 1.983,
              "weakest": {"x": 9.95, "y": 9.85, "z": 0.05, "layer": 0, "mode": "between_layers"},
              "min_peak_safety": 1.283, "voxels_below_1": 0, "voxels_below_1_5": 0, "voxels_below_2": 4},
@@ -312,3 +313,21 @@ Para decidir, entonces:
 
 La evidencia son dos casos. Más adelante, el criterio de A1 (placa con agujero, con la solución exacta de Kirsch) la
 amplía.
+
+## Criterio de A1: placa con agujero (2026-11-13)
+
+Placa de 120 × 40 × 2 mm con un agujero de 8 mm de diámetro en el centro (96 lados), modelo `solid`, PLA de Bambu
+Lab, vóxeles de 0,25 mm y 2 filas por capa. El extremo de X mínima fijo y 800 N hacia +X en el de X máxima: tensión
+lejana de 800 / (40 × 2) = 10 MPa.
+
+- **Solución exacta:** Kirsch da K = 3 en una placa infinita. Con el ancho finito (d/W = 0,2), la corrección de
+  Heywood da K neto = 2 + (1 − d/W)³ = 2,512, y sobre la tensión lejana K = 2,512 / 0,8 = 3,14.
+- **Motor:** la tensión es tracción en X tanto lejos del agujero como en su borde, así que K es el cociente de los
+  factores de seguridad: mediana a 30 mm del agujero 3,120, mínimo en el borde 0,996 (en X 99,1, Y 95,9, el lado del
+  agujero perpendicular a la carga). K = 3,13, un 0,3 % por debajo de 3,14. El máximo de von Mises, 30,9 MPa,
+  también queda en el borde del agujero, no en la sujeción.
+- Tiempo: 66 s de solución en esta máquina (8 núcleos, sin GPU). La comprobación de resolución (vóxeles de 0,5 mm)
+  cambia el factor de seguridad en un 1,0 %.
+- Cómo repetirlo: el STL lo arma un script propio de la placa; el caso es
+  `{"model": "solid", "voxel": 0.25, "rows_per_layer": 2, "fixtures": [{"face": "x_min"}], "loads": [{"face":
+  "x_max", "force": [800, 0, 0]}]}`, con `--vtk` para leer el factor de seguridad por vóxel.

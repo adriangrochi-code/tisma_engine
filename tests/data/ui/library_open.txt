@@ -1,0 +1,28 @@
+# «Abrir en la placa» (p2p_library.md, rule 8 octies): without a session the
+# card asks to log in; logged in, a model the seeder does not have says so,
+# and the gear's project comes in pieces checked against the signed index and
+# opens on the plate.
+menu library_button
+wait 20
+menu library_model_m1
+expect-control library_login
+menu library_close
+menu cloud_chip
+cloud-wait
+cloud-field email ana@example.com
+cloud-field password secret123
+menu cloud_login
+cloud-wait
+expect-cloud logged yes
+menu cloud_close
+menu library_button
+wait 20
+menu library_model_m2
+menu library_open
+wait 20
+expect-text Este modelo todavía no está disponible para bajar
+menu library_model_m1
+menu library_open
+wait 30
+expect-no-control library_window
+expect-objects 1

@@ -55,6 +55,8 @@ struct AeroInput {
 struct AeroResult {
     bool ok = false;
     std::string error;
+    // Where the flow was solved: the LBM has no GPU version yet, so "CPU".
+    std::string solver_device = "CPU";
     double drag_n = 0.0, cd = 0.0, cd_pressure = 0.0, cd_friction = 0.0;
     double side_force_n = 0.0;     // across the air, from the pressure
     // The pressure drag's sources: the momentum the walls take (before the

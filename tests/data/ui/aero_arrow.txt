@@ -1,0 +1,8 @@
+# The overlays over the 3D view show with both views (the tester's report,
+# 2026-11-16: Aerodinámica's streamlines did not show on two cards, which
+# took Vulkan): the wind's arrow, drawn as the streamlines are, has its blue
+# in the screenshot (--expect-color).
+menu mode_engineering
+menu tab_aerodynamics
+menu aero_dir_my
+wait 10

@@ -4,12 +4,50 @@ La interfaz para las aplicaciones que no pueden enlazar C++ directamente: la app
 (`mobile_app.md`, regla 2), y cualquier otra que hable C. El encabezado es `include/tisma/tisma_engine.h`; este
 documento explica cómo se usa.
 
-**Estado (2026-11-04):** interfaz acordada con la sesión de la app de Android; **todavía no está implementada**. La
-app construye sus pantallas contra una versión falsa. La implementación va después de los ítems actuales de la hoja de
-ruta, salvo que el dueño diga que es urgente.
+**Estado (2026-11-12):** interfaz acordada con la sesión de la app de Android el 2026-11-04. **Implementada la
+primera versión** (`src/cli/c_api.cpp`, pedido de la sesión del iPhone): contexto, abrir por ruta o bytes, ajustes,
+estimación y límite de memoria, laminar con avance y cancelar, resumen y G-code (entero o por pedazos). Va en la
+biblioteca de iOS (`tools/build_ios.sh`). La vista previa por capas y el análisis están desde el 2026-11-13.
 
-**Primera versión prevista:** abrir, ajustes, laminar con avance y cancelar, resumen y G-code. Después: vista previa
-por capas, análisis y estimación de memoria.
+## Cómo funciona la primera versión
+
+- Cada contexto tiene una carpeta propia en la carpeta temporal del sistema (los ajustes, el modelo dado en bytes y
+  el resultado), que se borra con `tisma_destroy`.
+- Laminar corre el mismo `slice <modelo> --config` de la línea de comandos en un hilo del contexto: el G-code y sus
+  comprobaciones son los mismos que en el escritorio.
+- **Avance:** por etapas, con el nombre de la etapa: `loading` 0, `slicing` 5, `walls` 15, `surfaces` 30, `support` 40,
+  `infill` 50, `gcode` 60, `finishing` 95, y `done` 100 (o `cancelled`, `failed`).
+- **Cancelar:** se nota en la próxima etapa. Medido: entre 0,05 y 0,5 s en una esfera de 319 200 triángulos. El
+  trabajo queda en `TISMA_STOPPED` con el código `TISMA_CANCELLED`, sin resultado.
+- **Ajustes:** un modelo suelto (STL, OBJ) los necesita con `tisma_set_settings_json` antes de laminar (si no,
+  `TISMA_BAD_SETTINGS`). Los scripts de posprocesado no corren: en una app no hay nadie que los confirme.
+- **Proyectos:** un 3MF sin ajustes dados se lamina con los suyos, igual que en los nodos
+  (`slice <proyecto> --sandbox`). El avance sale de sus líneas `progress` y ahí se mira la cancelación. Con ajustes
+  dados, el 3MF se lamina como un modelo con esos ajustes. En ese caso el costo del resumen sale `null`: el precio del
+  proyecto todavía no se lee.
+- **Memoria:** `tisma_estimate_memory` es una cota por arriba ajustada a lo medido en Linux x86_64: 80 MB, más 200 B
+  por triángulo, más 16 B por mm² de la caja del modelo y por capa. La tabla de lo medido está en `PROGRESS.md`
+  (2026-11-12).
+- **Costo:** los gramos por `extrusion.cost` (dinero por kg), redondeado a centésimos. Sale `null` sin precio o sin
+  la densidad del filamento (`extrusion.density`), que es lo que da los gramos.
+- **Vista previa:** se lee del G-code terminado la primera vez que se pide, igual que la vista previa del escritorio,
+  y queda en el contexto hasta el próximo trabajo. Hoy el G-code entero está en memoria mientras se lee; para un
+  teléfono es lo próximo a mejorar si pesa. Tipos: las superficies de abajo salen como relleno sólido
+  (`TISMA_PATH_BOTTOM` todavía no se da), y el relleno de huecos, el planchado y la torre de purga son `TISMA_PATH_OTHER`.
+- **Análisis:**
+  - `tisma_analyze_start(objeto, calidad)` corre el análisis de un proyecto abierto con `tisma_open_path`, igual que
+    los nodos (`analyze <proyecto> --sandbox --mode analyze`), con los ajustes del proyecto.
+  - El avance sale de sus líneas `progress`, leídas a medida que llegan; ahí se mira también la cancelación.
+  - `tisma_analysis_json` da el resumen: veredicto, `min_safety` con su rango, desplazamiento, masa, material y vóxeles.
+  - Sin zona fija o sin fuerza: `TISMA_NEEDS_CONDITIONS`; demasiado grande para la memoria: `TISMA_TOO_LARGE`.
+  - Un análisis no deja G-code ni vista previa.
+  - `tisma_analyze_case_start(caso)` analiza el modelo abierto (STL, OBJ o 3MF sin condiciones) con un caso JSON,
+    como `analyze <modelo> --config --case --mesh --progress`: caras fijas y cargadas, fuerzas y dirección
+    (docs/ANALYSIS.md). Usa los ajustes del contexto (o los de fábrica). El avance sale de las líneas
+    `progress: <etapa> <0 a 1>`. `tisma_analysis_json` da el informe del análisis y `tisma_analysis_mesh` la superficie
+    de los vóxeles coloreada por seguridad, en PLY, hasta el próximo trabajo.
+- **Errores de laminar:** el código sale del de la línea de comandos (2 → `TISMA_CANNOT_READ`, 4 →
+  `TISMA_BAD_MODEL`, el resto `TISMA_ERROR`) y el mensaje es su primera línea `error:`.
 
 ## Reglas
 

@@ -1,0 +1,11 @@
+# Release gate G12: the elephant_foot calibration test from its card in the
+# Calibration tab: «Create» makes it and the card closes; it slices to
+# checked G-code with layers, filament and time.
+menu tab_calibration
+menu cal_row_elephant_foot
+expect-control cal_create
+menu cal_create
+wait 10
+expect-no-control cal_create
+slice
+expect-gcode-valid

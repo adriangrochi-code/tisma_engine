@@ -5,6 +5,7 @@ menu mode_engineering
 expect-control tab_design
 menu tab_design
 expect-no-control fasteners_back
+menu design_group_create
 menu design_fasteners
 expect-control fasteners_back
 expect-no-control design_command

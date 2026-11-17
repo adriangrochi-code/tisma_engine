@@ -442,10 +442,11 @@ TEST_CASE("time: heating, homing and levelling as preparation, shown apart (prin
     const std::string timed = gcode_of(s);
     CHECK_THAT(estimate(timed, "printing time"), WithinAbs(base + 87.5 + 35.0 + 10.0 + 40.0, 1.5));
     CHECK_THAT(estimate(timed, "preparation time"), WithinAbs(87.5 + 35.0 + 10.0 + 40.0, 1.0));
-    // A start that heats itself: the engine adds no temperatures (so no bed),
-    // and a second wait at the same temperature heats nothing more.
+    // A start that heats the nozzle itself: the engine adds only the bed (each
+    // heater on its own, gcode_firmware.md, rule 1), and a second wait at the
+    // same temperature heats nothing more.
     s.start_gcode = "G28 ; home\nG29\nM109 S200\nM109 S200\nG4 S5";
-    CHECK_THAT(estimate(gcode_of(s), "preparation time"), WithinAbs(87.5 + 10.0 + 40.0 + 5.0, 1.0));
+    CHECK_THAT(estimate(gcode_of(s), "preparation time"), WithinAbs(87.5 + 35.0 + 10.0 + 40.0 + 5.0, 1.0));
     // Klipper's own wait.
     s.flavor = GcodeFlavor::Klipper;
     s.auto_temperatures = false;

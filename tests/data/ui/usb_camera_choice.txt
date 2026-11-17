@@ -1,0 +1,11 @@
+# A printer's camera (printer_connections.md, «Cámara USB de la computadora»,
+# rules 1 and 5): a USB printer chooses «Sin cámara» or a USB camera in its
+# panel; a network one below its data. With no camera connected (this
+# machine has none) the list says so, and nothing is opened.
+menu tab_device
+expect-control camera_choice
+expect-text No hay cámaras USB conectadas.
+host octoprint http://127.0.0.1:9
+wait 2
+expect-control camera_choice
+expect-text No hay cámaras USB conectadas.

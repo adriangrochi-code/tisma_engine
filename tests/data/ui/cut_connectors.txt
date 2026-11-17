@@ -1,0 +1,9 @@
+# The cut's connectors (model_tools.md, rule 18; the spec team's MT22) on the
+# 10 mm cube cut at 5 mm: a fixed round dowel of 4 mm and 3 mm, tolerance
+# 0.1. The lower half carries it (5 + 3 mm high); the upper one has a hole
+# 4.2 mm wide and 3.1 mm deep.
+wait 3
+cut 5 dowel 4 3 0.1
+expect-objects 2 (2)
+expect-model 0 8
+expect-model 1 5 4.2 4.2 3.1

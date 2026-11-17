@@ -38,6 +38,16 @@ struct ModelFile {
     // support enforcers.
     std::vector<TriangleMesh> modifiers;
     TriangleMesh support_blockers, support_enforcers;
+    // Each part's triangles in `mesh` (formats.md, FM9): its range, the build
+    // item it belongs to (from 0), its name (the volume's in a slicer
+    // project, else the object's) and its extruder (0: not given).
+    struct Piece {
+        std::string name;
+        std::size_t object = 0;
+        std::size_t first = 0, count = 0;
+        int extruder = 0;
+    };
+    std::vector<Piece> pieces;
 };
 
 // A Wavefront OBJ file: its vertices ("v") and faces ("f", any number of

@@ -407,3 +407,27 @@ TEST_CASE("CC20: a failed job's text for a person (cloud.md, rule 19a)", "[cloud
     job.summary["code"] = "usage";
     CHECK(cloud::job_error(job, true) == job.error);
 }
+
+TEST_CASE("cloud: the service's state without a session, a warning with \"down\" (rule 4a, CC21)", "[cloud]") {
+    MockCloud mock;
+    cloud::Client client(mock.url(), "");
+    cloud::Failure error;
+    cloud::ServiceStatus st;
+    REQUIRE(client.status(st, error));
+    CHECK(st.status == "ok");
+    CHECK_FALSE(st.warn());
+    CHECK(st.nodes_online == 3);
+    {
+        std::lock_guard lock(mock.mutex_);
+        mock.service_ = "down";
+    }
+    REQUIRE(client.status(st, error));
+    CHECK(st.warn());
+    CHECK(st.label(true) == "Caído");
+    CHECK(st.message(false) == "No nodes are connected.");
+    CHECK(st.unavailable == std::vector<std::string>{"slice", "fea"});
+    CHECK(st.longest_wait_s == 742.0);
+    CHECK(st.nodes_online == 0);
+    CHECK(st.checked_at == "2026-11-12T05:00:00Z");
+}
+

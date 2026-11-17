@@ -1,0 +1,12 @@
+# «Laminar sin soporte» slices as it is, and the same model is not asked
+# about again.
+press-slice
+expect-control overhang_prompt
+menu overhang_without
+slice
+expect-gcode-count ;TYPE:Support 0
+expect-setting support.enabled false
+menu tab_prepare
+press-slice
+wait 3
+expect-no-control overhang_prompt

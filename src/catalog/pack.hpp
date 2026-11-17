@@ -96,13 +96,21 @@ bool safe_pack_path(std::string_view path);
 // A variant's printer profile (rule 10, PF4): common.settings with the
 // variant's settings over them, group by group and key by key, named after
 // the variant. Unknown keys are left out, each with a warning (rule 10).
-Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings);
+// The print settings a printer variant carries (profile_pack_format.md,
+// print profiles, rule 6, PF8: wipe_tower.purge_volumes) go to
+// `print_defaults` as a JSON object of groups, when given: the print's own
+// value wins.
+Profile pack_printer_profile(std::string_view model_json, const std::string& variant, std::vector<std::string>& warnings,
+                             std::string* print_defaults = nullptr);
 
 // A filament, print or resin entry's profile (rule 10, PF6): its "profile",
 // unknown keys left out with a warning; "original" is never read.
 struct PackEntry {
     Profile profile;
     std::optional<int> compatible; // a set of compatible.json; none: every printer
+    // A filament's print profiles (pack paths) it works with
+    // (profile_pack_format.md, entries, rule 4); empty: any print.
+    std::vector<std::string> compatible_prints;
     bool generic = false;
     double nozzle = 0.0; // a print profile's nozzle, when all its printers use one; 0: not given
     std::string license, origin;
@@ -116,6 +124,10 @@ struct PackEntry {
     // cooling.min_speed, which the engine keeps in the printer profile.
     // pack_profiles lays them over the printer's.
     std::string printer_settings = "{}";
+    // The filament settings a print entry carries (profile_pack_format.md,
+    // print profiles, rule 6, PF7: extrusion.bridge_flow_ratio): laid over
+    // the filament's.
+    std::string filament_settings = "{}";
 };
 PackEntry parse_pack_entry(std::string_view json, std::vector<std::string>& warnings);
 
@@ -160,6 +172,7 @@ struct PackProfiles {
     std::optional<Profile> filament, print;
     std::string filament_path, print_path;
     std::string filament_vendor; // the filament entry's maker (community data)
+    std::vector<std::string> filament_prints; // its compatible_prints (empty: any print)
     // The printer profile has the printer settings its filament and print
     // profile carry (their speeds), over the variant's (BH27).
     bool resin = false;          // a resin printer: the filament is its resin
@@ -191,7 +204,29 @@ bool pack_printer_is_resin(const PackIndex& index, int printer);
 struct PackFilamentRef {
     std::string path, name, vendor;
 };
-std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);
+// With `print` (a pack path), only the filaments that work with that print
+// profile (compatible_prints; profile_pack_format.md, entries, rule 4).
+std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer,
+                                                const std::string& print = {});
+// Whether a filament with these compatible_prints works with print profile
+// `print` (a pack path, with or without "vendors/"); empty lists work with any.
+bool pack_print_fits(const std::vector<std::string>& compatible_prints, const std::string& print);
+
+// A filament the interface may hold: its name, material type and
+// compatible_prints (empty: any print; `pack` false: not a pack filament,
+// which works with any print).
+struct FilamentChoice {
+    std::string name, type;
+    std::vector<std::string> compatible_prints;
+    bool pack = true;
+};
+// When print profile `print` (a pack path) is chosen and filament `current`
+// does not work with it (compatible_prints), the one to switch to: the
+// printer's default filament if it fits, else the first of `filaments` that
+// fits, of the same material; nothing when `current` fits or none does
+// (profile_pack_format.md, entries, rule 4).
+std::optional<std::string> pack_refit_filament(const std::vector<FilamentChoice>& filaments, const std::string& current,
+                                               const std::string& print, const std::string& printer_default);
 // The same for the print profiles (for a resin printer, the resin print
 // profiles), rule 12.
 std::vector<PackFilamentRef> pack_prints_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);

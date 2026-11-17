@@ -352,6 +352,13 @@
      "in. It only matters if you print with more than one filament.\n\nMore purge gives cleaner colours and wastes "
      "more plastic. You can give one value for all or one per extruder.\n\nExample: 100 % by default; 120 to 150 % for "
      "white or clear, which show any trace of the previous colour; 70 to 80 % for black, which hides it."},
+    {"extrusion.transmission_distance",
+     "Cuánto deja pasar la luz el filamento, en mm (el «TD» que publican algunos fabricantes). Más de 10 es un "
+     "filamento translúcido: deja ver lo de adentro, así que con mezclas en una boquilla no se purga en el relleno de "
+     "sus piezas. Puede ser un valor o uno por extrusor.\n\nEjemplo: 0 si no se sabe; un PLA translúcido, unos 20.",
+     "How far light goes through the filament, in mm (the \"TD\" some makers publish). Above 10 the filament is "
+     "translucent: it shows what is inside, so with mixes on one nozzle its parts' infill takes no purge. One value or "
+     "one per extruder.\n\nExample: 0 if unknown; a translucent PLA, about 20."},
     {"extrusion.min_purge_on_tower",
      "Al cambiar de filamento se puede aprovechar la purga: en vez de tirarla toda en la torre, el filamento nuevo "
      "imprime primero el relleno de adentro de algunas piezas, donde no se ve el color mezclado. Este ajuste es lo que "

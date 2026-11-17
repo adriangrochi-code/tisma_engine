@@ -2,7 +2,14 @@
 
 Modelos del plan: Benchy, Benchy ×2 con giroide, conejo ×1,5 y tornillo ×4.
 
-**Todavía no están en el repositorio.** Falta que el dueño confirme qué archivos usar y que su licencia permita
+**3DBenchy** está en `bench/3DBenchy.stl.xz` (CC0 1.0, `THIRD_PARTY.md`; decisión del dueño, 2026-11-11). Con los
+ajustes del banco (`tests/data/settings.json`):
+
+```sh
+bench/run_benchy.sh build tests/data/settings.json   # tiempo de laminado, capas, tiempo estimado y filamento, sin y con GPU
+```
+
+Los demás modelos **todavía no están en el repositorio.** Falta que el dueño confirme qué archivos usar y que su licencia permita
 guardarlos acá (3DBenchy y el conejo de Stanford tienen licencias propias). Mientras tanto, la lectura se mide con una
 esfera generada:
 

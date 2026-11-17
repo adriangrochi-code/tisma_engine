@@ -1,0 +1,23 @@
+# The view bar at the bottom in the middle (interface.md, «Navegación de la
+# vista 3D», rule 3): with Girar picked, a left drag turns the view; with
+# Desplazar it moves it; Esc goes back to the usual (a left drag from an
+# empty place turns nothing). Zoom, framing and the projection are the round
+# buttons under the view cube (rule 2, view_nav_buttons.txt).
+wait 3
+expect-control view_orbit
+expect-control view_pan
+expect-no-control view_zoom
+expect-control view_render
+expect-in-view view_tools
+menu view_orbit
+camera-mark
+mouse left 0.15 0.25 60 20
+expect-camera turned
+menu view_pan
+camera-mark
+mouse left 0.15 0.25 60 20
+expect-camera moved
+key escape
+camera-mark
+mouse left 0.15 0.25 40 30
+expect-camera same

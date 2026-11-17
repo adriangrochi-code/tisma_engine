@@ -10,6 +10,8 @@
 #include "perimeters/coverage.hpp"
 
 #include <algorithm>
+#include <set>
+#include <map>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -28,44 +30,120 @@ Point64 rotate(const Point64& p, double c, double s) {
 // horizontal pieces, each running left to right: a piece comes after every
 // piece of the line below that touches it (their spans, widened by half a
 // bead, overlap). Among the pieces that may come next, the one starting
-// nearest to where the last one ended.
+// nearest to where the last one ended (ties: the first in the input, which
+// comes sorted across the lines and along them).
+// Without comparing every pair: the line below is found among the lines'
+// heights, its touching pieces by their sorted starts, and the nearest ready
+// piece in a grid of their starts (a large top surface has thousands).
 Polygons order_monotonic(Polygons pieces, double step, double half_width) {
     const std::size_t n = pieces.size();
+    if (n == 0)
+        return pieces;
     std::vector<std::vector<std::size_t>> after(n); // pieces that wait for this one
     std::vector<std::size_t> waiting(n, 0);
-    for (std::size_t p = 0; p < n; ++p)
-        for (std::size_t q = 0; q < n; ++q) {
-            const double dy = double(pieces[p].front().y - pieces[q].front().y);
-            if (std::fabs(dy - step) > 0.25 * step)
-                continue; // q is not on the line just below p
-            const double p0 = double(pieces[p].front().x) - half_width, p1 = double(pieces[p].back().x) + half_width;
-            const double q0 = double(pieces[q].front().x) - half_width, q1 = double(pieces[q].back().x) + half_width;
-            if (p0 <= q1 && q0 <= p1) {
-                after[q].push_back(p);
-                ++waiting[p];
+    // The pieces of each line height, by their widened start.
+    std::map<std::int64_t, std::vector<std::size_t>> rows;
+    for (std::size_t q = 0; q < n; ++q)
+        rows[pieces[q].front().y].push_back(q);
+    const auto start = [&](std::size_t q) { return double(pieces[q].front().x) - half_width; };
+    const auto end = [&](std::size_t q) { return double(pieces[q].back().x) + half_width; };
+    // Each row sorted by start, with the greatest end so far: the pieces
+    // touching [p0, p1] all lie before the last start <= p1, and none lies
+    // before the place where that greatest end falls below p0.
+    std::map<std::int64_t, std::vector<double>> reach;
+    for (auto& [y, row] : rows) {
+        std::stable_sort(row.begin(), row.end(), [&](std::size_t a, std::size_t b) { return start(a) < start(b); });
+        std::vector<double>& m = reach[y];
+        m.reserve(row.size());
+        for (std::size_t q : row)
+            m.push_back(m.empty() ? end(q) : std::max(m.back(), end(q)));
+    }
+    for (std::size_t p = 0; p < n; ++p) {
+        const double py = double(pieces[p].front().y);
+        const double p0 = start(p), p1 = end(p);
+        // Heights within a quarter step of one step below.
+        auto it = rows.lower_bound(std::int64_t(std::ceil(py - 1.25 * step)));
+        for (; it != rows.end() && double(it->first) <= py - 0.75 * step; ++it) {
+            if (std::fabs(py - double(it->first) - step) > 0.25 * step)
+                continue;
+            const std::vector<std::size_t>& row = it->second;
+            const std::vector<double>& most = reach.at(it->first);
+            std::size_t k = std::size_t(std::upper_bound(row.begin(), row.end(), p1,
+                                                         [&](double v, std::size_t q) { return v < start(q); }) -
+                                        row.begin());
+            while (k > 0 && most[k - 1] >= p0) {
+                --k;
+                if (end(row[k]) >= p0) {
+                    after[row[k]].push_back(p);
+                    ++waiting[p];
+                }
             }
         }
-    std::vector<bool> done(n, false);
+    }
+    // The ready pieces' starts in a grid of square cells.
+    std::int64_t x0 = INT64_MAX, y0 = INT64_MAX, x1 = INT64_MIN, y1 = INT64_MIN;
+    for (const Polygon& piece : pieces) {
+        x0 = std::min(x0, piece.front().x), x1 = std::max(x1, piece.front().x);
+        y0 = std::min(y0, piece.front().y), y1 = std::max(y1, piece.front().y);
+    }
+    const double cell = std::max(4.0 * step, 1.0);
+    const auto nx = std::size_t(double(x1 - x0) / cell) + 1, ny = std::size_t(double(y1 - y0) / cell) + 1;
+    std::vector<std::vector<std::size_t>> grid(nx * ny);
+    const auto cell_of = [&](double x, double y) {
+        const auto cx = std::size_t(std::clamp((x - double(x0)) / cell, 0.0, double(nx - 1)));
+        const auto cy = std::size_t(std::clamp((y - double(y0)) / cell, 0.0, double(ny - 1)));
+        return std::pair{cx, cy};
+    };
+    std::set<std::size_t> ready;
+    const auto add = [&](std::size_t p) {
+        ready.insert(p);
+        const auto [cx, cy] = cell_of(double(pieces[p].front().x), double(pieces[p].front().y));
+        grid[cy * nx + cx].push_back(p);
+    };
+    const auto remove = [&](std::size_t p) {
+        ready.erase(p);
+        const auto [cx, cy] = cell_of(double(pieces[p].front().x), double(pieces[p].front().y));
+        std::vector<std::size_t>& c = grid[cy * nx + cx];
+        c.erase(std::find(c.begin(), c.end(), p));
+    };
+    for (std::size_t p = 0; p < n; ++p)
+        if (waiting[p] == 0)
+            add(p);
     Polygons out;
     out.reserve(n);
-    for (std::size_t k = 0; k < n; ++k) {
-        std::size_t best = n;
-        double nearest = std::numeric_limits<double>::max();
-        for (std::size_t p = 0; p < n; ++p) {
-            if (done[p] || waiting[p] != 0)
-                continue;
-            const double d = out.empty() ? 0.0
-                                         : std::hypot(double(pieces[p].front().x - out.back().back().x),
-                                                      double(pieces[p].front().y - out.back().back().y));
-            if (d < nearest) // pieces come sorted across the lines and along them, so ties keep that order
-                nearest = d, best = p;
+    while (!ready.empty()) {
+        std::size_t best = *ready.begin(); // the first: nothing printed yet
+        if (!out.empty()) {
+            const double ex = double(out.back().back().x), ey = double(out.back().back().y);
+            const auto [cx, cy] = cell_of(ex, ey);
+            double nearest = std::numeric_limits<double>::max();
+            best = n;
+            const std::size_t reach = std::max(nx, ny);
+            for (std::size_t r = 0; r <= reach; ++r) {
+                // A start r cells away lies at least (r - 1) cells away.
+                if (best != n && double(r) - 1.0 > 0.0 && (double(r) - 1.0) * cell > nearest)
+                    break;
+                const std::int64_t lo_x = std::int64_t(cx) - std::int64_t(r), hi_x = std::int64_t(cx) + std::int64_t(r);
+                const std::int64_t lo_y = std::int64_t(cy) - std::int64_t(r), hi_y = std::int64_t(cy) + std::int64_t(r);
+                for (std::int64_t gy = lo_y; gy <= hi_y; ++gy)
+                    for (std::int64_t gx = lo_x; gx <= hi_x; ++gx) {
+                        if (gx < 0 || gy < 0 || gx >= std::int64_t(nx) || gy >= std::int64_t(ny))
+                            continue;
+                        if (gx != lo_x && gx != hi_x && gy != lo_y && gy != hi_y)
+                            continue; // inside: an earlier ring
+                        for (std::size_t p : grid[std::size_t(gy) * nx + std::size_t(gx)]) {
+                            const double d = std::hypot(double(pieces[p].front().x) - ex, double(pieces[p].front().y) - ey);
+                            if (d < nearest || (d == nearest && p < best))
+                                nearest = d, best = p;
+                        }
+                    }
+            }
         }
-        if (best == n)
-            break; // cannot happen: the line below always comes first
-        done[best] = true;
+        remove(best);
         for (std::size_t p : after[best])
-            --waiting[p];
-        out.push_back(pieces[best]);
+            if (--waiting[p] == 0)
+                add(p);
+        out.push_back(std::move(pieces[best]));
     }
     return out;
 }
@@ -74,7 +152,7 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect, bool fit, bool monotonic, double overlap, double shift,
-                                       double max_join) {
+                                       double max_join, const Polygons* join_inside, bool whole) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -137,11 +215,17 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
             const double across = double(hi - lo) - 20.0; // without the slack
             if (across < 0.0)
                 continue;
-            const auto count = static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
-            const double first = double(lo) + 10.0 + (across - double(count - 1) * step) / 2.0;
+            // Whole: enough lines to span it with at most `step` between them,
+            // the outer ones on its shrunk edges; one line in the middle when
+            // two would overlap by more than a quarter (narrower than 3/4 of
+            // a step).
+            const auto count = whole ? (across < 0.75 * step ? 1 : static_cast<std::int64_t>(std::ceil(across / step - 1e-9)) + 1)
+                                     : static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
+            const double gap = whole && count > 1 ? across / double(count - 1) : step;
+            const double first = double(lo) + 10.0 + (across - double(count - 1) * gap) / 2.0;
             Polygons lines;
             for (std::int64_t k = 0; k < count; ++k) {
-                const std::int64_t y = std::llround(first + double(k) * step);
+                const std::int64_t y = std::llround(first + double(k) * gap);
                 lines.push_back({{left - 1, y}, {right + 1, y}});
             }
             clip(lines, piece, open);
@@ -167,7 +251,20 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
     if (monotonic)
         open = order_monotonic(std::move(open), step, width / 2.0 * kUnitsPerMm);
     else if (connect)
-        open = join_along_boundary(open, turned, max_join > 0.0 ? max_join * kUnitsPerMm : kMaxJoin * step, step);
+    {
+        // The region that holds the joins, in the same turned frame.
+        Polygons inside_turned;
+        if (join_inside)
+            for (const Polygon& path : *join_inside) {
+                Polygon t;
+                t.reserve(path.size());
+                for (const Point64& p : path)
+                    t.push_back(rotate(p, c, -s));
+                inside_turned.push_back(std::move(t));
+            }
+        open = join_along_boundary(open, turned, max_join > 0.0 ? max_join * kUnitsPerMm : kMaxJoin * step, step,
+                                   join_inside ? &inside_turned : nullptr);
+    }
     for (const Polygon& piece : open) {
         if (piece.size() < 2)
             continue;
@@ -208,6 +305,8 @@ std::size_t fill_period(const FillParams& params) {
         return 0;
     case InfillPattern::Honeycomb:
         return 6;
+    case InfillPattern::Honeycomb3d:
+        return 0; // it moves with the height
     case InfillPattern::Rectilinear:
     case InfillPattern::Grid:
     case InfillPattern::Triangles:
@@ -225,9 +324,15 @@ std::size_t fill_period(const FillParams& params) {
     return 0;
 }
 
+double layer_angle(double angle, const std::vector<double>& angles, std::size_t layer) {
+    if (!angles.empty())
+        return angles[layer % angles.size()];
+    return angle + (layer % 2 == 1 ? 90.0 : 0.0);
+}
+
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
-    const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
+    const double angle = layer_angle(params, layer);
     // The top surface itself, and under it the rest of the top layers, solid
     // like the bottom ones (surfaces_infill.md, rule 2).
     const Polygons surface = surfaces.top_under.empty()
@@ -317,9 +422,13 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         out.gaps = gap_fill(Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero), lines,
                             params.width, d);
     }
-    // Bridge lines stay straight: a join along the edge would hang in the air.
+    // Bridge lines are joined only where the join lies entirely over what
+    // holds the bridge (toolpath_time.md, rule 1): a join along a free edge
+    // would hang in the air, so those lines stay apart.
     const double bridge = params.bridge_width > 0.0 ? params.bridge_width : params.width;
-    out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, false, true);
+    out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, !surfaces.bridge_support.empty(),
+                                  true, false, 0.0, 0.0, 2.0 * (bridge + bridge),
+                                  surfaces.bridge_support.empty() ? nullptr : &surfaces.bridge_support, true);
     if (params.density <= 0.0)
         return out;
     const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
@@ -378,6 +487,9 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(ws, params.density), principal, w);
         break;
     }
+    case InfillPattern::Honeycomb3d: // rows along 0 and 90 degrees, a layer each (rule 11, P8)
+        out.sparse = honeycomb3d_fill(surfaces.sparse, ws / params.density, z, layer % 2 == 0 ? 0.0 : 90.0, w);
+        break;
     case InfillPattern::Concentric:
         out.sparse = concentric_fill(surfaces.sparse, ws / params.density, w);
         break;

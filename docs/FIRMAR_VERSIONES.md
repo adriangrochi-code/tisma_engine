@@ -40,6 +40,27 @@ versiones siguientes vuelven a quedar como borrador para firmar.
 
 ## Crear la clave (una sola vez en la vida del proyecto)
 
+Se hace sola, la primera vez que enchufás el pendrive (decisión del dueño, 2026-11-10):
+
+1. Doble clic en `tools\crear_clave_pendrive.bat` (o, en una consola, `python tools/sign_release.py create-key`).
+2. Cuando dice «Enchufá el pendrive…», enchufalo. Sin preguntar nada más, el programa:
+   - crea la clave en el pendrive, en `tisma\clave.pem`, y la clave pública en `tisma\clave_publica.txt`;
+   - espera 2 minutos un **segundo pendrive** para la copia de seguridad: enchufalo y la copia se hace sola, y
+     guardalo en otro lugar (si se pierden los dos, los programas ya instalados no van a aceptar más
+     actualizaciones);
+   - pone la clave pública en GitHub, como la variable `TISMA_UPDATES_KEY` (si `gh` está instalado y con la sesión
+     iniciada; si no, lo dice y la ponés a mano como en el paso 5 de abajo);
+   - firma y publica las versiones que estén esperando como borrador.
+3. Después queda **bloqueado**: esta computadora guarda que la clave ya existe (`%APPDATA%\tisma\clave_bloqueada.txt`),
+   y GitHub ya tiene la clave pública. Con cualquiera de las dos, el programa nunca crea otra clave, aunque enchufes un
+   pendrive vacío: solo acepta el pendrive con esa clave o su copia. Correrlo de nuevo con ese pendrive no cambia
+   nada y sirve para hacer una copia que faltó.
+
+Si alguna vez se perdieran los dos pendrives y hiciera falta una clave nueva, hay que borrar a mano ese archivo y la
+variable `TISMA_UPDATES_KEY` de GitHub: es a propósito, para que no pase por error.
+
+### A mano (lo mismo, paso a paso)
+
 1. Enchufá el pendrive. En Git Bash, la unidad `E:` es `/e` (cambiá la letra si es otra).
 2. Creá la clave en el pendrive:
 
@@ -48,8 +69,7 @@ versiones siguientes vuelven a quedar como borrador para firmar.
    openssl genpkey -algorithm ed25519 -out /e/tisma/clave.pem
    ```
 
-3. **Hacé una segunda copia** en otro pendrive y guardalo en otro lugar (si se pierden los dos, los programas ya
-   instalados no van a aceptar más actualizaciones):
+3. **Hacé una segunda copia** en otro pendrive y guardalo en otro lugar:
 
    ```sh
    cp /e/tisma/clave.pem /f/tisma/clave.pem
@@ -66,7 +86,8 @@ versiones siguientes vuelven a quedar como borrador para firmar.
    - en el repositorio `tisma_engine`: **Settings › Secrets and variables › Actions › Variables › New repository
      variable**;
    - nombre `TISMA_UPDATES_KEY`, valor la clave pública. Es una **variable**, no un secreto: es pública.
-6. Pasale la misma clave pública a la sesión de Android: la app la toma con `-Ptisma.updatesKey=…`.
+
+En los dos casos, pasale la misma clave pública a la sesión de Android: la app la toma con `-Ptisma.updatesKey=…`.
 
 Nunca subas `clave.pem` a ningún lado, ni la mandes por mensaje o correo. Si alguna vez se copia a otra
 computadora, avisá: hay que hacer una clave nueva y los programas ya instalados se actualizan a mano una vez.

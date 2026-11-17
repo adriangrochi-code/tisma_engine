@@ -37,6 +37,10 @@ public:
 
 // What templates see: the print's variables, and the globals that templates
 // set for the ones after them (rule 6).
+// The printer's number of heads, set by the writer for rule 8 of
+// gcode_macros.md (a variable no G-code names).
+inline constexpr const char* kExtrudersVariable = "__extruders";
+
 struct TemplateContext {
     std::map<std::string, TemplateValue, std::less<>> variables;
     std::map<std::string, TemplateValue, std::less<>> globals;

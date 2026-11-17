@@ -1,0 +1,12 @@
+# Release gate G6 (QA, 2026-11-16): a PrusaSlicer project saved with
+# support_material = 1 opens with the supports on, through the pack's
+# translation table, and they stay on when the project's printer is set
+# aside for ours («Usar la mía»), with no notice that they went off.
+wait 2
+expect-toast Proyecto de PrusaSlicer: 1 pieza.
+expect-setting support.enabled true
+expect-setting support.automatic true
+menu import_use_mine
+wait 3
+expect-setting support.enabled true
+expect-no-text Los soportes quedaron apagados

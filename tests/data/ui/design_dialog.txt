@@ -1,0 +1,18 @@
+# Each step in its own panel at the right of the view (cad_design.md, rule
+# 11 quinquies): a new box opens it with its sizes; Cancel takes the box
+# away; OK keeps it and closes the panel.
+menu mode_engineering
+menu tab_design
+menu design_box
+expect-control design_dialog
+expect-control design_dialog_accept
+menu design_dialog_cancel
+wait 10
+expect-no-control design_dialog
+expect-no-control design_timeline_1
+menu design_box
+expect-design 8000
+menu design_dialog_accept
+wait 5
+expect-no-control design_dialog
+expect-control design_timeline_1

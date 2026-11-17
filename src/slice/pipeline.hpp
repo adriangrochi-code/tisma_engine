@@ -17,6 +17,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <span>
 #include <vector>
 
@@ -44,6 +45,10 @@ struct SlicedObject {
 };
 
 // The planar slicing of a model: one region per layer, with its walls.
+// The notice of a vase with holes or several pieces (vase_mode.md, rule 7, VA5).
+inline constexpr std::string_view kVaseSeamNotice =
+    "Vase mode with holes or several pieces: those turns are not a spiral and leave a seam";
+
 struct SlicedModel {
     std::vector<Layer> layers;
     std::vector<Polygons> regions; // one per layer, after fill mode and offsets
@@ -87,6 +92,13 @@ struct SlicedModel {
     // Settings of a part or a modifier the slicing left out, said so (a
     // modifier's layer height is the object's: model_tools.md, rules 4 and 9).
     std::vector<std::string> notices;
+    // Per layer, the order its extruders must print in, from 1, when it has
+    // sublayers (color_mixing_plus.md, rule 10): the lowest first. Empty, or
+    // an empty layer: any order (plan_tools's own).
+    std::vector<std::vector<int>> tool_order;
+    // Whether a blend prints on the plate (color_mixing_plus.md): a layer with
+    // a change on one nozzle then starts each part with its sparse infill (rule 34).
+    bool blended = false;
     // Curved layers (nonplanar.md): the field the layers were sliced
     // through; the layers above are flat in its space, and the G-code puts
     // every point back on its curve.

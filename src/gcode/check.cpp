@@ -20,15 +20,21 @@
 #include <charconv>
 #include <cstdint>
 #include <memory>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <numbers>
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <string>
 
 namespace tisma {
 namespace {
+
+// The printed-height map's cells, mm.
+constexpr double kPrintedCell = 1.0;
+
 
 constexpr double kPositionSlack = 1e-3; // mm: coordinates are written with 3 decimals
 // mm an arc's end may be off the circle its start and centre make: the three
@@ -152,6 +158,15 @@ public:
         }
         if (p.head.empty())
             return;
+        // A command starts with a letter (G28, T1, a Klipper macro) or a
+        // host's sign ($H, @pause, %); a line that starts with a quote, a '+'
+        // or a bracket is a printer G-code left as an unevaluated expression
+        // (QA, Z-Bolt Classic, 17-11-2026), also in the machine's own G-code.
+        if (const char c = p.head.front(); !std::isalpha(static_cast<unsigned char>(c)) && c != '$' &&
+                                           c != '@' && c != '%' && c != '!') {
+            problem("not a G-code command: '" + std::string(p.head) + "'");
+            return;
+        }
         command(p, parameters.subspan(p.first, p.count));
     }
 
@@ -263,6 +278,9 @@ private:
         // is only a note.
         if (custom_ && ((!p.readable && kind != 'G' && kind != 'M' && kind != 'T') ||
                         (p.readable && kind == 'M' && p.code == 98)))
+            macro_seen_ = true;
+        if (custom_ && ((!p.readable && kind != 'G' && kind != 'M' && kind != 'T') ||
+                        (p.readable && kind == 'M' && p.code == 98)))
             for (std::size_t k = 0; k < cold_.size(); ++k)
                 if (cold_[k]) {
                     if (macro_heats_.size() <= k)
@@ -310,15 +328,38 @@ private:
             known_[0] = known_[1] = known_[2] = false; // homed: where exactly, the printer knows
         else if (kind == 'G' && (n == 10 || n == 11) && parameters.empty() && !custom_)
             firmware_retraction(n == 10);
+        else if ((kind == 'G' && n == 10 && param['S' - 'A']) || (kind == 'M' && n == 568 && param['S' - 'A'])) {
+            // RepRapFirmware: G10 P<tool> S<t> and RRF 3's M568 P<tool> S<t>
+            // set a tool's temperature (gcode_firmware.md, rule 1).
+            const std::optional<double>& p = param['P' - 'A'];
+            const std::size_t k = p && *p >= 0.0 ? std::size_t(*p) : tool_;
+            const double t = *param['S' - 'A'];
+            if (cold_.size() <= k)
+                cold_.resize(k + 1, false);
+            cold_[k] = t < 1.0;
+            if (t >= 1.0) {
+                if (heated_.size() <= k)
+                    heated_.resize(k + 1, false);
+                heated_[k] = true;
+            }
+        }
         else if (kind == 'M' && (n == 104 || n == 109)) {
             // The nozzle's heater set to 0: nothing may extrude from it until
             // it is set again (the spec team's BH10).
             const std::optional<double>& t = param['T' - 'A'];
             const std::size_t k = t && *t >= 0.0 ? std::size_t(*t) : tool_;
-            if (const std::optional<double>& s = param['S' - 'A']) {
+            // S, or R (wait for this exact temperature, cooling too), the
+            // same set point (gcode_firmware.md, rule 1, FW11).
+            const std::optional<double>& given = param['S' - 'A'] ? param['S' - 'A'] : param['R' - 'A'];
+            if (const std::optional<double>& s = given) {
                 if (cold_.size() <= k)
                     cold_.resize(k + 1, false);
                 cold_[k] = *s < 1.0;
+                if (*s >= 1.0) {
+                    if (heated_.size() <= k)
+                        heated_.resize(k + 1, false);
+                    heated_[k] = true;
+                }
                 if (k < macro_heats_.size())
                     macro_heats_[k] = false; // set again after the macro: it holds
             }
@@ -334,17 +375,28 @@ private:
     // filament pulled back; the next one's, pulled back when it left, comes
     // back with its own extra.
     void tool_change(int n) {
-        if (limits_.toolchange_length.empty() || n < 0)
+        if (n < 0)
             return;
+        // Which tool prints always follows T<n>, also on a printer without a
+        // tool change's retraction: its heater is the one asked for (the
+        // Sovol SV04 in mode 02 heats and prints with T1, QA 17-11-2026).
+        if (limits_.toolchange_length.empty()) {
+            tool_ = std::size_t(n);
+            return;
+        }
         const auto at = [](std::vector<double>& list, std::size_t k) -> double& {
             if (list.size() <= k)
                 list.resize(k + 1, 0.0);
             return list[k];
         };
         at(pulled_, tool_) = retracted_;
+        // With its pieces: the rounding they allow comes back with it.
+        at(pulled_pieces_, tool_) = double(pieces_);
         tool_ = std::size_t(n);
         retracted_ = limits_.mmu ? 0.0 : at(pulled_, tool_);
+        pieces_ = limits_.mmu ? 0 : std::size_t(at(pulled_pieces_, tool_));
         at(pulled_, tool_) = 0.0;
+        at(pulled_pieces_, tool_) = 0.0;
         target_ = retracted_;
         tool_back_ = retracted_ > 1e-9;
         pulling_ = false;
@@ -447,6 +499,7 @@ private:
                         " leaves the allowed area (the part with its skirt and brim, on the bed)");
             if (given[2] && (to[2] < limits_.min_z - kPositionSlack || to[2] > limits_.max_z + kPositionSlack))
                 problem("move to Z" + text(to[2]) + " is out of " + text(limits_.min_z) + " to " + text(limits_.max_z));
+            through_printed(to, to[3] - position_[3] > 1e-9 && (given[0] || given[1]));
             classify(to, given, path);
         }
         for (int a = 0; a < 4; ++a) {
@@ -456,6 +509,40 @@ private:
         }
         if (known_[2])
             out_.stats.max_z = std::max(out_.stats.max_z, position_[2]);
+    }
+
+    // A map of what is already printed: the highest bead top in each cell of
+    // kPrintedCell mm. A move whose nozzle passes more than a layer below it
+    // runs through the part (a layer out of order, a Z that dropped). Planar
+    // layers only: nonplanar blocks, waves, curved layers, Z anti-aliasing,
+    // belts and the wipe tower lowered under the layer go their own way.
+    void through_printed(const double to[4], bool extrudes) {
+        if (limits_.wave > 0.0 || limits_.curved || limits_.zaa_below > 0.0 || limits_.zaa_above > 0.0 ||
+            limits_.belt || nonplanar_ || tower_ || !known_[0] || !known_[1] || !known_[2] || !layer_z_)
+            return;
+        const double a[3] = {position_[0], position_[1], position_[2]};
+        const double length = std::hypot(to[0] - a[0], to[1] - a[1]);
+        const auto steps = std::size_t(std::ceil(length / (0.5 * kPrintedCell))) + 1;
+        const double below = std::max(layer_height_, height_.value_or(0.0)) + kPositionSlack;
+        bool told = false;
+        for (std::size_t k = 0; k <= steps; ++k) {
+            const double t = double(k) / double(steps);
+            const double x = a[0] + t * (to[0] - a[0]), y = a[1] + t * (to[1] - a[1]), z = a[2] + t * (to[2] - a[2]);
+            const std::uint64_t key = (std::uint64_t(std::uint32_t(std::int32_t(std::floor(x / kPrintedCell)))) << 32) |
+                                      std::uint32_t(std::int32_t(std::floor(y / kPrintedCell)));
+            if (!told) {
+                const auto it = printed_.find(key);
+                if (it != printed_.end() && z < it->second - below) {
+                    problem("moves through what is already printed: Z" + text(z) + " at X" + text(x) + " Y" + text(y) +
+                            ", printed up to Z" + text(it->second));
+                    told = true;
+                }
+            }
+            if (extrudes) {
+                float& top = printed_[key];
+                top = std::max(top, float(z));
+            }
+        }
     }
 
     // What an engine move is, by its E: an extrusion, a travel, a retraction
@@ -483,6 +570,14 @@ private:
                 tool_back_ = false;
                 retracted_ = 0.0;
                 pieces_ = 0;
+            }
+            if (limits_.require_heat && !custom_ && !(tool_ < heated_.size() && heated_[tool_]) &&
+                !(tool_ < cold_.size() && cold_[tool_]) && !unheated_told_) {
+                unheated_told_ = true;
+                if (macro_seen_)
+                    out_.notes.push_back({line_, "extrudes before any nozzle temperature is set (a printer macro may set it)"});
+                else
+                    problem("extrudes before any nozzle temperature is set");
             }
             if (tool_ < cold_.size() && cold_[tool_]) {
                 if (tool_ < macro_heats_.size() && macro_heats_[tool_]) {
@@ -646,11 +741,16 @@ private:
     std::size_t tool_ = 0;        // the extruder printing, from 0
     std::vector<bool> cold_;      // each extruder's heater set to 0 (M104 or M109 S0)
     bool cold_told_ = false;      // that problem said once
+    std::vector<bool> heated_;    // each extruder's heater set to a temperature
+    bool macro_seen_ = false;     // a printer macro in the user's G-code
+    bool unheated_told_ = false;  // extruding before any temperature, said once
     bool cold_noted_ = false;     // and that note
     std::vector<bool> macro_heats_; // set to 0 before a printer macro, which may heat it: only a note
     std::vector<double> pulled_;  // each extruder's filament pulled back when it left
+    std::vector<double> pulled_pieces_; // and in how many pieces
     bool tool_back_ = false;      // the tool came back from a change: its own extra
     bool tower_ = false;          // in the wipe tower's lines
+    std::unordered_map<std::uint64_t, float> printed_; // the highest bead top by cell (through_printed)
     bool awaiting_z_ = false;
     bool new_object_ = false; // after ;NEXT_OBJECT, until the next object's first ;Z:
     std::optional<double> layer_z_, height_, width_;
@@ -701,6 +801,14 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         limits.belt_angle = s.belt_angle;
         limits.belt_is_z = s.belt_is_z;
     }
+    // A printer's profile (a bed and its start G-code) heats before printing.
+    // Not without a nozzle temperature: a printer with no heater (Cocoa
+    // Press's chocolate, gcode_firmware.md, rule 1, FW11).
+    const auto t = s.variables.find("temperature");
+    const bool no_heater = t != s.variables.end() && !t->second.empty() &&
+                           std::all_of(t->second.begin(), t->second.end(),
+                                       [](const std::string& v) { return std::strtod(v.c_str(), nullptr) <= 0.0; });
+    limits.require_heat = !s.bed.empty() && !s.start_gcode.empty() && !no_heater;
     if (!s.bed.empty()) { // and never off the bed
         double bed_lo[2] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
         double bed_hi[2] = {-bed_lo[0], -bed_lo[1]};
@@ -753,6 +861,14 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     }
     if (const std::optional<WaveParams> waves = wave_params(s)) // the crests: half the amplitude higher
         limits.wave = std::max(limits.wave, 0.5 * waves->amplitude);
+    // Sublayers (color_mixing_plus.md, rule 10): a pass's top under its
+    // layer's, down to its thinnest pass.
+    if (s.mix_subdivide && std::any_of(model.tool_order.begin(), model.tool_order.end(), [](const auto& o) { return !o.empty(); })) {
+        double thickest = 0.0;
+        for (const Layer& layer : model.layers)
+            thickest = std::max(thickest, layer.top - layer.bottom);
+        limits.wave = std::max(limits.wave, thickest);
+    }
     // The raised loops and the crests, and the travels over them, go that
     // much higher than the top layer (a staggered top layer with no lift
     // went past it: fuzzer, seed 20261029, run 354).

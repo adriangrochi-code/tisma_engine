@@ -18,6 +18,7 @@
 #include "gcode/thumbnail.hpp"
 #include "io/model.hpp"
 #include "io/paths.hpp"
+#include "io/project_import.hpp"
 #include "project/project.hpp"
 #include "ui/project_slice.hpp"
 
@@ -50,6 +51,8 @@ struct NodeArgs {
     std::string over;              // --config-over: a partial settings JSON
     std::string config;            // --config: the settings of a bare model (aero, orient, analyze)
     std::string inspect_paint;     // --inspect-paint: the painting's summary, "-" for the standard output
+    std::string translation;       // --translation: the pack's table for another program's 3MF (project_import.md, rule 11)
+    std::string translation_dir;   // --translation-dir: the pack's translation/ folder; the table of the file's program
 };
 
 std::optional<std::string> read_whole(const std::filesystem::path& path);
@@ -175,7 +178,8 @@ std::string first_input(std::span<const std::string_view> args) {
         if (a == "-o" || a == "--output" || a == "--summary" || a == "--config" || a == "-c" || a == "--warnings" ||
             a == "--case" || a == "--copies" || a == "--set" || a == "--config-over" || a == "--inspect-paint" ||
             a == "--inspect-mesh" || a == "--export-statistics" || a == "--export-settings" ||
-            a == "--ground-face-normal" || a == "--ground-face-point") {
+            a == "--ground-face-normal" || a == "--ground-face-point" || a == "--translation" ||
+            a == "--translation-dir") {
             ++i;
             continue;
         }
@@ -270,6 +274,10 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             a.config = std::string(args[++i]);
         } else if (arg == "--inspect-paint" && has_value) {
             a.inspect_paint = std::string(args[++i]);
+        } else if (arg == "--translation" && has_value) {
+            a.translation = std::string(args[++i]);
+        } else if (arg == "--translation-dir" && has_value) {
+            a.translation_dir = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -324,17 +332,89 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     const std::optional<std::string> data = read_whole(a.project);
     if (!data)
         return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
-    if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma (its own file, or a 3MF with " +
-                                    "Metadata/tisma_project.json): projects of other slicers are not read yet",
-                    "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
-    try {
-        project = read_project(*data);
-    } catch (const ProjectTooNew& e) {
-        return fail(kExitInput, a.project + ": " + e.what(), "project_too_new", kTooNewEs);
-    } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
+    if (!looks_like_project(*data)) {
+        // A plain 3MF, or another program's project (formats.md, rules 5 and
+        // 18): its parts, placed by their build items, with the default
+        // settings; the file's own settings are not used.
+        std::vector<ThreeMfItem> items;
+        try {
+            items = read_3mf_items(*data, nullptr, {}, true);
+        } catch (const std::exception&) {
+            items.clear();
+        }
+        if (items.empty())
+            // A bare model (STL, OBJ…) comes with its settings: say so.
+            return fail(kExitInput,
+                        "'" + a.project + "' is not a project saved by Tisma, nor a 3MF with a model" +
+                            (a.config.empty() ? std::string(" (a model needs --config)") : std::string()),
+                        "not_a_project", "el archivo no es un proyecto de Tisma");
+        // The job's settings (--config), else the defaults; another
+        // program's own settings over them, translated with the pack's table
+        // when the job gives it (project_import.md, rules 6, 8 and 11); the
+        // job's changes go over both, below.
+        if (!a.config.empty()) {
+            try {
+                project.settings = load_settings(a.config);
+            } catch (const std::exception& e) {
+                return fail(kExitInput, e.what(), "bad_settings", "un ajuste del trabajo no es válido");
+            }
+        }
+        std::string translated;
+        // With the pack's folder, the table of the program that saved the
+        // file (project_import.md, rules 1 and 11); none for a standard 3MF.
+        std::string table_path = a.translation;
+        if (table_path.empty() && !a.translation_dir.empty()) {
+            std::string dialect;
+            try {
+                dialect = translation_dialect(project_source(*data));
+            } catch (const std::exception&) {
+            }
+            if (!dialect.empty()) {
+                const std::filesystem::path p = std::filesystem::path(a.translation_dir) / (dialect + ".json");
+                if (std::error_code ec; std::filesystem::is_regular_file(p, ec))
+                    table_path = p.string();
+                else
+                    translated = " no translation table for " + dialect + " in '" + a.translation_dir + "';";
+            }
+        }
+        if (!table_path.empty()) {
+            const std::optional<std::string> table = read_whole(table_path);
+            if (!table)
+                return fail(kExitInput, "cannot read the translation table '" + table_path + "'", "cannot_read",
+                            "no se puede leer la tabla de traducción");
+            try {
+                const auto own = project_settings(*data);
+                if (!own.empty()) {
+                    const ProjectSettings p = translate_settings(parse_translation(*table), own, project.settings);
+                    project.settings = p.settings;
+                    translated = " its settings translated, " + std::to_string(p.skipped.size()) + " without equivalent;";
+                }
+            } catch (const std::exception& e) {
+                return fail(kExitInput, table_path + ": " + e.what(), "bad_translation",
+                            "la tabla de traducción no se puede leer");
+            }
+        }
+        for (ThreeMfItem& item : items) {
+            ProjectModel model;
+            model.name = item.name.empty() ? "model" : item.name;
+            model.mesh = std::move(item.mesh);
+            model.turn = item.turn;
+            model.offset = item.offset;
+            project.models.push_back(std::move(model));
+        }
+        err << "warning: '" << a.project << "' is a 3MF without Tisma's project: its parts with "
+            << (a.config.empty() ? "the default settings" : "the job's settings") << ";"
+            << (translated.empty() ? " its own settings, if any, are not used (no --translation, or none in it);" : translated)
+            << " the changes given go over them\n";
+    } else {
+        try {
+            project = read_project(*data);
+        } catch (const ProjectTooNew& e) {
+            return fail(kExitInput, a.project + ": " + e.what(), "project_too_new", kTooNewEs);
+        } catch (const std::exception& e) {
+            return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
+        }
     }
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
@@ -380,6 +460,7 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     for (const ui::PlateObject& o : objects)
         placed.push_back(ui::placed_mesh(o));
     ui::PlateSlice plate = ui::plate_slice(objects, placed, settings);
+    plate.painting = with_color_slots(plate.painting, project.paint_slots); // MX33
     const TriangleMesh mesh = ui::plate_mesh(placed);
     placed.clear();
     // What is painted, by kind (orca_2_5.md, rule 26).
@@ -468,7 +549,76 @@ std::string slice_summary_json(const std::filesystem::path& gcode, double filame
     return summary.dump(2);
 }
 
+nlohmann::json lightest_infill_search(const IndexedMesh& mesh, const TriangleMesh& part, const Settings& settings,
+                                      const AnalysisCase& c, const ProjectEngineering& e, bool no_zones, bool ribs,
+                                      const std::function<void(double)>& progress, nlohmann::json& result) {
+    // structural_optimization.md, rules 2 to 4: the lowest uniform infill
+    // that holds; then by zones (unless no_zones) and with ribs, each
+    // proposed only when lighter. The zones are boxes on the bed, where the
+    // part stands (the desktop turns them into the part's own volumes; the
+    // boxes and their settings are in the result).
+    const double steps = 1.0 + (no_zones ? 0.0 : 1.0) + (ribs ? 1.0 : 0.0);
+    int stage = 0;
+    const auto share = [&](double done) {
+        if (progress)
+            progress((double(stage) + std::clamp(done, 0.0, 1.0)) / steps);
+    };
+    LightestInfill best;
+    ZonedInfill zoned;
+    RibbedInfill ribbed;
+    best = lightest_infill(mesh, part, settings, c, e, share);
+    ++stage;
+    if (best.found && !best.solid && !no_zones) {
+        zoned = zoned_infill(mesh, part, settings, c, e, best.density, share);
+        ++stage;
+    }
+    if (best.found && !best.solid && ribs)
+        ribbed = ribbed_infill(mesh, part, settings, c, e, best.density, share);
+    const auto boxes = [](const std::vector<MeshModifier>& mods) {
+        nlohmann::json list = nlohmann::json::array();
+        for (const MeshModifier& m : mods) {
+            const BoundingBox b = m.mesh.bounding_box();
+            list.push_back({{"name", m.name},
+                            {"min", {b.min.x, b.min.y, b.min.z}},
+                            {"max", {b.max.x, b.max.y, b.max.z}},
+                            {"settings", nlohmann::json::parse(m.settings)}});
+        }
+        return list;
+    };
+    const auto finite = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
+    nlohmann::json summary{{"mode", "lightest-infill"},
+                           {"solid", best.solid},
+                           {"found", best.found},
+                           {"density", best.found ? nlohmann::json(best.density) : nlohmann::json(nullptr)},
+                           {"min_safety", finite(best.min_safety)},
+                           {"required_safety", e.structural.safety_factor},
+                           {"analyses", best.analyses + zoned.analyses + ribbed.analyses}};
+    if (!no_zones && best.found && !best.solid) {
+        summary["zones"] = {{"found", zoned.found},
+                            {"lighter", zoned.lighter},
+                            {"levels", zoned.zones.density},
+                            {"mass_g", zoned.mass_g},
+                            {"uniform_mass_g", zoned.uniform_mass_g}};
+        if (zoned.lighter)
+            result["zones"] = boxes(zoned.zones.modifiers);
+    }
+    if (ribs && best.found && !best.solid) {
+        summary["ribs"] = {{"found", ribbed.found},
+                           {"lighter", ribbed.lighter},
+                           {"density", ribbed.density},
+                           {"angles", ribbed.ribs.angles}};
+        if (ribbed.lighter)
+            result["ribs"] = boxes(ribbed.ribs.modifiers);
+    }
+    return summary;
+}
+
 bool node_analyze_wanted(std::span<const std::string_view> args) {
+    // A model with its load case (--case) is analysed by `analyze <model>`,
+    // whatever the mode.
+    for (const std::string_view a : args)
+        if (a == "--case")
+            return false;
     for (const std::string_view a : args)
         if (a == "--summary" || a == "--sandbox" || a == "--mode" || a == "--object" || a == "--instance")
             return true;
@@ -646,64 +796,16 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         // each proposed only when lighter. The zones are boxes on the bed,
         // where the part stands (the desktop turns them into the part's own
         // volumes; the boxes and their settings are in the result).
-        const double steps = 1.0 + (no_zones ? 0.0 : 1.0) + (ribs ? 1.0 : 0.0);
-        int stage = 0;
-        const auto share = [&](double done) {
-            progress(10 + int((double(stage) + std::clamp(done, 0.0, 1.0)) / steps * 85.0));
-        };
-        LightestInfill best;
-        ZonedInfill zoned;
-        RibbedInfill ribbed;
+        nlohmann::json result{{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "lightest-infill"},
+                              {"object", index}, {"instance", 0}, {"part", model.name}, {"fingerprint", fingerprint}};
+        nlohmann::json summary;
         try {
-            best = lightest_infill(mesh, part.mesh, settings, c, placed, share);
-            ++stage;
-            if (best.found && !best.solid && !no_zones) {
-                zoned = zoned_infill(mesh, part.mesh, settings, c, placed, best.density, share);
-                ++stage;
-            }
-            if (best.found && !best.solid && ribs)
-                ribbed = ribbed_infill(mesh, part.mesh, settings, c, placed, best.density, share);
+            summary = lightest_infill_search(mesh, part.mesh, settings, c, placed, no_zones, ribs,
+                                             [&](double done) { progress(10 + int(std::clamp(done, 0.0, 1.0) * 85.0)); },
+                                             result);
         } catch (const AnalysisError& e) {
             return fail_coded(kExitAnalysis, e.what(), "too_large",
                               "la pieza es demasiado grande para analizarla con esta memoria; probá la calidad rápida");
-        }
-        const auto boxes = [](const std::vector<MeshModifier>& mods) {
-            nlohmann::json list = nlohmann::json::array();
-            for (const MeshModifier& m : mods) {
-                const BoundingBox b = m.mesh.bounding_box();
-                list.push_back({{"name", m.name},
-                                {"min", {b.min.x, b.min.y, b.min.z}},
-                                {"max", {b.max.x, b.max.y, b.max.z}},
-                                {"settings", nlohmann::json::parse(m.settings)}});
-            }
-            return list;
-        };
-        const auto finite = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
-        nlohmann::json summary{{"mode", "lightest-infill"},
-                               {"solid", best.solid},
-                               {"found", best.found},
-                               {"density", best.found ? nlohmann::json(best.density) : nlohmann::json(nullptr)},
-                               {"min_safety", finite(best.min_safety)},
-                               {"required_safety", placed.structural.safety_factor},
-                               {"analyses", best.analyses + zoned.analyses + ribbed.analyses}};
-        nlohmann::json result{{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "lightest-infill"},
-                              {"object", index}, {"instance", 0}, {"part", model.name}, {"fingerprint", fingerprint}};
-        if (!no_zones && best.found && !best.solid) {
-            summary["zones"] = {{"found", zoned.found},
-                                {"lighter", zoned.lighter},
-                                {"levels", zoned.zones.density},
-                                {"mass_g", zoned.mass_g},
-                                {"uniform_mass_g", zoned.uniform_mass_g}};
-            if (zoned.lighter)
-                result["zones"] = boxes(zoned.zones.modifiers);
-        }
-        if (ribs && best.found && !best.solid) {
-            summary["ribs"] = {{"found", ribbed.found},
-                               {"lighter", ribbed.lighter},
-                               {"density", ribbed.density},
-                               {"angles", ribbed.ribs.angles}};
-            if (ribbed.lighter)
-                result["ribs"] = boxes(ribbed.ribs.modifiers);
         }
         result["summary"] = summary;
         if (!write_file(a.output, [&](std::ostream& f) { f << result.dump() << "\n"; }))

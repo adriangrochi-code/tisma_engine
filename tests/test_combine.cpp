@@ -1,9 +1,11 @@
 #include "infill/combine.hpp"
+#include "infill/gyroid.hpp"
 #include "infill/patterns.hpp"
 #include "infill/rectilinear.hpp"
 #include "infill/stress_density.hpp"
 
 #include "config/analysis_case.hpp"
+#include "config/settings.hpp"
 #include "fea/analysis.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
@@ -14,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -566,6 +569,43 @@ TEST_CASE("infill patterns: honeycomb, the principal direction turning a layer e
           0.7 * area_a);
 }
 
+TEST_CASE("infill patterns: 3D honeycomb, rows at 0 and 90 degrees with slants that change with the height (rule 11, P8)",
+          "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    p.pattern = InfillPattern::Honeycomb3d;
+    const LayerSurfaces region = square_sparse(20.0);
+    std::vector<double> slanted;
+    // P8: layer 5 mostly at 0 degrees, 6 at 90, 45 at 0; the slants at 45 and 135.
+    for (const auto& [layer, main] : {std::pair{4, 0}, std::pair{5, 90}, std::pair{44, 0}, std::pair{10, 0}}) {
+        const std::vector<Toolpath> lines = fill_layer(region, std::size_t(layer), p, 0.2 * (layer + 1)).sparse;
+        REQUIRE_FALSE(lines.empty());
+        const std::map<int, double> d = by_direction(lines);
+        const double all = total(lines);
+        const auto share = [&](int a) { return d.count(a) ? d.at(a) / all : 0.0; };
+        INFO("layer " << layer + 1 << ": 0 " << share(0) << ", 90 " << share(90) << ", 45 " << share(45) << ", 135 "
+                      << share(135));
+        CHECK(share(main) > 0.4);
+        CHECK(share(main == 0 ? 90 : 0) < 0.1); // the rows' joins along the edge
+        CHECK_THAT(share(45), WithinAbs(share(135), 0.08));
+        CHECK(share(main) + share(45) + share(135) > 0.9);
+        slanted.push_back(share(45) + share(135));
+        // About the rectilinear's length (P8: 190 to 209 mm against 197), the
+        // slants adding to it; the rectilinear's joins along the edge are longer.
+        p.pattern = InfillPattern::Rectilinear;
+        const std::vector<Toolpath> rect = fill_layer(region, std::size_t(layer), p, 0.2 * (layer + 1)).sparse;
+        INFO("3d " << all << " in " << lines.size() << ", rectilinear " << total(rect) << " in " << rect.size());
+        CHECK_THAT(all / total(rect), WithinAbs(1.0, 0.3));
+        p.pattern = InfillPattern::Honeycomb3d;
+    }
+    // How much slants changes with the height.
+    CHECK(*std::max_element(slanted.begin(), slanted.end()) - *std::min_element(slanted.begin(), slanted.end()) > 0.15);
+    // Read and written by name.
+    CHECK(parse_settings(R"({"infill": {"pattern": "honeycomb_3d"}})").infill_pattern == InfillPattern::Honeycomb3d);
+}
+
 TEST_CASE("infill patterns: concentric loops (P9)", "[combine]") {
     FillParams p;
     p.width = 0.4;
@@ -718,4 +758,109 @@ TEST_CASE("infill patterns: fitted solid lines fit each island, not the whole la
         CHECK_THAT(lo - bottom, WithinAbs(0.2, 0.01));
         CHECK_THAT(bottom + 10.0 - hi, WithinAbs(0.2, 0.01));
     }
+}
+
+TEST_CASE("infill patterns: Hilbert and Archimedean chords on a large region, clipped in strips", "[combine]") {
+    // 160 mm with a hole: clipped in strips of about 40 mm, the pieces joined
+    // again on the strips' edges. Nothing is lost at the cuts (the length is
+    // the area over the spacing) and the pieces stay as few as one clip gives.
+    const auto at = [](double x, double y) { return Clipper2Lib::Point64{to_units(x), to_units(y)}; };
+    const Polygons region{{at(0, 0), at(160, 0), at(160, 160), at(0, 160)},
+                          {at(60, 60), at(60, 100), at(100, 100), at(100, 60)}};
+    const double width = 0.45, inside = (159.55 * 159.55 - 40.45 * 40.45);
+    for (int k = 0; k < 2; ++k) {
+        INFO((k ? "archimedean" : "hilbert"));
+        const std::vector<Toolpath> fill =
+            k ? archimedean_fill(region, width, {80.0, 80.0}, width) : hilbert_fill(region, width, 45.0, width);
+        CHECK_THAT(total(fill) * width / inside, WithinAbs(1.0, 0.03));
+        CHECK(fill.size() <= 120);
+        // No two pieces meet end to end: a cut left unjoined would.
+        std::map<std::pair<long long, long long>, int> ends;
+        for (const Toolpath& t : fill)
+            for (const Point2d q : {t.points.front().p, t.points.back().p})
+                ++ends[{std::llround(q.x * 1000.0), std::llround(q.y * 1000.0)}];
+        for (const auto& [q, n] : ends)
+            CHECK(n == 1);
+    }
+}
+
+TEST_CASE("infill angles: a list cycled layer by layer (Q18)", "[combine]") {
+    // infill.angles: the layer's lines at angles[layer % size] instead of
+    // angle and angle + 90, for the sparse lines and the solid surfaces.
+    const Settings s = parse_settings(R"({"infill": {"angles": [0, 60, 120]}})");
+    REQUIRE(s.infill_angles == std::vector<double>{0.0, 60.0, 120.0});
+    CHECK(parse_settings(settings_json(s)).infill_angles == s.infill_angles);
+    CHECK_THROWS_AS(parse_settings(R"({"infill": {"angles": 30}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"infill": {"angles": [400]}})"), SettingsError);
+    CHECK(layer_angle(45.0, {}, 3) == 135.0);
+    CHECK(layer_angle(45.0, s.infill_angles, 4) == 60.0);
+
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angles = s.infill_angles;
+    const LayerSurfaces sparse = square_sparse(20.0);
+    LayerSurfaces solid;
+    solid.bottom = sparse.sparse;
+    for (std::size_t l = 0; l < 4; ++l) {
+        INFO("layer " << l);
+        const int want = int(s.infill_angles[l % 3]);
+        for (const std::vector<Toolpath>& paths : {fill_layer(sparse, l, p).sparse, fill_layer(solid, l, p).solid}) {
+            const std::map<int, double> d = by_direction(paths);
+            REQUIRE(!d.empty());
+            const auto most = std::max_element(d.begin(), d.end(),
+                                               [](const auto& a, const auto& b) { return a.second < b.second; });
+            CHECK(most->first == want);
+        }
+    }
+}
+
+TEST_CASE("bridges: a whole number of lines from edge to edge (Q10)", "[combine]") {
+    // A strip 10.3 mm wide bridged with 0.4 mm lines: across the shrunk strip
+    // (9.9 mm) 0.4 does not divide evenly, so the lines come a little closer
+    // and the outer ones lie on both shrunk edges; with fit alone a strip of
+    // up to a line's width stayed bare, split between the edges.
+    const auto at = [](double x, double y) { return Clipper2Lib::Point64{to_units(x), to_units(y)}; };
+    const Polygons strip{{at(0, 0), at(30, 0), at(30, 10.3), at(0, 10.3)}};
+    const double w = 0.4;
+    const std::vector<Toolpath> lines = rectilinear_fill(strip, w, 0.0, w, false, true, false, 0.0, 0.0, 0.0, nullptr, true);
+    std::vector<double> ys;
+    for (const Toolpath& t : lines)
+        ys.push_back(t.points.front().p.y);
+    std::sort(ys.begin(), ys.end());
+    REQUIRE(ys.size() >= 2);
+    CHECK(ys.size() == 26); // ceil(9.9 / 0.4) + 1
+    CHECK_THAT(ys.front(), WithinAbs(0.2, 0.01));
+    CHECK_THAT(ys.back(), WithinAbs(10.1, 0.01));
+    for (std::size_t i = 1; i < ys.size(); ++i)
+        CHECK(ys[i] - ys[i - 1] <= w + 1e-3);
+    // Narrower than 3/4 of a line across: one line in the middle.
+    const Polygons thin{{at(0, 0), at(30, 0), at(30, 0.65), at(0, 0.65)}};
+    CHECK(rectilinear_fill(thin, w, 0.0, w, false, true, false, 0.0, 0.0, 0.0, nullptr, true).size() == 1);
+}
+
+TEST_CASE("gyroid: a large dense region marched in bands, joined at their edges", "[combine]") {
+    // 160 mm at 100 %: millions of grid nodes, marched in bands of rows; the
+    // pieces are joined again where they cross a band's edge, so none meets
+    // another end to end, and the length is the area over the spacing.
+    const auto at = [](double x, double y) { return Clipper2Lib::Point64{to_units(x), to_units(y)}; };
+    const Polygons region{{at(0, 0), at(160, 0), at(160, 160), at(0, 160)},
+                          {at(60, 60), at(60, 100), at(100, 100), at(100, 60)}};
+    const double width = 0.45, period = gyroid_period(width, 1.0);
+    REQUIRE(std::pow(160.0 / (period / kGyroidSamples), 2.0) > 2.0 * double(kGyroidBandNodes));
+    const std::vector<Toolpath> fill = gyroid_fill(region, period, 1.0, width);
+    const double inside = 159.55 * 159.55 - 40.45 * 40.45;
+    double length = 0.0;
+    for (const Toolpath& t : fill)
+        for (std::size_t i = 1; i < t.points.size(); ++i)
+            length += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+    CHECK_THAT(length * width / inside, WithinAbs(1.0, 0.05));
+    std::map<std::pair<long long, long long>, int> ends;
+    for (const Toolpath& t : fill)
+        for (const Point2d q : {t.points.front().p, t.points.back().p})
+            ++ends[{std::llround(q.x * 1000.0), std::llround(q.y * 1000.0)}];
+    std::size_t shared = 0;
+    for (const auto& [q, n] : ends)
+        shared += n > 1;
+    CHECK(shared == 0);
 }

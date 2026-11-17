@@ -49,6 +49,15 @@ struct ProjectRange {
     std::string settings{};
 };
 
+// A part of a model: a run of its mesh's triangles with its own extruder
+// (0: the model's).
+struct ProjectPart {
+    std::string name;
+    std::size_t first = 0, count = 0;
+    int extruder = 0;
+    std::string settings{}; // its own, over the model's
+};
+
 struct ProjectModel {
     std::string name;                // the file it came from, or the calibration's name
     TriangleMesh mesh;               // as it was loaded, in its own coordinates
@@ -73,6 +82,9 @@ struct ProjectModel {
     // Whether it is printed (interface.md, «Menús»: Printable); a model that
     // is not stays on the bed and out of the slice.
     bool printable = true;
+    // Its parts, one after another in the mesh (formats.md, rule 7); empty:
+    // one part, all of it.
+    std::vector<ProjectPart> parts{};
 };
 
 // The calibration being printed: which one, and the value of each segment.
@@ -91,6 +103,11 @@ struct Project {
     // (color_mixing.md): they travel with the models, not with a profile.
     std::vector<ColorMix> mixes;
     std::vector<std::string> filament_colors;
+    // The paint's slots (color_mixing_plus.md, MX33): colour mark k paints
+    // with paint_slots[k - 1], a filament or blend number (0: the part's
+    // own); at most kPaintMaxMark. Empty: each mark is its number. See
+    // with_color_slots.
+    std::vector<int> paint_slots;
     // What opening the file left out, for the person (not saved): Engineering
     // data this program does not read, conditions that no longer fit their mesh.
     std::vector<std::string> notices;

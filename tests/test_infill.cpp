@@ -451,3 +451,28 @@ TEST_CASE("fill_period: the same surfaces fill alike that many layers apart, at 
     none.pattern = InfillPattern::Gyroid;
     CHECK(fill_period(none) == 2); // only the solid lines turn
 }
+
+TEST_CASE("rectilinear: joins only inside join_inside, as a bridge's over what holds it (toolpath_time.md, rule 1)", "[infill]") {
+    // Lines along X across a 10 mm square, 1 mm apart; joined, they make one
+    // zig-zag. Held only on the left (x < 2): only the joins at the left end.
+    const Polygons region = square(0, 0, 10);
+    const std::vector<Toolpath> loose = rectilinear_fill(region, 1.0, 0.0, 0.4, false, true);
+    const std::vector<Toolpath> all = rectilinear_fill(region, 1.0, 0.0, 0.4, true, true, false, 0.0, 0.0, 4.0 * 0.4 * 2.0);
+    Polygons held = {Polygon{{-1 * kUnitsPerMm, -1 * kUnitsPerMm}, {2 * kUnitsPerMm, -1 * kUnitsPerMm},
+                             {2 * kUnitsPerMm, 11 * kUnitsPerMm}, {-1 * kUnitsPerMm, 11 * kUnitsPerMm}}};
+    const std::vector<Toolpath> some =
+        rectilinear_fill(region, 1.0, 0.0, 0.4, true, true, false, 0.0, 0.0, 4.0 * 0.4 * 2.0, &held);
+    REQUIRE(loose.size() >= 8);
+    CHECK(all.size() == 1);
+    // Every other pair joined: half the pieces, about.
+    CHECK(some.size() > all.size());
+    CHECK(some.size() < loose.size());
+    // No join leaves the held strip: every point off the lines' rows lies at x < 2.
+    for (const Toolpath& t : some)
+        for (std::size_t k = 1; k < t.points.size(); ++k) {
+            const auto& a = t.points[k - 1].p;
+            const auto& b = t.points[k].p;
+            if (std::fabs(a.y - b.y) > 1e-6) // a join, across the rows
+                CHECK((a.x < 2.0 && b.x < 2.0));
+        }
+}
