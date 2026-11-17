@@ -74,7 +74,9 @@ enum class PrinterKind(val wire: String, val defaultPort: Int) {
     OCTOPRINT("octoprint", 80),
     PRUSALINK("prusalink", 80),
     DUET("duet", 80),
-    BAMBU("bambu", 8883);
+    BAMBU("bambu", 8883),
+    /** Flashforge (printer_connections.md, «Flashforge en red local»): the serial number in `user`, the check code as the key. */
+    FLASHFORGE("flashforge", 8898);
 
     companion object {
         fun of(wire: String) = entries.firstOrNull { it.wire == wire }
@@ -106,6 +108,8 @@ data class PrinterStatus(
      * «FINISHED»/«STOPPED»): true finished, false stopped, null not said (then the progress decides).
      */
     val finished: Boolean? = null,
+    /** Why it could not be read, when the spec words it (a [PrinterException.reason]). */
+    val reason: String? = null,
 )
 
 data class Camera(
@@ -124,7 +128,28 @@ interface CameraFrames : AutoCloseable {
 }
 
 /** A request to a printer failed. */
-class PrinterException(val kind: Kind, val detail: String, cause: Throwable? = null) : Exception(detail, cause) {
+class PrinterException(
+    val kind: Kind,
+    val detail: String,
+    cause: Throwable? = null,
+    /**
+     * A situation the spec words for the person (Flashforge's codes, «Flashforge en red local»), which the screens show
+     * in their own language instead of [detail]; see [Reason].
+     */
+    val reason: String? = null,
+) : Exception(detail, cause) {
+    /** The [reason]s the screens know. */
+    object Reason {
+        const val FF_AUTH = "flashforge.auth"
+        const val FF_BUSY = "flashforge.busy"
+        const val FF_NO_FILE = "flashforge.no_file"
+        const val FF_REFUSED = "flashforge.refused"
+        const val FF_UNREACHABLE = "flashforge.unreachable"
+        const val FF_UNREACHABLE_LAN = "flashforge.unreachable_lan"
+        const val FF_OTHER_PROGRAM = "flashforge.other_program"
+        const val FF_NO_UPLOAD = "flashforge.no_upload"
+    }
+
     enum class Kind {
         /** No answer: the printer is off, or on another network. */
         NETWORK,
@@ -163,6 +188,8 @@ data class PrinterConfig(
             if (t.isEmpty()) return t
             // Bambu Lab is not HTTP: its address is the host (and, for tests, other ports).
             if (kind == PrinterKind.BAMBU) return if (t.startsWith("bambu://")) t else "bambu://" + t.substringAfter("://")
+            // Flashforge speaks HTTP on 8898 and TCP on 8899: its address is the host.
+            if (kind == PrinterKind.FLASHFORGE) return if (t.startsWith("flashforge://")) t else "flashforge://" + t.substringAfter("://")
             if (!t.startsWith("http://", true) && !t.startsWith("https://", true)) {
                 t = "http://$t"
                 val hostPart = t.removePrefix("http://").substringBefore('/')

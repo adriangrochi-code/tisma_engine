@@ -82,3 +82,15 @@ actual class PinnedTls actual constructor(private val expectedSha256: String?) {
         fun fingerprint(der: ByteArray): String = net.tisma.io.Sha256.fingerprint(der)
     }
 }
+
+actual fun openTcp(host: String, port: Int, timeoutMs: Int, readTimeoutMs: Int): net.tisma.io.Link {
+    val s = Socket()
+    return try {
+        s.connect(InetSocketAddress(host, port), timeoutMs)
+        s.soTimeout = readTimeoutMs
+        net.tisma.io.SocketLink(s)
+    } catch (e: java.io.IOException) {
+        runCatching { s.close() }
+        throw PrinterException(PrinterException.Kind.NETWORK, e.message ?: "Cannot reach $host:$port", e)
+    }
+}

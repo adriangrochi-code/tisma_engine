@@ -5,6 +5,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import net.tisma.cloud.UrlConnectionHttp
 import net.tisma.printers.DiscoveryTypes
+import net.tisma.printers.FlashforgeProbe
 import net.tisma.printers.FoundPrinter
 import net.tisma.printers.MoonrakerConnection
 import net.tisma.printers.PrinterKind
@@ -15,7 +16,7 @@ import java.util.concurrent.Executors
  * Searches the local network with Android's DNS-SD (NsdManager) while the
  * printer list is open (printer_connections.md, «Búsqueda en la red»):
  * `_octoprint._tcp` (its TXT `path`, `model`), `_moonraker._tcp`, and plain
- * `_http._tcp` services, which count as Klipper only if Moonraker's API answers.
+ * `_http._tcp` services, which count as Klipper only if Moonraker's API answers; and Flashforge's UDP probe.
  */
 class NetworkDiscovery(
     context: Context,
@@ -25,6 +26,8 @@ class NetworkDiscovery(
     private val nsd = context.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val listeners = mutableListOf<NsdManager.DiscoveryListener>()
     private val probe = Executors.newSingleThreadExecutor()
+    /** Flashforge's probe, every minute, apart from the Moonraker checks. */
+    private val flashforge = Executors.newSingleThreadExecutor()
     // NsdManager resolves one service at a time on older Androids: a queue.
     private val pending = ArrayDeque<Pair<NsdServiceInfo, String>>()
     private var resolving = false
@@ -46,6 +49,14 @@ class NetworkDiscovery(
             }
             runCatching { nsd.discoverServices(type, NsdManager.PROTOCOL_DNS_SD, l) }.onSuccess { listeners += l }
         }
+        // Flashforge answers its own UDP probe, not DNS-SD (printer_connections.md, «Flashforge en red local»): asked
+        // now and every minute while the list is open; the list forgets a printer after 3 minutes without news.
+        runCatching { flashforge.execute {
+            while (!Thread.currentThread().isInterrupted) {
+                runCatching { FlashforgeProbe.probe() }.getOrDefault(emptyList()).forEach(onFound)
+                try { Thread.sleep(60_000) } catch (_: InterruptedException) { break }
+            }
+        } }
     }
 
     fun stop() {
@@ -54,6 +65,7 @@ class NetworkDiscovery(
         synchronized(this) { pending.clear() }
         // Its probing thread ends with it: a discovery is made each time the list comes to the front.
         probe.shutdownNow()
+        flashforge.shutdownNow()
     }
 
     /** Whether discovery is running (for tests). */

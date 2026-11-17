@@ -36,8 +36,8 @@ class Rest(
 
     fun delete(path: String): JsonElement = call(HttpRequest("DELETE", base + path, all(), timeoutMs = 15_000))
 
-    fun upload(path: String, parts: List<FormPart>): JsonElement =
-        call(HttpRequest("POST", base + path, all(), form = parts, timeoutMs = 30 * 60_000))
+    fun upload(path: String, parts: List<FormPart>, extra: Map<String, String> = emptyMap()): JsonElement =
+        call(HttpRequest("POST", base + path, all() + extra, form = parts, timeoutMs = 30 * 60_000))
 
     /** A file as the raw body of [method] (PrusaLink's PUT, Duet's rr_upload POST). */
     fun uploadRaw(method: String, path: String, part: FormPart, extra: Map<String, String> = emptyMap()): JsonElement =

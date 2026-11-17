@@ -45,12 +45,23 @@ struct PrinterView: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                         .accessibilityIdentifier("printer_address")
                     if kind == "prusalink" { TextField("User", text: $user).textInputAutocapitalization(.never).accessibilityIdentifier("printer_user") }
-                    SecureField(kind == "bambu" ? "Access code" : kind == "octoprint" || kind == "moonraker" ? "API key" : "Password", text: $secret)
+                    // Flashforge (printer_connections.md, «Flashforge en red local»): the serial number and the check
+                    // code of the modern ones; the Adventurer 3 and 4 need neither.
+                    if kind == "flashforge" {
+                        TextField("Serial number (starts with «SN»)", text: $user).textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled().accessibilityIdentifier("printer_user")
+                    }
+                    SecureField(kind == "bambu" ? "Access code" : kind == "flashforge" ? "Check code (empty for the Adventurer 3 and 4)"
+                                : kind == "octoprint" || kind == "moonraker" ? "API key" : "Password", text: $secret)
                         .onChange(of: secret) { _, v in Keychain.write("printer.secret", v) }
                         .accessibilityIdentifier("printer_secret")
                     Button("Test") { run { tested = try PrinterBridge.shared.test(kind: $0.0, address: $0.1, user: $0.2, secret: $0.3) } }
                         .disabled(address.isEmpty).accessibilityIdentifier("printer_test")
                     if let tested { Text(tested).foregroundStyle(.secondary).accessibilityIdentifier("printer_tested") }
+                    if kind == "flashforge" {
+                        Text("Adventurer 5M, 5M Pro, AD5X and Creator 5: turn on «LAN only»; the check code is on that network mode screen. Address: the printer's IP. Files are not sent to the Adventurer 3 and 4 yet.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
                 if let line {
                     Section("State") {
@@ -152,6 +163,7 @@ enum PrinterKinds {
         case "prusalink": return "PrusaLink"
         case "duet": return "Duet"
         case "bambu": return "Bambu Lab (LAN)"
+        case "flashforge": return "Flashforge"
         default: return kind
         }
     }

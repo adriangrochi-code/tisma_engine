@@ -166,3 +166,27 @@ private class StreamLink(private val i: NSInputStream, private val o: NSOutputSt
 
     override fun close() { i.close(); o.close() }
 }
+
+@OptIn(ExperimentalForeignApi::class)
+actual fun openTcp(host: String, port: Int, timeoutMs: Int, readTimeoutMs: Int): Link {
+    val (input, output) = memScoped {
+        val i = alloc<ObjCObjectVar<NSInputStream?>>()
+        val o = alloc<ObjCObjectVar<NSOutputStream?>>()
+        NSStream.getStreamsToHostWithName(host, port.convert(), i.ptr, o.ptr)
+        (i.value ?: throw PrinterException(PrinterException.Kind.NETWORK, "Cannot reach $host")) to
+            (o.value ?: throw PrinterException(PrinterException.Kind.NETWORK, "Cannot reach $host"))
+    }
+    input.open(); output.open()
+    // Connected when the output has room; refused or silent ends in an error or the deadline.
+    val end = nowMs() + timeoutMs
+    while (!output.hasSpaceAvailable) {
+        if (output.streamStatus == NSStreamStatusError || input.streamStatus == NSStreamStatusError) {
+            val why = output.streamError?.localizedDescription ?: "Cannot reach $host:$port"
+            input.close(); output.close()
+            throw PrinterException(PrinterException.Kind.NETWORK, why)
+        }
+        if (nowMs() > end) { input.close(); output.close(); throw PrinterException(PrinterException.Kind.NETWORK, "The printer does not answer") }
+        NSThread.sleepForTimeInterval(0.02)
+    }
+    return StreamLink(input, output, readTimeoutMs)
+}

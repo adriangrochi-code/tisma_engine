@@ -137,6 +137,7 @@ class PrintersViewModel(
         val toSave = if (kind == PrinterKind.BAMBU && kept != null) config.copy(serial = kept.serial, certSha256 = kept.certSha256) else config
         val text = withContext(io) { connector(toSave, stored).let { c -> try { c.test() } finally { c.close() } } }
         forget(toSave.id)
+        refused.remove(toSave.id)
         store.save(toSave, secret)
         AppLog.line("printer: ${kind.wire} saved ($text)")
         _state.update { it.copy(printers = store.all(), notice = PrinterNotice.Tested(text)) }
@@ -233,12 +234,17 @@ class PrintersViewModel(
 
     private fun setCamera(id: String, v: CameraView) = _state.update { it.copy(cameras = it.cameras + (id to v)) }
 
+    /** Printers whose key was refused, as they were saved: not asked again until they change (FF1.2: no retry loop). */
+    private val refused = java.util.concurrent.ConcurrentHashMap<String, PrinterConfig>()
+
     private suspend fun read(p: PrinterConfig) {
+        if (refused[p.id] == p) return
         val s = try {
             withContext(io) { connection(p).status() }
         } catch (e: PrinterException) {
+            if (e.kind == PrinterException.Kind.AUTH) refused[p.id] = p
             PrinterStatus(if (e.kind == PrinterException.Kind.AUTH) PrinterState.ERROR else PrinterState.OFFLINE,
-                message = e.detail)
+                message = e.detail, reason = e.reason)
         }
         _state.update { it.copy(status = it.status + (p.id to s)) }
         if (net.tisma.printers.PrintEvents.isActive(s)) onActivePrint()

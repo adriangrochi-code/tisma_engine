@@ -39,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -202,7 +203,8 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
                 StateChip(s?.state)
             }
             if (s == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-            s?.message?.takeIf { it.isNotBlank() }?.let {
+            val context = LocalContext.current
+            (s?.reason?.let { context.reasonText(it, s.message) } ?: s?.message)?.takeIf { it.isNotBlank() }?.let {
                 Text(it, color = if (s.state == PrinterState.ERROR) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("printer_message"))
             }
@@ -388,7 +390,9 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
     var name by rememberSaveable { mutableStateOf(existing?.name ?: found?.name.orEmpty()) }
     var address by rememberSaveable { mutableStateOf(existing?.url ?: found?.url.orEmpty()) }
     var key by rememberSaveable { mutableStateOf("") }
-    var user by rememberSaveable { mutableStateOf(existing?.user?.ifBlank { null } ?: "maker") }
+    // PrusaLink's user is «maker» unless changed; a Flashforge found on the network brings its serial number.
+    var user by rememberSaveable { mutableStateOf(existing?.user?.ifBlank { null } ?: found?.serial?.ifBlank { null }
+        ?: if ((found?.kind ?: existing?.kind) == PrinterKind.FLASHFORGE) "" else "maker") }
     ScreenColumn {
         TismaCard {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -404,8 +408,9 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                 placeholder = { Text(if (kind == PrinterKind.MOONRAKER) "192.168.1.20:7125" else "192.168.1.30") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth().testTag("printer_address"))
-            if (kind == PrinterKind.PRUSALINK) {
-                OutlinedTextField(user, { user = it }, singleLine = true, label = { Text(stringResource(R.string.printer_user)) },
+            if (kind == PrinterKind.PRUSALINK || kind == PrinterKind.FLASHFORGE) {
+                OutlinedTextField(user, { user = it }, singleLine = true,
+                    label = { Text(stringResource(if (kind == PrinterKind.FLASHFORGE) R.string.printer_serial else R.string.printer_user)) },
                     modifier = Modifier.fillMaxWidth().testTag("printer_user"))
             }
             OutlinedTextField(key, { key = it }, singleLine = true,
@@ -415,6 +420,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     PrinterKind.PRUSALINK -> R.string.printer_password
                     PrinterKind.DUET -> R.string.printer_board_password
                     PrinterKind.BAMBU -> R.string.printer_access_code
+                    PrinterKind.FLASHFORGE -> R.string.printer_check_code
                 })) },
                 supportingText = if (existing != null) { { Text(stringResource(R.string.printer_key_keep)) } } else null,
                 visualTransformation = PasswordVisualTransformation(),
@@ -425,7 +431,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     // An empty key on an edit keeps the stored one.
                     val secret = key.ifEmpty { if (existing != null) null else "" }
                     printers.testAndSave(existing?.id, name, kind, address, secret,
-                        if (kind == PrinterKind.PRUSALINK) user else "") { nav.back() }
+                        if (kind == PrinterKind.PRUSALINK || kind == PrinterKind.FLASHFORGE) user else "") { nav.back() }
                     key = ""
                 },
                 enabled = !state.busy && address.isNotBlank() && (kind !in setOf(PrinterKind.OCTOPRINT, PrinterKind.PRUSALINK, PrinterKind.BAMBU) || key.isNotBlank() || existing != null),
@@ -434,6 +440,8 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (kind == PrinterKind.BAMBU) Text(stringResource(R.string.printer_bambu_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (kind == PrinterKind.FLASHFORGE) Text(stringResource(R.string.printer_flashforge_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("printer_flashforge_hint"))
             Text(stringResource(R.string.printer_key_safe), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -462,6 +470,7 @@ private fun kindName(k: PrinterKind) = stringResource(when (k) {
     PrinterKind.PRUSALINK -> R.string.kind_prusalink
     PrinterKind.DUET -> R.string.kind_duet
     PrinterKind.BAMBU -> R.string.kind_bambu
+    PrinterKind.FLASHFORGE -> R.string.kind_flashforge
 })
 
 private fun temp(t: Temperature): String =
@@ -478,7 +487,7 @@ fun duration(seconds: Long): String {
 }
 
 fun Context.printerNoticeText(n: PrinterNotice): String = when (n) {
-    is PrinterNotice.Failed -> when (n.error.kind) {
+    is PrinterNotice.Failed -> reasonText(n.error.reason, n.error.detail) ?: when (n.error.kind) {
         PrinterException.Kind.NETWORK -> getString(R.string.printer_error_network)
         PrinterException.Kind.AUTH -> getString(R.string.printer_error_auth, n.error.detail)
         PrinterException.Kind.CONFLICT -> getString(R.string.printer_error_conflict, n.error.detail)
@@ -490,6 +499,22 @@ fun Context.printerNoticeText(n: PrinterNotice): String = when (n) {
     is PrinterNotice.Tested -> getString(R.string.printer_tested, n.text)
     is PrinterNotice.Uploaded -> getString(if (n.started) R.string.printer_uploaded_started else R.string.printer_uploaded, n.name)
     PrinterNotice.CannotRead -> getString(R.string.error_cannot_read)
+}
+
+/** The spec's own words for a situation it names (Flashforge's codes), or null. */
+fun Context.reasonText(reason: String?, detail: String): String? {
+    val ip = detail.substringAfter(" at ", "").substringBefore(". ")
+    return when (reason) {
+        PrinterException.Reason.FF_AUTH -> getString(R.string.ff_error_auth)
+        PrinterException.Reason.FF_BUSY -> getString(R.string.ff_error_busy)
+        PrinterException.Reason.FF_NO_FILE -> getString(R.string.ff_error_no_file)
+        PrinterException.Reason.FF_REFUSED -> getString(R.string.ff_error_refused)
+        PrinterException.Reason.FF_UNREACHABLE -> getString(R.string.ff_error_unreachable, ip)
+        PrinterException.Reason.FF_UNREACHABLE_LAN -> getString(R.string.ff_error_unreachable_lan, ip)
+        PrinterException.Reason.FF_OTHER_PROGRAM -> getString(R.string.ff_error_other_program)
+        PrinterException.Reason.FF_NO_UPLOAD -> getString(R.string.ff_error_no_upload)
+        else -> null
+    }
 }
 
 private fun nameAndSize(context: Context, uri: Uri): Pair<String?, Long> = runCatching {

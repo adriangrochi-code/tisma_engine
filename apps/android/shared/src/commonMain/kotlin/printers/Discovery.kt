@@ -15,11 +15,15 @@ data class FoundPrinter(
     val path: String = "/",
     /** OctoPrint's `model` and `vendor`, when announced. */
     val model: String = "",
+    /** Flashforge: the serial number its answer gives (empty for the older ones). */
+    val serial: String = "",
 ) {
     /** The address the printer is added with: the service's address plus `path`. */
     val url: String
         get() {
             val h = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
+            // Flashforge is added by its host: HTTP and TCP are on their usual ports.
+            if (kind == PrinterKind.FLASHFORGE) return "flashforge://$h"
             val p = path.trim().ifEmpty { "/" }.let { if (it.startsWith("/")) it else "/$it" }.trimEnd('/')
             return "http://$h:$port$p"
         }

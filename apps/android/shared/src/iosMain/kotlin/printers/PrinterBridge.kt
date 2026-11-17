@@ -78,6 +78,7 @@ object PrinterBridge {
             PrinterKind.PRUSALINK -> PrusaLinkConnection(url, user.ifBlank { "maker" }, secret, PlatformHttp)
             PrinterKind.DUET -> DuetConnection(url, secret.ifEmpty { "reprap" }, PlatformHttp)
             PrinterKind.BAMBU -> BambuConnection.of(url, secret, defaults.stringForKey(pinKey(address)))
+            PrinterKind.FLASHFORGE -> Flashforge.of(url, user, secret, PlatformHttp)
         }
     }
 

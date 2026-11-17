@@ -11,5 +11,6 @@ fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tism
         PrinterKind.PRUSALINK -> PrusaLinkConnection(url, user.ifBlank { "maker" }, secret.orEmpty(), http)
         PrinterKind.DUET -> DuetConnection(url, secret.orEmpty().ifEmpty { "reprap" }, http)
         PrinterKind.BAMBU -> BambuConnection.of(url, secret.orEmpty(), certSha256.ifBlank { null })
+        PrinterKind.FLASHFORGE -> Flashforge.of(url, user, secret.orEmpty(), http)
     }
 
