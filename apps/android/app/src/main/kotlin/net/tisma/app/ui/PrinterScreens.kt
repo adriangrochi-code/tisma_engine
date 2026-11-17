@@ -205,7 +205,7 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
             if (s == null) LinearProgressIndicator(Modifier.fillMaxWidth())
             val context = LocalContext.current
             (s?.reason?.let { context.reasonText(it, s.message) } ?: s?.message)?.takeIf { it.isNotBlank() }?.let {
-                Text(it, color = if (s.state == PrinterState.ERROR) MaterialTheme.colorScheme.error
+                Text(it, color = if (s?.state == PrinterState.ERROR) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("printer_message"))
             }
             val pct = s?.percent
