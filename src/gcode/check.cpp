@@ -20,6 +20,7 @@
 #include <charconv>
 #include <cstdint>
 #include <memory>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -152,6 +153,15 @@ public:
         }
         if (p.head.empty())
             return;
+        // A command starts with a letter (G28, T1, a Klipper macro) or a
+        // host's sign ($H, @pause, %); a line that starts with a quote, a '+'
+        // or a bracket is a printer G-code left as an unevaluated expression
+        // (QA, Z-Bolt Classic, 17-11-2026), also in the machine's own G-code.
+        if (const char c = p.head.front(); !std::isalpha(static_cast<unsigned char>(c)) && c != '$' &&
+                                           c != '@' && c != '%' && c != '!') {
+            problem("not a G-code command: '" + std::string(p.head) + "'");
+            return;
+        }
         command(p, parameters.subspan(p.first, p.count));
     }
 

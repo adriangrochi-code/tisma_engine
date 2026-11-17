@@ -265,6 +265,18 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         CHECK(home < first_layer);
         CHECK(o.gcode.find("M104 S{") == std::string::npos);
     }
+    {
+        // An end G-code left as an unevaluated expression (the Z-Bolt Classic
+        // of the pack): its lines start with a quote or a '+'.
+        Settings z = test_printer();
+        z.end_gcode = "'M104 S0 ;extruder heater off' + ('\nM140 S0 ;off' if machine_heated_bed else '') + '\n"
+                      "+ 'G1 X0'\n@pause\n$H\nEND_PRINT";
+        const Output o = slice_and_write(cube(), z);
+        const GcodeCheck c = check_gcode(o.gcode, o.limits);
+        REQUIRE(c.problems.size() == 2);
+        CHECK(c.problems[0].message.find("not a G-code command: ''M104'") != std::string::npos);
+        CHECK(c.problems[1].message.find("not a G-code command: '+'") != std::string::npos);
+    }
 }
 
 TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
