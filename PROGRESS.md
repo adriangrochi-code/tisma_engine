@@ -14769,3 +14769,9 @@ para el LBM D3Q19.
   la captura final tiene el diálogo del proyecto, pero el aviso no llegó en 300 cuadros (65 s a unos 5 cuadros por
   segundo). Para la próxima corrida, el chequeo de la vista dice el renderizador y sus muestras, y `expect-toast`
   lista los avisos que sí salieron.
+- **G6 en macOS Intel, causa:** los avisos se guardaban para `expect-toast` solo después de leer el guion, y el modelo
+  de la línea de comandos abre antes; en un equipo lento el aviso vencía (6 s) antes de que el guion mirara. Ahora se
+  guardan siempre (los últimos 200).
+- **Chequeo de la vista con el renderizador por software de Apple:** QA pidió saltarlo con `TISMA_SOFTWARE_GL`. No lo
+  hice: es relajar una comprobación de la puerta y la regla del dueño es que ninguna se salta. Queda para que decida
+  el dueño (o un runner con GPU).

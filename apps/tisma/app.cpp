@@ -4599,10 +4599,11 @@ void App::save_preferences(const std::filesystem::path& to) {
     }
 }
 
-// The toasts shown while a script runs, for expect-toast (at most the last 200).
+// The toasts shown, for a script's expect-toast (at most the last 200).
+// Kept even before the script is read: the model on the command line opens
+// first, and on a slow machine its toast is gone before the script looks
+// (macOS with the software renderer, 2026-11-17).
 void App::remember_toast(const std::string& text) {
-    if (script_.empty())
-        return;
     toasts_shown_.push_back(text);
     if (toasts_shown_.size() > 200)
         toasts_shown_.erase(toasts_shown_.begin());
