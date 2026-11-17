@@ -144,6 +144,10 @@ ejecutó aquí):
     con el proyecto, así que la pieza se abre igual en una computadora sin esa fuente.
 11. **Teclas:** Enter confirma; Esc vuelve un nivel atrás y nunca borra trabajo; deshacer y rehacer funcionan dentro
     del boceto. «Ajustar a la selección» desde la línea de tiempo y la lista de cuerpos.
+    **Sin herramienta activa** (pedido del dueño, 17-11-2026): un clic elige o suelta una línea, un círculo o un arco;
+    arrastrar hace una caja de selección (regla 17); un clic en el vacío suelta todo; un clic nunca empieza una línea
+    nueva. Esc primero suelta lo elegido y recién después sale de la herramienta o del boceto. Deshacer y rehacer
+    dentro del boceto (Ctrl+Z, Ctrl+Y) deshacen cada dibujo, borrado, cota y restricción, uno por vez (prueba CD30).
 
 ### Diseño visual y forma de uso (estilo Fusion 360)
 
@@ -212,6 +216,9 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
     achaflanar esquinas, simetría respecto de una recta, matriz rectangular y polar, mover, copiar, girar y escalar
     con punto base. Selección por ventana (de izquierda a derecha, solo lo que queda adentro) y por cruce (de derecha a
     izquierda, todo lo que toca).
+    **Borrar:** Supr o Retroceso borra lo elegido; la herramienta Borrar, en Modificar y en la línea de comandos (`B`,
+    `BORRA`, `BORRAR`, `ERASE`, `SUPR`, `DEL`), borra lo que se toca o lo elegido. Al borrar una curva se borran sus
+    cotas y restricciones; las demás curvas quedan. La `E` sigue siendo extruir (prueba CD30).
 18. **Medir:** distancia y ángulo entre dos puntos, área y perímetro de una región, sin agregar cotas.
 
 ### Archivos y placa
@@ -316,3 +323,4 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 | CD27 | Hacer boceto, extruir y redondear; arrastrar la marca de la línea de tiempo antes del redondeo | La pieza se ve sin redondeo y el ícono del redondeo en gris; soltar al final lo vuelve a aplicar |
 | CD28 | Clic derecho en la vista con una cara elegida | Menú radial con Repetir, Boceto, Extruir, Redondear, Mover/Copiar, Medir y Borrar, y la lista del contexto |
 | CD29 | Tecla S y escribir «redo» | Aparece Redondear; Enter la empieza |
+| CD30 | Boceto con dos líneas y un círculo con cota | Sin herramienta: clic en una línea la elige, Supr la borra, el círculo y su cota quedan; caja de selección elige las dos; `BORRAR` en la línea de comandos borra lo tocado; Ctrl+Z devuelve cada borrado, Ctrl+Y lo rehace; Esc suelta la elección sin salir del boceto |
