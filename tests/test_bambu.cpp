@@ -446,7 +446,7 @@ TEST_CASE("bambu: the send options go in the print request (gcode_macros.md, rul
     CHECK(p["ams_mapping"] == "");
 }
 
-TEST_CASE("bambu: project_file as the phone apps send it, field by field (printer_connections.md, BL2)", "[bambu]") {
+TEST_CASE("bambu: project_file as the phone apps send it, field by field (printer_connections.md, BL4)", "[bambu]") {
     std::ifstream in(std::string(TISMA_TEST_DATA_DIR) + "/bambu_project_file.json", std::ios::binary);
     REQUIRE(in);
     const nlohmann::json c = nlohmann::json::parse(in);

@@ -15105,3 +15105,4 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
 - **BL2 (printer_connections.md, spec/next 3eb4be8):** `tests/data/bambu_project_file.json` es la referencia: un G-code,
   sus opciones y el `project_file` exacto que deben mandar el escritorio y las apps. La prueba de escritorio
   (`[bambu]`) lo compara campo por campo y en cantidad de campos. Pasa. Las apps pueden leer el mismo archivo.
+- La prueba de `project_file` en la ficha ahora es BL4 (spec/next 6f164aa); renombrada en la prueba y en la referencia.

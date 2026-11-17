@@ -1,5 +1,5 @@
 {
- "comment": "printer_connections.md, BL2: the project_file that the desktop and the phone apps send for this G-code and options; each side's test compares field by field.",
+ "comment": "printer_connections.md, BL4: the project_file that the desktop and the phone apps send for this G-code and options; each side's test compares field by field.",
  "gcode": "G28\nG1 X10 Y10 Z0.2 E1\n",
  "name": "pieza",
  "options": {
