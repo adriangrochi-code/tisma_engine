@@ -15097,3 +15097,8 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
 - `1e-7` se lee como número.
 - La división entera entre enteros ya estaba.
 - Pruebas `[gcode]` y `[template]` bien.
+- **Bambu, la PC como las apps (QA: Android probado con una A1 mini real):** `project_file` manda el MD5 del G-code (no
+  el del paquete), `ams_mapping` vacío como texto `""` y ya no manda `file`. Revisado para Windows: la búsqueda SSDP
+  escucha UDP 1990 y 2021 (el aviso sin resultados nombra el cortafuegos, la red «Pública» y escribir la dirección), y
+  la dirección a mano no depende de la búsqueda; TLS sin validar la cadena, sin nombre de host (sin SNI), con la
+  huella fijada, curvas y RSA del mbedTLS por defecto. No probado con hardware.
