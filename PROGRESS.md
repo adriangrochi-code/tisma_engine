@@ -14902,3 +14902,14 @@ para el LBM D3Q19.
   no tiene malla, lo dice también.
 - **Probado:** 109 guiones de interfaz y 61 pruebas de la puerta (sin las largas ni las de descarga) en verde, en
   local. Falta verlo en macOS y Windows en la CI.
+
+## 2026-11-17 — bloque nocturno: el orden monótono sin costo cuadrático
+
+- `order_monotonic` comparaba cada pedazo con todos los demás dos veces: para saber qué pedazos de la línea de abajo
+  lo tocan, y para elegir el siguiente más cercano. Ahora la línea de abajo se busca por altura, los pedazos que la
+  tocan por su inicio ordenado (con el mayor final acumulado, así una línea con pedazos que se solapan también da
+  bien) y el más cercano entre los listos en una grilla de inicios; los empates, como antes, por el orden de entrada.
+- **Medido:** el G-code es idéntico byte a byte en el Benchy, la esfera de 50 mm, las islas, la pieza escalonada y una
+  placa de 30 × 30 bloques de 5 mm (unos 10 000 pedazos por capa de arriba). Esa placa: 1,09 → 0,82 s el laminado
+  entero (dos corridas, 4 núcleos).
+- `[surfaces]`, `[combine]`, `[determinism]`, `[gcode]` en verde.
