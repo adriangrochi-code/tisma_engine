@@ -218,3 +218,13 @@ foreach(kind resin_exposure resin_measure)
                   ARGS --pack ${TISMA_GATE_OUT}/pack/pack --pick-pack-printer "vendors/bolt/models/B2.json#default"
                   PROPERTIES FIXTURES_REQUIRED gate_pack)
 endforeach()
+
+# G15, close: with a slice, a slice in the cloud and an aerodynamic analysis
+# under way, the process ends in under 3 s.
+add_test(NAME gate_g15_quit
+  COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>
+          ${TISMA_GATE_BENCHY} --lang en --size 1200x760 --cloud-server {url}
+          --ui-script ${TISMA_GATE_DATA}/ui/gate_g15_quit.txt --screenshot ${TISMA_GATE_OUT}/gate_g15_quit.png)
+set_tests_properties(gate_g15_quit PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSION "error: " TIMEOUT 300
+                     PASS_REGULAR_EXPRESSION "ui-script: quit: the program ended" FIXTURES_REQUIRED gate_benchy
+                     ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${TISMA_GATE_OUT}/g15_secrets.txt")

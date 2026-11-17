@@ -14792,3 +14792,7 @@ para el LBM D3Q19.
   quedaba en 0, 0, fuera de la pantalla («does not fit on the display»). Ahora, sin cama propia, la cama de una
   impresora de resina es su pantalla desde (0, 0) (`src/catalog/pack.cpp`; como hace el panel al elegir resina;
   resin.md, RE3). Prueba en `[pack]`.
+- **G15, cerrar:** `gate_g15_quit`: el Benchy con la sesión de la nube iniciada, un análisis aerodinámico en marcha
+  (calidad rápida), un laminado en la nube y uno local en marcha (verbo `expect-busy slice|cloud`), y `quit`: el
+  proceso termina en 525 ms (tope 3 s). Pasa.
+- **Puerta:** falta solo G16 (las apps). Todo lo demás de la tabla tiene su prueba.

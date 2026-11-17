@@ -1434,7 +1434,10 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 - [x] G6: proyecto con soportes, cambio de impresora, filamento y perfil, deshacer.
 - [x] G1: STL, OBJ, 3MF propio y de otro programa.
 - [x] G7, G8, G9: adhesión, relleno y paredes, guardar y abrir proyecto.
-- [ ] G10 a G12, G15; G13 y G14 con el motor; G16 con las apps (flujo `release-gate.yml`, PR #56).
+- [x] G10 (exportar y mandar a las 6 impresoras simuladas), G11 (nube contra un maestro de prueba), G12 (cada
+      calibración), G15 (cerrar con trabajos en marcha).
+- [x] G13 y G14 (el motor, sobre los verbos de la interfaz).
+- [ ] G16: el flujo de Android de las apps (PR #56) cuando esté en dev; el iPhone.
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 

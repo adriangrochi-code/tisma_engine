@@ -28037,6 +28037,12 @@ bool App::script_check(const ScriptStep& step, int f) {
         if (r.layers.empty() || r.volume <= 0.0 || r.seconds <= 0.0)
             return fail_step("the resin slice has no layers, volume or time");
         next();
+    } else if (step.verb == "expect-busy") { // slice|cloud: that work is under way now (waits up to 600 frames)
+        const bool busy = step.key == "slice" ? slice_job_.running() : step.key == "cloud" ? cloud_slice_.valid() : false;
+        if (!busy)
+            return f > 600 ? fail_step(step.key + " is not under way") : true;
+        std::printf("ui-script: expect-busy %s: ok\n", step.key.c_str());
+        next();
     } else {
         return false;
     }
