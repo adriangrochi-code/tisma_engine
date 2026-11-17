@@ -1032,6 +1032,10 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         << " layers, " << exported.check.stats.filament << " mm of filament net of retractions)\n";
     out << "wrote " << target.string() << "\n";
     out << "warnings: " << warnings.size() << "\n";
+    // The slice's notices, one line each (a vase with holes, vase_mode.md,
+    // rule 7: said once when slicing).
+    for (const std::string& notice : sliced.notices)
+        out << "note: " << notice << "\n";
     if (!parsed->warnings.empty()) {
         if (!write_file(parsed->warnings, [&](std::ostream& report) { report << warnings_json(warnings); })) {
             err << "error: cannot write '" << parsed->warnings << "'\n";

@@ -89,7 +89,8 @@ std::vector<Warning> model_warnings(const SlicedModel& model, double free_bridge
     }
     // Settings of a part left out (model_tools.md, rules 4 and 9).
     for (const std::string& notice : model.notices)
-        out.push_back({"part_settings", -1, 0.0, notice, 0.0, "information"});
+        out.push_back({notice.starts_with(kVaseSeamNotice) ? "vase_seam" : "part_settings", -1, 0.0, notice, 0.0,
+                       "information"});
     return out;
 }
 

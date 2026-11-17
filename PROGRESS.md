@@ -14799,3 +14799,14 @@ para el LBM D3Q19.
 - **Vista con el renderizador por software (RELEASE_GATE.md, spec/next a804372):** con `TISMA_SOFTWARE_GL` (CI de
   macOS) el chequeo de la vista exige igual 0 píxeles negros pero no cuenta destellos; en Linux y Windows el tope de
   1 en 1000 sigue.
+
+## 2026-11-17 — modo jarrón con agujero (QA, VA5)
+
+- **Error:** con un agujero o varias piezas el escritor no hacía espiral (exigía una sola vuelta por capa): todo plano.
+- **Arreglo (vase_mode.md, regla 7):** la vuelta de afuera de la pieza más grande va en espiral y primero; las demás,
+  planas después, con viaje y retracción. La capa que empieza una vuelta nueva no sube antes a su Z: el viaje va a la
+  altura de la de abajo, y Z no baja nunca. La vuelta se tomaba antes de mover los pasos: en capas alternas giraba el
+  agujero (corregido). La CLI escribe las notas del laminado (`note:`); el aviso tiene su tipo, `vase_seam`.
+- **Prueba nueva:** tubo de 20 mm con agujero de 8 mm: afuera sube 0,2 mm por capa, el agujero plano en la Z de la
+  capa, ninguna bajada de Z, el aviso una vez. 1120 pruebas sin interfaz en verde.
+

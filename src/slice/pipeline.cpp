@@ -3084,7 +3084,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         for (std::size_t l = bottom; l < out.walls.size(); ++l)
             if (std::count_if(out.walls[l].toolpaths.begin(), out.walls[l].toolpaths.end(),
                               [](const Toolpath& t) { return !t.points.empty(); }) > 1) {
-                out.notices.push_back("Vase mode with holes or several pieces: those turns are not a spiral and leave a seam");
+                out.notices.emplace_back(kVaseSeamNotice);
                 break;
             }
     }

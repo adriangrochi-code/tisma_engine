@@ -1445,6 +1445,9 @@ public:
     // extrusions that follow are this far down, as thick as the layer; 0:
     // at the layer's top again.
     void set_drop(double drop) { drop_ = drop; }
+    // The layer's first travel at this much under its top: to a vase's turn
+    // that starts anew from the layer below (vase_mode.md, rule 7).
+    void travel_below(double below) { travel_below_ = below; }
 
     // Above the layer's top the nozzle travels this high (Z anti-aliasing that
     // raises paths, docs/ZAA.md), so it clears them.
@@ -1728,8 +1731,9 @@ public:
             }
         }
         wiped_path_.clear();
-        const double cruise = written(z_value_ + clearance_);
-        const double level = clearance_ > 0.0 ? cruise : z_value_;
+        const double cruise = written(z_value_ - travel_below_ + clearance_);
+        const double level = clearance_ > 0.0 ? cruise : z_value_ - travel_below_;
+        travel_below_ = 0.0;
         const double lift = retracting ? lift_height() : 0.0;
         other_time_ += plan->length / feed;
         if (lift > 0.0 && ramp_tan_ > 0.0) {
@@ -2416,6 +2420,7 @@ private:
     std::vector<double> tool_e_;
     double tower_e_ = 0.0;   // mm of filament laid on the wipe tower
     double drop_ = 0.0;      // mm the extrusions lie under the layer's top (the wipe tower's)
+    double travel_below_ = 0.0; // mm the next travel goes under the layer's top (a vase's turn)
     bool on_tower_ = false;  // the nozzle is down on the wipe tower
     bool tower_ = false;     // the current type is the wipe tower's
     double x_value_ = 0.0, y_value_ = 0.0, z_value_ = 0.0;
@@ -3729,39 +3734,54 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // the layer below ended, going on from there when that was a turn too,
     // and rises a layer along its length, every bead a layer thick (on the
     // turn below). Another layer is laid flat, and the next turn starts anew.
-    std::vector<char> continues(model.layers.size(), 0);
+    // With holes or several pieces (rule 7, VA5) the spiral is only the
+    // outer loop of the largest piece, laid first, so Z never goes down; the
+    // other loops follow it flat, each with its travel and retraction, and the
+    // next turn starts anew.
+    std::vector<char> continues(model.layers.size(), 0), spirals(model.layers.size(), 0);
     bool after_turn = false;
+    std::optional<Point2d> spiral_end; // where the last turn ended
     const std::size_t spiral_from = std::max<std::size_t>(std::size_t(std::max(s.bottom_layers, 0)), 1);
     const auto spiral_turn = [&](std::vector<Step>& steps, std::size_t l) {
-        Step* only = nullptr;
-        for (Step& step : steps) {
-            if (!step.type || only) // a thick zone's height, or a second path
+        std::size_t outer = steps.size();
+        double largest = 0.0;
+        for (std::size_t k = 0; k < steps.size(); ++k) {
+            const Step& step = steps[k];
+            if (!step.type) // a thick zone's height
                 return false;
-            only = &step;
+            if (std::strcmp(step.type, "External perimeter") != 0 || !step.path.closed || step.path.points.size() < 3)
+                continue;
+            double area = 0.0;
+            const std::vector<ToolpathPoint>& q = step.path.points;
+            for (std::size_t i = 0, j = q.size() - 1; i < q.size(); j = i++)
+                area += q[j].p.x * q[i].p.y - q[i].p.x * q[j].p.y;
+            if (std::abs(area) > largest)
+                largest = std::abs(area), outer = k;
         }
-        if (!only || std::strcmp(only->type, "External perimeter") != 0 || !only->path.closed ||
-            only->path.points.size() < 3)
+        if (outer == steps.size())
             return false;
-        Toolpath& loop = only->path;
-        for (const ToolpathPoint& p : loop.points)
+        for (const ToolpathPoint& p : steps[outer].path.points)
             if (p.dz != 0.0 || p.below != 0.0)
                 return false;
+        std::rotate(steps.begin(), steps.begin() + std::ptrdiff_t(outer), steps.begin() + std::ptrdiff_t(outer) + 1);
+        Toolpath& loop = steps.front().path; // after the move: it is first now
         if (s.walls_clockwise) // the spiral turns clockwise too (retraction_travel.md, rule 9)
             std::reverse(loop.points.begin() + 1, loop.points.end());
-        if (last_end) {
+        const std::optional<Point2d> near = spiral_end ? spiral_end : last_end;
+        if (near) {
             std::size_t nearest = 0;
             double best = std::numeric_limits<double>::infinity();
             for (std::size_t i = 0; i < loop.points.size(); ++i) {
-                const double d = std::hypot(loop.points[i].p.x - last_end->x, loop.points[i].p.y - last_end->y);
+                const double d = std::hypot(loop.points[i].p.x - near->x, loop.points[i].p.y - near->y);
                 if (d < best)
                     best = d, nearest = i;
             }
             std::rotate(loop.points.begin(), loop.points.begin() + std::ptrdiff_t(nearest), loop.points.end());
         }
         std::vector<ToolpathPoint> points;
-        if (after_turn && last_end) {
+        if (after_turn && spiral_end) {
             points.push_back(loop.points.front());
-            points.back().p = *last_end;
+            points.back().p = *spiral_end;
         }
         points.insert(points.end(), loop.points.begin(), loop.points.end());
         points.push_back(loop.points.front()); // round to where it started
@@ -3779,6 +3799,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             points[i].below = points[i].dz;
         }
         points.back().dz = points.back().below = 0.0;
+        spiral_end = points.back().p;
         loop.points = std::move(points);
         loop.closed = false;
         loop.wavy = true;
@@ -4675,6 +4696,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         printed_top = std::max(printed_top, layer.top - base_of(l));
         g.open_layer_fan();
         const bool turn = l < continues.size() && continues[l];
+        // A turn that starts anew starts from the layer below's height too:
+        // no move up to this layer before it, so Z never goes down (rule 7).
+        const bool keep_z = turn || (l < spirals.size() && spirals[l]);
         // The layer's templates, from the second layer (gcode_templates.md,
         // rule 11, T8), with the layer's number and Z.
         std::string before, after;
@@ -4683,7 +4707,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             before = render_template(s.gcode_before_layer, templates, "gcode.before_layer");
             after = render_template(s.gcode_after_layer, templates, "gcode.after_layer");
         }
-        g.new_layer(layer.top - base_of(l), layer.top - layer.bottom, s.travel_speed, turn, before, after);
+        g.new_layer(layer.top - base_of(l), layer.top - layer.bottom, s.travel_speed, keep_z, before, after);
+        if (keep_z && !turn)
+            g.travel_below(layer.top - layer.bottom);
         if (s.gcode_progress)
             g.progress_mark();
         else
@@ -5129,11 +5155,18 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                            planned[l] = plan_layer(l, actives[l]);
                                                            std::vector<std::vector<std::size_t>>().swap(loop_candidates[l]);
                                                            if (s.vase) {
-                                                               if (l == object_start(l))
+                                                               if (l == object_start(l)) {
                                                                    after_turn = false; // a new object starts its own spiral
+                                                                   spiral_end.reset();
+                                                               }
                                                                const bool turn = local(l) >= spiral_from && spiral_turn(planned[l], l);
                                                                continues[l] = turn && after_turn;
-                                                               after_turn = turn;
+                                                               spirals[l] = turn;
+                                                               // Flat loops after the turn: the next one starts anew.
+                                                               after_turn = turn && std::count_if(planned[l].begin(), planned[l].end(),
+                                                                                                  [](const Step& st) { return st.type != nullptr; }) == 1;
+                                                               if (!turn)
+                                                                   spiral_end.reset();
                                                            }
                                                            for (Step& step : planned[l])
                                                                if (step.type) {

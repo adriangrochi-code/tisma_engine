@@ -17,6 +17,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <span>
 #include <vector>
 
@@ -44,6 +45,10 @@ struct SlicedObject {
 };
 
 // The planar slicing of a model: one region per layer, with its walls.
+// The notice of a vase with holes or several pieces (vase_mode.md, rule 7, VA5).
+inline constexpr std::string_view kVaseSeamNotice =
+    "Vase mode with holes or several pieces: those turns are not a spiral and leave a seam";
+
 struct SlicedModel {
     std::vector<Layer> layers;
     std::vector<Polygons> regions; // one per layer, after fill mode and offsets
