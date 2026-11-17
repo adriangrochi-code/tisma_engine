@@ -14913,3 +14913,17 @@ para el LBM D3Q19.
   placa de 30 × 30 bloques de 5 mm (unos 10 000 pedazos por capa de arriba). Esa placa: 1,09 → 0,82 s el laminado
   entero (dos corridas, 4 núcleos).
 - `[surfaces]`, `[combine]`, `[determinism]`, `[gcode]` en verde.
+
+## 2026-11-17 — bloque nocturno: el giroide en bandas, sin la grilla entera en memoria
+
+- El giroide marchaba los cuadrados sobre toda la grilla de una vez (24 muestras por período: al 100 % una pieza de
+  300 mm son decenas de millones de nodos). Ahora va en bandas de filas de unos 4 millones de nodos
+  (`kGyroidBandNodes`), en paralelo; cada banda se recorta con la región ampliada un margen y los pedazos se vuelven a
+  unir en el borde de la banda, donde las dos calculan el mismo cruce con los mismos valores. Las regiones de una sola
+  banda siguen el camino de antes, sin cambios.
+- **Medido** (cuadrado con hueco, ancho 0,45, micro banco propio, 4 núcleos): al 100 %, 150 mm 0,65 → 0,28 s; 300 mm
+  3,29 → 0,73 s; pico de memoria del banco 1,24 → 0,57 GB. Mismos caminos; el largo igual (190 469,2 contra 190 468,8 mm).
+  Al 20 % no cambia (una banda).
+- **Probado:** prueba nueva `gyroid: a large dense region marched in bands, joined at their edges` (160 mm al 100 %: el
+  largo es el área sobre la separación al 5 %, ningún par de pedazos unido por la punta); `[gyroid]`, `[combine]`,
+  `[infill]`, `[determinism]`, `[gcode]` en verde.

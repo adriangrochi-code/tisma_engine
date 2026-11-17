@@ -1,4 +1,5 @@
 #include "infill/combine.hpp"
+#include "infill/gyroid.hpp"
 #include "infill/patterns.hpp"
 #include "infill/rectilinear.hpp"
 #include "infill/stress_density.hpp"
@@ -836,4 +837,30 @@ TEST_CASE("bridges: a whole number of lines from edge to edge (Q10)", "[combine]
     // Narrower than 3/4 of a line across: one line in the middle.
     const Polygons thin{{at(0, 0), at(30, 0), at(30, 0.65), at(0, 0.65)}};
     CHECK(rectilinear_fill(thin, w, 0.0, w, false, true, false, 0.0, 0.0, 0.0, nullptr, true).size() == 1);
+}
+
+TEST_CASE("gyroid: a large dense region marched in bands, joined at their edges", "[combine]") {
+    // 160 mm at 100 %: millions of grid nodes, marched in bands of rows; the
+    // pieces are joined again where they cross a band's edge, so none meets
+    // another end to end, and the length is the area over the spacing.
+    const auto at = [](double x, double y) { return Clipper2Lib::Point64{to_units(x), to_units(y)}; };
+    const Polygons region{{at(0, 0), at(160, 0), at(160, 160), at(0, 160)},
+                          {at(60, 60), at(60, 100), at(100, 100), at(100, 60)}};
+    const double width = 0.45, period = gyroid_period(width, 1.0);
+    REQUIRE(std::pow(160.0 / (period / kGyroidSamples), 2.0) > 2.0 * double(kGyroidBandNodes));
+    const std::vector<Toolpath> fill = gyroid_fill(region, period, 1.0, width);
+    const double inside = 159.55 * 159.55 - 40.45 * 40.45;
+    double length = 0.0;
+    for (const Toolpath& t : fill)
+        for (std::size_t i = 1; i < t.points.size(); ++i)
+            length += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+    CHECK_THAT(length * width / inside, WithinAbs(1.0, 0.05));
+    std::map<std::pair<long long, long long>, int> ends;
+    for (const Toolpath& t : fill)
+        for (const Point2d q : {t.points.front().p, t.points.back().p})
+            ++ends[{std::llround(q.x * 1000.0), std::llround(q.y * 1000.0)}];
+    std::size_t shared = 0;
+    for (const auto& [q, n] : ends)
+        shared += n > 1;
+    CHECK(shared == 0);
 }

@@ -623,8 +623,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
   - lo que quedó de la revisión profunda (2026-10-25), sin errores de seguridad:
     - [x] resolución del G-code (juntar puntos alineados con el mismo ancho, desvío de 0,0125 mm): las paredes
       duplican vértices, el gyroid escribe el triple de tramos y quedan tramos de un micrón que extruyen
-    - [ ] el gyroid por franjas, sin la grilla entera en memoria (queda); el orden monótono sin costo cuadrático (hecho
-      2026-11-17: la línea de abajo por altura, los pedazos que tocan por inicio ordenado, el más cercano en una grilla)
+    - [x] el gyroid por franjas, sin la grilla entera en memoria (hecho 2026-11-17: bandas de filas de unos 4 millones de
+      nodos, en paralelo); el orden monótono sin costo cuadrático (hecho 2026-11-17: la línea de abajo por altura, los pedazos que tocan por inicio ordenado, el más cercano en una grilla)
     - [ ] escribir y verificar el G-code por capas, sin tenerlo entero en memoria
     - [ ] el Voronoi propio más rápido en capas con miles de sitios (hoy es lo más lento con muchas islas)
     - [ ] el verificador con un mapa de alturas de lo ya impreso (ningún movimiento por debajo)

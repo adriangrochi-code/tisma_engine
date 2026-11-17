@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include "geom/polygons.hpp"
 #include "perimeters/sites.hpp"
 
@@ -17,6 +19,8 @@ namespace tisma {
 // are joined along it (join_along_boundary), anchoring them to the walls.
 inline constexpr int kGyroidSamples = 24;
 inline constexpr double kGyroidTolerance = 0.005; // mm
+// Nodes of the sampling grid marched at once: larger regions go in bands of rows.
+inline constexpr std::size_t kGyroidBandNodes = std::size_t(1) << 22;
 std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double z, double width);
 
 // The period for a density (0 to 1) with beads of this width: at fixed z the
