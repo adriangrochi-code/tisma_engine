@@ -49,6 +49,10 @@ targets:
         BGTaskSchedulerPermittedIdentifiers: [net.tismaservidores.tisma.watch]
         # The printer search (printer_connections.md, «Búsqueda en la red»): the Bonjour types it browses.
         NSBonjourServices: [_octoprint._tcp, _moonraker._tcp, _http._tcp]
+        # Printers on the person's own network speak plain HTTP (Moonraker, OctoPrint, PrusaLink, Duet): App Transport
+        # Security allows it only to local addresses (.local and bare names, IP addresses); Tisma Cloud stays HTTPS.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         CFBundleDocumentTypes:
           - CFBundleTypeName: 3D model
             LSHandlerRank: Alternate
@@ -93,6 +97,12 @@ targets:
     sources: [TismaUITests]
     dependencies:
       - target: Tisma
+    # The release gate (ReleaseGateTests) reads the printer simulators on this machine over plain HTTP.
+    info:
+      path: TismaUITests/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

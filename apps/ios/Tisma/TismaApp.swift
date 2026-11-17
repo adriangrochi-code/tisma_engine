@@ -81,6 +81,8 @@ struct PlateView: View {
     /// The model on the plate: the person's (copied into the app) or, until one is opened, the 20 mm cube.
     @AppStorage("plate.opened") private var openedPath = ""
     private var opened: URL? { openedPath.isEmpty ? nil : URL(fileURLWithPath: openedPath) }
+    /// «20.0 × 20.0 × 20.0 mm · 12 triangles», from the engine's `info` on the model on the plate.
+    @State private var modelInfo: String?
     @State private var picking = false
     @State private var sent: String?
     @State private var cloudLine: String?
@@ -145,6 +147,9 @@ struct PlateView: View {
                 }
                 Section("Model") {
                     Text(opened?.lastPathComponent ?? String(localized: "The 20 mm cube"))
+                        .accessibilityIdentifier("plate_model")
+                    // The part's size and triangles, as the engine reads the file (STL, OBJ or 3MF), as on Android.
+                    if let modelInfo { Text(modelInfo).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("plate_info") }
                     Button("Open a model…") { picking = true }
                     // mobile_app.md, rule 13: whether the part holds, with the engine's analysis.
                     NavigationLink("Engineering") {
@@ -162,24 +167,33 @@ struct PlateView: View {
                 }
                 Section("Engine") {
                     Text(Engine.run(["--version"]).out.trimmingCharacters(in: .whitespacesAndNewlines))
-                    Button("Slice") { slice() }.disabled(busy || printer.isEmpty)
+                    Button("Slice") { slice() }.disabled(busy || printer.isEmpty).accessibilityIdentifier("plate_slice")
                     // rule 12: the slice in the background, with its progress and a way to stop it.
                     if busy {
                         ProgressView(value: Double(percent), total: 100) { Text(stageText.isEmpty ? String(localized: "Slicing…") : String(localized: String.LocalizationValue(stageText))) }
                         if let job { Button("Cancel", role: .cancel) { job.cancel() }.accessibilityIdentifier("plate_cancel") }
                     }
-                    if let result { Text(result).font(.footnote.monospaced()) }
+                    if let result { Text(result).font(.footnote.monospaced()).accessibilityIdentifier("plate_result") }
                     if let gcode {
                         NavigationLink("Preview") { PreviewView(gcode: gcode) }
                         // rule 6: the output, saved or shared (Files, AirDrop, another app).
                         ShareLink(item: gcode) { Label("Share or save the G-code", systemImage: "square.and.arrow.up") }
                             .accessibilityIdentifier("plate_share")
                         Button("Send to the printer and start") { send(gcode) }.disabled(busy || savedAddress.isEmpty)
-                        if let sent { Text(sent).font(.footnote) }
+                            .accessibilityIdentifier("plate_send")
+                        if let sent { Text(sent).font(.footnote).accessibilityIdentifier("plate_sent") }
                     }
                 }
             }
             .navigationTitle("Plate")
+            .task(id: openedPath) {
+                // The engine's own reading of the file: the same size the slice will have.
+                let path = opened?.path ?? ""
+                modelInfo = nil
+                guard !path.isEmpty else { return }
+                let info = await Task.detached { PlateView.info(of: path) }.value
+                if openedPath == path { modelInfo = info }
+            }
             // mobile_app.md, rule 6 (parity P3): the tools in a strip below, the model still in view.
             .safeAreaInset(edge: .bottom) { toolStrip }
             .navigationDestination(isPresented: $engineering) {
@@ -300,6 +314,21 @@ struct PlateView: View {
     }
 
     /// mobile_app.md, rule 14 (MA7): the G-code goes to the saved printer, which starts it.
+    /// The engine's `info` of a model as the plate shows it: «20.0 × 20.0 × 20.0 mm · 12 triangles», or nil.
+    nonisolated static func info(of path: String) -> String? {
+        let out = Engine.run(["info", path]).out
+        var size: [Double] = [], triangles = 0
+        for line in out.split(separator: "\n") {
+            if line.hasPrefix("size: ") {
+                size = line.dropFirst(6).split(separator: "x").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            } else if line.hasPrefix("triangles: ") {
+                triangles = Int(line.dropFirst(11).trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+        }
+        guard size.count == 3 else { return nil }
+        return String(format: "%.1f × %.1f × %.1f mm · %d ", size[0], size[1], size[2], triangles) + String(localized: "triangles")
+    }
+
     private func send(_ file: URL) {
         busy = true; sent = nil
         let a = (savedKind, savedAddress, savedUser, Keychain.read("printer.secret") ?? "")

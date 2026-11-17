@@ -40,14 +40,17 @@ struct PrinterView: View {
                     Picker("Kind", selection: $kind) {
                         ForEach(PrinterBridge.shared.kinds, id: \.self) { Text(Self.title($0)).tag($0) }
                     }
+                    .accessibilityIdentifier("printer_kind")
                     TextField("Address", text: $address)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    if kind == "prusalink" { TextField("User", text: $user).textInputAutocapitalization(.never) }
+                        .accessibilityIdentifier("printer_address")
+                    if kind == "prusalink" { TextField("User", text: $user).textInputAutocapitalization(.never).accessibilityIdentifier("printer_user") }
                     SecureField(kind == "bambu" ? "Access code" : kind == "octoprint" || kind == "moonraker" ? "API key" : "Password", text: $secret)
                         .onChange(of: secret) { _, v in Keychain.write("printer.secret", v) }
+                        .accessibilityIdentifier("printer_secret")
                     Button("Test") { run { tested = try PrinterBridge.shared.test(kind: $0.0, address: $0.1, user: $0.2, secret: $0.3) } }
-                        .disabled(address.isEmpty)
-                    if let tested { Text(tested).foregroundStyle(.secondary) }
+                        .disabled(address.isEmpty).accessibilityIdentifier("printer_test")
+                    if let tested { Text(tested).foregroundStyle(.secondary).accessibilityIdentifier("printer_tested") }
                 }
                 if let line {
                     Section("State") {
