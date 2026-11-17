@@ -14983,3 +14983,9 @@ para el LBM D3Q19.
 - **G15, carrera (motor, run 44039216677):** el trabajo de la nube del servidor de prueba termina en 3 consultas y,
   con la aerodinámica usando todos los núcleos, podía terminar antes de `expect-busy cloud`. Con
   `TISMA_MOCK_CLOUD_HOLD` el servidor de prueba lo deja en marcha; `gate_g15_quit` lo usa. 3 de 3 corridas pasan.
+
+## 2026-11-17 — ASan y UBSan sobre 4328f11
+
+- Las 1124 pruebas sin interfaz con `-fsanitize=address,undefined` (Debug), sobre 4328f11 (todo lo de esta noche):
+  en verde, ningún error de memoria ni comportamiento indefinido. La primera corrida no llegó a compilar: el disco se
+  llenó con los G-code de los bancos (se borraron); la segunda reusó la compilación ASan de la copia de CI.
