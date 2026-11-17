@@ -30012,6 +30012,9 @@ int run_app(const AppOptions& options) {
     // and Background threads wait in their destructors) would hold the exit.
     // run() has saved what is kept and closed the window; the process ends
     // here, with the static objects' clean-up (the design session's folder).
+    // Downloads still running at the exit must not find OpenSSL torn down
+    // under them (the release build's ui_sigterm_while_starting crash).
+    net::keep_tls_at_exit();
     auto* app = new App(options);
     const int code = app->run();
     if (g_quit_at) {

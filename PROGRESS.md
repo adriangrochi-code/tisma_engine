@@ -15062,3 +15062,18 @@ Versión 0.13.0-beta.2.
 - `line_width` (Cura): el ancho de línea general.
 - `jobname` (Cura): el nombre del modelo sin la extensión.
 - Pruebas `[gcode]`: 137 casos bien.
+
+## 2026-11-17 — la publicación de 0.13.0-beta.1 falló en sus propios builds
+
+Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasaba. Arreglos:
+- **Linux:** `ui_sigterm_while_starting` daba segfault. `run_app` termina con `std::exit` sin destruir la `App`, y
+  OpenSSL se desarmaba en `atexit` mientras la descarga del paquete seguía en otro hilo.
+  `net::keep_tls_at_exit()` llama a `OPENSSL_init_crypto(OPENSSL_INIT_NO_ATEXIT)` antes de crear la `App`. Probado
+  localmente: falló en las 2 primeras corridas; con el arreglo, 25 corridas seguidas sin fallar.
+- **Windows:** la firma de la lista de bloqueos de la biblioteca compartida no coincidía, porque git cambiaba los fines
+  de línea de `tests/data/library`. Ahora es `binary` en `.gitattributes`. Sin probar en Windows; lo prueba el CI.
+- **macOS:** `std::to_chars` con `double` no existe antes de macOS 13.3. El destino mínimo del build de publicación y
+  `LSMinimumSystemVersion` pasan de 13.0 a 13.3. Decisión mía: es la opción más chica.
+
+**Sigue:** 0.13.0-beta.2 sale de un `alpha` sin estos arreglos, así que su publicación falla igual. Se publica
+0.13.0-beta.3 con estos arreglos y GM22.
