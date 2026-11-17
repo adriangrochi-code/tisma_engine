@@ -1,8 +1,8 @@
-# Erasing in the sketch (the owner, 2026-11-17: nothing could be erased, and
-# a click meant to pick a line began a new one). Two lines drawn with the
-# Line tool; with no tool a click picks one and Supr erases it (as Fusion); a
-# click on nothing draws nothing; then B (BORRA, as AutoCAD) with a crossing
-# box and Enter erases the other; the rules on them go too.
+# Erasing in the sketch (the owner, 2026-11-17; cad_design.md, rules 11 and 17, CD30):
+# two lines drawn with the Line tool; with no tool a click picks one and Supr
+# erases it (as Fusion); a click on nothing draws nothing; B (BORRA, as
+# AutoCAD) and Enter erases the other; Ctrl+Z brings each back, Ctrl+Y erases
+# again; Esc lets go of the choice and stays in the sketch.
 menu mode_engineering
 menu tab_design
 menu design_sketch
@@ -36,3 +36,17 @@ key enter
 sketch-point 10 10
 key enter
 expect-sketch-entities 0
+# Undo and redo inside the sketch (rule 11, CD30): each erase comes back with
+# Ctrl+Z, one at a time, and Ctrl+Y erases it again.
+key ctrl+z
+expect-sketch-entities 1
+key ctrl+z
+expect-sketch-entities 2
+key ctrl+y
+expect-sketch-entities 1
+# Esc lets go of the choice without leaving the sketch.
+sketch-point 10 10
+key escape
+expect-control sketch_finish
+key delete
+expect-sketch-entities 1

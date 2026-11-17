@@ -1607,6 +1607,7 @@ private:
     bool design_pick_sketch_ = false;    // the Boceto tool from Prepare: the plane is asked
     // The command line (rule 12): the text, the tool asking for its sizes.
     std::string command_text_;
+    bool command_active_ = false; // the command line has the keyboard
     std::string command_message_;
     std::string last_command_;
     struct CommandPrompt {
@@ -1660,6 +1661,10 @@ private:
         bool construction = false, show_grid = true, show_rules = true, show_dims = true;
         // A dimension being typed after a double click on its number.
         std::optional<std::size_t> dim_edit;
+        // Undo and redo inside the sketch (cad_design.md, rule 11, CD30): the
+        // sketch as it was before each change, taken when it settles.
+        std::vector<cad::Sketch> undo, redo;
+        std::optional<cad::Sketch> settled;
         double dim_value = 0.0;
         double polar_step = 45.0;
         // What each point of the tool snapped to, and the segments typed as lengths.
@@ -1706,6 +1711,8 @@ private:
     void sketch_edit_tool(SketchEdit::EditKind kind);
     void sketch_edit_prompt();
     void sketch_erase_selected();
+    void sketch_history();
+    void sketch_undo(bool redo);
     void sketch_click_select(const cad::Pt& raw);
     void sketch_edit_point(const cad::Pt& p, const cad::Pt& raw);
     bool sketch_edit_text(const std::string& word, const std::string& text);
@@ -23096,6 +23103,7 @@ void App::design_command_line() {
     g_menu_rects["design_command"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
     const bool active = ImGui::IsItemActive();
+    command_active_ = active;
     const auto take = [&](std::string text) {
         run_command(std::move(text));
         command_text_.clear();
@@ -23698,6 +23706,50 @@ void App::sketch_edit_tool(SketchEdit::EditKind kind) {
     if (sketch_edit_selecting() && !e.selected.empty())
         e.edit_step = 1;
     sketch_edit_prompt();
+}
+
+// The sketch's history: when it has settled (no drag, no shape half drawn,
+// no button held) and differs from the last settled one, that one goes on the
+// undo list (rule 11, CD30).
+void App::sketch_history() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left) || e.drag || !e.points.empty() || e.dim_edit)
+        return;
+    if (!e.settled) {
+        e.settled = *sketch;
+        return;
+    }
+    if (*sketch == *e.settled)
+        return;
+    e.undo.push_back(std::move(*e.settled));
+    if (e.undo.size() > 200)
+        e.undo.erase(e.undo.begin());
+    e.redo.clear();
+    e.settled = *sketch;
+}
+
+void App::sketch_undo(bool redo) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    sketch_history(); // what was just done counts first
+    SketchEdit& e = *sketch_edit_;
+    std::vector<cad::Sketch>& from = redo ? e.redo : e.undo;
+    std::vector<cad::Sketch>& to = redo ? e.undo : e.redo;
+    if (from.empty()) {
+        command_message_ = tr(redo ? T::SketchNothingToRedo : T::SketchNothingToUndo);
+        return;
+    }
+    to.push_back(*sketch);
+    *sketch = std::move(from.back());
+    from.pop_back();
+    e.settled = *sketch;
+    e.selected.clear();
+    e.drag.reset();
+    command_message_ = tr(redo ? T::Redo : T::Undo);
 }
 
 // With no tool, a click on the sketch: the entity under it joins the choice
@@ -26038,6 +26090,15 @@ void App::layout() {
         rebuild_design();
     }
     if (tab_ == Tab::Design && sketch_edit_ && no_popup()) {
+        sketch_history();
+        // Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) in the sketch, also from the
+        // command line while nothing is typed in it.
+        if (!ImGui::GetIO().WantTextInput || (command_active_ && command_text_.empty())) {
+            if (take_chord('z', false))
+                sketch_undo(false);
+            else if (take_chord('y', false) || take_chord('z', true))
+                sketch_undo(true);
+        }
         if (ImGui::Shortcut(ImGuiKey_F3, ImGuiInputFlags_RouteGlobal))
             sketch_edit_->snaps = !sketch_edit_->snaps;
         if (ImGui::Shortcut(ImGuiKey_F8, ImGuiInputFlags_RouteGlobal))

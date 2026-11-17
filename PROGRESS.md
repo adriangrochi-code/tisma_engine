@@ -15130,7 +15130,10 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
     `ERASE`, `SUPR`, `DEL` (la `E` sigue siendo extruir, regla 12). Elegir y Enter; si ya había algo elegido, lo borra
     al instante. Se van también las restricciones de lo borrado.
 - **Prueba:** `ui_script_design_sketch_erase`. Las 48 de diseño y boceto siguen pasando.
-- **Falta:** deshacer dentro del boceto (regla 11) no existe todavía; no se puede deshacer un borrado. Diseño propio,
-  sin ficha: se le pide a QA que lo sume a `cad_design.md`.
+- **Deshacer y rehacer en el boceto (cad_design.md, reglas 11 y 17, CD30; spec/next 6914533):** Ctrl+Z y Ctrl+Y (o
+  Ctrl+Shift+Z), también desde la línea de comandos vacía, deshacen de a uno cada dibujo, borrado, cota y
+  restricción: cuando el boceto queda quieto (sin arrastre, sin forma a medio dibujar) y cambió, el estado anterior
+  va a la lista (hasta 200). La prueba suma: dos deshacer devuelven las dos líneas, rehacer borra otra vez, y Esc
+  suelta la elección sin salir del boceto. Las 61 de diseño, boceto y textos pasan.
 - **`gate_g10_bambu` en el runner de Linux:** la búsqueda escucha 6 s y llena la lista al terminar; `expect-bambu found`
   esperaba 600 cuadros, que en un runner rápido son menos de 6 s. Ahora espera a que la búsqueda termine.
