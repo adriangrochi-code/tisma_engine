@@ -14839,3 +14839,16 @@ para el LBM D3Q19.
   (caso real: el fin del Z-Bolt Classic, una expresión de Cura sin evaluar). Barrido de 87 variantes instaladas: sin
   fallas nuevas.
 - **Siguiente:** puerta en Linux, Windows y macOS sobre ef61988; si queda verde, la versión de prueba (dev → alpha).
+
+## 2026-11-17 — bloque nocturno: Hilbert y Arquímedes en regiones grandes
+
+- **Recorte en franjas (PLAN, relleno, regla 12):** el barrido de Clipper2 mantiene activas todas las aristas que
+  cruzan la fila, así que una región grande llena de tramos cortos costaba más que lineal (4× el área, 9× el tiempo).
+  Ahora la región se corta en franjas verticales de unos 40 mm (o 16 mil puntos; nunca según los núcleos), cada una se
+  recorta aparte en paralelo (`RectClipLines` y la región con un margen) y los pedazos se vuelven a unir donde se tocan
+  en el borde de una franja: el mismo punto, hecho por el mismo borde de rectángulo.
+- **Medido** (cuadrado con hueco, ancho 0,45 al 100 %, micro banco propio): 300 mm, un núcleo, Hilbert 0,73 → 0,28 s y
+  Arquímedes 0,90 → 0,033 s; 4 núcleos, 0,11 y 0,011 s. Mismo número de caminos y mismo largo que el recorte de una
+  vez. Prueba nueva: 160 mm con hueco, largo = área / separación al 3 % y ningún par de pedazos unido por la punta.
+  `[combine]` y `[determinism]` (OR19) en verde.
+- **Siguiente:** panal 3D (regla 11) necesita más mediciones de la ficha; seguir con el próximo punto de PLAN.md.

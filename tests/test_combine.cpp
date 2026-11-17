@@ -756,3 +756,27 @@ TEST_CASE("infill patterns: fitted solid lines fit each island, not the whole la
         CHECK_THAT(bottom + 10.0 - hi, WithinAbs(0.2, 0.01));
     }
 }
+
+TEST_CASE("infill patterns: Hilbert and Archimedean chords on a large region, clipped in strips", "[combine]") {
+    // 160 mm with a hole: clipped in strips of about 40 mm, the pieces joined
+    // again on the strips' edges. Nothing is lost at the cuts (the length is
+    // the area over the spacing) and the pieces stay as few as one clip gives.
+    const auto at = [](double x, double y) { return Clipper2Lib::Point64{to_units(x), to_units(y)}; };
+    const Polygons region{{at(0, 0), at(160, 0), at(160, 160), at(0, 160)},
+                          {at(60, 60), at(60, 100), at(100, 100), at(100, 60)}};
+    const double width = 0.45, inside = (159.55 * 159.55 - 40.45 * 40.45);
+    for (int k = 0; k < 2; ++k) {
+        INFO((k ? "archimedean" : "hilbert"));
+        const std::vector<Toolpath> fill =
+            k ? archimedean_fill(region, width, {80.0, 80.0}, width) : hilbert_fill(region, width, 45.0, width);
+        CHECK_THAT(total(fill) * width / inside, WithinAbs(1.0, 0.03));
+        CHECK(fill.size() <= 120);
+        // No two pieces meet end to end: a cut left unjoined would.
+        std::map<std::pair<long long, long long>, int> ends;
+        for (const Toolpath& t : fill)
+            for (const Point2d q : {t.points.front().p, t.points.back().p})
+                ++ends[{std::llround(q.x * 1000.0), std::llround(q.y * 1000.0)}];
+        for (const auto& [q, n] : ends)
+            CHECK(n == 1);
+    }
+}
