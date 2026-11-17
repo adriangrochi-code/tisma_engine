@@ -28000,7 +28000,9 @@ bool App::script_check(const ScriptStep& step, int f) {
         if (structural_job_.running() || cloud_eng_.valid())
             return f >= 120000 ? fail_step("the analysis is still running") : true;
         if (!structural_map_)
-            return f >= 600 ? fail_step("no structural map") : true;
+            return f >= 600 ? fail_step("no structural map" +
+                                        (structural_message_.empty() ? std::string() : ": " + structural_message_))
+                            : true;
         const StructuralRun& m = *structural_map_;
         const std::size_t n = m.corners.size() / 3;
         // A face with no stress has an infinite safety factor (strength over
