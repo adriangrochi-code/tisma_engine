@@ -14763,3 +14763,9 @@ para el LBM D3Q19.
   `TISMA_SOFTWARE_GL` pide el renderizador por software de Apple (`kCGLRendererGenericFloatID`) en lugar de
   `NSOpenGLPFAAccelerated`. Solo `gate_macos.yml` la pone; un Mac de verdad no cambia. Sin probar en macOS: se ve en
   la próxima corrida de `gate_macos.yml`.
+- **macOS Intel (corrida 43975257657):** (a) `gate_g14_prusa` y `_marlin`: no hay píxeles negros (el -1, -1 es «ninguno»):
+  fallan por destellos, 1107 y 607 en 525 720 píxeles (el tope es 1 en 1000), con el renderizador por software de
+  Apple; en arm64 pasan. La captura muestra la cama y las líneas de viaje sin antialias. (b) `gate_g6_project_support`:
+  la captura final tiene el diálogo del proyecto, pero el aviso no llegó en 300 cuadros (65 s a unos 5 cuadros por
+  segundo). Para la próxima corrida, el chequeo de la vista dice el renderizador y sus muestras, y `expect-toast`
+  lista los avisos que sí salieron.

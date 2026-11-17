@@ -27599,8 +27599,8 @@ void App::check_view(int fb_w, int fb_h) {
         return;
     }
     const PictureHealth health = picture_health(picture.data(), w, h);
-    std::printf("view check (%s): %zu pixels, %zu black, %zu sparkles\n", vulkan_ ? "Vulkan" : "OpenGL",
-                health.pixels, health.black, health.sparkles);
+    std::printf("view check (%s, %s, up to %d samples): %zu pixels, %zu black, %zu sparkles\n", vulkan_ ? "Vulkan" : "OpenGL",
+                gpu_renderer_.c_str(), vulkan_ ? 0 : renderer_.max_samples(), health.pixels, health.black, health.sparkles);
     if (health.black > 0 || health.sparkles * 1000 > health.pixels) {
         // The picture next to the screenshot, as evidence, rows from the top.
         std::vector<std::uint8_t> upright(picture.size());
@@ -29459,8 +29459,11 @@ void App::script_input() {
                 std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
                 return next();
             }
-        if (f >= 300)
+        if (f >= 300) {
+            for (const std::string& shown : toasts_shown_)
+                std::printf("ui-script:   toast seen: %s\n", shown.c_str());
             fail_step("no toast says \"" + step.value + "\"");
+        }
     } else {
         fail_step("unknown step");
     }
