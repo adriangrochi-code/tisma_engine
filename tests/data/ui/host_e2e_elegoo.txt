@@ -1,0 +1,18 @@
+# The Device page against a fake Elegoo Centauri Carbon by SDCP (EL1): found by
+# M99999, tested over its WebSocket, the file sent in 1 MB pieces and started
+# (Cmd 128), state.
+slice
+host elegoo {url}
+host search
+expect-host found 000000000001d354
+host test
+host-wait
+expect-host ok yes
+slice
+# The G-code that goes, for the fake to compare (release gate G10).
+keep-gcode host_sent_elegoo.gcode
+host send
+host-wait
+expect-host sent yes
+host refresh
+host-wait

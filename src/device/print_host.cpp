@@ -1,6 +1,8 @@
 #include "device/print_host.hpp"
 
 #include "device/flashforge.hpp"
+#include "device/sdcp.hpp"
+#include "net/websocket.hpp"
 
 #include "io/checksum.hpp"
 #include "net/digest.hpp"
@@ -11,6 +13,8 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <memory>
+#include <random>
 #include <thread>
 #include <cctype>
 #include <cstdlib>
@@ -872,6 +876,250 @@ HostResult legacy_command(const HostConfig& host, const char* command) {
 
 } // namespace
 
+
+namespace {
+
+// Elegoo by SDCP v3 (printer_connections.md, «Impresoras Elegoo por red
+// local»): a WebSocket on 3030 for each call, the request with its RequestID
+// answered on sdcp/response/<MainboardID>; files by HTTP in 1 MB pieces.
+struct Sdcp {
+    std::unique_ptr<net::WebSocket> ws;
+    std::string id; // MainboardID
+    std::string address;
+    nlohmann::json status; // the last sdcp/status message's Status
+    HostResult result;
+};
+
+std::string elegoo_address(const HostConfig& host) { return legacy_host(host); }
+
+// The printer's port for discovery and messages: 3000 for M99999 and 3030 for
+// the WebSocket and the uploads, as the spec has them; a test's own
+// «host:port» moves the 3030 ones.
+int elegoo_port(const HostConfig& host) {
+    const int p = legacy_port(host);
+    return p == 8899 ? 3030 : p; // legacy_port gives 8899 when none was written
+}
+
+Sdcp sdcp_open(const HostConfig& host) {
+    Sdcp c;
+    c.address = elegoo_address(host);
+    c.id = host.printer;
+    if (c.id.empty()) {
+        // Its MainboardID from M99999 asked of it directly (UDP 3000).
+        const int udp = std::getenv("TISMA_TEST_SDCP_UDP") ? std::atoi(std::getenv("TISMA_TEST_SDCP_UDP")) : 3000;
+        for (const SdcpPrinter& p : sdcp_discover(1500, {{c.address, udp}}))
+            if (p.address == c.address || c.id.empty())
+                c.id = p.mainboard_id;
+    }
+    int status = 0;
+    std::string error;
+    c.ws = net::WebSocket::connect(c.address, elegoo_port(host), "/websocket", std::min(host.timeout_s, 10) * 1000, status, error);
+    if (!c.ws) {
+        c.result.code = status == 500 ? "busy" : status == 0 ? "unreachable" : "bad_answer";
+        c.result.error = status == 500 ? "the printer has too many connections open"
+                         : status == 0 ? "cannot reach the printer at " + c.address +
+                                             "; check that it is on and on the same network"
+                                       : "the address answers, but not as an Elegoo printer: " + error;
+        return c;
+    }
+    if (c.id.empty()) {
+        c.result.code = "bad_answer";
+        c.result.error = "the printer at " + c.address + " did not say its MainboardID";
+        c.ws.reset();
+        return c;
+    }
+    c.result.ok = true;
+    return c;
+}
+
+std::string sdcp_request_id() {
+    static std::mt19937_64 random(std::random_device{}());
+    char id[33];
+    std::snprintf(id, sizeof id, "%016llx%016llx", static_cast<unsigned long long>(random()),
+                  static_cast<unsigned long long>(random()));
+    return id;
+}
+
+// Sends one command and waits for its answer (matched by RequestID); the
+// status messages that come meanwhile are kept. Its Data.Data, or null with
+// result set when none came.
+nlohmann::json sdcp_call(Sdcp& c, int cmd, const nlohmann::json& data, int timeout_ms) {
+    const std::string rid = sdcp_request_id();
+    const nlohmann::json request = {
+        {"Id", ""},
+        {"Data",
+         {{"Cmd", cmd}, {"Data", data}, {"RequestID", rid}, {"MainboardID", c.id},
+          {"TimeStamp", std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count()},
+          {"From", 0}}},
+        {"Topic", "sdcp/request/" + c.id}};
+    if (!c.ws->send_text(request.dump())) {
+        c.result = {false, "unreachable", "the connection to the printer closed"};
+        return nullptr;
+    }
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    for (;;) {
+        const int left = int(std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now()).count());
+        if (left <= 0)
+            break;
+        const std::optional<std::string> m = c.ws->receive(left);
+        if (!m)
+            break;
+        const nlohmann::json j = nlohmann::json::parse(*m, nullptr, false);
+        if (!j.is_object())
+            continue;
+        const std::string topic = j.value("Topic", "");
+        if (topic.rfind("sdcp/status", 0) == 0 && j.contains("Status"))
+            c.status = j["Status"];
+        if (topic.rfind("sdcp/response", 0) == 0 && j.contains("Data") && j["Data"].value("RequestID", "") == rid)
+            return j["Data"].value("Data", nlohmann::json::object());
+    }
+    c.result = {false, "timeout", "the printer did not answer"};
+    return nullptr;
+}
+
+// A value of the status wherever it is nested (the community's FDM fields
+// sit at different depths).
+const nlohmann::json* sdcp_find(const nlohmann::json& j, const char* key) {
+    if (j.is_object()) {
+        if (j.contains(key))
+            return &j[key];
+        for (const auto& [k, v] : j.items())
+            if (const nlohmann::json* f = sdcp_find(v, key))
+                return f;
+    }
+    return nullptr;
+}
+double sdcp_number(const nlohmann::json& j, const char* key) {
+    const nlohmann::json* f = sdcp_find(j, key);
+    return f && f->is_number() ? f->get<double>() : -1.0;
+}
+
+HostResult sdcp_ack(Sdcp& c, int cmd, const nlohmann::json& answer) {
+    if (!c.result.ok)
+        return c.result;
+    const int ack = answer.is_object() && answer.contains("Ack") && answer["Ack"].is_number() ? answer["Ack"].get<int>() : 0;
+    HostResult out;
+    out.ok = ack == 0;
+    if (!out.ok) {
+        out.code = cmd == 128 && ack == 1 ? "conflict" : "failed";
+        out.error = sdcp_ack_text(cmd, ack);
+    }
+    return out;
+}
+
+HostStatus elegoo_status(const HostConfig& host) {
+    HostStatus out;
+    Sdcp c = sdcp_open(host);
+    if (!c.result.ok) {
+        static_cast<HostResult&>(out) = c.result;
+        return out;
+    }
+    const nlohmann::json answer = sdcp_call(c, 0, nlohmann::json::object(), host.timeout_s * 1000 / 2);
+    // The state comes on sdcp/status; its answer may come first.
+    for (int i = 0; i < 20 && c.status.is_null() && c.result.ok; ++i)
+        if (const auto m = c.ws->receive(100)) {
+            const nlohmann::json j = nlohmann::json::parse(*m, nullptr, false);
+            if (j.is_object() && j.value("Topic", "").rfind("sdcp/status", 0) == 0 && j.contains("Status"))
+                c.status = j["Status"];
+        }
+    if (!c.result.ok) {
+        static_cast<HostResult&>(out) = c.result;
+        return out;
+    }
+    (void)answer;
+    if (c.status.is_null()) {
+        out.code = "bad_answer";
+        out.error = "the printer sent no state";
+        return out;
+    }
+    out.ok = true;
+    const nlohmann::json* info = sdcp_find(c.status, "PrintInfo");
+    const int st = info && info->contains("Status") && (*info)["Status"].is_number() ? (*info)["Status"].get<int>() : 0;
+    out.state = sdcp_print_state(st);
+    out.printing = st >= 1 && st <= 5;
+    out.paused = st == 6;
+    if (info) {
+        out.file = info->value("Filename", std::string());
+        const double layer = sdcp_number(*info, "CurrentLayer"), layers = sdcp_number(*info, "TotalLayer");
+        if (layers > 0.0 && layer >= 0.0)
+            out.progress = 100.0 * layer / layers;
+    }
+    out.nozzle = sdcp_number(c.status, "TempOfNozzle");
+    out.nozzle_target = sdcp_number(c.status, "TempTargetNozzle");
+    out.bed = sdcp_number(c.status, "TempOfHotbed");
+    out.bed_target = sdcp_number(c.status, "TempTargetHotbed");
+    return out;
+}
+
+HostVersion elegoo_version(const HostConfig& host) {
+    HostVersion out;
+    const HostStatus st = elegoo_status(host);
+    static_cast<HostResult&>(out) = st;
+    if (out.ok)
+        out.server = "Elegoo (SDCP)";
+    return out;
+}
+
+HostResult elegoo_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
+    std::ifstream in(path, std::ios::binary);
+    const std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::string md5 = net::md5_hex(data);
+    const std::string uuid = sdcp_request_id();
+    const std::string url = "http://" + elegoo_address(host) + ":" + std::to_string(elegoo_port(host)) + "/uploadFile/upload";
+    constexpr std::size_t kPiece = 1u << 20; // 1 MB, in order
+    for (std::size_t at = 0; at < data.size() || at == 0; at += kPiece) {
+        net::Request r;
+        r.method = "POST";
+        r.url = url;
+        r.timeout_s = std::max(host.timeout_s, 120);
+        r.form = {{"S-File-MD5", md5, "", "", "text/plain"},
+                  {"Check", "1", "", "", "text/plain"},
+                  {"Offset", std::to_string(at), "", "", "text/plain"},
+                  {"Uuid", uuid, "", "", "text/plain"},
+                  {"TotalSize", std::to_string(data.size()), "", "", "text/plain"},
+                  {"File", data.substr(at, kPiece), "", name, "application/octet-stream"}};
+        const net::Response resp = net::perform(r);
+        HostResult res = result_of(resp);
+        if (!res.ok) {
+            if (res.code == "unreachable")
+                res.error = "cannot reach the printer at " + elegoo_address(host);
+            return res;
+        }
+        const nlohmann::json j = nlohmann::json::parse(resp.body, nullptr, false);
+        std::string code = j.is_object() && j.contains("code") ? (j["code"].is_string() ? j["code"].get<std::string>()
+                                                                                        : j["code"].dump())
+                                                               : resp.body;
+        if (code.find("000000") == std::string::npos) {
+            res.ok = false;
+            res.code = "failed";
+            res.error = code.find("-2") != std::string::npos ? "the upload failed (the offset did not match)"
+                        : code.find("-1") != std::string::npos ? "the upload failed (negative offset)"
+                        : code.find("-3") != std::string::npos ? "the upload failed (the printer could not open the file)"
+                                                              : "the upload failed";
+            return res;
+        }
+        if (data.empty())
+            break;
+    }
+    if (!start)
+        return {true, "", ""};
+    Sdcp c = sdcp_open(host);
+    if (!c.result.ok)
+        return c.result;
+    const nlohmann::json answer = sdcp_call(c, 128, {{"Filename", name}, {"StartLayer", 0}}, host.timeout_s * 1000 / 2);
+    return sdcp_ack(c, 128, answer);
+}
+
+HostResult elegoo_command(const HostConfig& host, int cmd) {
+    Sdcp c = sdcp_open(host);
+    if (!c.result.ok)
+        return c.result;
+    const nlohmann::json answer = sdcp_call(c, cmd, nlohmann::json::object(), host.timeout_s * 1000 / 2);
+    return sdcp_ack(c, cmd, answer);
+}
+
+} // namespace
+
 bool host_kind_from(const std::string& word, HostKind& out) {
     if (word == "octoprint")
         out = HostKind::OctoPrint;
@@ -889,6 +1137,8 @@ bool host_kind_from(const std::string& word, HostKind& out) {
         out = HostKind::Flashforge;
     else if (word == "flashforge_legacy")
         out = HostKind::FlashforgeLegacy;
+    else if (word == "elegoo")
+        out = HostKind::Elegoo;
     else
         return false;
     return true;
@@ -929,6 +1179,7 @@ const char* host_kind_word(HostKind kind) {
     case HostKind::Repetier: return "repetier";
     case HostKind::Flashforge: return "flashforge";
     case HostKind::FlashforgeLegacy: return "flashforge_legacy";
+    case HostKind::Elegoo: return "elegoo";
     default: return "octoprint";
     }
 }
@@ -942,6 +1193,7 @@ const char* host_kind_name(HostKind kind) {
     case HostKind::Repetier: return "Repetier-Server";
     case HostKind::Flashforge: return "Flashforge (5M, AD5X, Creator 5)";
     case HostKind::FlashforgeLegacy: return "Flashforge (Adventurer 3, 4)";
+    case HostKind::Elegoo: return "Elegoo (Centauri Carbon, resina)";
     default: return "OctoPrint";
     }
 }
@@ -959,6 +1211,8 @@ HostVersion host_version(const HostConfig& host) {
         return flashforge_version(host);
     if (host.kind == HostKind::FlashforgeLegacy)
         return legacy_version(host);
+    if (host.kind == HostKind::Elegoo)
+        return elegoo_version(host);
     HostVersion out;
     const net::Response r = net::perform(request(host, "GET", "/api/version"));
     static_cast<HostResult&>(out) = result_of(r);
@@ -990,6 +1244,8 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
         return repetier_upload(host, path, name, start);
     if (host.kind == HostKind::Flashforge)
         return flashforge_upload(host, path, name, start);
+    if (host.kind == HostKind::Elegoo)
+        return elegoo_upload(host, path, name, start);
     if (host.kind == HostKind::FlashforgeLegacy) // M28 and M29: not confirmed (the spec)
         return unsupported("sending files to an Adventurer 3 or 4 over the network is not confirmed yet; "
                            "copy the file to a USB stick");
@@ -1014,6 +1270,8 @@ HostStatus host_status(const HostConfig& host) {
         return flashforge_status(host);
     if (host.kind == HostKind::FlashforgeLegacy)
         return legacy_status(host);
+    if (host.kind == HostKind::Elegoo)
+        return elegoo_status(host);
     if (host.kind == HostKind::AstroBox) {
         HostStatus out;
         static_cast<HostResult&>(out) = unsupported("AstroBox has no published API for the printer's state");
@@ -1075,6 +1333,8 @@ HostResult host_pause(const HostConfig& host, bool pause) {
         return flashforge_job(host, pause ? "pause" : "continue");
     if (host.kind == HostKind::FlashforgeLegacy)
         return legacy_command(host, pause ? "M25" : "M24");
+    if (host.kind == HostKind::Elegoo)
+        return elegoo_command(host, pause ? 129 : 131);
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = nlohmann::json{{"command", "pause"}, {"action", pause ? "pause" : "resume"}}.dump();
@@ -1096,6 +1356,8 @@ HostResult host_cancel(const HostConfig& host) {
         return flashforge_job(host, "cancel");
     if (host.kind == HostKind::FlashforgeLegacy)
         return legacy_command(host, "M26");
+    if (host.kind == HostKind::Elegoo)
+        return elegoo_command(host, 130);
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = R"({"command": "cancel"})";

@@ -49,6 +49,7 @@
 #include "device/mdns.hpp"
 #include "device/flashforge.hpp"
 #include "device/print_host.hpp"
+#include "device/sdcp.hpp"
 #include "device/printer_limits.hpp"
 #include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
@@ -1874,6 +1875,8 @@ private:
     // la red»): its `_moonraker._tcp` services that answer /server/info.
     std::future<std::vector<device::FoundHost>> moonraker_search_;
     std::future<std::vector<device::FlashforgePrinter>> flashforge_search_;
+    std::future<std::vector<device::SdcpPrinter>> sdcp_search_;
+    std::vector<device::SdcpPrinter> sdcp_found_;
     std::vector<device::FlashforgePrinter> flashforge_found_;
     std::vector<device::FoundHost> moonraker_found_;
     // What another program's project brought that has no equivalent
@@ -2673,6 +2676,16 @@ std::string g_last_field; // the last of them, for a field narrower than its cel
 // --ui-script's menu step: min x, min y, max x, max y.
 std::map<std::string, ImVec4> g_menu_rects;
 std::optional<std::chrono::steady_clock::time_point> g_quit_at;
+// The tests' Elegoo on this machine: TISMA_TEST_SDCP_DISCOVERY=127.0.0.1:<port>.
+std::vector<std::pair<std::string, int>> sdcp_test_targets() {
+    std::vector<std::pair<std::string, int>> out;
+    if (const char* v = std::getenv("TISMA_TEST_SDCP_DISCOVERY")) {
+        const std::string t = v;
+        if (const std::size_t colon = t.rfind(':'); colon != std::string::npos)
+            out.push_back({t.substr(0, colon), std::atoi(t.c_str() + colon + 1)});
+    }
+    return out;
+}
 // The tests' Flashforge on this machine, asked directly by the search:
 // TISMA_TEST_FLASHFORGE_DISCOVERY=127.0.0.1:<port>.
 std::vector<std::pair<std::string, int>> flashforge_test_targets() {
@@ -26768,6 +26781,10 @@ void App::host_poll() {
         host_found_ = host_search_.get();
         host_searched_ = true;
     }
+    if (sdcp_search_.valid() && sdcp_search_.wait_for(0ms) == std::future_status::ready) {
+        sdcp_found_ = sdcp_search_.get();
+        host_searched_ = true;
+    }
     if (flashforge_search_.valid() && flashforge_search_.wait_for(0ms) == std::future_status::ready) {
         flashforge_found_ = flashforge_search_.get();
         host_searched_ = true;
@@ -26796,7 +26813,8 @@ void App::host_panel(float field, float button_h) {
     if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
         for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
                                          device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier,
-                                         device::HostKind::Flashforge, device::HostKind::FlashforgeLegacy})
+                                         device::HostKind::Flashforge, device::HostKind::FlashforgeLegacy,
+                                         device::HostKind::Elegoo})
             if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
                 host_.kind = k;
                 host_tested_ = false;
@@ -26883,6 +26901,30 @@ void App::host_panel(float field, float button_h) {
         if (host_searched_ && flashforge_found_.empty() && !flashforge_search_.valid())
             loc::TextDisabled("%s", tr(T::HostNoneFound));
     }
+    // Elegoo answers «M99999» on UDP 3000 (printer_connections.md, EL1.1).
+    if (host_.kind == device::HostKind::Elegoo) {
+        ImGui::BeginDisabled(sdcp_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            sdcp_search_ = std::async(std::launch::async, [] { return device::sdcp_discover(3000, sdcp_test_targets()); });
+        }
+        note_rect("elegoo_search");
+        ImGui::EndDisabled();
+        if (sdcp_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::SdcpPrinter& p : sdcp_found_) {
+            const std::string label = (p.name.empty() ? p.machine : p.name) + "  " + p.address + "  " + p.mainboard_id;
+            if (ImGui::Selectable(label.c_str(), host_.printer == p.mainboard_id)) {
+                host_.url = p.address;
+                host_.printer = p.mainboard_id;
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && sdcp_found_.empty() && !sdcp_search_.valid())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
+    }
     ImGui::SetNextItemWidth(field * 1.4f);
     if (ImGui::InputTextWithHint(tr(T::HostUrl), "http://192.168.1.50", &host_.url))
         host_tested_ = false;
@@ -26890,6 +26932,8 @@ void App::host_panel(float field, float button_h) {
     if (host_.kind == device::HostKind::Duet) {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else if (host_.kind == device::HostKind::Elegoo) {
+        loc::TextDisabled("%s", tr(T::HostElegooHelp)); // no login on the local network
     } else if (host_.kind == device::HostKind::FlashforgeLegacy) {
         loc::TextDisabled("%s", tr(T::HostFlashforgeLegacyHelp)); // no login; files by USB stick
     } else if (host_.kind == device::HostKind::Flashforge) {
@@ -29126,7 +29170,10 @@ void App::script_input() {
             host_.password = step.value;
         else if (step.key == "printer") // Repetier-Server's printer; Flashforge's serial number
             host_.printer = step.value;
-        else if (step.key == "search" && (host_.kind == device::HostKind::Flashforge ||
+        else if (step.key == "search" && host_.kind == device::HostKind::Elegoo) {
+            host_searched_ = false;
+            sdcp_search_ = std::async(std::launch::async, [] { return device::sdcp_discover(1500, sdcp_test_targets()); });
+        } else if (step.key == "search" && (host_.kind == device::HostKind::Flashforge ||
                                           host_.kind == device::HostKind::FlashforgeLegacy)) {
             host_searched_ = false;
             flashforge_search_ = std::async(std::launch::async, [] { return device::flashforge_discover(1500, flashforge_test_targets()); });
@@ -29163,10 +29210,14 @@ void App::script_input() {
             got = !host_sent_ ? "none" : *host_sent_ ? "yes" : "no";
         else if (step.key == "printing")
             got = host_status_.ok && host_status_.printing ? "yes" : "no";
-        else if (step.key == "found") { // the Flashforge search listed this serial number, or «older» for an older one
-            if (flashforge_search_.valid())
+        else if (step.key == "found") { // the Flashforge search listed this serial number, or «older» for an older one;
+                                          // the Elegoo search, this MainboardID
+            if (flashforge_search_.valid() || sdcp_search_.valid())
                 return f > 36000 ? fail_step("the search never ended") : void();
             got = "nothing";
+            for (const device::SdcpPrinter& p : sdcp_found_)
+                if (p.mainboard_id == step.value)
+                    got = step.value;
             for (const device::FlashforgePrinter& p : flashforge_found_)
                 if ((p.modern && p.serial == step.value) || (!p.modern && step.value == "older"))
                     got = step.value;

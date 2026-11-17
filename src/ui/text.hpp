@@ -1733,6 +1733,7 @@
     X(HostSerial, "Número de serie", "Serial number") \
     X(HostCheckCode, "Código de verificación", "Check code") \
     X(HostLevelFirst, "Nivelar antes de imprimir", "Level before printing") \
+    X(HostElegooHelp, "Elegoo Centauri Carbon y resinas con WiFi (SDCP): sin contraseña en la red local. Dirección: la IP. La Centauri Carbon 2 y la Neptune 4 usan otra conexión.", "Elegoo Centauri Carbon and Wi-Fi resin printers (SDCP): no password on the local network. Address: the IP. The Centauri Carbon 2 and the Neptune 4 use another connection.") \
     X(HostFlashforgeLegacyHelp, "Adventurer 3 y 4: sin contraseña; se ven el estado y se puede pausar o cancelar. Mandar archivos por la red todavía no está confirmado: copialos a un pendrive. Dirección: la IP.", "Adventurer 3 and 4: no password; the state shows and you can pause or cancel. Sending files over the network is not confirmed yet: copy them to a USB stick. Address: the IP.") \
     X(HostFlashforgeHelp, "Adventurer 5M, 5M Pro, AD5X y Creator 5: activá «Solo LAN» en la impresora; ahí se ven el número de serie y el código de verificación. Dirección: http://<IP>:8898.", "Adventurer 5M, 5M Pro, AD5X and Creator 5: turn on «LAN only» on the printer; its screen shows the serial number and the check code. Address: http://<IP>:8898.") \
     X(SketchNothingToUndo, "No hay nada para deshacer en el boceto", "Nothing to undo in the sketch") \

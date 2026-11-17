@@ -15179,4 +15179,17 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
 - **Pruebas:** `[device][net]` con simuladores propios (`tests/fake_flashforge_net.hpp`: TCP de legado, con y sin
   «Control Failed», y respuestas UDP de 280 y 140 bytes) y `ui_host_e2e_flashforge` en la puerta, que además busca y
   encuentra las dos. FF1.1 a FF1.6 cubiertos.
-- **Lo que sigue:** Elegoo SDCP (EL1) y Creality de fábrica (CR1).
+- **Elegoo por SDCP v3 (EL1):** tipo «Elegoo (Centauri Carbon, resina)». Búsqueda con `M99999` por UDP 3000 (una
+  impresora por `MainboardID`); cada pedido abre un WebSocket a `ws://<IP>:3030/websocket`, manda el comando con su
+  `RequestID` y espera la respuesta que lo repite; el estado sale de `sdcp/status` (`PrintInfo.Status`, capas, y las
+  temperaturas de FDM donde estén anidadas). Subida por HTTP a `/uploadFile/upload` en trozos de 1 MB con
+  `S-File-MD5`, `Offset`, `Uuid` y `TotalSize`; «000000» sigue, otro código corta con su motivo (−2: «el offset no
+  coincide»). Imprimir 128 (cada Ack con su texto), pausar 129, parar 130, reanudar 131. Un 500 al conectar es
+  «demasiadas conexiones abiertas». Sin `MainboardID`, se lo pide a la IP con `M99999`. Cliente WebSocket propio
+  (`src/net/websocket.*`, RFC 6455, con SHA-1 de FIPS 180-4 y Base64 de RFC 4648, probados con los vectores de las
+  normas).
+- **Pruebas:** EL1.1 a EL1.6 en `[device][net]` con un simulador propio (`tests/fake_sdcp.hpp`: WebSocket y subida en
+  un mismo puerto, y UDP), y `ui_host_e2e_elegoo` en la puerta: la encuentra, prueba, manda entero y arranca.
+- **Sin hacer:** mandar el `.goo` de una impresora de resina (hoy manda el G-code de FDM); la variante vieja por MQTT
+  (fuera de la primera versión según la ficha).
+- **Lo que sigue:** Creality de fábrica (CR1) y el aviso de Anycubic.

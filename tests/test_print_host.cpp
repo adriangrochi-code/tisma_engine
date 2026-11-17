@@ -3,9 +3,13 @@
 // un simulador propio»).
 #include "device/flashforge.hpp"
 #include "device/print_host.hpp"
+#include "device/sdcp.hpp"
+#include "net/digest.hpp"
+#include "net/websocket.hpp"
 #include "device/printer_limits.hpp"
 #include "fake_flashforge_net.hpp"
 #include "fake_print_hosts.hpp"
+#include "fake_sdcp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <httplib.h>
@@ -446,4 +450,116 @@ TEST_CASE("print host: an older Flashforge over TCP 8899, its session, state and
     CHECK(b.code == "conflict");
     CHECK(b.error.find("another program") != std::string::npos);
     CHECK(busy.commands() == std::vector<std::string>{"M601 S1"});
+}
+
+TEST_CASE("websocket: SHA-1 and Base64 of the handshake (FIPS 180-4, RFC 4648, RFC 6455)", "[net]") {
+    const auto hex = [](const std::string& b) {
+        std::string out;
+        char two[3];
+        for (const char c : b) {
+            std::snprintf(two, sizeof two, "%02x", std::uint8_t(c));
+            out += two;
+        }
+        return out;
+    };
+    CHECK(hex(tisma::net::sha1("abc")) == "a9993e364706816aba3e25717850c26c9cd0d89d");
+    CHECK(hex(tisma::net::sha1("")) == "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+    CHECK(tisma::net::base64("foobar") == "Zm9vYmFy");
+    CHECK(tisma::net::base64("fooba") == "Zm9vYmE=");
+    CHECK(tisma::net::base64("foob") == "Zm9vYg==");
+    // RFC 6455, 1.3: the sample key and its accept.
+    CHECK(tisma::net::base64(tisma::net::sha1("dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) ==
+          "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
+}
+
+TEST_CASE("print host: Elegoo by SDCP, found, state, upload in pieces, print, pause and stop (EL1)", "[device][net]") {
+    fake_sdcp::Printer fake;
+    // EL1.1: two equal answers to M99999, one printer.
+    const std::vector<SdcpPrinter> found = sdcp_discover(1000, {{"127.0.0.1", fake.udp_port()}});
+    REQUIRE(found.size() == 1);
+    CHECK(found[0].name == "Centauri Carbon");
+    CHECK(found[0].address == "127.0.0.1");
+    CHECK(found[0].mainboard_id == fake_sdcp::Printer::kId);
+
+    HostConfig host;
+    host.kind = HostKind::Elegoo;
+    host.url = "127.0.0.1:" + std::to_string(fake.port());
+    host.printer = fake_sdcp::Printer::kId;
+    host.timeout_s = 10;
+    const HostVersion v = host_version(host);
+    INFO(v.error);
+    REQUIRE(v.ok);
+    const HostStatus idle = host_status(host);
+    REQUIRE(idle.ok);
+    CHECK(idle.state == "idle");
+    CHECK(idle.nozzle == 215.0);
+    CHECK(idle.bed_target == 60.0);
+
+    // EL1.2: 2.5 MB in three pieces, one Uuid, the whole size and MD5.
+    std::string data(2621440, 'G');
+    for (std::size_t i = 0; i < data.size(); i += 97)
+        data[i] = char('0' + i % 10);
+    const std::filesystem::path g = std::filesystem::temp_directory_path() / "tisma_print_host_sdcp.gcode";
+    std::ofstream(g, std::ios::binary) << data;
+    const HostResult up = host_upload(host, g.string(), "pieza.gcode", true);
+    INFO(up.error);
+    REQUIRE(up.ok);
+    {
+        std::lock_guard lock(fake.mutex);
+        REQUIRE(fake.pieces.size() == 3);
+        CHECK(fake.pieces[0].offset == "0");
+        CHECK(fake.pieces[1].offset == "1048576");
+        CHECK(fake.pieces[2].offset == "2097152");
+        CHECK(fake.pieces[0].uuid == fake.pieces[2].uuid);
+        CHECK(fake.pieces[1].total == std::to_string(data.size()));
+        CHECK(fake.pieces[2].md5 == tisma::net::md5_hex(data));
+        CHECK(fake.file == data);
+        REQUIRE(!fake.commands.empty());
+        CHECK(fake.commands.back().first == 128);
+    }
+    const HostStatus printing = host_status(host);
+    CHECK(printing.printing);
+    CHECK(printing.progress == 25.0);
+    CHECK(printing.file == "pieza.gcode");
+
+    // EL1.5: pause and stop, each answer matched by its RequestID.
+    REQUIRE(host_pause(host, true).ok);
+    CHECK(host_status(host).state == "paused");
+    REQUIRE(host_cancel(host).ok);
+    CHECK(host_status(host).state == "stopped");
+    {
+        std::lock_guard lock(fake.mutex);
+        REQUIRE(fake.answered.size() == fake.commands.size());
+        for (std::size_t i = 0; i < fake.commands.size(); ++i)
+            CHECK(fake.answered[i] == fake.commands[i].second);
+    }
+
+    // EL1.3: a piece refused: the upload stops and says why.
+    {
+        std::lock_guard lock(fake.mutex);
+        fake.pieces.clear();
+        fake.fail_piece = 1;
+    }
+    const HostResult bad = host_upload(host, g.string(), "otra.gcode", true);
+    CHECK_FALSE(bad.ok);
+    CHECK(bad.error == "the upload failed (the offset did not match)");
+    {
+        std::lock_guard lock(fake.mutex);
+        CHECK(fake.pieces.size() == 2); // nothing after the refused one
+        fake.fail_piece = -1;
+        fake.status = 0;
+        fake.start_ack = 1;
+    }
+    // EL1.4: Ack 1 to start: busy, and not printing.
+    const HostResult busy = host_upload(host, g.string(), "otra.gcode", true);
+    CHECK(busy.code == "conflict");
+    CHECK(busy.error == "the printer is busy");
+    CHECK_FALSE(host_status(host).printing);
+    std::filesystem::remove(g);
+
+    // EL1.6: the sixth connection refused with a 500.
+    fake.too_many = true;
+    const HostStatus many = host_status(host);
+    CHECK(many.code == "busy");
+    CHECK(many.error == "the printer has too many connections open");
 }

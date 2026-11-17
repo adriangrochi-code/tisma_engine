@@ -29,7 +29,7 @@
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier, Flashforge, FlashforgeLegacy };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier, Flashforge, FlashforgeLegacy, Elegoo };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;
@@ -39,6 +39,7 @@ struct HostConfig {
                                 // Duet: «reprap» when empty, its default)
     std::string printer; // Repetier-Server: the printer's slug on the server; empty, its first printer
                          // Flashforge: the printer's serial number (the check code is api_key)
+                         // Elegoo: its MainboardID (empty: asked of the printer by M99999)
     bool level_before_print = false; // Flashforge: «levelingBeforePrint» with the upload
     int timeout_s = 20;
 };

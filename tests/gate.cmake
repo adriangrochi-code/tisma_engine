@@ -182,7 +182,7 @@ endforeach()
 # G10, send: each kind of network printer, faked on this machine, from end to
 # end through the Device page (the tester's report, 2026-11-16): the G-code
 # arrives whole, byte for byte the slice's, and the print starts.
-foreach(kind octoprint astrobox moonraker prusalink duet repetier flashforge)
+foreach(kind octoprint astrobox moonraker prusalink duet repetier flashforge elegoo)
   add_test(NAME ui_host_e2e_${kind}
     COMMAND $<TARGET_FILE:tisma_fake_print_host> ${kind} ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>
             ${TISMA_GATE_DATA}/cube_ascii.stl --lang en --size 1200x760

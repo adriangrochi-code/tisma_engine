@@ -7,6 +7,7 @@
 #include "cad/process.hpp"
 #include "fake_flashforge_net.hpp"
 #include "fake_print_hosts.hpp"
+#include "fake_sdcp.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -96,6 +97,26 @@ int main(int argc, char** argv) {
         FakeRepetier fake;
         return run<FakeRepetier>(fake, argc, argv, [](const FakeRepetier& f) {
             return "started=" + std::string(f.job != "none" ? "1" : "0") + " name=" + f.uploaded_name + whole(f.uploaded);
+        });
+    }
+    if (kind == "elegoo") {
+        fake_sdcp::Printer fake;
+        const std::string udp = "127.0.0.1:" + std::to_string(fake.udp_port());
+#ifdef _WIN32
+        _putenv_s("TISMA_TEST_SDCP_DISCOVERY", udp.c_str());
+        _putenv_s("TISMA_TEST_SDCP_UDP", std::to_string(fake.udp_port()).c_str());
+#else
+        setenv("TISMA_TEST_SDCP_DISCOVERY", udp.c_str(), 1);
+        setenv("TISMA_TEST_SDCP_UDP", std::to_string(fake.udp_port()).c_str(), 1);
+#endif
+        return run<fake_sdcp::Printer>(fake, argc, argv, [](const fake_sdcp::Printer& f) {
+            auto& p = const_cast<fake_sdcp::Printer&>(f);
+            std::lock_guard lock(p.mutex);
+            bool started = false;
+            for (const auto& c : p.commands)
+                started = started || c.first == 128;
+            return "started=" + std::string(started ? "1" : "0") + " name=" + p.started_file + whole(p.file) +
+                   " pieces=" + std::to_string(p.pieces.size());
         });
     }
     if (kind == "flashforge") {
