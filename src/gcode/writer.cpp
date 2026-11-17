@@ -2917,6 +2917,10 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
             items.push_back(TemplateValue::parse(v));
         c.variables[name] = list(std::move(items));
     }
+    // The profiles' names the interface chose, unless machine.variables has them.
+    for (const auto& [name, value] : s.profile_names)
+        if (!value.empty() && !c.variables.contains(name))
+            c.variables[name] = list({TemplateValue::of(value)});
     // The temperature variables always exist, 0 when the filament lacks them,
     // so a start macro can be given them (profile_pack.md rules 17 and 18 bis,
     // BH30).

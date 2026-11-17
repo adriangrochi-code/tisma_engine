@@ -389,6 +389,12 @@ struct Settings {
     // Not a setting: the input file's name without its folder and extension,
     // for the templates' input_filename_base (gcode_templates.md, rule 7).
     std::string input_name;
+    // Not a setting either: the names of the printer, filament and print
+    // profiles the interface chose, for the machine's G-code
+    // (printer_settings_id, filament_settings_id, print_settings_id;
+    // gcode_macros.md, rule 9 bis). Kept out of the saved settings so the
+    // G-code's settings block stays the same wherever it is sliced.
+    std::map<std::string, std::string> profile_names;
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;

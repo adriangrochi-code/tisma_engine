@@ -15085,3 +15085,11 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
 - `1e-7` se lee como número.
 - La división entera entre enteros ya estaba.
 - Pruebas `[gcode]` y `[template]` bien.
+
+**Suite completa local en Linux (14:20–15:00):** de 1449 pruebas, fallaron 2:
+- `gate_g15_quit`: pasa sola; falló solo con la máquina cargada.
+- `gate_g11_cloud`: falla real. Los nombres de perfil que agregaba la interfaz iban a `machine.variables` y entraban en
+  el bloque de ajustes del G-code, así que el G-code local y el de la nube no coincidían. Ahora van en
+  `Settings::profile_names`, que no se guarda. `profile --pack` sigue escribiéndolos en `machine.variables`, porque ese
+  JSON es lo que se lamina después.
+- Después del arreglo pasan las 168 pruebas `ui_script` y `gate_`, y `[gcode]`.
