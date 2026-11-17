@@ -15139,3 +15139,22 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
   esperaba 600 cuadros, que en un runner rápido son menos de 6 s. Ahora espera a que la búsqueda termine.
 - **CD30 completo:** la prueba suma un círculo con su cota; al borrar las dos líneas (y al deshacer y rehacer) el
   círculo y su cota siguen ahí (verbo nuevo `expect-sketch-rules N`).
+
+## 2026-11-17 — F6: el motor con y sin GPU sobre el banco (primera medición)
+
+Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine slice` y los ajustes del banco
+(`compute.gpu` en `off` y en `auto`):
+
+| Pieza | Capas | Sin GPU | Con GPU (llvmpipe) | G-code igual |
+|---|---|---|---|---|
+| 3DBenchy | 240 | 570 ms | 552 ms | sí (solo cambia la línea `compute.gpu`) |
+| 3DBenchy, giroide 20 % | 240 | 590 ms | 557 ms | sí |
+| Esfera de 1 001 112 triángulos | 500 | 1156 ms | 1099 ms | sí |
+
+- **Sin probar en una GPU de verdad:** acá la única es llvmpipe, Vulkan por software en la CPU. Estos números muestran
+  que el camino de GPU funciona y da el mismo G-code que la CPU, pero no cuánto acelera. Para eso hay que correr
+  `bench/run_benchy.sh` en una máquina con GPU, por ejemplo la del dueño.
+- Faltan dos piezas del banco del plan, el conejo ×1,5 y el tornillo ×4. Siguen sin archivos con licencia confirmada
+  (`bench/README.md`).
+
+**Sigue:** la medición en una GPU real; después P2 (fichas de QA) y W4.

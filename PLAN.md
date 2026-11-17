@@ -1455,7 +1455,8 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 
 Para esa fecha, en este orden:
 1. Publicar 0.13.0-beta.3. `alpha` a7aeec6 se fusionó el 17-11 y la publicación está en marcha.
-2. F6: medir el motor con y sin GPU sobre el banco.
+2. F6: medir el motor con y sin GPU sobre el banco. Primera medición del 17-11 en PROGRESS.md: en la CPU y en
+   llvmpipe, con el mismo G-code en los dos caminos. Falta medir en una GPU de verdad.
 3. P2: conexión con las impresoras de fábrica de Creality, Elegoo, Anycubic y Flashforge. QA escribe las fichas en
    `printer_connections.md` (17 y 18-11).
 4. W4: las superficies de arriba en pendiente, cuando QA mande la decisión del dueño.
