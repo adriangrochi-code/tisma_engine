@@ -548,3 +548,20 @@ TEST_CASE("check limits: the highest layer, not the last (fuzz seed 20261104, ru
     const GcodeLimits limits = gcode_limits(model, s);
     CHECK(limits.max_z >= 5.938 + 0.15 - 1e-9);
 }
+
+TEST_CASE("islands: many are ordered through a grid, the tour near a lawnmower's (Q9)", "[gcode][check]") {
+    // 20 x 20 posts: past kIslandsAllPairs islands the order uses a grid and
+    // 2-opt over near neighbours. Every post prints, and a layer's travel
+    // stays near a lawnmower path over the posts (400 x 4 mm).
+    IndexedMesh posts;
+    for (int i = 0; i < 20; ++i)
+        for (int j = 0; j < 20; ++j)
+            add_box(posts, 4.0f * float(i), 4.0f * float(j), 0, 4.0f * float(i) + 2, 4.0f * float(j) + 2, 0.6f);
+    const Settings s = test_printer();
+    const Output o = slice_and_write(posts, s);
+    const GcodeCheck c = check_gcode(o.gcode, o.limits);
+    INFO(problems_of(c));
+    REQUIRE(c.ok());
+    const double per_layer = c.stats.travel_path / double(c.stats.layers);
+    CHECK(per_layer < 400 * 4.0 * 1.6);
+}

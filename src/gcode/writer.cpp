@@ -49,6 +49,160 @@
 namespace tisma {
 namespace {
 
+// Islands ordered all against all up to this many; beyond, through a grid,
+// with 2-opt over each island's kIslandsNeighbours nearest (toolpath_time.md, rule 2;
+// research map Q9: a plate of 2500 islands spent 0.7 s a layer here).
+constexpr std::size_t kIslandsAllPairs = 300;
+constexpr std::size_t kIslandsNeighbours = 10;
+
+// One pass of 2-opt on the open tour cursor, order...: for each edge (a, b),
+// only the reversals that bring a next to one of its kIslandsNeighbours
+// nearest islands c further on (Johnson and McGeoch's neighbour lists): the
+// stretch b .. c reversed when that makes the tour shorter.
+bool two_opt_near(Point2d cursor, std::vector<std::size_t>& order, const std::vector<Point2d>& at) {
+    const std::size_t n = order.size();
+    std::vector<std::size_t> pos(at.size(), 0);
+    for (std::size_t i = 0; i < n; ++i)
+        pos[order[i]] = i + 1;
+    // The neighbours, by brute force over a grid of the points.
+    std::vector<std::vector<std::size_t>> near(n);
+    {
+        double x0 = std::numeric_limits<double>::max(), y0 = x0, x1 = std::numeric_limits<double>::lowest(), y1 = x1;
+        for (const std::size_t k : order)
+            x0 = std::min(x0, at[k].x), y0 = std::min(y0, at[k].y), x1 = std::max(x1, at[k].x), y1 = std::max(y1, at[k].y);
+        const double cell = std::max(1e-3, std::sqrt(std::max((x1 - x0) * (y1 - y0), 1e-6) / double(n)) * 2.0);
+        const auto nx = std::size_t((x1 - x0) / cell) + 1, ny = std::size_t((y1 - y0) / cell) + 1;
+        std::vector<std::vector<std::size_t>> grid(nx * ny);
+        const auto cell_of = [&](Point2d p) {
+            return std::pair{std::size_t(std::clamp((p.x - x0) / cell, 0.0, double(nx - 1))),
+                             std::size_t(std::clamp((p.y - y0) / cell, 0.0, double(ny - 1)))};
+        };
+        for (const std::size_t k : order) {
+            const auto [cx, cy] = cell_of(at[k]);
+            grid[cy * nx + cx].push_back(k);
+        }
+        std::vector<std::pair<double, std::size_t>> found;
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::size_t k = order[i];
+            const auto [cx, cy] = cell_of(at[k]);
+            for (std::size_t r = 1;; ++r) {
+                found.clear();
+                for (std::size_t gy = cy > r ? cy - r : 0; gy <= std::min(ny - 1, cy + r); ++gy)
+                    for (std::size_t gx = cx > r ? cx - r : 0; gx <= std::min(nx - 1, cx + r); ++gx)
+                        for (const std::size_t q : grid[gy * nx + gx])
+                            if (q != k)
+                                found.push_back({std::hypot(at[q].x - at[k].x, at[q].y - at[k].y), q});
+                // Enough found within r cells, or everything seen.
+                const bool all = (cy <= r && cy + r >= ny - 1 && cx <= r && cx + r >= nx - 1);
+                std::sort(found.begin(), found.end());
+                if (all || (found.size() >= kIslandsNeighbours && found[kIslandsNeighbours - 1].first <= double(r) * cell))
+                    break;
+            }
+            for (std::size_t m = 0; m < std::min(found.size(), kIslandsNeighbours); ++m)
+                near[i].push_back(found[m].second);
+        }
+    }
+    const auto point = [&](std::size_t i) { return i == 0 ? cursor : at[order[i - 1]]; };
+    const auto dist = [](const Point2d& p, const Point2d& q) { return std::hypot(p.x - q.x, p.y - q.y); };
+    // near[] is by the island's place in the order at the start: look it up by island.
+    std::vector<std::size_t> slot(at.size(), 0);
+    for (std::size_t i = 0; i < n; ++i)
+        slot[order[i]] = i;
+    bool better = false;
+    for (std::size_t i = 1; i <= n; ++i) {
+        // Edge (point(i - 1), point(i)); a = point(i - 1) is the cursor for i = 1.
+        const Point2d a = point(i - 1);
+        const double ab = dist(a, point(i));
+        const std::vector<std::size_t>& candidates = i == 1 ? std::vector<std::size_t>{} : near[slot[order[i - 2]]];
+        for (const std::size_t c : candidates) {
+            const std::size_t j = pos[c];
+            if (j <= i || dist(a, at[c]) >= ab)
+                continue;
+            const double before = ab + (j < n ? dist(point(j), point(j + 1)) : 0.0);
+            const double after = dist(a, point(j)) + (j < n ? dist(point(i), point(j + 1)) : 0.0);
+            if (after + 1e-9 < before) {
+                std::reverse(order.begin() + std::ptrdiff_t(i - 1), order.begin() + std::ptrdiff_t(j));
+                for (std::size_t m = i; m <= j; ++m)
+                    pos[order[m - 1]] = m;
+                better = true;
+                break;
+            }
+        }
+        // The other way: c near b = point(i), earlier at m < i - 1; reversing
+        // m .. i - 1 puts c next to b and point(m - 1) next to a.
+        const Point2d b = point(i);
+        const double ab2 = dist(point(i - 1), b);
+        for (const std::size_t c : near[slot[order[i - 1]]]) {
+            const std::size_t m = pos[c];
+            if (m + 1 >= i || m == 0 || dist(b, at[c]) >= ab2)
+                continue;
+            const double before = dist(point(m - 1), point(m)) + ab2;
+            const double after = dist(point(m - 1), point(i - 1)) + dist(point(m), b);
+            if (after + 1e-9 < before) {
+                std::reverse(order.begin() + std::ptrdiff_t(m - 1), order.begin() + std::ptrdiff_t(i - 1));
+                for (std::size_t q = m; q < i; ++q)
+                    pos[order[q - 1]] = q;
+                better = true;
+                break;
+            }
+        }
+    }
+    return better;
+}
+
+// Nearest neighbour from `from` through `todo`'s points (`at`, by island),
+// with a grid of their points: among equals, the first in `todo`.
+std::vector<std::size_t> nearest_tour(Point2d from, const std::vector<std::size_t>& todo, const std::vector<Point2d>& at) {
+    double x0 = std::numeric_limits<double>::max(), y0 = x0, x1 = std::numeric_limits<double>::lowest(), y1 = x1;
+    for (const std::size_t k : todo)
+        x0 = std::min(x0, at[k].x), y0 = std::min(y0, at[k].y), x1 = std::max(x1, at[k].x), y1 = std::max(y1, at[k].y);
+    const double cell = std::max(1e-3, std::sqrt(std::max((x1 - x0) * (y1 - y0), 1e-6) / double(todo.size())) * 2.0);
+    const auto nx = std::size_t((x1 - x0) / cell) + 1, ny = std::size_t((y1 - y0) / cell) + 1;
+    std::vector<std::vector<std::size_t>> grid(nx * ny); // positions in todo
+    const auto cell_of = [&](Point2d p) {
+        return std::pair{std::size_t(std::clamp((p.x - x0) / cell, 0.0, double(nx - 1))),
+                         std::size_t(std::clamp((p.y - y0) / cell, 0.0, double(ny - 1)))};
+    };
+    for (std::size_t i = 0; i < todo.size(); ++i) {
+        const auto [cx, cy] = cell_of(at[todo[i]]);
+        grid[cy * nx + cx].push_back(i);
+    }
+    std::vector<std::size_t> order;
+    order.reserve(todo.size());
+    for (std::size_t n = 0; n < todo.size(); ++n) {
+        const auto [cx, cy] = cell_of(from);
+        // The query may lie outside the grid: the cells' distance counts from its own.
+        const double ox = std::max({x0 - from.x, 0.0, from.x - (x0 + double(nx) * cell)});
+        const double oy = std::max({y0 - from.y, 0.0, from.y - (y0 + double(ny) * cell)});
+        const double outside = std::hypot(ox, oy);
+        std::size_t best = todo.size();
+        double nearest = std::numeric_limits<double>::max();
+        for (std::size_t r = 0; r <= std::max(nx, ny); ++r) {
+            if (best != todo.size() && outside + (double(r) - 1.0) * cell > nearest)
+                break;
+            const std::int64_t lx = std::int64_t(cx) - std::int64_t(r), hx = std::int64_t(cx) + std::int64_t(r);
+            const std::int64_t ly = std::int64_t(cy) - std::int64_t(r), hy = std::int64_t(cy) + std::int64_t(r);
+            for (std::int64_t gy = std::max<std::int64_t>(ly, 0); gy <= std::min<std::int64_t>(hy, std::int64_t(ny) - 1); ++gy)
+                for (std::int64_t gx = std::max<std::int64_t>(lx, 0); gx <= std::min<std::int64_t>(hx, std::int64_t(nx) - 1); ++gx) {
+                    if (gx != lx && gx != hx && gy != ly && gy != hy)
+                        continue;
+                    for (const std::size_t i : grid[std::size_t(gy) * nx + std::size_t(gx)]) {
+                        const Point2d& q = at[todo[i]];
+                        const double d = std::hypot(from.x - q.x, from.y - q.y);
+                        if (d < nearest || (d == nearest && i < best))
+                            nearest = d, best = i;
+                    }
+                }
+        }
+        const auto [bx, by] = cell_of(at[todo[best]]);
+        std::vector<std::size_t>& c = grid[by * nx + bx];
+        c.erase(std::find(c.begin(), c.end(), best));
+        order.push_back(todo[best]);
+        from = at[todo[best]];
+    }
+    return order;
+}
+
 // A number with fixed decimals, as printf's "%.*f" writes it (std::to_chars
 // is specified to round the same way), without a negative zero. Returns the
 // length written to buffer.
@@ -4393,22 +4547,30 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                         at[k] = middle(k);
                     const auto dist = [](const Point2d& p, const Point2d& q) { return std::hypot(p.x - q.x, p.y - q.y); };
                     Point2d from = cursor;
-                    std::vector<bool> taken(islands.size(), false);
-                    for (std::size_t n = 0; n < todo.size(); ++n) {
-                        std::size_t best = islands.size();
-                        double d = std::numeric_limits<double>::max();
-                        for (const std::size_t k : todo)
-                            if (!taken[k] && dist(from, at[k]) < d)
-                                d = dist(from, at[k]), best = k;
-                        taken[best] = true;
-                        order.push_back(best);
-                        from = at[best];
+                    if (todo.size() <= kIslandsAllPairs) {
+                        std::vector<bool> taken(islands.size(), false);
+                        for (std::size_t n = 0; n < todo.size(); ++n) {
+                            std::size_t best = islands.size();
+                            double d = std::numeric_limits<double>::max();
+                            for (const std::size_t k : todo)
+                                if (!taken[k] && dist(from, at[k]) < d)
+                                    d = dist(from, at[k]), best = k;
+                            taken[best] = true;
+                            order.push_back(best);
+                            from = at[best];
+                        }
+                    } else {
+                        order = nearest_tour(cursor, todo, at);
                     }
                     // 2-opt on the open tour from the cursor, a bounded number of passes.
                     const auto point = [&](std::size_t i) { return i == 0 ? cursor : at[order[i - 1]]; };
                     bool better = true;
-                    for (int pass = 0; better && pass < 8; ++pass) {
+                    for (int pass = 0; better && pass < (order.size() > kIslandsAllPairs ? 50 : 8); ++pass) {
                         better = false;
+                        if (order.size() > kIslandsAllPairs) {
+                            better = two_opt_near(cursor, order, at);
+                            continue;
+                        }
                         for (std::size_t i = 1; i + 1 <= order.size(); ++i)
                             for (std::size_t j = i + 1; j <= order.size(); ++j) {
                                 // Reverse order[i-1 .. j-1]: edges (i-1, i) and (j, j+1) change.

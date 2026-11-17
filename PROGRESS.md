@@ -14956,3 +14956,16 @@ para el LBM D3Q19.
 - **Probado:** prueba nueva `info: overlapping shells and parts are counted once in the volume` (dos cubos de 10 mm a
   medias en un STL: `sliced_volume: 1500`, `overlap_volume: 500`; las dos partes de `box_parts.3mf`: suma 4000, unión
   2000). `[cli]` en verde. Datos nuevos de prueba: `tests/data/overlap_boxes.stl`, generado acá.
+
+## 2026-11-17 — bloque nocturno: Q9, el orden de muchas islas
+
+- Con más de 300 islas por capa, el orden (vecino más cercano y 2-opt, `toolpath_time.md` regla 2) ya no compara todas
+  contra todas: el vecino más cercano sale de una grilla (empates como antes: la primera) y el 2-opt mira solo los 10
+  vecinos más cercanos de cada isla, en los dos sentidos (listas de vecinos de Johnson y McGeoch 1997). Hasta 300
+  islas, todo igual que antes.
+- **Medido** (placa de 50 × 50 postes de 2 mm, 3 capas): escribir el G-code 2,11 → 0,58 s; el viaje total 40 120 →
+  40 621 mm (+1,2 %). Se probó antes una ventana fija de 2-opt: 50 posiciones daban +7 % de viaje y 1000 posiciones
+  1,47 s; quedó la de vecinos.
+- **Probado:** prueba nueva `islands: many are ordered through a grid, the tour near a lawnmower's (Q9)` (400 postes:
+  verificación limpia, 2149 mm de viaje por capa contra 1600 de una pasada en zigzag); `[gcode]`, `[determinism]`,
+  `[check]` en verde.
