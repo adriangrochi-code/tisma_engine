@@ -118,7 +118,13 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
       `print_time` (el tiempo estimado, como lo escribe Cura), `top_bottom_thickness` (capas de arriba por la altura de
       capa), `filament_amount` (m), `filament_cost`, y `purge_distance`, `retraction_hop_height_after_extruder_switch`,
       `switch_extruder_retraction_amount` del perfil de la impresora si los trae, si no los valores por defecto de
-      Cura;
+      Cura. Datos de la definición base de Cura (`fdmprinter.def.json`, rama main, leída el 17-11-2026):
+      `switch_extruder_retraction_amount` vale `machine_heat_zone_length`, 16 mm por defecto; la subida al cambiar de
+      cabezal se llama en Cura `retraction_hop_after_extruder_switch_height` y vale la de `retraction_hop` (en Tisma,
+      `retraction.lift`), así que `retraction_hop_height_after_extruder_switch` toma ese valor; `purge_distance` no
+      existe en Cura (solo lo nombra el G-code de cambio de cabezal de la Sovol SV04, que en modo de un cabezal no se
+      usa): queda con aviso; `print_time` solo aparece en comentarios (`;Print time: {print_time}`) y toma el tiempo
+      estimado como «1h 2m 3s»;
     - `date` sale como `dd-mm-aaaa` y `time` como `HH:MM:SS`, la hora local (como Cura).
     Una variable sin valor conocido sigue saliendo con aviso, que la interfaz muestra al laminar (prueba GM22).
 10 bis. **Dialectos** (campo `dialect` del bloque `gcode` del paquete, `profile_pack_format.md`): `prusaslicer` es el
