@@ -24,6 +24,10 @@
 #include <mutex>
 #include <random>
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0 // Windows has no SIGPIPE
+#endif
+
 namespace tisma::net {
 
 namespace {
@@ -185,7 +189,7 @@ std::unique_ptr<WebSocket> WebSocket::connect(const std::string& host, int port,
     const std::string hello = "GET " + path + " HTTP/1.1\r\nHost: " + host + ":" + std::to_string(port) +
                               "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key +
                               "\r\nSec-WebSocket-Version: 13\r\n\r\n";
-    if (send(s, hello.data(), int(hello.size()), 0) != int(hello.size())) {
+    if (send(s, hello.data(), int(hello.size()), MSG_NOSIGNAL) != int(hello.size())) {
         error = "the connection closed";
         return nullptr;
     }
@@ -259,7 +263,7 @@ bool WebSocket::send_frame(int opcode, const std::string& payload) {
         f += char(payload[i] ^ mask[i % 4]);
     std::size_t sent = 0;
     while (sent < f.size()) {
-        const int k = int(send(Socket(socket_), f.data() + sent, int(f.size() - sent), 0));
+        const int k = int(send(Socket(socket_), f.data() + sent, int(f.size() - sent), MSG_NOSIGNAL));
         if (k <= 0)
             return false;
         sent += std::size_t(k);

@@ -21,6 +21,10 @@
 #include <cstring>
 #include <mutex>
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0 // Windows has no SIGPIPE
+#endif
+
 namespace tisma::device {
 
 namespace {
@@ -177,7 +181,7 @@ FlashforgeSession flashforge_tcp(const std::string& host, int port, const std::v
     std::string pending;
     const auto ask = [&](const std::string& command, std::string& answer) {
         const std::string line = "~" + command + "\r\n";
-        if (send(s, line.data(), int(line.size()), 0) != int(line.size()))
+        if (send(s, line.data(), int(line.size()), MSG_NOSIGNAL) != int(line.size()))
             return false;
         const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
         char buffer[1024];

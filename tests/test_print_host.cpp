@@ -11,6 +11,7 @@
 #include "fake_print_hosts.hpp"
 #include "fake_sdcp.hpp"
 
+#include <cmath>
 #include <catch2/catch_test_macros.hpp>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -562,4 +563,57 @@ TEST_CASE("print host: Elegoo by SDCP, found, state, upload in pieces, print, pa
     const HostStatus many = host_status(host);
     CHECK(many.code == "busy");
     CHECK(many.error == "the printer has too many connections open");
+}
+
+TEST_CASE("print host: a stock Creality, its state by 9999 or Moonraker when it answers (CR1)", "[device][net]") {
+    fake_sdcp::Creality fake;
+    HostConfig host;
+    host.kind = HostKind::Creality;
+    host.url = "127.0.0.1:" + std::to_string(fake.port());
+    host.timeout_s = 5;
+    // Moonraker answers nowhere: the printer's own WebSocket.
+#ifdef _WIN32
+    _putenv_s("TISMA_TEST_CREALITY_MOONRAKER_PORT", "9");
+#else
+    setenv("TISMA_TEST_CREALITY_MOONRAKER_PORT", "9", 1);
+#endif
+    // CR1-3: model empty, the board's code.
+    const HostVersion v = host_version(host);
+    INFO(v.error);
+    REQUIRE(v.ok);
+    CHECK(v.server == "Creality (board F012) K1C-ABCD");
+    // CR1-2: the times pushed, in seconds.
+    const HostStatus st = host_status(host);
+    REQUIRE(st.ok);
+    CHECK(st.seconds_done == 600.0);
+    CHECK(st.seconds_left == 1200.0);
+    CHECK(std::abs(st.progress - 100.0 / 3.0) < 1e-9);
+    CHECK(st.printing);
+    // Sending over 9999 is not tried: the message says what to turn on.
+    const HostResult up = host_upload(host, "x.gcode", "x.gcode", true);
+    CHECK(up.code == "unsupported");
+    CHECK(up.error.find("Moonraker/Fluidd") != std::string::npos);
+    // CR1-5: the link cut mid-print: still printing, reconnecting.
+    fake.down = true;
+    const HostStatus cut = host_status(host);
+    CHECK(cut.printing);
+    CHECK(cut.state == "reconnecting");
+
+    // CR1-1: Moonraker answers on its port: that connection, not 9999's.
+    FakeMoonraker moon;
+    const std::string port = moon.url().substr(moon.url().rfind(':') + 1);
+#ifdef _WIN32
+    _putenv_s("TISMA_TEST_CREALITY_MOONRAKER_PORT", port.c_str());
+#else
+    setenv("TISMA_TEST_CREALITY_MOONRAKER_PORT", port.c_str(), 1);
+#endif
+    const HostVersion mv = host_version(host);
+    INFO(mv.error);
+    REQUIRE(mv.ok);
+    CHECK(mv.server.find("Moonraker") != std::string::npos);
+#ifdef _WIN32
+    _putenv_s("TISMA_TEST_CREALITY_MOONRAKER_PORT", "");
+#else
+    unsetenv("TISMA_TEST_CREALITY_MOONRAKER_PORT");
+#endif
 }

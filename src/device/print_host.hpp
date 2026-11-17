@@ -29,7 +29,7 @@
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier, Flashforge, FlashforgeLegacy, Elegoo };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet, AstroBox, Repetier, Flashforge, FlashforgeLegacy, Elegoo, Creality };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;
@@ -63,6 +63,7 @@ struct HostStatus : HostResult {
     std::string file;        // the job's file
     double progress = -1.0;  // percent; -1 unknown
     double seconds_left = -1.0;
+    double seconds_done = -1.0; // the time printed so far, where the program says it (Creality)
     double nozzle = -1.0, nozzle_target = -1.0, bed = -1.0, bed_target = -1.0; // °C; -1 unknown
 };
 

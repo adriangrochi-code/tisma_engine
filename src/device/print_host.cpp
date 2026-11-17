@@ -13,7 +13,10 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <random>
 #include <thread>
 #include <cctype>
@@ -1120,6 +1123,138 @@ HostResult elegoo_command(const HostConfig& host, int cmd) {
 
 } // namespace
 
+
+namespace {
+
+// Creality's own firmware (Klipper without Moonraker; printer_connections.md,
+// «Creality de fábrica»): Moonraker on 7125 when it answers, as the stock K1C
+// 2025 does; else the state the printer pushes on its WebSocket at 9999
+// (printJobTime, printLeftTime, model, modelVersion, hostname). Sending and
+// commands over 9999 are not confirmed: they are not tried.
+int creality_moonraker_port() {
+    const char* v = std::getenv("TISMA_TEST_CREALITY_MOONRAKER_PORT"); // the tests' fake
+    return v ? std::atoi(v) : 7125;
+}
+
+std::optional<HostConfig> creality_moonraker(const HostConfig& host) {
+    HostConfig m = host;
+    m.kind = HostKind::Moonraker;
+    m.url = "http://" + legacy_host(host) + ":" + std::to_string(creality_moonraker_port());
+    m.timeout_s = 3;
+    if (!moonraker_version(m).ok)
+        return std::nullopt;
+    m.timeout_s = host.timeout_s;
+    return m;
+}
+
+int creality_port(const HostConfig& host) {
+    const int p = legacy_port(host);
+    return p == 8899 ? 9999 : p; // legacy_port gives 8899 when none was written
+}
+
+// The last state seen of each printer: a cut connection keeps a print going
+// (CR1-5).
+std::mutex creality_mutex;
+std::map<std::string, HostStatus>& creality_last() {
+    static std::map<std::string, HostStatus> last;
+    return last;
+}
+
+// A board code (modelVersion, when model is empty) as the printer's name:
+// the spec lists the codes, not their models, so the code is shown.
+std::string creality_model(const nlohmann::json& j) {
+    const std::string model = j.value("model", std::string());
+    if (!model.empty())
+        return model;
+    const std::string board = j.value("modelVersion", std::string());
+    return board.empty() ? std::string("Creality") : "Creality (board " + board + ")";
+}
+
+HostStatus creality_ws_status(const HostConfig& host, std::string* model) {
+    HostStatus out;
+    const std::string address = legacy_host(host);
+    int status = 0;
+    std::string error;
+    auto ws = net::WebSocket::connect(address, creality_port(host), "/", std::min(host.timeout_s, 10) * 1000, status, error);
+    if (!ws) {
+        std::lock_guard lock(creality_mutex);
+        const auto it = creality_last().find(address);
+        if (it != creality_last().end() && it->second.printing) {
+            // Not lost: the print goes on while the link comes back.
+            out = it->second;
+            out.state = "reconnecting";
+            out.code = "reconnecting";
+            return out;
+        }
+        out.code = status == 0 ? "unreachable" : "bad_answer";
+        out.error = status == 0 ? "the printer does not accept state connections at " + address +
+                                      "; check the IP and that the firmware is up to date"
+                                : "the address answers, but not as a Creality printer: " + error;
+        return out;
+    }
+    // The printer pushes its state: what comes in a moment, merged.
+    nlohmann::json merged = nlohmann::json::object();
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+    for (;;) {
+        const int left = int(std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now()).count());
+        if (left <= 0)
+            break;
+        const std::optional<std::string> m = ws->receive(left);
+        if (!m)
+            break;
+        const nlohmann::json j = nlohmann::json::parse(*m, nullptr, false);
+        if (j.is_object())
+            merged.update(j);
+    }
+    ws->close();
+    if (merged.empty()) {
+        out.code = "bad_answer";
+        out.error = "the printer sent no state";
+        return out;
+    }
+    out.ok = true;
+    out.seconds_done = number(merged, "printJobTime");
+    out.seconds_left = number(merged, "printLeftTime");
+    out.printing = out.seconds_left > 0.0;
+    out.state = out.printing ? "printing" : "idle";
+    // No share is pushed: the times give it (CR1-2).
+    if (out.seconds_done + out.seconds_left > 0.0)
+        out.progress = 100.0 * out.seconds_done / (out.seconds_done + out.seconds_left);
+    if (model)
+        *model = creality_model(merged) + (merged.contains("hostname") ? " " + merged.value("hostname", std::string()) : "");
+    std::lock_guard lock(creality_mutex);
+    creality_last()[address] = out;
+    return out;
+}
+
+HostStatus creality_status(const HostConfig& host) {
+    if (const auto m = creality_moonraker(host)) // CR1-1
+        return moonraker_status(*m);
+    return creality_ws_status(host, nullptr);
+}
+
+HostVersion creality_version(const HostConfig& host) {
+    HostVersion out;
+    if (const auto m = creality_moonraker(host)) {
+        out = moonraker_version(*m);
+        if (out.ok)
+            out.server += " (port " + std::to_string(creality_moonraker_port()) + ")";
+        return out;
+    }
+    std::string model;
+    const HostStatus st = creality_ws_status(host, &model);
+    static_cast<HostResult&>(out) = st;
+    if (out.ok)
+        out.server = model;
+    return out;
+}
+
+HostResult creality_unsupported() {
+    return unsupported("to send to this printer, turn on Moonraker/Fluidd (sending over its own port 9999 is not confirmed)");
+}
+
+} // namespace
+
 bool host_kind_from(const std::string& word, HostKind& out) {
     if (word == "octoprint")
         out = HostKind::OctoPrint;
@@ -1139,6 +1274,8 @@ bool host_kind_from(const std::string& word, HostKind& out) {
         out = HostKind::FlashforgeLegacy;
     else if (word == "elegoo")
         out = HostKind::Elegoo;
+    else if (word == "creality")
+        out = HostKind::Creality;
     else
         return false;
     return true;
@@ -1180,6 +1317,7 @@ const char* host_kind_word(HostKind kind) {
     case HostKind::Flashforge: return "flashforge";
     case HostKind::FlashforgeLegacy: return "flashforge_legacy";
     case HostKind::Elegoo: return "elegoo";
+    case HostKind::Creality: return "creality";
     default: return "octoprint";
     }
 }
@@ -1194,6 +1332,7 @@ const char* host_kind_name(HostKind kind) {
     case HostKind::Flashforge: return "Flashforge (5M, AD5X, Creator 5)";
     case HostKind::FlashforgeLegacy: return "Flashforge (Adventurer 3, 4)";
     case HostKind::Elegoo: return "Elegoo (Centauri Carbon, resina)";
+    case HostKind::Creality: return "Creality (K1, K2, Ender 3 V3, Hi)";
     default: return "OctoPrint";
     }
 }
@@ -1213,6 +1352,8 @@ HostVersion host_version(const HostConfig& host) {
         return legacy_version(host);
     if (host.kind == HostKind::Elegoo)
         return elegoo_version(host);
+    if (host.kind == HostKind::Creality)
+        return creality_version(host);
     HostVersion out;
     const net::Response r = net::perform(request(host, "GET", "/api/version"));
     static_cast<HostResult&>(out) = result_of(r);
@@ -1246,6 +1387,11 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
         return flashforge_upload(host, path, name, start);
     if (host.kind == HostKind::Elegoo)
         return elegoo_upload(host, path, name, start);
+    if (host.kind == HostKind::Creality) {
+        if (const auto m = creality_moonraker(host))
+            return moonraker_upload(*m, path, name, start);
+        return creality_unsupported();
+    }
     if (host.kind == HostKind::FlashforgeLegacy) // M28 and M29: not confirmed (the spec)
         return unsupported("sending files to an Adventurer 3 or 4 over the network is not confirmed yet; "
                            "copy the file to a USB stick");
@@ -1272,6 +1418,8 @@ HostStatus host_status(const HostConfig& host) {
         return legacy_status(host);
     if (host.kind == HostKind::Elegoo)
         return elegoo_status(host);
+    if (host.kind == HostKind::Creality)
+        return creality_status(host);
     if (host.kind == HostKind::AstroBox) {
         HostStatus out;
         static_cast<HostResult&>(out) = unsupported("AstroBox has no published API for the printer's state");
@@ -1335,6 +1483,11 @@ HostResult host_pause(const HostConfig& host, bool pause) {
         return legacy_command(host, pause ? "M25" : "M24");
     if (host.kind == HostKind::Elegoo)
         return elegoo_command(host, pause ? 129 : 131);
+    if (host.kind == HostKind::Creality) {
+        if (const auto m = creality_moonraker(host))
+            return host_pause(*m, pause);
+        return creality_unsupported();
+    }
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = nlohmann::json{{"command", "pause"}, {"action", pause ? "pause" : "resume"}}.dump();
@@ -1358,6 +1511,11 @@ HostResult host_cancel(const HostConfig& host) {
         return legacy_command(host, "M26");
     if (host.kind == HostKind::Elegoo)
         return elegoo_command(host, 130);
+    if (host.kind == HostKind::Creality) {
+        if (const auto m = creality_moonraker(host))
+            return host_cancel(*m);
+        return creality_unsupported();
+    }
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = R"({"command": "cancel"})";

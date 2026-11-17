@@ -26,6 +26,10 @@
 #include <thread>
 #include <vector>
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0 // Windows has no SIGPIPE
+#endif
+
 namespace fake_flashforge {
 
 #ifdef _WIN32
@@ -115,7 +119,7 @@ private:
                     if (code == "M601") {
                         if (failed_) {
                             answer += "Control Failed.\r\n";
-                            send(c, answer.data(), int(answer.size()), 0);
+                            send(c, answer.data(), int(answer.size()), MSG_NOSIGNAL);
                             open = false;
                             break;
                         }
@@ -138,7 +142,7 @@ private:
                         answer += "Control Release.\r\n";
                     }
                     answer += "ok\r\n";
-                    send(c, answer.data(), int(answer.size()), 0);
+                    send(c, answer.data(), int(answer.size()), MSG_NOSIGNAL);
                 }
             }
             close_socket(c);

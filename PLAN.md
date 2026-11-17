@@ -1459,6 +1459,8 @@ Para esa fecha, en este orden:
    llvmpipe, con el mismo G-code en los dos caminos. Falta medir en una GPU de verdad.
 3. P2: conexión con las impresoras de fábrica de Creality, Elegoo, Anycubic y Flashforge. QA escribe las fichas en
    `printer_connections.md` (17 y 18-11).
+   Hecho el 17-11: Flashforge (FF1), Elegoo por SDCP (EL1) y Creality de fábrica (CR1, menos CR1-4, que espera la
+   clave del estado en la ficha). Anycubic queda fuera de la beta, con el aviso de usar Anycubic Slicer Next.
 4. W4: las superficies de arriba en pendiente. No queda nada por hacer: vale la decisión del 13-11 que ya está en
    PROGRESS.md (QA, 17-11).
 

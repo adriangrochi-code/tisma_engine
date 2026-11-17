@@ -19,6 +19,10 @@
 #include <thread>
 #include <vector>
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0 // Windows has no SIGPIPE
+#endif
+
 namespace fake_sdcp {
 
 using fake_flashforge::Socket;
@@ -83,7 +87,7 @@ private:
     static bool send_all(Socket c, const std::string& d) {
         std::size_t at = 0;
         while (at < d.size()) {
-            const int k = int(send(c, d.data() + at, int(d.size() - at), 0));
+            const int k = int(send(c, d.data() + at, int(d.size() - at), MSG_NOSIGNAL));
             if (k <= 0)
                 return false;
             at += std::size_t(k);
@@ -293,4 +297,85 @@ private:
     std::vector<std::thread> threads_;
 };
 
+// A stock Creality (K1C) faked on this machine (printer_connections.md, CR1):
+// a WebSocket that pushes the printer's state as JSON once connected.
+class Creality {
+public:
+    Creality() {
+        tcp_ = bound(SOCK_STREAM, port_);
+        listen(tcp_, 8);
+        thread_ = std::thread([this] { serve(); });
+    }
+    ~Creality() {
+        stop_ = true;
+        thread_.join();
+        close_socket(tcp_);
+    }
+    int port() const { return port_; }
+    std::string url() const { return "127.0.0.1:" + std::to_string(port_); }
+    std::atomic<double> left{1200.0}; // printLeftTime
+    std::atomic<bool> down{false};    // refuses every connection (a cut link)
+
+private:
+    static bool send_all(Socket c, const std::string& d) {
+        std::size_t at = 0;
+        while (at < d.size()) {
+            const int k = int(send(c, d.data() + at, int(d.size() - at), MSG_NOSIGNAL));
+            if (k <= 0)
+                return false;
+            at += std::size_t(k);
+        }
+        return true;
+    }
+    void serve() {
+        while (!stop_) {
+            if (!readable(tcp_, 100))
+                continue;
+            const Socket c = accept(tcp_, nullptr, nullptr);
+            if (down) {
+                close_socket(c);
+                continue;
+            }
+            std::string head;
+            char buffer[2048];
+            while (head.find("\r\n\r\n") == std::string::npos && readable(c, 2000)) {
+                const int k = int(recv(c, buffer, int(sizeof buffer), 0));
+                if (k <= 0)
+                    break;
+                head.append(buffer, std::size_t(k));
+            }
+            std::string lower = head;
+            for (char& ch : lower)
+                ch = char(std::tolower(static_cast<unsigned char>(ch)));
+            const std::size_t at = lower.find("sec-websocket-key:");
+            if (at != std::string::npos) {
+                std::string key = head.substr(at + 18, head.find("\r\n", at) - at - 18);
+                while (!key.empty() && key.front() == ' ')
+                    key.erase(key.begin());
+                send_all(c, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " +
+                                tisma::net::base64(tisma::net::sha1(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) + "\r\n\r\n");
+                // Two pushes, as the printer sends what changed.
+                for (const nlohmann::json& j :
+                     {nlohmann::json{{"model", ""}, {"modelVersion", "F012"}, {"hostname", "K1C-ABCD"}},
+                      nlohmann::json{{"printJobTime", 600}, {"printLeftTime", left.load()}}}) {
+                    const std::string t = j.dump();
+                    std::string f;
+                    f += char(0x81);
+                    f += char(t.size());
+                    send_all(c, f + t);
+                }
+                // Until the client closes.
+                while (!stop_ && readable(c, 100) == false) {
+                }
+            }
+            close_socket(c);
+        }
+    }
+    Socket tcp_{};
+    int port_ = 0;
+    std::atomic<bool> stop_{false};
+    std::thread thread_;
+};
+
 } // namespace fake_sdcp
+

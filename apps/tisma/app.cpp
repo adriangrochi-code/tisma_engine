@@ -2149,6 +2149,7 @@ private:
     long long view_calls_ = -1; // the 3D view's draw calls in the last frame (--draw-stats)
     bool quit_ = false;
     std::optional<bool> host_sent_; // script: how the last send to a network program went
+    std::string host_sent_code_;    // script: and its code
     std::vector<std::future<void>> busy_jobs_; // script: stuck jobs, to time the exit (busy-job)
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
@@ -26795,10 +26796,14 @@ void App::host_poll() {
     }
     if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
         const device::HostResult r = host_job_.get();
-        if (!host_job_what_.empty())
+        if (!host_job_what_.empty()) {
             host_sent_ = r.ok;
+            host_sent_code_ = r.code;
+        }
         if (r.ok && !host_job_what_.empty())
             notify(format(tr(T::HostSent), host_job_what_.c_str(), host_.url.c_str()));
+        else if (!r.ok && host_.kind == device::HostKind::Creality && r.code == "unsupported")
+            notify(tr(T::HostCrealitySend), true); // not tried over 9999 (CR1-6)
         else if (!r.ok)
             notify(format(tr(T::HostFailed), r.error.c_str()), true);
         host_refresh();
@@ -26814,7 +26819,7 @@ void App::host_panel(float field, float button_h) {
         for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
                                          device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier,
                                          device::HostKind::Flashforge, device::HostKind::FlashforgeLegacy,
-                                         device::HostKind::Elegoo})
+                                         device::HostKind::Elegoo, device::HostKind::Creality})
             if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
                 host_.kind = k;
                 host_tested_ = false;
@@ -26822,6 +26827,8 @@ void App::host_panel(float field, float button_h) {
             }
         ImGui::EndCombo();
     }
+    // Anycubic is out of the beta (QA, 2026-11-17): say where to send from.
+    loc::TextWrapped("%s", tr(T::HostAnycubicNote));
     // OctoPrint announces itself by Zeroconf (printer_connections.md, «Búsqueda en la red»).
     if (host_.kind == device::HostKind::OctoPrint) {
         ImGui::BeginDisabled(host_search_.valid());
@@ -26932,6 +26939,9 @@ void App::host_panel(float field, float button_h) {
     if (host_.kind == device::HostKind::Duet) {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else if (host_.kind == device::HostKind::Creality) {
+        // Port 9999 asks for nothing: say who can reach it (CR1, «Advertencia de seguridad»).
+        loc::TextWrapped("%s", tr(T::HostCrealityHelp));
     } else if (host_.kind == device::HostKind::Elegoo) {
         loc::TextDisabled("%s", tr(T::HostElegooHelp)); // no login on the local network
     } else if (host_.kind == device::HostKind::FlashforgeLegacy) {
@@ -26987,14 +26997,23 @@ void App::host_panel(float field, float button_h) {
     loc::TextDisabled("%s", host_version_.server.c_str());
     const device::HostStatus& st = host_status_;
     if (st.ok) {
-        loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
+        if (st.nozzle < 0.0 && st.bed < 0.0) // not reported (a stock Creality, CR1)
+            loc::Text("%s", st.state.c_str());
+        else
+            loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
         if (st.printing) {
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
             ImGui::ProgressBar(float(std::max(0.0, st.progress) / 100.0), ImVec2(-FLT_MIN, 0.0f));
             ImGui::PopStyleColor();
-            loc::Text("%s: %.0f %%, %s", st.file.c_str(), std::max(0.0, st.progress),
-                      format_duration(std::max(0.0, st.seconds_left)).c_str());
+            if (st.seconds_done > 0.0) // Creality reports times, not a share (CR1-2)
+                loc::Text(tr(T::HostElapsed), format_duration(st.seconds_done).c_str(),
+                          format_duration(std::max(0.0, st.seconds_left)).c_str());
+            else
+                loc::Text("%s: %.0f %%, %s", st.file.c_str(), std::max(0.0, st.progress),
+                          format_duration(std::max(0.0, st.seconds_left)).c_str());
         }
+        if (st.code == "reconnecting") // never a lost print for a cut link (CR1-5)
+            loc::TextColored(rgb(0xE5A50A), "%s", tr(T::HostReconnecting));
     } else if (!st.code.empty()) {
         loc::TextColored(rgb(0xE5484D), tr(T::HostFailed), st.error.c_str());
     }
@@ -29208,6 +29227,8 @@ void App::script_input() {
             got = host_tested_ && host_version_.ok ? "yes" : "no";
         else if (step.key == "sent") // the last send: yes, no, or none
             got = !host_sent_ ? "none" : *host_sent_ ? "yes" : "no";
+        else if (step.key == "sent-code") // the last send's code: unsupported, busy…
+            got = host_sent_code_;
         else if (step.key == "printing")
             got = host_status_.ok && host_status_.printing ? "yes" : "no";
         else if (step.key == "found") { // the Flashforge search listed this serial number, or «older» for an older one;

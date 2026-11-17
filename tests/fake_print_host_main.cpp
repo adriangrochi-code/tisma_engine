@@ -119,6 +119,18 @@ int main(int argc, char** argv) {
                    " pieces=" + std::to_string(p.pieces.size());
         });
     }
+    if (kind == "creality") {
+        // Stock firmware, Moonraker off (CR1): its state by the WebSocket only.
+        fake_sdcp::Creality fake;
+#ifdef _WIN32
+        _putenv_s("TISMA_TEST_CREALITY_MOONRAKER_PORT", "9");
+#else
+        setenv("TISMA_TEST_CREALITY_MOONRAKER_PORT", "9", 1);
+#endif
+        return run<fake_sdcp::Creality>(fake, argc, argv, [](const fake_sdcp::Creality&) {
+            return std::string("started=0 creality");
+        });
+    }
     if (kind == "flashforge") {
         FakeFlashforge fake;
         // The search's answers too (FF1.1): a newer and an older printer.

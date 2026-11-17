@@ -15193,3 +15193,22 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
 - **Sin hacer:** mandar el `.goo` de una impresora de resina (hoy manda el G-code de FDM); la variante vieja por MQTT
   (fuera de la primera versión según la ficha).
 - **Lo que sigue:** Creality de fábrica (CR1) y el aviso de Anycubic.
+
+## 2026-11-17 — Creality de fábrica (CR1) y el aviso de Anycubic (beta del 24-11)
+
+- **Creality de fábrica:** tipo «Creality (K1, K2, Ender 3 V3, Hi)». Primero se prueba Moonraker en 7125; si
+  responde, se usa esa conexión (CR1-1). Si no, el estado por el WebSocket `ws://<IP>:9999/`: la impresora empuja
+  JSON y se junta lo que llega en 1,5 s. `printJobTime` y `printLeftTime` en segundos, y el avance sale de los dos
+  (CR1-2). Con `model` vacío, el modelo es «Creality (board F012)» (CR1-3). Con el enlace cortado a mitad de una
+  impresión sigue figurando activa y el panel dice «Reconectando…» (CR1-5). La subida y las órdenes no se intentan
+  por 9999: el aviso «Para mandar a esta impresora, activá Moonraker/Fluidd» (CR1-6, decisión de QA). El panel avisa
+  que sin contraseña cualquiera en la red puede controlarla. Sin temperaturas: la ficha no confirma sus nombres, y el
+  panel no muestra −1.
+- **Anycubic:** fuera de la beta; el panel de programas en la red dice «usá Anycubic Slicer Next».
+- **Arreglo:** los `send` de los sockets propios (WebSocket, Flashforge y los simuladores) usan `MSG_NOSIGNAL`: un
+  par que cerraba terminaba el programa con SIGPIPE en Linux.
+- **Pruebas:** CR1-1, 2, 3, 5 y 6 en `[device][net]` con un simulador propio (`fake_sdcp::Creality`), y
+  `ui_host_e2e_creality` en la puerta (prueba, estado imprimiendo, la orden de mandar con su aviso, y el de Anycubic).
+- **Sin hacer:** CR1-4 («detenida» tras 15 s en precalentamiento): la ficha no nombra la clave del estado ni sus
+  valores; queda pendiente de la ficha.
+- No probado con hardware.
