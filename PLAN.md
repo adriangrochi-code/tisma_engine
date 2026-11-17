@@ -1451,6 +1451,18 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 - [x] G13 y G14 (el motor, sobre los verbos de la interfaz).
 - [ ] G16: el flujo de Android de las apps (PR #56) cuando esté en dev; el iPhone.
 
+### Cierre de la beta: 24-11-2026 (decisión del dueño, 17-11, por QA)
+
+Para esa fecha, en este orden:
+1. Publicar 0.13.0-beta.3. `alpha` a7aeec6 se fusionó el 17-11 y la publicación está en marcha.
+2. F6: medir el motor con y sin GPU sobre el banco.
+3. P2: conexión con las impresoras de fábrica de Creality, Elegoo, Anycubic y Flashforge. QA escribe las fichas en
+   `printer_connections.md` (17 y 18-11).
+4. W4: las superficies de arriba en pendiente, cuando QA mande la decisión del dueño.
+
+macOS sale como versión alternativa. Se publica solo si pasa su propia puerta, y no frena a Windows, Linux ni Android.
+`release.yml` ya funciona así: `publish_macos` va aparte de `publish`.
+
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 
 Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
