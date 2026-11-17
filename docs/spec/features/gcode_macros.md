@@ -76,6 +76,40 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     tipo de placa elegido, si se nivela la cama, si se calibra el flujo y si se hace la calibración de vibraciones;
     esos valores salen de las opciones de impresión (regla 12).
 
+9 bis. **El G-code de la máquina tiene que salir igual que en el programa original** (decisión del dueño,
+    17-11-2026). Ninguna variable que use un G-code del paquete queda vacía o en 0 si tiene un valor real: con un valor
+    vacío, una condición `{if …}` toma otra rama y el G-code ya no es el de la máquina. Las que faltaban (barrido de QA
+    del 17-11-2026, 447 variantes) y su valor:
+    - `filament_abrasive[i]`: si el filamento del cabezal `i` es abrasivo (dato del filamento del paquete); si no lo
+      trae, no;
+    - `nozzle_high_flow[i]`: si la boquilla es de alto caudal (las variantes «HF» de Prusa: sí; dato de la impresora);
+    - `nozzle_volume_type`: «High Flow» o «Standard», del mismo dato;
+    - `zhop`: `retraction.lift`;
+    - `outer_wall_acceleration`: la aceleración de la pared externa;
+    - `print_sequence`: «by object» con `sequential.enabled`, si no «by layer»;
+    - `timelapse_type`: 0 (sin video), salvo que la impresora lo pida;
+    - `has_single_extruder_multi_material_priming`: no, salvo una impresora de un cabezal con varios filamentos que
+      cebe al empezar;
+    - `long_retraction_when_cut`: el dato del filamento si lo trae; si no, no;
+    - `e_retracted[i]`: lo que está retraído el cabezal `i` en ese punto, en mm;
+    - `position[0..2]`: la posición X, Y, Z de la boquilla en ese punto;
+    - `extruded_volume[i]` (mm³), `extruded_weight_total` y `filament_weight` (g): lo usado hasta ese punto; en el
+      G-code de fin, el total;
+    - `print_settings_id`, `filament_settings_id`, `printer_preset`, `print_preset`, `physical_printer_preset`: el
+      nombre del perfil de impresión, de filamento y de impresora elegidos; la impresora física, su nombre si la
+      persona le dio uno, si no el de la impresora;
+    - `notes`: las notas del perfil de impresión; `machine_name` (Cura): el nombre de la impresora;
+    - `print_bed_max`: la esquina de la cama con X e Y más grandes;
+    - `build_volume_temperature` (Cura): `extrusion.chamber_temperature`; `wall_thickness` (Cura): el número de
+      paredes por el ancho de línea; `material_standby_temperature` (Cura): la de espera del filamento si la trae,
+      si no la de impresión;
+    - `nozzle_temperature_initial_layer_1` y las demás de la forma vieja `[variable_índice]`: el valor del cabezal
+      `índice`, también en una impresora de varios cabezales (regla 8);
+    - `date`, `time` (Cura): la fecha y la hora de laminado, en el formato de la documentación de Cura;
+    - `bed_mesh_probe_count`, `bed_mesh_algo` (OrcaSlicer, malla adaptativa de Klipper): si el perfil trae los valores,
+      esos; si no, falta medirlos en OrcaSlicer como caja negra: hasta entonces se avisa en la interfaz, no solo en el
+      registro.
+    Una variable sin valor conocido sigue saliendo con aviso, que la interfaz muestra al laminar (prueba GM22).
 10 bis. **Dialectos** (campo `dialect` del bloque `gcode` del paquete, `profile_pack_format.md`): `prusaslicer` es el
     lenguaje de arriba con los nombres de la documentación pública de PrusaSlicer; `orcaslicer`, `crealityprint` y
     `elegooslicer` usan el mismo lenguaje con sus propios nombres de variables, que el motor llena con el valor
@@ -174,5 +208,6 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM17 | Una condición que abre y cierra en la misma línea, dentro de un texto y con un índice de extrusor: `M104 T1 S{if filament_type[1] == "PLA"}215{else}240{endif}` con PLA | `M104 T1 S215`; no cae en la versión simple |
 | GM20 | Prusa XL de 5 cabezales del paquete, un solo filamento | Se interpreta su G-code de inicio entero (`M17`, `M862.3 P "XL"`, `G28 XY`, `G28 Z`, la purga); no cae en la versión simple |
 | GM21 | G-code de inicio que no se puede interpretar, versión simple sin `G28` | El G-code tiene `G28` antes de la primera extrusión y el aviso se ve en la interfaz |
+| GM22 | Barrido de las 2 267 variantes FDM del paquete con el cubo de 20 mm | Ninguna da el aviso de variable sin llenar, salvo `bed_mesh_probe_count` y `bed_mesh_algo` sin valor en el perfil; las ramas `{if}` coinciden con las del programa original en las impresoras de referencia (MK4S, XL, X1C, K1, Voron 2.4) |
 | GM18 | `{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n"A" + a + "\n";\n}` (con saltos de línea reales) | Sale `A3` y un salto de línea; nada más |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |
