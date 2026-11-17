@@ -3,6 +3,7 @@
 #include "gcode/template.hpp"
 
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace tisma {
@@ -27,5 +28,12 @@ std::span<const MacroVariable> macro_variables();
 // list of one), named in TemplateContext::unfilled. Names already set are
 // kept. Own design.
 void add_macro_variables(TemplateContext& context, const Settings& settings);
+
+// Names the printer, filament and print profiles chosen for the machine's
+// G-code (gcode_macros.md, rule 9 bis): printer_settings_id,
+// filament_settings_id and print_settings_id in settings.variables, unless
+// already there; an empty name is left out.
+void name_profiles(Settings& settings, const std::string& printer, const std::string& filament,
+                   const std::string& print);
 
 } // namespace tisma

@@ -1,5 +1,6 @@
 #include "adhesion/adhesion.hpp"
 #include "config/settings.hpp"
+#include "gcode/macro_variables.hpp"
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
 #include "gcode/template.hpp"
@@ -163,6 +164,55 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK_FALSE(bc.unfilled.contains("curr_bed_type"));
     // A name that is in no list still fails (rule 5, GM6).
     CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
+}
+
+TEST_CASE("the machine's G-code takes the original program's branches (gcode_macros.md, rule 9 bis, GM22)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"215"};
+    s.abrasive = true;
+    s.high_flow_nozzle = {true};
+    s.retract_lift = 0.4;
+    s.accel_outer_wall = 1500.0;
+    s.wall_count = 2;
+    s.wall_width = 0.45;
+    s.chamber_temperature = 45.0;
+    s.filament_density = 1.24;
+    name_profiles(s, "Original Prusa XL HF0.6", "Prusament PLA", "0.20mm SPEED");
+    TemplateContext c = template_context(s, SlicedModel{});
+    CHECK(render_template("{if filament_abrasive[0]}A{else}N{endif}", c, "t") == "A");
+    CHECK(render_template("M862.1 F{(nozzle_high_flow[0] ? 1 : 0)}", c, "t") == "M862.1 F1");
+    CHECK(render_template("[nozzle_volume_type]", c, "t") == "High Flow");
+    CHECK(render_template("{zhop}", c, "t") == "0.4");
+    CHECK(render_template("{outer_wall_acceleration[0]}", c, "t") == "1500");
+    CHECK(render_template("{print_sequence}", c, "t") == "by layer");
+    CHECK(render_template("{timelapse_type}", c, "t") == "0");
+    CHECK(render_template("[print_preset];[printer_preset];[physical_printer_preset];[machine_name]", c, "t") ==
+          "0.20mm SPEED;Original Prusa XL HF0.6;Original Prusa XL HF0.6;Original Prusa XL HF0.6");
+    CHECK(render_template("[filament_settings_id]", c, "t") == "Prusament PLA");
+    CHECK(render_template("{build_volume_temperature};{wall_thickness};{material_standby_temperature}", c, "t") ==
+          "45;0.9;215");
+    // The old [variable_index] form through another program's name, for a
+    // second head the list does not have: the last value.
+    CHECK(render_template("[nozzle_temperature_initial_layer_1]", c, "t") == "215");
+    CHECK(render_template("[date]", c, "t").size() == 10);
+    CHECK(render_template("[time]", c, "t").size() == 8);
+    for (const char* name : {"filament_abrasive", "nozzle_high_flow", "zhop", "outer_wall_acceleration", "print_sequence",
+                             "timelapse_type", "print_preset", "printer_preset", "physical_printer_preset",
+                             "print_settings_id", "machine_name", "notes", "e_retracted", "position",
+                             "extruded_weight_total", "filament_weight", "build_volume_temperature", "wall_thickness",
+                             "material_standby_temperature", "nozzle_temperature_initial_layer_1", "date", "time",
+                             "long_retraction_when_cut", "has_single_extruder_multi_material_priming"})
+        CHECK_FALSE(c.unfilled.contains(name));
+    // Where the nozzle is and what it used, at the end.
+    s.start_gcode = "G28";
+    s.end_gcode = "; at {position[2]} used {extruded_weight_total} g, {e_retracted[0]} pulled back";
+    const std::string g = cube_gcode(s);
+    const std::size_t at = g.find("; at ");
+    REQUIRE(at != std::string::npos);
+    const std::string end = g.substr(at, g.find('\n', at) - at);
+    CHECK(end.find("; at 0 ") == std::string::npos);
+    CHECK(end.find("used 0 g") == std::string::npos);
 }
 
 TEST_CASE("ceil, and a condition opening and closing on one line with an extruder index (gcode_macros.md, GM16, GM17)",
@@ -2875,10 +2925,11 @@ TEST_CASE("a cura printer's own G-code: only {name}, and the extrusion its start
     const std::vector<double> e = e_values(g);
     REQUIRE(e.size() > 10);
     CHECK(e == e_values(cube_gcode(absolute)));
-    // Not the simple version: only the log's note of the name left as written.
+    // Not the simple version: a visible warning naming the variable left
+    // unfilled (gcode_macros.md, rule 9 bis).
     for (const Warning& w : warnings)
         if (w.kind == "gcode_macro") {
-            CHECK(w.severity == "information");
+            CHECK(w.severity == "warning");
             CHECK_THAT(w.message, Catch::Matchers::ContainsSubstring("no_such_cura_name"));
         }
 }

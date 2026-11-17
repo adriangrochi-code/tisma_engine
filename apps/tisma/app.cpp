@@ -38,6 +38,7 @@
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
+#include "gcode/macro_variables.hpp"
 #include "gcode/dialect.hpp"
 #include "gcode/gate_check.hpp"
 #include "gcode/output.hpp"
@@ -7350,6 +7351,9 @@ void App::start_slice() {
     // or sent to a printer, was «.gcode» (a hidden file on Klipper).
     if (settings.input_name.empty() && !model_path_.empty())
         settings.input_name = utf8(model_path_.stem());
+    // The profiles chosen, by name, for the machine's G-code (gcode_macros.md, rule 9 bis).
+    name_profiles(settings, chosen_profile_[std::size_t(ProfileKind::Printer)],
+                  chosen_profile_[std::size_t(ProfileKind::Filament)], chosen_profile_[std::size_t(ProfileKind::Print)]);
     PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
     // The paint's colour marks as the filaments and blends they stand for (MX33).
     Painting painting = paint_slots_.empty() ? std::move(plate.painting) : with_color_slots(plate.painting, paint_slots_);

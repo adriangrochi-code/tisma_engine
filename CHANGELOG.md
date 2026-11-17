@@ -9,6 +9,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+### Corregido
+- G-code de la máquina igual al del programa original: se llenan las variables que quedaban vacías o en 0 y cambiaban
+  las ramas `{if}` en 447 variantes del paquete. Entre ellas: filamento abrasivo, boquilla de alto caudal, `zhop`,
+  aceleración de la pared externa, orden de impresión, nombres de los perfiles, posición, lo retraído y lo usado, y las
+  de Cura. Una variable que el motor todavía no llena es ahora un aviso visible (GM22).
 
 ## [0.13.0-beta.2] - 2026-11-17
 ### Corregido

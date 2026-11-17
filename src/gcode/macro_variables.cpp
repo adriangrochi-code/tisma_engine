@@ -9,6 +9,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -190,6 +191,69 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     set("additional_fan_full_speed_layer", list_of(TemplateValue::of(0LL)));
     set("close_additional_fan_first_x_layers", list_of(TemplateValue::of(0LL)));
 
+    // What the machine's G-code needs to take the same branches as in the
+    // program it comes from (gcode_macros.md, rule 9 bis, GM22).
+    {
+        const std::size_t heads = std::size_t(std::max(s.extruders, 1));
+        const auto each = [&](TemplateValue value) {
+            return TemplateValue::of(std::vector<TemplateValue>(heads, value));
+        };
+        set("filament_abrasive", each(TemplateValue::of(s.abrasive)));
+        TemplateValue high = TemplateValue::of(std::vector<TemplateValue>{}), kinds = high;
+        for (std::size_t k = 0; k < heads; ++k) {
+            const bool hf = !s.high_flow_nozzle.empty() && s.high_flow_nozzle[std::min(k, s.high_flow_nozzle.size() - 1)];
+            high.list.push_back(TemplateValue::of(hf));
+            kinds.list.push_back(TemplateValue::of(std::string(hf ? "High Flow" : "Standard")));
+        }
+        set("nozzle_high_flow", high);
+        set("nozzle_volume_type", kinds);
+        set("nozzle_volume_types", kinds);
+        set("zhop", number(s.retract_lift));
+        set("outer_wall_acceleration",
+            list_of(number(s.accel_outer_wall > 0.0 ? s.accel_outer_wall : s.acceleration)));
+        set("print_sequence", TemplateValue::of(std::string(s.sequential ? "by object" : "by layer")));
+        set("timelapse_type", TemplateValue::of(0LL));
+        set("has_single_extruder_multi_material_priming", TemplateValue::of(false));
+        set("long_retraction_when_cut", TemplateValue::of(false));
+        set("notes", TemplateValue::of(std::string()));
+        set("build_volume_temperature", whole(s.chamber_temperature));
+        const double width = s.wall_width > 0.0 ? s.wall_width : auto_wall_width(s.nozzle_diameter);
+        set("wall_thickness", number(s.wall_count * width));
+        if (const double idle = first_number("idle_temperature"); idle > 0.0 || nozzle > 0.0)
+            set("material_standby_temperature", whole(idle > 0.0 ? idle : nozzle));
+        // Where the nozzle is and what is used; the writer sets them again at
+        // each layer change and at the end.
+        set("position", TemplateValue::of(std::vector<TemplateValue>{number(0.0), number(0.0), number(0.0)}));
+        set("e_retracted", each(number(0.0)));
+        set("extruded_volume", each(number(0.0)));
+        set("extruded_weight_total", number(0.0));
+        set("filament_weight", number(0.0));
+        // The profiles' names: the print preset is the print profile, the
+        // physical printer the printer (none named apart), cura's machine_name
+        // the printer.
+        const auto alias = [&](const char* name, const char* from) {
+            if (const auto it = v.find(from); it != v.end())
+                set(name, it->second);
+        };
+        alias("print_preset", "print_settings_id");
+        alias("printer_preset", "printer_settings_id");
+        alias("physical_printer_preset", "printer_settings_id");
+        alias("machine_name", "printer_settings_id");
+        // cura's date and time of slicing.
+        const std::time_t now = std::time(nullptr);
+        std::tm local{};
+#ifdef _WIN32
+        localtime_s(&local, &now);
+#else
+        localtime_r(&now, &local);
+#endif
+        char text[32];
+        std::strftime(text, sizeof text, "%d-%m-%Y", &local);
+        set("date", TemplateValue::of(std::string(text)));
+        std::strftime(text, sizeof text, "%H:%M:%S", &local);
+        set("time", TemplateValue::of(std::string(text)));
+    }
+
     // The rest of the list.
     for (const MacroVariable& m : kVariables) {
         const std::string name(m.name);
@@ -207,16 +271,34 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         if (const std::size_t under = name.find_last_of('_');
             m.equivalent.empty() && under != std::string::npos && under + 1 < name.size() &&
             name.find_first_not_of("0123456789", under + 1) == std::string::npos) {
-            const auto base = v.find(name.substr(0, under));
+            // Through the base's equivalent too (nozzle_temperature_initial_layer_1),
+            // and the last value for a head beyond the list (rule 8).
+            std::string base_name = name.substr(0, under);
+            if (!v.contains(base_name))
+                for (const MacroVariable& e : kVariables)
+                    if (e.name == base_name && !e.equivalent.empty()) {
+                        base_name = std::string(e.equivalent);
+                        break;
+                    }
+            const auto base = v.find(base_name);
             const std::size_t at = std::stoul(name.substr(under + 1));
-            if (base != v.end() && base->second.kind == TemplateValue::Kind::List && at < base->second.list.size()) {
-                v[name] = base->second.list[at];
+            if (base != v.end() && base->second.kind == TemplateValue::Kind::List && !base->second.list.empty()) {
+                v[name] = base->second.list[std::min(at, base->second.list.size() - 1)];
                 continue;
             }
         }
         v[name] = neutral(m.type);
         c.unfilled.insert(name);
     }
+}
+
+void name_profiles(Settings& settings, const std::string& printer, const std::string& filament,
+                   const std::string& print) {
+    for (const auto& [name, value] : {std::pair{"printer_settings_id", &printer},
+                                      std::pair{"filament_settings_id", &filament},
+                                      std::pair{"print_settings_id", &print}})
+        if (!value->empty() && !settings.variables.contains(name))
+            settings.variables[name] = {*value};
 }
 
 } // namespace tisma

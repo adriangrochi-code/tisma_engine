@@ -15004,3 +15004,27 @@ cualquier línea así en lo que escribe el motor (gcode_firmware.md regla 1, FW1
 Versión 0.13.0-beta.2.
 
 **Sigue:** confirmar la publicación y avisar a QA; el barrido del paquete lo repite QA.
+
+## 2026-11-17 — GM22: variables del G-code de la máquina (gcode_macros.md, regla 9 bis)
+
+**Hecho:**
+- El barrido de QA mostró 447 variantes del paquete con variables vacías o en 0. Ahora se llenan con los valores de la
+  regla 9 bis:
+  - del perfil: `filament_abrasive`, `nozzle_high_flow`, `nozzle_volume_type`, `zhop`, `outer_wall_acceleration`,
+    `print_sequence`, `timelapse_type`, `notes`;
+  - los nombres de los perfiles: `print_preset`, `printer_preset`, `physical_printer_preset` y `machine_name`, que
+    `name_profiles` toma de `profile --pack` y de la interfaz;
+  - de Cura: `build_volume_temperature`, `wall_thickness`, `material_standby_temperature`, `date`, `time`;
+  - del punto de impresión, en cada cambio de capa y al final: `position`, `e_retracted`, `extruded_volume`,
+    `extruded_weight_total`, `filament_weight`.
+- La forma vieja `[variable_índice]` busca la variable por su equivalente y, para un cabezal fuera de la lista, toma el
+  último valor.
+- Una variable sin llenar sale como aviso (`warning`) y no como información.
+
+**Pruebas:** `[gcode]`, 137 casos bien.
+
+**Sin probar:** el barrido del paquete, que lo hace QA.
+
+**Sigue:**
+- `bed_mesh_*` queda con aviso hasta que se mida en OrcaSlicer.
+- Falta confirmar el formato de `date` y `time` de Cura.
