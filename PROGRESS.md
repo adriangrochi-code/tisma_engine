@@ -14831,3 +14831,11 @@ para el LBM D3Q19.
   fabricantes no bajados): todas laminan, ninguna en la versión simple; sin `G28` solo la mycusini 2.0 (su propio
   inicio, de chocolate). 1121 pruebas sin interfaz en verde (PT7 cambia: la cama se agrega).
 
+- **Sovol SV04 «Single Mode 02» (4 variantes, debe886):** calienta e imprime con `T1` en una impresora de un solo
+  extrusor; el verificador ignoraba `T<n>` cuando no hay longitudes de cambio de herramienta y miraba el calentador
+  de T0. Ahora sigue `T<n>` siempre. Las 4 laminan y pasan la verificación.
+- **Líneas que no son comandos (propuesta de QA, ef61988):** una línea cuyo primer carácter no es una letra ni un
+  signo de host (`$`, `@`, `%`, `!`) sale como problema «not a G-code command», también en el G-code de la máquina
+  (caso real: el fin del Z-Bolt Classic, una expresión de Cura sin evaluar). Barrido de 87 variantes instaladas: sin
+  fallas nuevas.
+- **Siguiente:** puerta en Linux, Windows y macOS sobre ef61988; si queda verde, la versión de prueba (dev → alpha).
