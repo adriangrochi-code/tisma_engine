@@ -375,18 +375,6 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_print_host_offline PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
-    # Each kind of network program from end to end against a local fake:
-    # test, send and print, state (the tester's report, 2026-11-16).
-    foreach(kind octoprint astrobox moonraker prusalink duet repetier)
-      add_test(NAME ui_host_e2e_${kind}
-        COMMAND $<TARGET_FILE:tisma_fake_print_host> ${kind} ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
-                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/host_e2e_${kind}.txt
-                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_host_e2e_${kind}.png)
-      set_tests_properties(ui_host_e2e_${kind} PROPERTIES FAIL_REGULAR_EXPRESSION "error: "
-                           PASS_REGULAR_EXPRESSION "fake host: started=1 name=." ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
-                           TIMEOUT 300)
-    endforeach()
     # The overlays over the view (the wind's arrow, the streamlines, the
     # sketch) show with OpenGL and with Vulkan.
     foreach(graphics opengl vulkan)

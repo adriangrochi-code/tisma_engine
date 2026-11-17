@@ -7342,7 +7342,12 @@ void App::start_slice() {
     // A test prints with its own settings: no supports under the resin tests
     // or the bridges, for one (calibration_print_settings).
     // The purge between filaments, by their colours when unset (color_mixing_plus.md, rule 37).
-    const Settings settings = with_color_purge(calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_);
+    Settings settings = with_color_purge(calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_);
+    // The templates' input_filename_base (gcode_templates.md, rule 7), as the
+    // command line gives it: without it the G-code's default name, exported
+    // or sent to a printer, was «.gcode» (a hidden file on Klipper).
+    if (settings.input_name.empty() && !model_path_.empty())
+        settings.input_name = utf8(model_path_.stem());
     PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
     // The paint's colour marks as the filaments and blends they stand for (MX33).
     Painting painting = paint_slots_.empty() ? std::move(plate.painting) : with_color_slots(plate.painting, paint_slots_);

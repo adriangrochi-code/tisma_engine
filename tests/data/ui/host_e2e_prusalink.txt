@@ -9,6 +9,8 @@ host-wait
 expect-host ok yes
 # Klipper's limits read on the test may change the settings: sliced again.
 slice
+# The G-code that goes, for the fake to compare (release gate G10).
+keep-gcode host_sent_prusalink.gcode
 host send
 host-wait
 expect-host sent yes

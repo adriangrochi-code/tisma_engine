@@ -9,11 +9,26 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace {
+
+// «whole=1» when what the fake got is, byte for byte, the file named by
+// TISMA_FAKE_HOST_EXPECT (the G-code a script kept with keep-gcode); empty
+// when that variable is not set.
+std::string whole(const std::string& got) {
+    const char* path = std::getenv("TISMA_FAKE_HOST_EXPECT");
+    if (!path)
+        return {};
+    std::ifstream in(path, std::ios::binary);
+    const std::string want((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return " bytes=" + std::to_string(got.size()) + "/" + std::to_string(want.size()) +
+           " whole=" + (!want.empty() && got == want ? "1" : "0");
+}
 
 template <class Fake>
 int run(Fake& fake, int argc, char** argv, std::string (*saw)(const Fake&)) {
@@ -52,19 +67,19 @@ int main(int argc, char** argv) {
     if (kind == "octoprint" || kind == "astrobox") { // AstroBox answers OctoPrint's calls (devices.md, rule 24)
         FakeOctoPrint fake;
         return run<FakeOctoPrint>(fake, argc, argv, [](const FakeOctoPrint& f) {
-            return "started=" + std::string(f.started ? "1" : "0") + " name=" + f.uploaded_name;
+            return "started=" + std::string(f.started ? "1" : "0") + " name=" + f.uploaded_name + whole(f.uploaded);
         });
     }
     if (kind == "moonraker") {
         FakeMoonraker fake;
         return run<FakeMoonraker>(fake, argc, argv, [](const FakeMoonraker& f) {
-            return "started=" + std::string(f.started ? "1" : "0") + " name=" + f.name;
+            return "started=" + std::string(f.started ? "1" : "0") + " name=" + f.name + whole(f.body);
         });
     }
     if (kind == "prusalink") {
         FakePrusaLink fake;
         return run<FakePrusaLink>(fake, argc, argv, [](const FakePrusaLink& f) {
-            return "started=" + std::string(f.started ? "1" : "0") + " name=" + f.name;
+            return "started=" + std::string(f.started ? "1" : "0") + " name=" + f.name + whole(f.body);
         });
     }
     if (kind == "duet") {
@@ -73,13 +88,13 @@ int main(int argc, char** argv) {
             bool started = false;
             for (const std::string& g : f.codes)
                 started = started || g.rfind("M32", 0) == 0;
-            return "started=" + std::string(started ? "1" : "0") + " name=" + f.name;
+            return "started=" + std::string(started ? "1" : "0") + " name=" + f.name + whole(f.body);
         });
     }
     if (kind == "repetier") {
         FakeRepetier fake;
         return run<FakeRepetier>(fake, argc, argv, [](const FakeRepetier& f) {
-            return "started=" + std::string(f.job != "none" ? "1" : "0") + " name=" + f.uploaded_name;
+            return "started=" + std::string(f.job != "none" ? "1" : "0") + " name=" + f.uploaded_name + whole(f.uploaded);
         });
     }
     std::fprintf(stderr, "tisma_fake_print_host: unknown kind %s\n", kind.c_str());

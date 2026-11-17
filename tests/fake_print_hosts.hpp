@@ -119,6 +119,7 @@ public:
             std::lock_guard lock(mutex_);
             const auto file = req.form.get_file("file");
             name = file.filename;
+            body = file.content;
             started = req.form.has_field("print") && req.form.get_field("print") == "true";
             if (started)
                 state = "printing";
@@ -161,7 +162,7 @@ public:
         thread_.join();
     }
     std::string url() const { return "http://127.0.0.1:" + std::to_string(port_); }
-    std::string state = "standby", name;
+    std::string state = "standby", name, body;
     bool started = false, asked = false;
     std::vector<std::string> calls;
 

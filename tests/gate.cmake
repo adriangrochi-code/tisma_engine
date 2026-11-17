@@ -178,3 +178,19 @@ foreach(case prusa:PrusaResearch/models/Original_Prusa_MK4.json
   set_tests_properties(gate_g14_${name} PROPERTIES
                        ENVIRONMENT "HOME=${home};XDG_CONFIG_HOME=;APPDATA=${home};ASAN_OPTIONS=detect_leaks=0")
 endforeach()
+
+# G10, send: each kind of network printer, faked on this machine, from end to
+# end through the Device page (the tester's report, 2026-11-16): the G-code
+# arrives whole, byte for byte the slice's, and the print starts.
+foreach(kind octoprint astrobox moonraker prusalink duet repetier)
+  add_test(NAME ui_host_e2e_${kind}
+    COMMAND $<TARGET_FILE:tisma_fake_print_host> ${kind} ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>
+            ${TISMA_GATE_DATA}/cube_ascii.stl --lang en --size 1200x760
+            --ui-script ${TISMA_GATE_DATA}/ui/host_e2e_${kind}.txt
+            --screenshot ${TISMA_GATE_OUT}/ui_host_e2e_${kind}.png)
+  set_tests_properties(ui_host_e2e_${kind} PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSION "error: "
+                       PASS_REGULAR_EXPRESSION "fake host: started=1 name=([^ ]*/)?[^ ./][^ /]*[.]gcode bytes=[0-9]+/[0-9]+ whole=1"
+                       WORKING_DIRECTORY ${TISMA_GATE_OUT}
+                       ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;TISMA_FAKE_HOST_EXPECT=${TISMA_GATE_OUT}/host_sent_${kind}.gcode"
+                       TIMEOUT 300)
+endforeach()

@@ -14775,3 +14775,9 @@ para el LBM D3Q19.
 - **Chequeo de la vista con el renderizador por software de Apple:** QA pidió saltarlo con `TISMA_SOFTWARE_GL`. No lo
   hice: es relajar una comprobación de la puerta y la regla del dueño es que ninguna se salta. Queda para que decida
   el dueño (o un runner con GPU).
+- **G10, mandar:** las seis pruebas `ui_host_e2e_*` (OctoPrint, AstroBox, Moonraker, PrusaLink, Duet, Repetier contra
+  fakes locales) pasan a la puerta. El fake compara lo que recibió con el G-code que el guion guardó (`keep-gcode`)
+  y la prueba exige «started=1», un nombre de archivo de verdad y «whole=1» (byte a byte). Pasan las seis.
+- **Encontrado de paso:** el nombre del archivo que se mandaba (y el nombre por defecto al exportar con la plantilla)
+  era «.gcode», vacío: la interfaz no le daba al motor `input_name` (el `[input_filename_base]` de la plantilla). En
+  Klipper eso es un archivo oculto. Ahora sale el nombre del modelo (`cube_ascii.gcode`).
