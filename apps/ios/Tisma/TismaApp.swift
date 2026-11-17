@@ -82,7 +82,7 @@ struct PlateView: View {
     @AppStorage("plate.opened") private var openedPath = ""
     private var opened: URL? { openedPath.isEmpty ? nil : URL(fileURLWithPath: openedPath) }
     /// «20.0 × 20.0 × 20.0 mm · 12 triangles», from the engine's `info` on the model on the plate.
-    @State private var modelInfo: String?
+    @State private var sizeLine: String?
     @State private var picking = false
     @State private var sent: String?
     @State private var cloudLine: String?
@@ -149,7 +149,7 @@ struct PlateView: View {
                     Text(opened?.lastPathComponent ?? String(localized: "The 20 mm cube"))
                         .accessibilityIdentifier("plate_model")
                     // The part's size and triangles, as the engine reads the file (STL, OBJ or 3MF), as on Android.
-                    if let modelInfo { Text(modelInfo).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("plate_info") }
+                    if let sizeLine { Text(sizeLine).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("plate_info") }
                     Button("Open a model…") { picking = true }
                     // mobile_app.md, rule 13: whether the part holds, with the engine's analysis.
                     NavigationLink("Engineering") {
@@ -189,10 +189,10 @@ struct PlateView: View {
             .task(id: openedPath) {
                 // The engine's own reading of the file: the same size the slice will have.
                 let path = opened?.path ?? ""
-                modelInfo = nil
+                sizeLine = nil
                 guard !path.isEmpty else { return }
                 let info = await Task.detached { PlateView.info(of: path) }.value
-                if openedPath == path { modelInfo = info }
+                if openedPath == path { sizeLine = info }
             }
             // mobile_app.md, rule 6 (parity P3): the tools in a strip below, the model still in view.
             .safeAreaInset(edge: .bottom) { toolStrip }
