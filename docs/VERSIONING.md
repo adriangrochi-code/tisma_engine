@@ -34,7 +34,7 @@ Hitos ya cumplidos, que no se publicaron por separado:
 | 0.9.0 | Más de F5, P1 y la cobertura: soportes en árbol, OBJ y 3MF, costura en bufanda, modo vaso, el panel de ajustes nuevo, herramientas de la placa y pintura; publicada como 0.9.0-alpha.1 |
 | 0.12.0 | El G-code original de cada impresora, temperaturas de la primera capa, BH39–BH45, el convertidor de proyectos (parcial), Mi biblioteca, agujeros como polígonos, paredes sin apoyo al final, la app de Android; publicada como 0.12.0-beta.1 para los probadores |
 | 0.11.0 | El paquete de perfiles (impresoras, filamentos y resinas descargados, cama en la vista), calibraciones nuevas, Ingeniería con Optimizar, Diseño (D3, D4 y D5b), la nube y las versiones firmadas; publicada como 0.11.0-beta.1 para los probadores |
-| 0.13.0 | La verificación del G-code más estricta (comandos, lo ya impreso, cambios de herramienta), `infill.angles`, puentes enteros, y piezas grandes y con muchas islas mucho más rápidas; publicada como 0.13.0-beta.1 para los probadores |
+| 0.13.0 | La verificación del G-code más estricta (comandos, lo ya impreso, cambios de herramienta), `infill.angles`, puentes enteros, y piezas grandes y con muchas islas mucho más rápidas; publicada como 0.13.0-beta.1 para los probadores y 0.13.0-beta.2 con el arreglo de FW12 |
 | 0.10.0 | Más de P1 y la cobertura: resina, impresoras de cinta, capas curvas, multimaterial, el panel de ajustes con búsqueda y Personalizado, la tarjeta y la página de la impresora, la vista previa completa, créditos, la ayuda con sus datos y tutoriales, cortar, separar, espejar y medir; publicada como 0.10.0-alpha.2 (la alpha.1 no llegó a publicarse: sus pruebas no corrieron en Windows) |
 
 ## Las ramas (decisión del dueño, 2026-10-24)

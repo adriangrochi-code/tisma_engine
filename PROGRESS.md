@@ -14994,3 +14994,13 @@ para el LBM D3Q19.
   clic caía donde estaba el cursor real (en Xvfb la ventana no tiene foco y no pasaba). Ahora el guion repite su
   posición en cada cuadro, después del backend. Linux: puerta 65/65 y los 108 `ui_script_*` pasan. macOS: se ve en
   la próxima corrida.
+
+## 2026-11-17 — FW12: regresión de «not a G-code command» y 0.13.0-beta.2
+
+**Hecho:** QA encontró que la comprobación de ef61988 dejaba sin laminar 146 de 2 267 variantes del paquete (todas
+las RatRig). Ahora `_` inicia una macro de Klipper; en el G-code de la máquina una línea que no es comando es un aviso
+(`notes`); sigue siendo problema una expresión sin evaluar (comilla con `' +`, o `if … else` fuera de llaves) y
+cualquier línea así en lo que escribe el motor (gcode_firmware.md regla 1, FW12). Pruebas `[gcode]`: 136 casos bien.
+Versión 0.13.0-beta.2.
+
+**Sigue:** confirmar la publicación y avisar a QA; el barrido del paquete lo repite QA.
