@@ -15225,5 +15225,6 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
 
 **0.13.0-beta.3 publicada (17-11, 19:22 UTC)** para Linux, Windows y Android. macOS espera en la cola de GitHub las
 corridas de su puerta. QA la probó en Linux: la A1 mini da `F523.843`. Las 72 capturas de la puerta salían sueltas
-junto a los instaladores. Desde ahora `release.yml` las junta en `capturas-de-la-puerta-<versión>.zip`. En la beta.3
+junto a los instaladores. Desde ahora `release.yml` no las sube: ni sueltas ni en zip. Quedan solo como artifact de la CI (decisión del dueño,
+17-11). En la beta.3
 siguen sueltas: no tengo herramienta para borrar archivos de una versión publicada.

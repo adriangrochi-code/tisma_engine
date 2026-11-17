@@ -266,11 +266,9 @@ jobs:
         run: |
           # macOS goes up in publish_macos, once its own gate passes.
           rm -f packages/*-macos-*
-          # The gate's screenshots in one zip, not loose beside the installers
-          # (QA, 17-11-2026: they confused the testers).
-          if ls packages/*.png >/dev/null 2>&1; then
-            (cd packages && zip -q -m "capturas-de-la-puerta-$(cat ../VERSION).zip" *.png)
-          fi
+          # The gate's screenshots stay a CI artifact only, never in the
+          # release, loose or zipped (owner's decision, 17-11-2026).
+          rm -f packages/*.png
           python3 tools/release_notes.py "$TAG" > notes.md
           version="$(cat VERSION)"
           prerelease=""
