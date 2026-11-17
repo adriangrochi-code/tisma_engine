@@ -9,20 +9,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
-### Corregido
-- G-code de la máquina igual al del programa original: se llenan las variables que quedaban vacías o en 0 y cambiaban
-  las ramas `{if}` en 447 variantes del paquete. Entre ellas: filamento abrasivo, boquilla de alto caudal, `zhop`,
-  aceleración de la pared externa, orden de impresión, nombres de los perfiles, posición, lo retraído y lo usado, y las
-  de Cura. Una variable que el motor todavía no llena es ahora un aviso visible (GM22).
 
-## [0.13.0-beta.2] - 2026-11-17
-### Corregido
-- Verificación del G-code: las macros de Klipper que empiezan con `_` (`_ON_LAYER_CHANGE` de las RatRig) son
-  comandos, y en el G-code de la máquina una línea que no es comando (`//M85`, `==========`) es un aviso y no impide
-  laminar; solo una expresión sin evaluar (Z-Bolt Classic) sigue siendo problema. En 0.13.0-beta.1, 146 de 2 267
-  variantes del paquete no laminaban (FW12).
+## [0.13.0-beta.3] - 2026-11-17
+0.13.0-beta.1 y 0.13.0-beta.2 no se publicaron: sus builds de publicación fallaban. Esta versión los reúne.
 
-## [0.13.0-beta.1] - 2026-11-17
 - Relleno: lista de ángulos por capa en ciclo (`infill.angles`), para lo sólido, los puentes, el planchado y los
   rellenos de líneas.
 - Puentes con un número entero de líneas de borde a borde: sin franja sin cubrir junto a los bordes.
@@ -93,6 +83,17 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - Los contadores con uno dicen «1 aviso», «1 capa», «1 pared» (antes «1 avisos»), también en inglés.
 - `--ground-*` con un 3MF que trae bloqueadores o forzadores de soporte ya no los deja fuera de lugar: avisa que
   todavía no se puede.
+
+### Corregido
+- Verificación del G-code: las macros de Klipper que empiezan con `_` (`_ON_LAYER_CHANGE` de las RatRig) son
+  comandos, y en el G-code de la máquina una línea que no es comando (`//M85`, `==========`) es un aviso y no impide
+  laminar; solo una expresión sin evaluar (Z-Bolt Classic) sigue siendo problema. Sin esto, 146 de 2 267
+  variantes del paquete no laminaban con la verificación nueva (FW12).
+- G-code de la máquina igual al del programa original: se llenan las variables que quedaban vacías o en 0 y cambiaban
+  las ramas `{if}` en 447 variantes del paquete. Entre ellas: filamento abrasivo, boquilla de alto caudal, `zhop`,
+  aceleración de la pared externa, orden de impresión, nombres de los perfiles, posición, lo retraído y lo usado, y las
+  de Cura. Una variable que el motor todavía no llena es ahora un aviso visible (GM22).
+- Publicación: el programa ya no se cierra con error si recibe SIGTERM mientras arranca y descarga el paquete; los datos firmados de las pruebas llegan iguales a Windows; el build de macOS pide macOS 13.3 o más nuevo.
 
 ## [0.12.0-beta.1] - 2026-11-10
 
@@ -1958,9 +1959,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.2...HEAD
-[0.13.0-beta.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.1...v0.13.0-beta.2
-[0.13.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.12.0-beta.1...v0.13.0-beta.1
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.3...HEAD
+[0.13.0-beta.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.12.0-beta.1...v0.13.0-beta.3
 [0.12.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...v0.12.0-beta.1
 [0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
 [0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
