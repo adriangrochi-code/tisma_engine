@@ -14781,3 +14781,7 @@ para el LBM D3Q19.
 - **Encontrado de paso:** el nombre del archivo que se mandaba (y el nombre por defecto al exportar con la plantilla)
   era «.gcode», vacío: la interfaz no le daba al motor `input_name` (el `[input_filename_base]` de la plantilla). En
   Klipper eso es un archivo oculto. Ahora sale el nombre del modelo (`cube_ascii.gcode`).
+- **G11, la nube:** `gate_g11_cloud`. El servidor de prueba, con `TISMA_MOCK_CLOUD_ENGINE`, es un maestro de prueba:
+  corre `tisma-engine slice <proyecto> --sandbox` sobre el proyecto que recibe, como los nodos. El guion lamina local,
+  guarda el G-code, inicia sesión, lamina en la nube y compara: igual byte a byte (117 551 bytes). Sin el maestro (la
+  respuesta fija del servidor de prueba) la comparación falla, como debe.

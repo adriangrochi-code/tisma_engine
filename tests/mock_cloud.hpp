@@ -3,12 +3,15 @@
 // A mock Tisma Cloud server for the tests, built from docs/spec/features/cloud.md
 // with cpp-httplib's server, on 127.0.0.1 and a free port.
 
+#include "cad/process.hpp"
 #include "io/zip.hpp"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <mutex>
 #include <sstream>
 #include <cstdlib>
@@ -274,6 +277,29 @@ public:
                                   {"report", {{"verdict", {{"name", "holds"}, {"min_safety", 3.5}, {"required_safety", 2.0}}},
                                               {"valid", true}}}};
                 res.set_content(tea.dump(), "application/json");
+                return;
+            }
+            // With TISMA_MOCK_CLOUD_ENGINE, a master of test: the engine
+            // slices the project as the nodes do (the release gate's G11).
+            if (const char* engine = std::getenv("TISMA_MOCK_CLOUD_ENGINE")) {
+                const std::filesystem::path dir =
+                    std::filesystem::temp_directory_path() / ("tisma_mock_master_" + std::to_string(port_));
+                std::filesystem::create_directories(dir);
+                const std::string ext = std::filesystem::path(filename_).extension().string();
+                const std::filesystem::path project = dir / ("job" + (ext.empty() ? std::string(".tisma") : ext));
+                std::ofstream(project, std::ios::binary) << project_;
+                const tisma::cad::ProcessResult r = tisma::cad::run_process(
+                    engine, {"slice", project.string(), "-o", (dir / "out.gcode").string(), "--summary",
+                             (dir / "summary.json").string(), "--sandbox"},
+                    600.0);
+                std::ifstream in(dir / "out.gcode", std::ios::binary);
+                const std::string gcode((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                if (!r.started || r.status != 0 || gcode.empty()) {
+                    res.status = 500;
+                    res.set_content(r.err + r.error, "text/plain");
+                    return;
+                }
+                res.set_content(gcode, "text/plain");
                 return;
             }
             res.set_content("; sliced on the server\nG1 X10 Y10 E1\n", "text/plain");

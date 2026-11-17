@@ -194,3 +194,14 @@ foreach(kind octoprint astrobox moonraker prusalink duet repetier)
                        ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;TISMA_FAKE_HOST_EXPECT=${TISMA_GATE_OUT}/host_sent_${kind}.gcode"
                        TIMEOUT 300)
 endforeach()
+
+# G11, the cloud: the plate sliced in the cloud against a master of test (the
+# mock server runs the engine on the project, as the nodes do); the G-code
+# that comes back is the local one, byte for byte.
+add_test(NAME gate_g11_cloud
+  COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>
+          ${TISMA_GATE_DATA}/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+          --ui-script ${TISMA_GATE_DATA}/ui/gate_g11_cloud.txt --screenshot ${TISMA_GATE_OUT}/gate_g11_cloud.png)
+set_tests_properties(gate_g11_cloud PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSION "error: " TIMEOUT 600
+                     WORKING_DIRECTORY ${TISMA_GATE_OUT}
+                     ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_CLOUD_ENGINE=$<TARGET_FILE:tisma-engine>;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${TISMA_GATE_OUT}/g11_secrets.txt")
