@@ -10,6 +10,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.13.0-beta.4] - 2026-11-17
+El mismo programa que 0.13.0-beta.3.
+### Cambiado
+- La página de la versión trae solo los instaladores, los zip y los APK. Las capturas de pantalla de las pruebas ya no
+  se publican.
+
 ## [0.13.0-beta.3] - 2026-11-17
 0.13.0-beta.1 y 0.13.0-beta.2 no se publicaron: sus builds de publicación fallaban. Esta versión los reúne.
 
@@ -1960,7 +1966,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.3...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.4...HEAD
+[0.13.0-beta.4]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.3...v0.13.0-beta.4
 [0.13.0-beta.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.12.0-beta.1...v0.13.0-beta.3
 [0.12.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...v0.12.0-beta.1
 [0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
