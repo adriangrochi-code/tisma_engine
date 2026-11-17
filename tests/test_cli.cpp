@@ -134,6 +134,20 @@ TEST_CASE("info prints the mesh summary", "[cli]") {
     CHECK_THAT(r.out, ContainsSubstring("sliced_volume: 1000"));
 }
 
+TEST_CASE("info: overlapping shells and parts are counted once in the volume", "[cli]") {
+    // Two 10 mm boxes in one STL, half over each other: the meshes add to
+    // 2000 mm3, the solid is 1500; info says how much overlaps.
+    const Run r = run({"info", kData + "/overlap_boxes.stl"});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("sliced_volume: 1500"));
+    CHECK_THAT(r.out, ContainsSubstring("overlap_volume: 500"));
+    // Parts of a 3MF: volume is their union; parts_volume their sum.
+    const Run p = run({"info", kData + "/formats/box_parts.3mf"});
+    CHECK(p.code == kExitOk);
+    CHECK_THAT(p.out, ContainsSubstring("parts_volume: "));
+    CHECK_THAT(p.out, ContainsSubstring("\nvolume: "));
+}
+
 TEST_CASE("info and slice read OBJ and 3MF models (formats.md, FM2, FM3, FM9)", "[cli]") {
     const Run obj = run({"info", kData + "/formats/box.obj"});
     CHECK(obj.code == kExitOk);

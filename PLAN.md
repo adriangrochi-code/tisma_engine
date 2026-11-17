@@ -630,8 +630,9 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [x] el verificador con un mapa de alturas de lo ya impreso (ningún movimiento por debajo), hecho 2026-11-17: celdas
       de 1 mm, más de una capa por debajo es problema; capas planas solamente
     - [x] `infill.solid_below_area` de la ficha `surfaces_infill.md` (zonas chicas sólidas)
-    - [ ] `info` cuenta contornos de área cero en mallas con triángulos degenerados, y su `volume` suma las mallas que
-      se pisan (el laminado está bien)
+    - [x] `info` cuenta contornos de área cero en mallas con triángulos degenerados, y su `volume` suma las mallas que
+      se pisan (el laminado está bien). Hecho 2026-11-17: `degenerate_contours` aparte; con varias partes `volume` es la
+      unión (de las capas) y `parts_volume` la suma; en una malla con cáscaras que se pisan, `overlap_volume`
     - [x] la verificación del G-code crece más que lineal con las islas (equipo de fichas: ×37 de 25 a 400 cilindros,
       el 16 % del total con 400). Medido otra vez el 2026-11-17 (con el mapa de alturas nuevo): 25, 100 y 400 cilindros
       de 64 lados, 16, 52 y 238–268 ms para 86 mil, 343 mil y 1,37 millones de líneas: lineal; ya no se reproduce

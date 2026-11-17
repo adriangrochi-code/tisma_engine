@@ -12,6 +12,7 @@
 #include "io/model.hpp"
 #include "io/paths.hpp"
 #include "io/stl.hpp"
+#include "slice/contours.hpp"
 #include "slice/placement.hpp"
 #include "io/ply.hpp"
 #include "io/vtk.hpp"
@@ -360,7 +361,12 @@ void print_mesh_summary(const ModelFile& stl, double seconds, std::ostream& out)
         out << "min: " << box.min.x << " " << box.min.y << " " << box.min.z << "\n";
         out << "max: " << box.max.x << " " << box.max.y << " " << box.max.z << "\n";
     }
-    out << "volume: " << stl.mesh.signed_volume() << "\n";
+    // Several parts may overlap: their meshes' volumes added count the
+    // overlap twice. The union comes from the slices (info's volume below).
+    if (stl.parts > 1)
+        out << "parts_volume: " << stl.mesh.signed_volume() << "\n";
+    else
+        out << "volume: " << stl.mesh.signed_volume() << "\n";
     out << "read_ms: " << seconds * 1000.0 << "\n";
 }
 
@@ -537,11 +543,23 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         const auto layers = slice_levels(indexed, height_field(indexed), heights);
         const double slice_ms =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - slice_start).count();
-        std::size_t contours = 0;
+        // A contour that encloses no area (the edge of a degenerate triangle,
+        // a sliver) is counted apart: it slices to nothing.
+        std::size_t contours = 0, degenerate = 0;
         for (const auto& layer : layers)
-            contours += layer.size();
+            for (const Contour& c : layer) {
+                double twice = 0.0;
+                for (std::size_t i = 0, n = c.points.size(); i < n; ++i) {
+                    const Vec3f& a = c.points[i];
+                    const Vec3f& b = c.points[(i + 1) % n];
+                    twice += double(a.x) * double(b.y) - double(b.x) * double(a.y);
+                }
+                (c.closed && std::abs(twice) > 2e-6 ? contours : degenerate) += 1;
+            }
         out << "layers: " << layers.size() << "\n";
         out << "contours: " << contours << "\n";
+        if (degenerate > 0)
+            out << "degenerate_contours: " << degenerate << "\n";
         out << "slice_ms: " << slice_ms << "\n";
         if (layers.empty())
             return kExitOk; // flat or thinner than a layer: no middle layer to look at
@@ -579,6 +597,12 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         out << "mid_layer_toolpaths: " << walls.size() << "\n";
         out << "mid_layer_toolpaths_ms: " << walls_ms << "\n";
         out << "sliced_volume: " << volume << "\n";
+        if (stl.parts > 1) {
+            out << "volume: " << volume << "\n"; // the parts' union, overlaps once
+        } else if (const double mesh = stl.mesh.signed_volume(); mesh - volume > std::max(0.01 * mesh, 1.0)) {
+            // Shells of one mesh that overlap: volume counted them twice.
+            out << "overlap_volume: " << mesh - volume << "\n";
+        }
     }
     return kExitOk;
 }

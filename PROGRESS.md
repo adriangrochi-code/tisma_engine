@@ -14945,3 +14945,14 @@ para el LBM D3Q19.
   según el equipo de fichas) ya no se reproduce: rejillas de 25, 100 y 400 cilindros de 6 mm (64 lados, 5 mm de
   alto), dos corridas cada una: `check_ms` 16, 52 y 238–268 ms para 86 mil, 343 mil y 1,37 millones de líneas, lineal
   con las líneas (incluido el mapa de alturas nuevo). Con bloques: 9, 16 y 68 ms. Cerrado sin cambio de código.
+
+## 2026-11-17 — bloque nocturno: `info` con contornos degenerados y mallas que se pisan
+
+- `contours` cuenta solo los contornos cerrados con área; los de área cero (el borde de un triángulo degenerado) van
+  en `degenerate_contours`, solo cuando hay.
+- Varias partes (3MF, OBJ): `volume` es la unión, de las capas, y `parts_volume` la suma de las mallas. Una malla con
+  cáscaras que se pisan: `volume` sigue siendo el de la malla y `overlap_volume` dice cuánto se pisa (cuando pasa del
+  1 % o de 1 mm³).
+- **Probado:** prueba nueva `info: overlapping shells and parts are counted once in the volume` (dos cubos de 10 mm a
+  medias en un STL: `sliced_volume: 1500`, `overlap_volume: 500`; las dos partes de `box_parts.3mf`: suma 4000, unión
+  2000). `[cli]` en verde. Datos nuevos de prueba: `tests/data/overlap_boxes.stl`, generado acá.
