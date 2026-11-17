@@ -23,7 +23,7 @@ final class ReleaseGateTests: XCTestCase {
         // «Open with» starts the app again with its launch arguments: without --first-start from here on, as a phone
         // that went through the assistant once (and it must not come back).
         app.terminate()
-        app.launchArguments = []
+        app.launchArguments = ["--ui-test-open"]
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["Plate"].waitForExistence(timeout: 20), "the app starts on its tabs")
         XCTAssertFalse(app.navigationBars["Welcome to Tisma"].exists, "the assistant shows only once")
@@ -55,8 +55,10 @@ final class ReleaseGateTests: XCTestCase {
 
     /// «Open with» Tisma: the file handed to the app by its address; the plate names it and shows its size.
     private func open(_ name: String, size: String?) {
-        let url = URL(fileURLWithPath: dir).appendingPathComponent(name)
-        app.open(url)
+        // The simulator does not hand a file URL to the app; the test's own scheme does (accepted only in UI tests).
+        var c = URLComponents(string: "tisma://open")!
+        c.queryItems = [URLQueryItem(name: "path", value: URL(fileURLWithPath: dir).appendingPathComponent(name).path)]
+        app.open(c.url!)
         let plate = app.tabBars.buttons["Plate"]
         XCTAssertTrue(plate.waitForExistence(timeout: 20), "the app opens \(name)")
         if !plate.isSelected { plate.tap() }

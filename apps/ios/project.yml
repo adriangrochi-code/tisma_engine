@@ -53,6 +53,10 @@ targets:
         # Security allows it only to local addresses (.local and bare names, IP addresses); Tisma Cloud stays HTTPS.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # The release gate's UI test opens files through this scheme, accepted only with --ui-test-open.
+        CFBundleURLTypes:
+          - CFBundleURLName: net.tismaservidores.tisma.open
+            CFBundleURLSchemes: [tisma]
         CFBundleDocumentTypes:
           - CFBundleTypeName: 3D model
             LSHandlerRank: Alternate

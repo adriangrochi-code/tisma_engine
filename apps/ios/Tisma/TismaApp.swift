@@ -54,8 +54,15 @@ struct RootView: View {
         // The first-use assistant (MA1), once.
         .fullScreenCover(isPresented: Binding(get: { !wizardDone }, set: { _ in })) { WizardView() }
         // «Compartir con Tisma» from another app (MA5): the model goes onto the plate.
-        .onOpenURL { url in
-            NSLog("TISMA-OPEN %@", url.absoluteString)
+        .onOpenURL { opened in
+            NSLog("TISMA-OPEN %@", opened.absoluteString)
+            // The release gate's UI test hands a file over as `tisma://open?path=…` (the simulator does not route a file
+            // URL to the app); only when started with --ui-test-open, so no other app can use it.
+            var url = opened
+            if opened.scheme == "tisma", opened.host == "open", ProcessInfo.processInfo.arguments.contains("--ui-test-open"),
+               let path = URLComponents(url: opened, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "path" })?.value {
+                url = URL(fileURLWithPath: path)
+            }
             if let copy = PlateView.copyIn(url) { openedPath = copy.path; tab = 0 } else {
                 NSLog("TISMA-OPEN could not read %@", url.path)
                 openProblem = String(format: String(localized: "Tisma could not open %@."), url.lastPathComponent)

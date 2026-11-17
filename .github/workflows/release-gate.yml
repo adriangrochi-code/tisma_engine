@@ -188,6 +188,8 @@ jobs:
       - name: The app's own log on the simulator (on failure)
         if: failure()
         run: |
+          # The simulator is shut down after the test: booted again to read its log.
+          xcrun simctl boot "$device" 2>/dev/null || true
           xcrun simctl spawn "$device" log show --last 30m --style compact --predicate 'process == "Tisma"' \
             > "$RUNNER_TEMP/gate-app.txt" 2>&1 || true
           grep -E "TISMA-|ENGINE-" "$RUNNER_TEMP/gate-app.txt" | tail -40 || true
