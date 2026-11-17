@@ -12,7 +12,7 @@ import java.io.File
 import kotlin.test.assertEquals
 
 /**
- * printer_connections.md, BL2: the `project_file` the app sends is the one the desktop sends, field by field, for the
+ * printer_connections.md, BL4: the `project_file` the app sends is the one the desktop sends, field by field, for the
  * shared reference in tests/data/bambu_project_file.json (a G-code, its name and the print options).
  */
 class BambuProjectFileTest {
@@ -22,7 +22,7 @@ class BambuProjectFileTest {
     fun stop() = printer.stop()
 
     @Test
-    fun `BL2 the project_file matches the shared reference field by field`() {
+    fun `BL4 the project_file matches the shared reference field by field`() {
         val ref = Json.parseToJsonElement(File("../../../tests/data/bambu_project_file.json").readText()).jsonObject
         val gcode = ref["gcode"]!!.jsonPrimitive.content.toByteArray()
         val name = ref["name"]!!.jsonPrimitive.content
