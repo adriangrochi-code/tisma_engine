@@ -9,6 +9,21 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+
+## [0.13.0-beta.1] - 2026-11-17
+- Relleno: lista de ángulos por capa en ciclo (`infill.angles`), para lo sólido, los puentes, el planchado y los
+  rellenos de líneas.
+- Puentes con un número entero de líneas de borde a borde: sin franja sin cubrir junto a los bordes.
+- Verificación del G-code: una línea que no es un comando sale como problema, también en el G-code de la máquina; un
+  movimiento que atraviesa lo ya impreso (más de una capa por debajo) también; `T<n>` se sigue en impresoras sin
+  longitudes de cambio de herramienta (Sovol SV04 en modo 02).
+- Más rápido en piezas grandes y con muchas islas: Hilbert y Arquímedes recortados por franjas (hasta 27 veces), el
+  giroide por bandas (4,5 veces y la mitad de memoria al 100 % en 300 mm), el orden monótono sin costo cuadrático, el
+  orden de muchas islas por grilla, y las paredes de cada isla por separado con 16 islas o más.
+- `info`: contornos degenerados aparte; con varias partes, el volumen es la unión; `overlap_volume` en mallas con
+  cáscaras que se pisan.
+- Varios cabezales, calentadores por separado, versión simple con `G28` y `is_nil` fuera del vector (barrido del
+  paquete de perfiles); modo vaso con agujeros (VA5).
 - Colores pintados: se laminan, cada zona con su filamento o mezcla; las paredes finas llevan el color de su lado
   pintado en todo el espesor y los techos y pisos pintados colorean sus capas sólidas. El color termina en el borde
   pintado (antes se pasaba un ancho de línea a lo largo de la pared, o dos en una pared fina, y una cara que terminaba
@@ -1931,7 +1946,9 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.1...HEAD
+[0.13.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.12.0-beta.1...v0.13.0-beta.1
+[0.12.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...v0.12.0-beta.1
 [0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
 [0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
 [0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2
