@@ -15077,6 +15077,18 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
 
 **Sigue:** 0.13.0-beta.2 sale de un `alpha` sin estos arreglos, así que su publicación falla igual. Se publica
 0.13.0-beta.3 con estos arreglos y GM22.
+- **G10, Bambu Lab en red local (QA):** `gate_g10_bambu` contra la impresora simulada (MQTT 3.1.1 sobre TLS, FTPS
+  implícito, cámara): la búsqueda la encuentra por SSDP en 1990 y 2021 (el simulador se anuncia como una real:
+  `bambu search`, `ssdp_announce_local`), se confirma el certificado, el estado y el AMS, y al imprimir el paquete llega
+  entero (su `plate_1.gcode` es el G-code byte a byte y su MD5 coincide) y `project_file` lo arranca con
+  `ftp:///<archivo>` (`expect-bambu whole`). Pasa.
+- **PC contra Android (la A1 mini anda en Android):** iguales en TLS 1.2, `CONNECT` de MQTT (usuario bblp, sesión
+  limpia, 60 s), topic `device/<serie>/request`, subida a la raíz como `<nombre>.gcode.3mf` con `Metadata/plate_1.gcode`
+  y su MD5, PASV usando la dirección de la impresora, y certificado aceptado por su huella. Distintos en `project_file`:
+  la PC manda el MD5 del paquete 3MF, Android el del G-code; la PC manda `ams_mapping` como lista vacía, Android como
+  texto vacío; la PC agrega `file`. Nada de eso afecta la conexión, que es lo que el dueño ve fallar. «Probar» dice
+  la causa: código rechazado, certificado nuevo o cambiado, o «no se pudo llegar» con el detalle (puerto cerrado,
+  tiempo agotado o error del saludo TLS). Falta el mensaje exacto que ve el dueño.
 
 **GM23 (gcode_macros.md regla 3, spec/next 5245ecb, medido por QA en PrusaSlicer 2.7.2):**
 - Un número calculado en el lenguaje de macros sale como `%g`: 6 cifras significativas como mucho, sin ceros al final y
@@ -15093,3 +15105,13 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
   `Settings::profile_names`, que no se guarda. `profile --pack` sigue escribiéndolos en `machine.variables`, porque ese
   JSON es lo que se lamina después.
 - Después del arreglo pasan las 168 pruebas `ui_script` y `gate_`, y `[gcode]`.
+
+- **Bambu, la PC como las apps (QA: Android probado con una A1 mini real):** `project_file` manda el MD5 del G-code (no
+  el del paquete), `ams_mapping` vacío como texto `""` y ya no manda `file`. Revisado para Windows: la búsqueda SSDP
+  escucha UDP 1990 y 2021 (el aviso sin resultados nombra el cortafuegos, la red «Pública» y escribir la dirección), y
+  la dirección a mano no depende de la búsqueda; TLS sin validar la cadena, sin nombre de host (sin SNI), con la
+  huella fijada, curvas y RSA del mbedTLS por defecto. No probado con hardware.
+- **BL2 (printer_connections.md, spec/next 3eb4be8):** `tests/data/bambu_project_file.json` es la referencia: un G-code,
+  sus opciones y el `project_file` exacto que deben mandar el escritorio y las apps. La prueba de escritorio
+  (`[bambu]`) lo compara campo por campo y en cantidad de campos. Pasa. Las apps pueden leer el mismo archivo.
+- La prueba de `project_file` en la ficha ahora es BL4 (spec/next 6f164aa); renombrada en la prueba y en la referencia.

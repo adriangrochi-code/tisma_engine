@@ -75,6 +75,7 @@
 #include "device/camera_frame.hpp"
 #include "library/shared_fetch.hpp"
 #include "library/shared_index.hpp"
+#include "net/digest.hpp"
 #include "net/ed25519.hpp"
 #include "net/http.hpp"
 #include "device/usb_camera.hpp"
@@ -28866,7 +28867,23 @@ void App::script_input() {
             bambu_refresh();
         } else if (step.key == "print")
             bambu_print_now();
-        else if (step.key == "camera")
+        else if (step.key == "search") { // as «Search»; the simulated printer announces itself as a real one does
+            bambu_searched_ = false;
+            bambu_search_ = std::async(std::launch::async, [] { return device::ssdp_listen(6000); });
+            if (bambu_sim_) {
+                const std::string notify = "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1990\r\nServer: UPnP/1.0\r\n"
+                                           "Location: 127.0.0.1\r\nNT: urn:bambulab-com:device:3dprinter:1\r\n"
+                                           "USN: 01S00SIMULATED\r\nDevModel.bambu.com: N1\r\n"
+                                           "DevName.bambu.com: Simulated\r\n\r\n";
+                busy_jobs_.push_back(std::async(std::launch::async, [notify] {
+                    for (int i = 0; i < 10; ++i) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                        for (const int port : {1990, 2021})
+                            device::ssdp_announce_local(notify, port);
+                    }
+                }));
+            }
+        } else if (step.key == "camera")
             bambu_camera_on();
         else if (step.key == "camera-off")
             bambu_camera_off();
@@ -28945,8 +28962,39 @@ void App::script_input() {
             got = bambu_status_.code;
         else if (step.key == "trays")
             got = std::to_string(bambu_status_.trays.size());
+        else if (step.key == "found") { // ID: the search listed that printer
+            got = "nothing";
+            for (const device::SsdpPrinter& p : bambu_found_)
+                if (p.id == step.value)
+                    got = p.id;
+        }
         else if (step.key == "sent")
             got = bambu_sim_ && bambu_sim_->files().count(step.value + ".gcode.3mf") ? step.value : "nothing";
+        else if (step.key == "whole") { // NAME: the package sent is this slice's G-code, byte for byte, with its MD5, and started
+            got = "nothing";
+            if (bambu_sim_ && result_) {
+                const auto files = bambu_sim_->files();
+                const auto it = files.find(step.value + ".gcode.3mf");
+                if (it != files.end()) {
+                    try {
+                        const ZipArchive zip(it->second);
+                        const ZipArchive::Entry* plate = zip.find("Metadata/plate_1.gcode");
+                        const ZipArchive::Entry* md5 = zip.find("Metadata/plate_1.gcode.md5");
+                        const std::string gcode = plate ? zip.read(*plate) : std::string();
+                        const bool same = gcode == result_->gcode && md5 && zip.read(*md5) == net::md5_hex(gcode);
+                        bool started = false;
+                        for (const nlohmann::json& c : bambu_sim_->commands())
+                            started = started || (c.is_object() && c.value("command", "") == "project_file" &&
+                                                  c.value("url", "") == "ftp:///" + it->first);
+                        got = same && started ? step.value : same ? "not started" : "not whole";
+                        std::printf("ui-script: expect-bambu whole: %zu of %zu bytes, %s\n", gcode.size(),
+                                    result_->gcode.size(), got.c_str());
+                    } catch (const std::exception& e) {
+                        got = std::string("not a package: ") + e.what();
+                    }
+                }
+            }
+        }
         else if (step.key == "camera") // the size of the frame shown, WxH; "none"
             got = bambu_camera_tex_ ? std::to_string(bambu_camera_w_) + "x" + std::to_string(bambu_camera_h_) : "none";
         else if (step.key == "camera-error") { // why the camera stopped, as the person reads it
@@ -28959,7 +29007,7 @@ void App::script_input() {
         if (got == step.value) {
             std::printf("ui-script: expect-bambu %s %s: ok\n", step.key.c_str(), step.value.c_str());
             next();
-        } else if (f > (step.key == "camera-error" ? 6000 : step.key == "camera" ? 600 : 2)) {
+        } else if (f > (step.key == "camera-error" ? 6000 : step.key == "camera" || step.key == "found" || step.key == "whole" ? 600 : 2)) {
             fail_step("bambu " + step.key + " is «" + got + "», not «" + step.value + "»");
         }
     } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)
