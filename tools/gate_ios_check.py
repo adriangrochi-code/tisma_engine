@@ -108,7 +108,7 @@ def main():
         for port in ports:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/_tisma/received", timeout=10) as r:
                 o = json.load(r)
-            if not any(v.get("sha256") == sha for v in o.get("files", {}).values()):
+            if not any(sha in (v.get("sha256"), v.get("gcode_sha256")) for v in o.get("files", {}).values()):
                 failures.append(f"printer on {port}: the cube's G-code did not arrive whole ({o})")
             else:
                 print(f"printer on {port}: got the cube's G-code whole, {o.get('state')}")

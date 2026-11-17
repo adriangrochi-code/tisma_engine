@@ -174,21 +174,33 @@ class ReleaseGateTest {
             Triple("octoprint", "http://10.0.2.2:7126", "test-key"),
             Triple("prusalink", "http://10.0.2.2:7127", "test-pass"),
             Triple("duet", "http://10.0.2.2:7128", "reprap"),
+            // Bambu Lab in local mode: MQTT and FTPS on the host's loopback, reached through `adb reverse`; what it
+            // received is told on 7129.
+            Triple("bambu", BAMBU, "12345678"),
         )
-        for ((kind, url, key) in printers) {
+        for ((kind, address, key) in printers) {
             compose.onNodeWithTag("section_printer").performClick()
             waitTag("add_printer")
             compose.onNodeWithTag("add_printer").performClick()
             waitTag("printer_address")
             compose.onNodeWithTag("kind_$kind").performClick()
             compose.onNodeWithTag("printer_name").performTextInput("gate-$kind")
-            compose.onNodeWithTag("printer_address").performTextInput(url)
+            compose.onNodeWithTag("printer_address").performTextInput(address)
             if (key.isNotEmpty()) compose.onNodeWithTag("printer_key").performTextInput(key)
             tap("printer_save")
+            if (kind == "bambu") {
+                // BL3: the first time, the person confirms the serial and the certificate the printer showed.
+                waitTag("bambu_confirm")
+                val said = compose.onNodeWithTag("bambu_confirm_text").fetchSemanticsNode().config
+                    .getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }.orEmpty()
+                assertTrue("01S00C123456789" in said, "the printer's serial is shown to confirm; it says «$said»")
+                compose.onNodeWithTag("bambu_confirm").performClick()
+            }
             compose.waitUntil(60_000) { !has("printer_save") }
         }
         val want = sha(gcode.readBytes())
-        for ((kind, url, _) in printers) {
+        for ((kind, address, _) in printers) {
+            val url = if (kind == "bambu") "http://10.0.2.2:7129" else address
             compose.onNodeWithTag("section_plate").performClick()
             waitTag("send_to_gate-$kind")
             tap("send_to_gate-$kind")
@@ -211,7 +223,10 @@ class ReleaseGateTest {
     private fun received(url: String, sha: String): Boolean = runCatching {
         val o = Json.parseToJsonElement(java.net.URL("$url/_tisma/received").readText()) as JsonObject
         val files = o["files"] as JsonObject
-        val arrived = files.values.any { ((it as JsonObject)["sha256"] as JsonPrimitive).content == sha }
+        // Bambu Lab gets the G-code packed in a 3MF: the one inside is compared.
+        val arrived = files.values.any { f ->
+            listOf("sha256", "gcode_sha256").any { ((f as JsonObject)[it] as? JsonPrimitive)?.content == sha }
+        }
         val state = (o["state"] as JsonPrimitive).content
         arrived && state in setOf("printing", "complete")
     }.getOrDefault(false)
@@ -304,3 +319,6 @@ class ReleaseGateTest {
         return compose.onAllNodes(m, useUnmergedTree = true).fetchSemanticsNodes().first().config[SemanticsProperties.TestTag]
     }
 }
+
+/** The Bambu Lab simulator's address from the emulator: its MQTT (7130) and FTPS (7131) through `adb reverse`. */
+private const val BAMBU = "bambu://127.0.0.1:7130?ftp=7131"

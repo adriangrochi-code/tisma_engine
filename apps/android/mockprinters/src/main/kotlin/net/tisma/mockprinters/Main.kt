@@ -15,9 +15,19 @@ fun main(args: Array<String>) {
     println("OctoPrint simulator: http://10.0.2.2:${port + 1} from an emulator, API key \"${octo.apiKey}\"")
     println("PrusaLink simulator: http://10.0.2.2:${port + 2}, user \"${prusa.user}\", password \"${prusa.password}\"")
     println("Duet simulator: http://10.0.2.2:${port + 3}, board password \"reprap\"")
-    // Bambu Lab listens on the loopback only in this simulator: from an emulator, use `adb reverse`.
-    val bambu = MockBambu().start()
-    println("Bambu Lab simulator: ${bambu.url}, access code \"${bambu.accessCode}\" (adb reverse tcp:${bambu.mqttPort} tcp:${bambu.mqttPort}; same for ${bambu.ftpPort})")
+    // Bambu Lab listens on the loopback only in this simulator: from an emulator, `adb reverse` its MQTT, FTPS and
+    // FTPS data ports (port + 5, + 6 and + 8; the camera on + 7). What it received is on HTTP at port + 4.
+    val bambu = MockBambu(mqtt = port + 5, ftp = port + 6, camera = port + 7, passivePort = port + 8).start()
+    com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("0.0.0.0", port + 4), 0).apply {
+        createContext("/_tisma/received") { ex ->
+            val body = bambu.received().toByteArray()
+            ex.responseHeaders.add("Content-Type", "application/json")
+            ex.sendResponseHeaders(200, body.size.toLong())
+            ex.responseBody.use { it.write(body) }
+        }
+        start()
+    }
+    println("Bambu Lab simulator: ${bambu.url}, access code \"${bambu.accessCode}\" (adb reverse tcp:${bambu.mqttPort} tcp:${bambu.mqttPort}; same for ${bambu.ftpPort} and ${port + 8}); received: http://10.0.2.2:${port + 4}/_tisma/received")
     println("Upload a G-code with «print» to start; each status read moves the print forward.")
     Thread.currentThread().join()
 }

@@ -27,7 +27,16 @@ import javax.net.ssl.SSLSocket
  * print commands with reports, and an implicit FTPS server that keeps what is
  * stored. Its certificate is made with the JDK's keytool, named by the serial.
  */
-class MockBambu(val serial: String = "01S00C123456789", val accessCode: String = "12345678") {
+class MockBambu(
+    val serial: String = "01S00C123456789",
+    val accessCode: String = "12345678",
+    /** Fixed ports for the release gate (an emulator reaches them through `adb reverse`); 0 picks free ones. */
+    mqtt: Int = 0,
+    ftp: Int = 0,
+    camera: Int = 0,
+    /** The FTPS data port PASV offers; 0 picks a free one each time. */
+    private val passivePort: Int = 0,
+) {
     private val dir = File(System.getProperty("java.io.tmpdir"), "mockbambu-" + System.nanoTime()).apply { mkdirs() }
     private val ssl: SSLContext = run {
         val ks = File(dir, "printer.p12")
@@ -42,9 +51,9 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
         SSLContext.getInstance("TLS").apply { init(kmf.keyManagers, null, null) }
     }
     private val loopback = InetAddress.getByName("127.0.0.1")
-    private val mqttServer = ssl.serverSocketFactory.createServerSocket(0, 10, loopback) as SSLServerSocket
-    private val ftpServer = ssl.serverSocketFactory.createServerSocket(0, 10, loopback) as SSLServerSocket
-    private val cameraServer = ssl.serverSocketFactory.createServerSocket(0, 10, loopback) as SSLServerSocket
+    private val mqttServer = ssl.serverSocketFactory.createServerSocket(mqtt, 10, loopback) as SSLServerSocket
+    private val ftpServer = ssl.serverSocketFactory.createServerSocket(ftp, 10, loopback) as SSLServerSocket
+    private val cameraServer = ssl.serverSocketFactory.createServerSocket(camera, 10, loopback) as SSLServerSocket
 
     val mqttPort get() = mqttServer.localPort
     val ftpPort get() = ftpServer.localPort
@@ -106,6 +115,32 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
             out.write(h.array()); out.write(jpeg); out.flush()
             Thread.sleep(cameraMs)
         }
+    }
+
+    /**
+     * For the release gate (G16): what arrived by FTPS (each file's size and SHA-256, and the SHA-256 of the G-code
+     * packed in it as `Metadata/plate_1.gcode`) and whether a print runs, as the other simulators' `/_tisma/received`.
+     */
+    fun received(): String = synchronized(this) {
+        fun sha(b: ByteArray) = java.security.MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+        buildJsonObject {
+            put("state", when (gcodeState) { "RUNNING" -> "printing"; "PAUSE" -> "paused"; "FINISH" -> "complete"; else -> "idle" })
+            put("file", (commands.lastOrNull { (it["command"] as? JsonPrimitive)?.contentOrNull == "project_file" }?.get("url") as? JsonPrimitive)?.contentOrNull ?: "")
+            put("files", buildJsonObject {
+                files.forEach { (name, data) ->
+                    put(name, buildJsonObject {
+                        put("size", data.size)
+                        put("sha256", sha(data))
+                        val inner = runCatching {
+                            java.util.zip.ZipInputStream(data.inputStream()).use { z ->
+                                generateSequence { z.nextEntry }.firstOrNull { it.name == "Metadata/plate_1.gcode" }?.let { z.readBytes() }
+                            }
+                        }.getOrNull()
+                        if (inner != null) put("gcode_sha256", sha(inner))
+                    })
+                }
+            })
+        }.toString()
     }
 
     private fun report(): ByteArray = synchronized(this) {
@@ -218,7 +253,7 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
                 "TYPE" -> say("200 Type set to I")
                 "PASV" -> {
                     // A plain listening socket; TLS starts on the accepted data connection.
-                    passive = ServerSocket(0, 1, loopback)
+                    passive = ServerSocket().apply { reuseAddress = true; bind(java.net.InetSocketAddress(loopback, passivePort), 1) }
                     val port = passive.localPort
                     say("227 Entering Passive Mode (127,0,0,1,${port / 256},${port % 256})")
                 }

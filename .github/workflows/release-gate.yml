@@ -43,10 +43,10 @@ jobs:
             "system-images;android-34;google_apis;x86_64" > /dev/null
       - name: Build the app (engine inside) and its gate test
         run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
-      - name: The printer simulators (Moonraker, OctoPrint, PrusaLink, Duet on 7125–7128)
+      - name: The printer simulators (Moonraker, OctoPrint, PrusaLink, Duet on 7125–7128; Bambu Lab on 7129–7133)
         run: |
           nohup ./gradlew --no-daemon :mockprinters:run -Pport=7125 > "$RUNNER_TEMP/mockprinters.log" 2>&1 &
-          timeout 300 sh -c 'until curl -sf http://127.0.0.1:7128/_tisma/received > /dev/null; do sleep 3; done'
+          timeout 300 sh -c 'until curl -sf http://127.0.0.1:7129/_tisma/received > /dev/null; do sleep 3; done'
       - name: The 3DBenchy (CC0, bench of dev)
         working-directory: .
         run: |
@@ -73,6 +73,8 @@ jobs:
           # The Printer screen asks for notifications (print progress); the system's dialog would pause the app, so
           # it is granted beforehand, as a person tapping «Allow».
           adb shell pm grant net.tismaservidores.tisma android.permission.POST_NOTIFICATIONS
+          # Bambu Lab's simulator listens on the host's loopback: MQTT, FTPS and the FTPS data port.
+          for p in 7130 7131 7133; do adb reverse tcp:$p tcp:$p; done
           adb push "$RUNNER_TEMP/3DBenchy.stl" /data/local/tmp/3DBenchy.stl
           adb shell chmod 644 /data/local/tmp/3DBenchy.stl
           adb shell am instrument -w -e class net.tisma.app.ReleaseGateTest -e benchy /data/local/tmp/3DBenchy.stl \
@@ -115,11 +117,11 @@ jobs:
           java-version: "21"
       - name: The shared module for the simulator
         run: ./gradlew --no-daemon :shared:linkDebugFrameworkIosSimulatorArm64
-      - name: The printer simulators (Moonraker, OctoPrint, PrusaLink, Duet on 7125–7128)
+      - name: The printer simulators (Moonraker, OctoPrint, PrusaLink, Duet on 7125–7128; Bambu Lab on 7129–7133)
         run: |
           nohup ./gradlew --no-daemon :mockprinters:run -Pport=7125 > "$RUNNER_TEMP/mockprinters.log" 2>&1 &
           # macOS has no timeout(1): up to 300 s.
-          for i in $(seq 100); do curl -sf http://127.0.0.1:7128/_tisma/received > /dev/null && exit 0; sleep 3; done
+          for i in $(seq 100); do curl -sf http://127.0.0.1:7129/_tisma/received > /dev/null && exit 0; sleep 3; done
           tail -30 "$RUNNER_TEMP/mockprinters.log"; exit 1
       - name: The gate's models (the 20 mm cube, tests/data/formats and the 3DBenchy of dev)
         working-directory: .
