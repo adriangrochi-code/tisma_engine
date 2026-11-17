@@ -1459,7 +1459,8 @@ Para esa fecha, en este orden:
    llvmpipe, con el mismo G-code en los dos caminos. Falta medir en una GPU de verdad.
 3. P2: conexión con las impresoras de fábrica de Creality, Elegoo, Anycubic y Flashforge. QA escribe las fichas en
    `printer_connections.md` (17 y 18-11).
-4. W4: las superficies de arriba en pendiente, cuando QA mande la decisión del dueño.
+4. W4: las superficies de arriba en pendiente. No queda nada por hacer: vale la decisión del 13-11 que ya está en
+   PROGRESS.md (QA, 17-11).
 
 macOS sale como versión alternativa. Se publica solo si pasa su propia puerta, y no frena a Windows, Linux ni Android.
 `release.yml` ya funciona así: `publish_macos` va aparte de `publish`.
