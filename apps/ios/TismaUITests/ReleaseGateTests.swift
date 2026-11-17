@@ -20,6 +20,13 @@ final class ReleaseGateTests: XCTestCase {
         app.launchArguments += ["--first-start"]
         app.launch()
         assistant()
+        // «Open with» starts the app again with its launch arguments: without --first-start from here on, as a phone
+        // that went through the assistant once (and it must not come back).
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Plate"].waitForExistence(timeout: 20), "the app starts on its tabs")
+        XCTAssertFalse(app.navigationBars["Welcome to Tisma"].exists, "the assistant shows only once")
         open("cube20.stl", size: "20.0 × 20.0 × 20.0 mm")
         open("box.obj", size: "20.0 × 20.0 × 10.0 mm")
         open("box.3mf", size: "20.0 × 20.0 × 10.0 mm")
@@ -50,7 +57,9 @@ final class ReleaseGateTests: XCTestCase {
     private func open(_ name: String, size: String?) {
         let url = URL(fileURLWithPath: dir).appendingPathComponent(name)
         app.open(url)
-        app.tabBars.buttons["Plate"].tap()
+        let plate = app.tabBars.buttons["Plate"]
+        XCTAssertTrue(plate.waitForExistence(timeout: 20), "the app opens \(name)")
+        if !plate.isSelected { plate.tap() }
         let model = app.staticTexts["plate_model"]
         XCTAssertTrue(model.waitForExistence(timeout: 30), "the plate names a model")
         XCTAssertTrue(wait(60) { model.label == name }, "\(name) is on the plate (it shows «\(model.label)»)")
