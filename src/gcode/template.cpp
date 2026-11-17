@@ -89,8 +89,13 @@ std::string template_text(const TemplateValue& v) {
     case TemplateValue::Kind::Int:
         return std::to_string(v.integer);
     case TemplateValue::Kind::Real: {
+        // At most 6 significant digits, no trailing zeros, no point when
+        // whole, very small or large ones in scientific notation, as the
+        // printers' own G-code expects (gcode_macros.md, rule 3, GM23).
+        // Like printf's %g, without the locale's decimal sign.
         char buffer[64];
-        const auto r = std::to_chars(buffer, buffer + sizeof buffer, v.real == 0.0 ? 0.0 : v.real);
+        const auto r = std::to_chars(buffer, buffer + sizeof buffer, v.real == 0.0 ? 0.0 : v.real,
+                                     std::chars_format::general, 6);
         return std::string(buffer, r.ptr);
     }
     case TemplateValue::Kind::Text:
@@ -440,8 +445,11 @@ private:
         if ((c >= '0' && c <= '9') || c == '.') {
             std::size_t j = at_;
             bool real = false;
+            // Digits, a point, and an exponent with its sign (1e-7, GM23).
             while (j < end_ && ((src_.text[j] >= '0' && src_.text[j] <= '9') || src_.text[j] == '.' ||
-                                ((src_.text[j] == 'e' || src_.text[j] == 'E') && j + 1 < end_)))
+                                ((src_.text[j] == 'e' || src_.text[j] == 'E') && j + 1 < end_) ||
+                                ((src_.text[j] == '-' || src_.text[j] == '+') && j > at_ &&
+                                 (src_.text[j - 1] == 'e' || src_.text[j - 1] == 'E'))))
                 real = real || !(src_.text[j] >= '0' && src_.text[j] <= '9'), ++j;
             const std::string_view number = src_.text.substr(at_, j - at_);
             at_ = j;

@@ -117,7 +117,9 @@ TEST_CASE("templates: values from the settings' text", "[template]") {
     CHECK(TemplateValue::parse("true").kind == TemplateValue::Kind::Bool);
     CHECK(TemplateValue::parse("\"gyroid\"").text == "gyroid");
     CHECK(TemplateValue::parse("60%").text == "60%");
-    CHECK(template_text(TemplateValue::of(0.1 + 0.2)) == "0.30000000000000004");
+    // At most 6 significant digits (gcode_macros.md, rule 3, GM23).
+    CHECK(template_text(TemplateValue::of(0.1 + 0.2)) == "0.3");
+    CHECK(template_text(TemplateValue::of(523.8431796449507)) == "523.843");
     CHECK(template_text(TemplateValue::of(-0.0)) == "0");
 }
 

@@ -49,6 +49,12 @@ Response perform(const Request& request);
 // Whether this build talks HTTPS (always on Windows; with OpenSSL elsewhere).
 bool https_available();
 
+// Keeps the TLS library from tearing itself down when the process exits:
+// a program that ends with requests still running on other threads (the
+// interface, which never waits for its downloads) would otherwise crash in
+// them. Called once, before the first request. Nothing to do on Windows.
+void keep_tls_at_exit();
+
 // The parts of a URL; false when it is not http:// or https://host[:port][/path].
 struct Url {
     bool https = false;

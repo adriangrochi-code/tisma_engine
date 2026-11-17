@@ -38,4 +38,8 @@ struct SsdpListen {
 // give their own) for `ms` milliseconds.
 SsdpListen ssdp_listen(int ms, const std::vector<int>& ports = {1990, 2021});
 
+// A printer's announcement, sent once to `port` of this machine (the
+// simulated printer's, for the tests and the «Simulated» choice).
+void ssdp_announce_local(const std::string& datagram, int port);
+
 } // namespace tisma::device

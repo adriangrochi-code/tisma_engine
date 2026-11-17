@@ -2094,6 +2094,10 @@ public:
     }
 
     double total_e() const { return total_e_; }
+    // Where the nozzle is (X, Y, Z as written) and how much filament is
+    // pulled back now, mm (G10: the firmware's length).
+    std::array<double, 3> where() const { return {position_[0], position_[1], position_[2]}; }
+    double retracted_now() const { return retracted_ ? (firmware_ ? retract_ : retracted_amount_) : 0.0; }
     // The filament each extruder pushed, by extruder from 0 (the footer's lists).
     const std::vector<double>& tool_e() const { return tool_e_; }
     void count_e(double e) {
@@ -2913,6 +2917,10 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
             items.push_back(TemplateValue::parse(v));
         c.variables[name] = list(std::move(items));
     }
+    // The profiles' names the interface chose, unless machine.variables has them.
+    for (const auto& [name, value] : s.profile_names)
+        if (!value.empty() && !c.variables.contains(name))
+            c.variables[name] = list({TemplateValue::of(value)});
     // The temperature variables always exist, 0 when the filament lacks them,
     // so a start macro can be given them (profile_pack.md rules 17 and 18 bis,
     // BH30).
@@ -3029,7 +3037,7 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     // (profile_pack_format.md, source_values) fill names the same way.
     for (const auto* given : {&s.machine_macros.values, &s.source_values})
         for (const auto& [name, values] : *given) {
-            if (c.variables.contains(name) && !c.unfilled.contains(name))
+            if (c.variables.contains(name) && !c.unfilled.contains(name) && !c.defaults.contains(name))
                 continue;
             std::vector<TemplateValue> items;
             for (const std::string& v : values)
@@ -3808,10 +3816,40 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         return (model.layers.empty() ? 0.0 : model.layers[object_start(l)].bottom) - s.z_offset;
     };
     // The layer the templates are at: its number (from 0) and its Z as written.
+    // Where the nozzle is and what it used so far (gcode_macros.md, rule 9
+    // bis): position, e_retracted, extruded_volume, extruded_weight_total and
+    // cura's filament_weight.
+    const auto at_point = [&] {
+        const auto r3 = [](double v) { return TemplateValue::of(std::round(v * 1000.0) / 1000.0); };
+        const std::array<double, 3> p = g.where();
+        templates.variables["position"] = TemplateValue::of(std::vector<TemplateValue>{r3(p[0]), r3(p[1]), r3(p[2])});
+        const std::size_t heads = std::size_t(std::max(s.extruders, 1));
+        const double area = std::numbers::pi * s.filament_diameter * s.filament_diameter / 4.0;
+        std::vector<TemplateValue> retracted(heads, r3(0.0)), volume(heads, r3(0.0));
+        const std::size_t tool = std::size_t(std::max(g.tool() - 1, 0));
+        if (tool < heads)
+            retracted[tool] = r3(g.retracted_now());
+        for (std::size_t t = 0; t < heads && t < g.tool_e().size(); ++t)
+            volume[t] = r3(g.tool_e()[t] * area);
+        templates.variables["e_retracted"] = TemplateValue::of(std::move(retracted));
+        templates.variables["extruded_volume"] = TemplateValue::of(std::move(volume));
+        const double grams = g.total_e() * area / 1000.0 * s.filament_density;
+        templates.variables["extruded_weight_total"] = templates.variables["filament_weight"] = r3(grams);
+        // cura's: the filament used in m and its cost.
+        if (s.machine_macros.dialect == "cura") {
+            templates.variables["filament_amount"] = r3(g.total_e() / 1000.0);
+            templates.variables["filament_cost"] = r3(grams * s.filament_cost / 1000.0);
+            const long long t = std::llround(g.print_time());
+            templates.variables["print_time"] = TemplateValue::of(std::to_string(t / 3600) + "h " +
+                                                                  std::to_string(t / 60 % 60) + "m " +
+                                                                  std::to_string(t % 60) + "s");
+        }
+    };
     const auto at_layer = [&](std::size_t l) {
         const double z = std::round((model.layers[l].top - base_of(l)) * 1000.0) / 1000.0;
         templates.variables["layer_num"] = TemplateValue::of(static_cast<long long>(l));
         templates.variables["layer_z"] = templates.variables["max_layer_z"] = TemplateValue::of(z);
+        at_point();
     };
 
     // No extrusion faster than speed.max, when it is set.
@@ -5487,7 +5525,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         warnings->push_back({"gcode_macro", -1, 0.0,
                              "El G-code de la impresora usa variables que el motor todavía no llena; van en 0, no o "
                              "vacío: " + names + ".",
-                             double(templates.unfilled_used.size()), "information"});
+                             double(templates.unfilled_used.size()), "warning"});
     }
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
         out << chamber_gcode(s.flavor, 0.0) << "\n";

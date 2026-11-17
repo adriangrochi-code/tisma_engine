@@ -15004,3 +15004,138 @@ cualquier línea así en lo que escribe el motor (gcode_firmware.md regla 1, FW1
 Versión 0.13.0-beta.2.
 
 **Sigue:** confirmar la publicación y avisar a QA; el barrido del paquete lo repite QA.
+
+## 2026-11-17 — GM22: variables del G-code de la máquina (gcode_macros.md, regla 9 bis)
+
+**Hecho:**
+- El barrido de QA mostró 447 variantes del paquete con variables vacías o en 0. Ahora se llenan con los valores de la
+  regla 9 bis:
+  - del perfil: `filament_abrasive`, `nozzle_high_flow`, `nozzle_volume_type`, `zhop`, `outer_wall_acceleration`,
+    `print_sequence`, `timelapse_type`, `notes`;
+  - los nombres de los perfiles: `print_preset`, `printer_preset`, `physical_printer_preset` y `machine_name`, que
+    `name_profiles` toma de `profile --pack` y de la interfaz;
+  - de Cura: `build_volume_temperature`, `wall_thickness`, `material_standby_temperature`, `date`, `time`;
+  - del punto de impresión, en cada cambio de capa y al final: `position`, `e_retracted`, `extruded_volume`,
+    `extruded_weight_total`, `filament_weight`.
+- La forma vieja `[variable_índice]` busca la variable por su equivalente y, para un cabezal fuera de la lista, toma el
+  último valor.
+- Una variable sin llenar sale como aviso (`warning`) y no como información.
+
+**Pruebas:** `[gcode]`, 137 casos bien.
+
+**Sin probar:** el barrido del paquete, que lo hace QA.
+
+**Sigue:**
+- `bed_mesh_*` queda con aviso hasta que se mida en OrcaSlicer.
+- Falta confirmar el formato de `date` y `time` de Cura.
+
+**Segunda tanda GM22 (17-11, QA con 272dd50: de 447 a 55 variantes):**
+- Ahora se llenan:
+  - `wipe_tower_center_pos_valid` y `start_filament_gcode`;
+  - las velocidades de pared interna, externa y de primera capa;
+  - los anchos de línea de la pared externa y el general;
+  - de Cura: `top_bottom_thickness`, y `filament_amount` y `filament_cost` en metros y en dinero. `filament_cost` sigue
+    siendo el precio por kg en los otros dialectos.
+- Valores por defecto que los valores del paquete (`values`, `source_values`) todavía pueden reemplazar
+  (`TemplateContext::defaults`): `required_nozzle_HRC`, `filament_flush_volumetric_speed`, `filament_notes`,
+  `filament_abrasive`, `notes`, `timelapse_type` y otras.
+- Siguen con aviso, por falta de datos:
+  - `print_bed_max` en la CR-20 y la CR-20 Pro, porque el paquete no trae su cama (8 variantes);
+  - `print_time` de Cura (formato sin confirmar);
+  - `purge_distance`, `retraction_hop_height_after_extruder_switch` y `switch_extruder_retraction_amount`, porque
+    falta el valor por defecto de Cura;
+  - `bed_mesh_*`.
+- Pruebas `[gcode]`: 137 casos bien.
+
+**Tercera tanda GM22 (respuestas de QA, spec/next 44184ef):**
+- Valores por defecto de Cura: `switch_extruder_retraction_amount` vale 16 mm y
+  `retraction_hop_height_after_extruder_switch` toma `retraction.lift`. Los dos se pueden reemplazar con los valores del
+  paquete.
+- `print_time` de Cura sale como «1h 2m 3s» con el tiempo estimado hasta ese punto. En el G-code de inicio vale «0h 0m
+  0s», porque el tiempo total todavía no se conoce.
+- `purge_distance` sigue con aviso: Cura no tiene ese valor.
+- Pruebas `[gcode]`: 137 casos bien.
+
+**Cuarta tanda GM22 (QA con 765903d: 43 variantes, todas con aviso por ficha o por el paquete):**
+- `wipe_tower_center_pos_x` y `_y`: la esquina de la torre más la mitad de su ancho, haya torre o no. Tomé el ancho
+  también para Y, porque la profundidad de la torre depende de cuánto se purga.
+- `line_width` (Cura): el ancho de línea general.
+- `jobname` (Cura): el nombre del modelo sin la extensión.
+- Pruebas `[gcode]`: 137 casos bien.
+
+## 2026-11-17 — la publicación de 0.13.0-beta.1 falló en sus propios builds
+
+Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasaba. Arreglos:
+- **Linux:** `ui_sigterm_while_starting` daba segfault. `run_app` termina con `std::exit` sin destruir la `App`, y
+  OpenSSL se desarmaba en `atexit` mientras la descarga del paquete seguía en otro hilo.
+  `net::keep_tls_at_exit()` llama a `OPENSSL_init_crypto(OPENSSL_INIT_NO_ATEXIT)` antes de crear la `App`. Probado
+  localmente: falló en las 2 primeras corridas; con el arreglo, 25 corridas seguidas sin fallar.
+- **Windows:** la firma de la lista de bloqueos de la biblioteca compartida no coincidía, porque git cambiaba los fines
+  de línea de `tests/data/library`. Ahora es `binary` en `.gitattributes`. Sin probar en Windows; lo prueba el CI.
+- **macOS:** `std::to_chars` con `double` no existe antes de macOS 13.3. El destino mínimo del build de publicación y
+  `LSMinimumSystemVersion` pasan de 13.0 a 13.3. Decisión mía: es la opción más chica.
+
+**Sigue:** 0.13.0-beta.2 sale de un `alpha` sin estos arreglos, así que su publicación falla igual. Se publica
+0.13.0-beta.3 con estos arreglos y GM22.
+- **G10, Bambu Lab en red local (QA):** `gate_g10_bambu` contra la impresora simulada (MQTT 3.1.1 sobre TLS, FTPS
+  implícito, cámara): la búsqueda la encuentra por SSDP en 1990 y 2021 (el simulador se anuncia como una real:
+  `bambu search`, `ssdp_announce_local`), se confirma el certificado, el estado y el AMS, y al imprimir el paquete llega
+  entero (su `plate_1.gcode` es el G-code byte a byte y su MD5 coincide) y `project_file` lo arranca con
+  `ftp:///<archivo>` (`expect-bambu whole`). Pasa.
+- **PC contra Android (la A1 mini anda en Android):** iguales en TLS 1.2, `CONNECT` de MQTT (usuario bblp, sesión
+  limpia, 60 s), topic `device/<serie>/request`, subida a la raíz como `<nombre>.gcode.3mf` con `Metadata/plate_1.gcode`
+  y su MD5, PASV usando la dirección de la impresora, y certificado aceptado por su huella. Distintos en `project_file`:
+  la PC manda el MD5 del paquete 3MF, Android el del G-code; la PC manda `ams_mapping` como lista vacía, Android como
+  texto vacío; la PC agrega `file`. Nada de eso afecta la conexión, que es lo que el dueño ve fallar. «Probar» dice
+  la causa: código rechazado, certificado nuevo o cambiado, o «no se pudo llegar» con el detalle (puerto cerrado,
+  tiempo agotado o error del saludo TLS). Falta el mensaje exacto que ve el dueño.
+
+**GM23 (gcode_macros.md regla 3, spec/next 5245ecb, medido por QA en PrusaSlicer 2.7.2):**
+- Un número calculado en el lenguaje de macros sale como `%g`: 6 cifras significativas como mucho, sin ceros al final y
+  en notación científica si es muy chico o muy grande. Se escribe con `std::to_chars` en formato `general` con
+  precisión 6, que no depende del idioma del sistema.
+- `1e-7` se lee como número.
+- La división entera entre enteros ya estaba.
+- Pruebas `[gcode]` y `[template]` bien.
+
+**Suite completa local en Linux (14:20–15:00):** de 1449 pruebas, fallaron 2:
+- `gate_g15_quit`: pasa sola; falló solo con la máquina cargada.
+- `gate_g11_cloud`: falla real. Los nombres de perfil que agregaba la interfaz iban a `machine.variables` y entraban en
+  el bloque de ajustes del G-code, así que el G-code local y el de la nube no coincidían. Ahora van en
+  `Settings::profile_names`, que no se guarda. `profile --pack` sigue escribiéndolos en `machine.variables`, porque ese
+  JSON es lo que se lamina después.
+- Después del arreglo pasan las 168 pruebas `ui_script` y `gate_`, y `[gcode]`.
+
+- **Bambu, la PC como las apps (QA: Android probado con una A1 mini real):** `project_file` manda el MD5 del G-code (no
+  el del paquete), `ams_mapping` vacío como texto `""` y ya no manda `file`. Revisado para Windows: la búsqueda SSDP
+  escucha UDP 1990 y 2021 (el aviso sin resultados nombra el cortafuegos, la red «Pública» y escribir la dirección), y
+  la dirección a mano no depende de la búsqueda; TLS sin validar la cadena, sin nombre de host (sin SNI), con la
+  huella fijada, curvas y RSA del mbedTLS por defecto. No probado con hardware.
+- **BL2 (printer_connections.md, spec/next 3eb4be8):** `tests/data/bambu_project_file.json` es la referencia: un G-code,
+  sus opciones y el `project_file` exacto que deben mandar el escritorio y las apps. La prueba de escritorio
+  (`[bambu]`) lo compara campo por campo y en cantidad de campos. Pasa. Las apps pueden leer el mismo archivo.
+- La prueba de `project_file` en la ficha ahora es BL4 (spec/next 6f164aa); renombrada en la prueba y en la referencia.
+
+## 2026-11-17 — boceto: borrar líneas y elegir con un clic (el dueño)
+
+- **Pedido del dueño:** no se podían borrar líneas del boceto (estilo AutoCAD) y la interfaz no generaba las líneas
+  como Fusion. Causa: sin herramienta, un clic sobre una línea no la elegía, empezaba una línea nueva; y no había
+  ninguna forma de borrar (`cad::erase_entity` existía pero la interfaz no la llamaba).
+- **Hecho:**
+  - sin herramienta, un clic elige una línea, círculo o arco, o la suelta; un clic en el vacío suelta todo; arrastrar
+    hace la caja de selección (ventana o cruce, regla 17); las líneas se dibujan con la herramienta Línea (L);
+  - Supr o Retroceso borran lo elegido (también con la línea de comandos activa y vacía, que se queda con el teclado);
+    Esc primero suelta la elección, después sale de la herramienta o del boceto (regla 11);
+  - herramienta «Borrar» en Modificar y en la línea de comandos: `B`, `BORRA`, `BORRAR` (AutoCAD en castellano),
+    `ERASE`, `SUPR`, `DEL` (la `E` sigue siendo extruir, regla 12). Elegir y Enter; si ya había algo elegido, lo borra
+    al instante. Se van también las restricciones de lo borrado.
+- **Prueba:** `ui_script_design_sketch_erase`. Las 48 de diseño y boceto siguen pasando.
+- **Deshacer y rehacer en el boceto (cad_design.md, reglas 11 y 17, CD30; spec/next 6914533):** Ctrl+Z y Ctrl+Y (o
+  Ctrl+Shift+Z), también desde la línea de comandos vacía, deshacen de a uno cada dibujo, borrado, cota y
+  restricción: cuando el boceto queda quieto (sin arrastre, sin forma a medio dibujar) y cambió, el estado anterior
+  va a la lista (hasta 200). La prueba suma: dos deshacer devuelven las dos líneas, rehacer borra otra vez, y Esc
+  suelta la elección sin salir del boceto. Las 61 de diseño, boceto y textos pasan.
+- **`gate_g10_bambu` en el runner de Linux:** la búsqueda escucha 6 s y llena la lista al terminar; `expect-bambu found`
+  esperaba 600 cuadros, que en un runner rápido son menos de 6 s. Ahora espera a que la búsqueda termine.
+- **CD30 completo:** la prueba suma un círculo con su cota; al borrar las dos líneas (y al deshacer y rehacer) el
+  círculo y su cota siguen ahí (verbo nuevo `expect-sketch-rules N`).

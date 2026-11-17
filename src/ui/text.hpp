@@ -1729,6 +1729,9 @@
     X(EditCopy, "Copiar", "Copy") \
     X(EditRotate, "Girar", "Rotate") \
     X(EditScale, "Escalar", "Scale") \
+    X(EditErase, "Borrar", "Erase") \
+    X(SketchNothingToUndo, "No hay nada para deshacer en el boceto", "Nothing to undo in the sketch") \
+    X(SketchNothingToRedo, "No hay nada para rehacer en el boceto", "Nothing to redo in the sketch") \
     X(PromptTrim, "Recortar: hacé clic en la parte a quitar (Enter termina)", "Trim: click the part to cut away (Enter ends)") \
     X(PromptExtend, "Alargar: hacé clic cerca del extremo a alargar (Enter termina)", "Extend: click near the end to extend (Enter ends)") \
     X(PromptOffsetDistance, "Desfasar: distancia <%.4g>", "Offset: distance <%.4g>") \
@@ -1765,6 +1768,7 @@
     X(EditNothing, "Ahí no hay nada para eso", "Nothing there for that") \
     X(EditNoSelection, "No hay nada elegido", "Nothing is picked") \
     X(EditDone, "Hecho", "Done") \
+    X(EditErased, "Borrados: %d", "Erased: %d") \
     X(RuleDimension, "Cota", "Dimension") \
     X(RuleHorizontal, "Horizontal", "Horizontal") \
     X(RuleVertical, "Vertical", "Vertical") \

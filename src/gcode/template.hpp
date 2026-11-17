@@ -62,6 +62,10 @@ struct TemplateContext {
     // settings and gave a safe value instead of 0 (gcode_macros.md, rule 10
     // quater), and those a template used, for the log.
     std::set<std::string, std::less<>> estimated, estimated_used;
+    // Variables given the value they take when the profile does not say
+    // (gcode_macros.md, rule 9 bis): the pack's machine and source values
+    // still replace them.
+    std::set<std::string, std::less<>> defaults;
     // A feed of 0 in a rendered line (F0) is written as this one, mm/min
     // (rule 10 quater; 0: left as it is), and counted.
     double zero_feed = 0.0;

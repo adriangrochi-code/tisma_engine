@@ -38,6 +38,7 @@
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
+#include "gcode/macro_variables.hpp"
 #include "gcode/dialect.hpp"
 #include "gcode/gate_check.hpp"
 #include "gcode/output.hpp"
@@ -74,6 +75,7 @@
 #include "device/camera_frame.hpp"
 #include "library/shared_fetch.hpp"
 #include "library/shared_index.hpp"
+#include "net/digest.hpp"
 #include "net/ed25519.hpp"
 #include "net/http.hpp"
 #include "device/usb_camera.hpp"
@@ -1605,6 +1607,7 @@ private:
     bool design_pick_sketch_ = false;    // the Boceto tool from Prepare: the plane is asked
     // The command line (rule 12): the text, the tool asking for its sizes.
     std::string command_text_;
+    bool command_active_ = false; // the command line has the keyboard
     std::string command_message_;
     std::string last_command_;
     struct CommandPrompt {
@@ -1625,7 +1628,7 @@ private:
         enum class Tool { None, Line, Rectangle, Circle, Arc, Constrain, Edit } tool = Tool::None;
         // The editing tools (rule 17), each a few steps: picks, points and
         // numbers asked for on the command line.
-        enum class EditKind { Trim, Extend, Offset, Fillet, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale, Distance, Area };
+        enum class EditKind { Trim, Extend, Offset, Fillet, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale, Distance, Area, Erase };
         EditKind edit = EditKind::Trim;
         int edit_step = 0;
         std::vector<std::size_t> selected;
@@ -1658,6 +1661,10 @@ private:
         bool construction = false, show_grid = true, show_rules = true, show_dims = true;
         // A dimension being typed after a double click on its number.
         std::optional<std::size_t> dim_edit;
+        // Undo and redo inside the sketch (cad_design.md, rule 11, CD30): the
+        // sketch as it was before each change, taken when it settles.
+        std::vector<cad::Sketch> undo, redo;
+        std::optional<cad::Sketch> settled;
         double dim_value = 0.0;
         double polar_step = 45.0;
         // What each point of the tool snapped to, and the segments typed as lengths.
@@ -1703,6 +1710,10 @@ private:
     double sketch_pick_radius() const;
     void sketch_edit_tool(SketchEdit::EditKind kind);
     void sketch_edit_prompt();
+    void sketch_erase_selected();
+    void sketch_history();
+    void sketch_undo(bool redo);
+    void sketch_click_select(const cad::Pt& raw);
     void sketch_edit_point(const cad::Pt& p, const cad::Pt& raw);
     bool sketch_edit_text(const std::string& word, const std::string& text);
     void sketch_edit_finish(bool changed);
@@ -7350,6 +7361,10 @@ void App::start_slice() {
     // or sent to a printer, was «.gcode» (a hidden file on Klipper).
     if (settings.input_name.empty() && !model_path_.empty())
         settings.input_name = utf8(model_path_.stem());
+    // The profiles chosen, by name, for the machine's G-code (gcode_macros.md, rule 9 bis).
+    settings.profile_names = {{"printer_settings_id", chosen_profile_[std::size_t(ProfileKind::Printer)]},
+                              {"filament_settings_id", chosen_profile_[std::size_t(ProfileKind::Filament)]},
+                              {"print_settings_id", chosen_profile_[std::size_t(ProfileKind::Print)]}};
     PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
     // The paint's colour marks as the filaments and blends they stand for (MX33).
     Painting painting = paint_slots_.empty() ? std::move(plate.painting) : with_color_slots(plate.painting, paint_slots_);
@@ -11399,9 +11414,11 @@ void App::viewport() {
                 sketch_drag_to(*se.raw);
             if (se.drag && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
                 se.drag.reset(); // a release after a drag places no point (it was not a click)
-            // Choosing for an editing tool: a drag is a selection box (rule 17).
-            if (sketch_edit_selecting()) {
-                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && se.raw)
+            // Choosing for an editing tool, or with no tool (as Fusion and
+            // AutoCAD): a drag is a selection box (rule 17).
+            const bool choosing = sketch_edit_selecting() || (se.tool == SketchEdit::Tool::None && !se.drag);
+            if (choosing) {
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && se.raw && !se.drag)
                     se.box_from = se.raw;
                 if (se.box_from && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                     if (io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >= 9.0f && se.raw && editing_sketch())
@@ -11413,8 +11430,17 @@ void App::viewport() {
             }
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 9.0f &&
                 sketch_edit_->cursor) {
-                const cad::Snap snap = sketch_edit_->snap;
-                sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
+                if (se.tool == SketchEdit::Tool::None) {
+                    // No tool: a click picks a line, circle or arc, or
+                    // another; on nothing it lets go of the choice. Lines are
+                    // drawn with the Line tool (the owner, 2026-11-17: a click
+                    // meant to pick a line began a new one).
+                    if (se.raw)
+                        sketch_click_select(*se.raw);
+                } else {
+                    const cad::Snap snap = sketch_edit_->snap;
+                    sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
+                }
             }
         } else {
             sketch_edit_->raw.reset();
@@ -15565,7 +15591,8 @@ bool sketch_alias(const std::string& word) {
     static const char* aliases[] = {"l",     "c",     "a",      "rec",   "tr",    "ex",     "o",       "f",       "cha",
                                     "mi",    "ar",    "m",      "co",    "ro",    "sc",     "di",      "area",    "e",
                                     "rev",   "linea", "línea",  "line",  "circulo", "círculo", "circle", "arco",  "arc",
-                                    "rectangulo", "rectángulo", "rectangle", "boceto", "sketch", "extruir", "extrude"};
+                                    "rectangulo", "rectángulo", "rectangle", "boceto", "sketch", "extruir", "extrude",
+                                    "b",     "borrar", "borra", "erase", "supr", "del"};
     for (const char* a : aliases)
         if (word == a)
             return true;
@@ -16123,6 +16150,8 @@ void cad_icon(ImDrawList* dl, std::string_view id, ImVec2 a, float w, ImU32 c) {
         dl->AddPolyline(q, 4, c, t, ImDrawFlags_Closed);
     } else if (id == "orthographic") {
         box(0.18f, 0.2f, 0.82f, 0.85f);
+    } else if (id == "erase") { // a line crossed out
+        line(0.15f, 0.5f, 0.85f, 0.5f), line(0.3f, 0.25f, 0.7f, 0.75f), line(0.3f, 0.75f, 0.7f, 0.25f);
     } else if (id == "trim") { // a line cut where it crosses another
         line(0.15f, 0.5f, 0.42f, 0.5f), line(0.58f, 0.5f, 0.85f, 0.5f), line(0.5f, 0.15f, 0.5f, 0.85f);
     } else if (id == "extend") {
@@ -16246,7 +16275,7 @@ void App::design_toolbar() {
             {K::Chamfer, T::EditChamfer, "sketch_edit_chamfer", "chamfer"}, {K::Mirror, T::EditMirror, "sketch_edit_mirror", "mirror"},
             {K::Array, T::EditArray, "sketch_edit_array", "pattern_rectangular"}, {K::Move, T::EditMove, "sketch_edit_move", "move"},
             {K::Copy, T::EditCopy, "sketch_edit_copy", "copy"},           {K::Rotate, T::EditRotate, "sketch_edit_rotate", "rotate"},
-            {K::Scale, T::EditScale, "sketch_edit_scale", "scale"}};
+            {K::Scale, T::EditScale, "sketch_edit_scale", "scale"},       {K::Erase, T::EditErase, "sketch_edit_erase", "erase"}};
         for (const auto& [kind, label, id, icon] : edits)
             modify.tools.push_back({id, icon, tr(label), tr(T::DesignTipSketchTool), "", true, false, [this, kind] { sketch_edit_tool(kind); }});
         // Restricciones (rule 5): the dimension and the geometric ones.
@@ -23074,6 +23103,7 @@ void App::design_command_line() {
     g_menu_rects["design_command"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
     const bool active = ImGui::IsItemActive();
+    command_active_ = active;
     const auto take = [&](std::string text) {
         run_command(std::move(text));
         command_text_.clear();
@@ -23088,6 +23118,8 @@ void App::design_command_line() {
             command_prompt_.reset();
             operation_prompt_.reset();
             command_message_ = tr(T::CommandCancelled);
+        } else if (sketch_edit_ && sketch_edit_->tool == SketchEdit::Tool::None && !sketch_edit_->selected.empty()) {
+            sketch_edit_->selected.clear(); // the first Esc lets go of the choice
         } else if (sketch_edit_ && sketch_edit_->tool != SketchEdit::Tool::None) {
             sketch_end_tool(false); // the first Esc leaves the tool (CD10)
             command_message_ = tr(T::SketchToolLeft);
@@ -23097,6 +23129,12 @@ void App::design_command_line() {
         command_text_.clear();
         command_clear_ = true;
         command_focus_ = true;
+    } else if (active && command_text_.empty() && sketch_edit_ && !sketch_edit_->selected.empty() &&
+               (sketch_edit_->tool == SketchEdit::Tool::None || sketch_edit_selecting()) &&
+               (ImGui::IsKeyPressed(ImGuiKey_Delete, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false))) {
+        // The field keeps the keyboard (rule 12): with nothing typed, Supr and
+        // Backspace erase what is chosen in the sketch, as in the view.
+        sketch_erase_selected();
     } else if (active && ImGui::IsKeyPressed(ImGuiKey_Space, false) && command_prompt_) {
         // The space bar confirms as Enter does (rule 12).
         std::string text = command_text_;
@@ -23661,9 +23699,102 @@ void App::sketch_edit_tool(SketchEdit::EditKind kind) {
     e.edit = kind;
     e.edit_step = 0;
     e.selected = std::move(selected);
+    if (kind == SketchEdit::EditKind::Erase && !e.selected.empty()) {
+        sketch_erase_selected(); // what was chosen goes at once, as AutoCAD's ERASE does
+        return;
+    }
     if (sketch_edit_selecting() && !e.selected.empty())
         e.edit_step = 1;
     sketch_edit_prompt();
+}
+
+// The sketch's history: when it has settled (no drag, no shape half drawn,
+// no button held) and differs from the last settled one, that one goes on the
+// undo list (rule 11, CD30).
+void App::sketch_history() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left) || e.drag || !e.points.empty() || e.dim_edit)
+        return;
+    if (!e.settled) {
+        e.settled = *sketch;
+        return;
+    }
+    if (*sketch == *e.settled)
+        return;
+    e.undo.push_back(std::move(*e.settled));
+    if (e.undo.size() > 200)
+        e.undo.erase(e.undo.begin());
+    e.redo.clear();
+    e.settled = *sketch;
+}
+
+void App::sketch_undo(bool redo) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    sketch_history(); // what was just done counts first
+    SketchEdit& e = *sketch_edit_;
+    std::vector<cad::Sketch>& from = redo ? e.redo : e.undo;
+    std::vector<cad::Sketch>& to = redo ? e.undo : e.redo;
+    if (from.empty()) {
+        command_message_ = tr(redo ? T::SketchNothingToRedo : T::SketchNothingToUndo);
+        return;
+    }
+    to.push_back(*sketch);
+    *sketch = std::move(from.back());
+    from.pop_back();
+    e.settled = *sketch;
+    e.selected.clear();
+    e.drag.reset();
+    command_message_ = tr(redo ? T::Redo : T::Undo);
+}
+
+// With no tool, a click on the sketch: the entity under it joins the choice
+// or leaves it; a click on nothing empties it.
+void App::sketch_click_select(const cad::Pt& raw) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    const double radius = sketch_pick_radius();
+    const std::vector<std::size_t> hit =
+        cad::select_box(*sketch, {raw.x + radius, raw.y + radius}, {raw.x - radius, raw.y - radius});
+    if (hit.empty()) {
+        e.selected.clear();
+        return;
+    }
+    const std::size_t i = hit.back(); // the last drawn, on top
+    const auto it = std::find(e.selected.begin(), e.selected.end(), i);
+    if (it == e.selected.end())
+        e.selected.push_back(i);
+    else
+        e.selected.erase(it);
+}
+
+// The chosen lines, circles and arcs erased, with the rules on them (the
+// owner, 2026-11-17: nothing in the sketch could be erased).
+void App::sketch_erase_selected() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    std::vector<std::size_t> gone = e.selected;
+    std::sort(gone.begin(), gone.end(), std::greater<>());
+    gone.erase(std::unique(gone.begin(), gone.end()), gone.end());
+    std::size_t erased = 0;
+    for (const std::size_t i : gone)
+        if (i < sketch->entities.size()) {
+            cad::erase_entity(*sketch, i);
+            ++erased;
+        }
+    e.selected.clear();
+    e.drag.reset();
+    if (e.tool == SketchEdit::Tool::Edit)
+        sketch_end_tool(false);
+    command_message_ = format(tr(T::EditErased), int(erased));
 }
 
 void App::sketch_edit_prompt() {
@@ -23883,7 +24014,11 @@ bool App::sketch_edit_text(const std::string& word, const std::string& text) {
         {"copiar", K::Copy},   {"copy", K::Copy},         {"ro", K::Rotate},         {"girar", K::Rotate},
         {"di", K::Distance},   {"distancia", K::Distance}, {"distance", K::Distance}, {"dist", K::Distance},
         {"area", K::Area},     {"área", K::Area},
-        {"rotate", K::Rotate}, {"sc", K::Scale},          {"escalar", K::Scale},     {"scale", K::Scale}};
+        {"rotate", K::Rotate}, {"sc", K::Scale},          {"escalar", K::Scale},     {"scale", K::Scale},
+        // Erase: BORRA and its B as AutoCAD in Spanish, ERASE in English (E is
+        // extrude here, rule 12).
+        {"b", K::Erase},       {"borrar", K::Erase},      {"borra", K::Erase},       {"erase", K::Erase},
+        {"supr", K::Erase},    {"del", K::Erase}};
     for (const auto& [name, kind] : kNames)
         if (word == name) {
             last_command_ = word;
@@ -23898,6 +24033,10 @@ bool App::sketch_edit_text(const std::string& word, const std::string& text) {
         if (sketch_edit_selecting()) {
             if (e.selected.empty()) {
                 command_message_ = tr(T::EditNoSelection);
+                return true;
+            }
+            if (e.edit == K::Erase) {
+                sketch_erase_selected();
                 return true;
             }
             e.edit_step = 1;
@@ -25951,6 +26090,15 @@ void App::layout() {
         rebuild_design();
     }
     if (tab_ == Tab::Design && sketch_edit_ && no_popup()) {
+        sketch_history();
+        // Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) in the sketch, also from the
+        // command line while nothing is typed in it.
+        if (!ImGui::GetIO().WantTextInput || (command_active_ && command_text_.empty())) {
+            if (take_chord('z', false))
+                sketch_undo(false);
+            else if (take_chord('y', false) || take_chord('z', true))
+                sketch_undo(true);
+        }
         if (ImGui::Shortcut(ImGuiKey_F3, ImGuiInputFlags_RouteGlobal))
             sketch_edit_->snaps = !sketch_edit_->snaps;
         if (ImGui::Shortcut(ImGuiKey_F8, ImGuiInputFlags_RouteGlobal))
@@ -25959,8 +26107,15 @@ void App::layout() {
             sketch_edit_->grid = !sketch_edit_->grid;
         if (ImGui::Shortcut(ImGuiKey_F10, ImGuiInputFlags_RouteGlobal))
             sketch_edit_->polar = !sketch_edit_->polar;
+        // Supr or Backspace erases what is chosen (as Fusion and AutoCAD).
+        if (!ImGui::GetIO().WantTextInput && !sketch_edit_->selected.empty() &&
+            (sketch_edit_->tool == SketchEdit::Tool::None || sketch_edit_selecting()) &&
+            (ImGui::IsKeyPressed(ImGuiKey_Delete, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false)))
+            sketch_erase_selected();
         if (!ImGui::IsAnyItemActive() && esc_frame_ != ImGui::GetFrameCount() && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-            if (sketch_edit_->tool != SketchEdit::Tool::None) {
+            if (sketch_edit_->tool == SketchEdit::Tool::None && !sketch_edit_->selected.empty()) {
+                sketch_edit_->selected.clear(); // Esc first lets go of the choice (rule 11: a level back)
+            } else if (sketch_edit_->tool != SketchEdit::Tool::None) {
                 sketch_end_tool(false);
                 command_message_ = tr(T::SketchToolLeft);
             } else {
@@ -28095,6 +28250,15 @@ bool App::script_check(const ScriptStep& step, int f) {
             return f > 600 ? fail_step(step.key + " is not under way") : true;
         std::printf("ui-script: expect-busy %s: ok\n", step.key.c_str());
         next();
+    } else if (step.verb == "expect-sketch-rules") { // N: the sketch being drawn has N dimensions and constraints added by hand
+        const cad::Sketch* sk = editing_sketch();
+        if (!sk)
+            return fail_step("no sketch is being drawn");
+        const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
+        std::printf("ui-script: expect-sketch-rules %zu: got %zu\n", want, sk->rules.size());
+        if (sk->rules.size() != want)
+            return fail_step("the sketch has " + std::to_string(sk->rules.size()) + " rules");
+        next();
     } else {
         return false;
     }
@@ -28861,7 +29025,23 @@ void App::script_input() {
             bambu_refresh();
         } else if (step.key == "print")
             bambu_print_now();
-        else if (step.key == "camera")
+        else if (step.key == "search") { // as «Search»; the simulated printer announces itself as a real one does
+            bambu_searched_ = false;
+            bambu_search_ = std::async(std::launch::async, [] { return device::ssdp_listen(6000); });
+            if (bambu_sim_) {
+                const std::string notify = "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1990\r\nServer: UPnP/1.0\r\n"
+                                           "Location: 127.0.0.1\r\nNT: urn:bambulab-com:device:3dprinter:1\r\n"
+                                           "USN: 01S00SIMULATED\r\nDevModel.bambu.com: N1\r\n"
+                                           "DevName.bambu.com: Simulated\r\n\r\n";
+                busy_jobs_.push_back(std::async(std::launch::async, [notify] {
+                    for (int i = 0; i < 10; ++i) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                        for (const int port : {1990, 2021})
+                            device::ssdp_announce_local(notify, port);
+                    }
+                }));
+            }
+        } else if (step.key == "camera")
             bambu_camera_on();
         else if (step.key == "camera-off")
             bambu_camera_off();
@@ -28940,8 +29120,41 @@ void App::script_input() {
             got = bambu_status_.code;
         else if (step.key == "trays")
             got = std::to_string(bambu_status_.trays.size());
+        else if (step.key == "found") { // ID: the search listed that printer (once the search has ended)
+            if (bambu_search_.valid())
+                return f > 36000 ? fail_step("the search never ended") : void(); // it listens 6 s, whatever the frame rate
+            got = "nothing";
+            for (const device::SsdpPrinter& p : bambu_found_)
+                if (p.id == step.value)
+                    got = p.id;
+        }
         else if (step.key == "sent")
             got = bambu_sim_ && bambu_sim_->files().count(step.value + ".gcode.3mf") ? step.value : "nothing";
+        else if (step.key == "whole") { // NAME: the package sent is this slice's G-code, byte for byte, with its MD5, and started
+            got = "nothing";
+            if (bambu_sim_ && result_) {
+                const auto files = bambu_sim_->files();
+                const auto it = files.find(step.value + ".gcode.3mf");
+                if (it != files.end()) {
+                    try {
+                        const ZipArchive zip(it->second);
+                        const ZipArchive::Entry* plate = zip.find("Metadata/plate_1.gcode");
+                        const ZipArchive::Entry* md5 = zip.find("Metadata/plate_1.gcode.md5");
+                        const std::string gcode = plate ? zip.read(*plate) : std::string();
+                        const bool same = gcode == result_->gcode && md5 && zip.read(*md5) == net::md5_hex(gcode);
+                        bool started = false;
+                        for (const nlohmann::json& c : bambu_sim_->commands())
+                            started = started || (c.is_object() && c.value("command", "") == "project_file" &&
+                                                  c.value("url", "") == "ftp:///" + it->first);
+                        got = same && started ? step.value : same ? "not started" : "not whole";
+                        std::printf("ui-script: expect-bambu whole: %zu of %zu bytes, %s\n", gcode.size(),
+                                    result_->gcode.size(), got.c_str());
+                    } catch (const std::exception& e) {
+                        got = std::string("not a package: ") + e.what();
+                    }
+                }
+            }
+        }
         else if (step.key == "camera") // the size of the frame shown, WxH; "none"
             got = bambu_camera_tex_ ? std::to_string(bambu_camera_w_) + "x" + std::to_string(bambu_camera_h_) : "none";
         else if (step.key == "camera-error") { // why the camera stopped, as the person reads it
@@ -28954,7 +29167,7 @@ void App::script_input() {
         if (got == step.value) {
             std::printf("ui-script: expect-bambu %s %s: ok\n", step.key.c_str(), step.value.c_str());
             next();
-        } else if (f > (step.key == "camera-error" ? 6000 : step.key == "camera" ? 600 : 2)) {
+        } else if (f > (step.key == "camera-error" ? 6000 : step.key == "camera" || step.key == "found" || step.key == "whole" ? 600 : 2)) {
             fail_step("bambu " + step.key + " is «" + got + "», not «" + step.value + "»");
         }
     } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)
@@ -29069,7 +29282,10 @@ void App::script_input() {
         const cad::Snap snap = sketch_edit_->snap;
         std::printf("ui-script: sketch-point %s %s: at %.3f %.3f (%s)\n", step.key.c_str(), step.value.c_str(),
                     sketch_edit_->cursor->x, sketch_edit_->cursor->y, cad::snap_name(snap.kind));
-        sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
+        if (sketch_edit_->tool == SketchEdit::Tool::None) // as the mouse: no tool picks
+            sketch_click_select(*sketch_edit_->raw);
+        else
+            sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
         next();
     } else if (step.verb == "expect-command-message") { // the command line's message contains TEXT
         const std::string want = step.value.empty() ? step.key : step.key + " " + step.value;
@@ -30008,6 +30224,9 @@ int run_app(const AppOptions& options) {
     // and Background threads wait in their destructors) would hold the exit.
     // run() has saved what is kept and closed the window; the process ends
     // here, with the static objects' clean-up (the design session's folder).
+    // Downloads still running at the exit must not find OpenSSL torn down
+    // under them (the release build's ui_sigterm_while_starting crash).
+    net::keep_tls_at_exit();
     auto* app = new App(options);
     const int code = app->run();
     if (g_quit_at) {
