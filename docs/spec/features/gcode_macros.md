@@ -62,6 +62,11 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
    valores.
 8. **Vectores por extrusor:** `temperature[0]`, `nozzle_temperature_initial_layer[1]`… tienen un valor por extrusor;
    con un solo extrusor, solo el índice 0.
+   Una impresora de varios cabezales (`machine.extruders` mayor que 1, por ejemplo la Prusa XL de 2 y 5 cabezales)
+   tiene un valor por cabezal en cada vector, aunque se imprima con uno solo: los que no se usan toman los valores del
+   filamento del cabezal 0, e `is_extruder_used[i]` vale no. Un índice fuera del vector dentro de `is_nil(...)` da sí
+   y no es un error (QA, 17-11-2026: las 32 variantes de la XL del paquete caían en la versión simple por
+   `filament_multitool_ramming[1]`) (prueba GM20).
 9. **La lista:** `docs/FORMAT.md` del paquete de perfiles trae, en una tabla, cada variable que usan los G-code del
    paquete, su tipo (número, texto, sí/no, vector), en qué G-code está disponible (inicio, fin, cambio de capa, cambio
    de herramienta, pausa) y su significado. El motor llena todas las de esa tabla; una variable que el motor todavía
@@ -75,7 +80,9 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     lenguaje de arriba con los nombres de la documentación pública de PrusaSlicer; `orcaslicer`, `crealityprint` y
     `elegooslicer` usan el mismo lenguaje con sus propios nombres de variables, que el motor llena con el valor
     equivalente; `cura` solo reemplaza `{nombre}` por su valor, sin condiciones ni cuentas. Si el G-code de un
-    dialecto no se puede interpretar, se usa la versión simple del perfil y se avisa en el registro.
+    dialecto no se puede interpretar, se usa la versión simple del perfil y se avisa en el registro y en la interfaz.
+    La versión simple siempre lleva a la impresora al origen: si no tiene `G28` ni una macro de inicio
+    (`START_PRINT`, `PRINT_START`), el motor escribe `G28` antes de la primera extrusión (prueba GM21).
 10 bis bis. **Listas donde se espera un número** (dialecto `orcaslicer` y sus derivados): una variable que es una lista
     de números o porcentajes, usada en una cuenta o una comparación sin índice (por ejemplo
     `{if outer_wall_acceleration > 0}`), vale su único elemento si tiene uno, y si no, el del extrusor en uso. Antes,
@@ -165,5 +172,7 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM15 | G-code `orcaslicer` con `{if outer_wall_acceleration > 0}` y la variable como lista de uno o de dos (dos extrusores, el segundo en uso) | Se interpreta: vale el único valor, o el del segundo extrusor; no cae en la versión simple |
 | GM16 | `{ceil(2.1)}` y `{ceil(3)}` en un G-code `orcaslicer` | `3` y `3` |
 | GM17 | Una condición que abre y cierra en la misma línea, dentro de un texto y con un índice de extrusor: `M104 T1 S{if filament_type[1] == "PLA"}215{else}240{endif}` con PLA | `M104 T1 S215`; no cae en la versión simple |
+| GM20 | Prusa XL de 5 cabezales del paquete, un solo filamento | Se interpreta su G-code de inicio entero (`M17`, `M862.3 P "XL"`, `G28 XY`, `G28 Z`, la purga); no cae en la versión simple |
+| GM21 | G-code de inicio que no se puede interpretar, versión simple sin `G28` | El G-code tiene `G28` antes de la primera extrusión y el aviso se ve en la interfaz |
 | GM18 | `{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n"A" + a + "\n";\n}` (con saltos de línea reales) | Sale `A3` y un salto de línea; nada más |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |

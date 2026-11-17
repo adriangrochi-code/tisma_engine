@@ -37,8 +37,14 @@ Los límites de la máquina (aceleraciones, velocidades y tirones máximos por e
      en RepRapFirmware el mismo `G10` sin parámetros es la retracción del firmware (`retraction_travel.md`, regla 7):
      con las dos cosas, el G-code tiene `G10 S200 P0` para la temperatura y `G10` solo para retraer (medido el
      27-10-2026). Al terminar, todos los firmwares apagan la boquilla con `M104 S0`, también RepRapFirmware;
-   - si el G-code de inicio ya tiene comandos de temperatura de boquilla, cama o cámara, el motor no los agrega:
-     la persona decide el orden.
+   - cada calentador se mira por separado: si el G-code de inicio ya fija la boquilla (`M104`, `M109`, también con
+     `R` en vez de `S` y con `T<n>`; `G10 S… P…` en RepRapFirmware; o una macro de inicio con la temperatura), el
+     motor no agrega la de la boquilla; si ya fija la cama (`M140`, `M190`), no agrega la de la cama; lo mismo con la
+     cámara. Un G-code de inicio que solo calienta la cama recibe igual la boquilla (QA, 17-11-2026: el Deltacomb
+     DC-20 del paquete no laminaba);
+   - la comprobación del G-code (`gcode_check`) acepta como temperatura de boquilla `M109 R<t>` y `M104/M109 T<n>`
+     para el cabezal con que se imprime, y no la exige si el filamento no tiene temperatura (0: impresoras sin
+     calentador, como la de chocolate Cocoa Press) (prueba FW11).
 2. **Límites de la máquina** con `emit`, antes del G-code de inicio:
 
    | Firmware | Comandos | Unidades |
@@ -137,3 +143,4 @@ del cubo de 20 mm, con centros en X = 100 y X = 74. Los valores de los límites 
 | FW8 | RepRap genérico, `emit`, etiquetas `firmware`, avance, modo silencioso | Sin límites, sin `M486` ni comentarios de objetos y sin error. `M73 P R` sin `Q` ni `S`. `M104 S200` antes del inicio y `M109 S200` después |
 | FW9 | Marlin 1 y Marlin 2, `emit`, aceleraciones 1100 al imprimir, 1200 al retraer y 1300 al viajar | Marlin 1: `M204 S1100 T1200`. Marlin 2: `M204 P1100 R1200 T1300` |
 | FW10 | Perfil Kobra 3, `strict_parser` = `anycubic`, cubo de 20 mm | `.gcode` plano con `HEADER_BLOCK`, `EXECUTABLE_BLOCK` y un `CONFIG_BLOCK` corto sin `;` dentro de valores; los nombres como en el archivo de referencia; la Kobra 3 del dueño lo imprime sin quedarse en «parsing», con y sin el ACE Pro |
+| FW11 | Lulzbot TAZ 4/5 (`M109 R…`), Sovol SV04 en modo 02 (`M104 T1`, `M109 T1`), Deltacomb DC-20 (solo `M140` al inicio) y Cocoa Press, del paquete | Los cuatro laminan; el DC-20 recibe `M104`/`M109` de la boquilla antes de imprimir |
