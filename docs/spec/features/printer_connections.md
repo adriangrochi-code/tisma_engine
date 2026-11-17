@@ -593,7 +593,7 @@ Avisa que cualquiera en la LAN puede controlar la impresora, y nunca la expone f
 | CR1-1 | El simulador responde en 7125, y no en 9999 | Se usa la conexión Moonraker, no la de Creality |
 | CR1-2 | Solo 9999 abierto, empuja JSON con `printJobTime`/`printLeftTime` | Se muestran el tiempo transcurrido y el restante, en segundos convertidos |
 | CR1-3 | `model` vacío y `modelVersion` = F012 | El modelo se deduce del código de placa, sin fallar |
-| CR1-4 | Imprimiendo, luego el estado de precalentamiento durante 15 s sin volver | Se informa «detenida» después de la ventana, no antes |
+| CR1-4 | (Pendiente, fuera de la beta del 24-11: falta medir con una Creality real la clave del estado y su valor de precalentamiento; hasta entonces, una parada se muestra como «sin datos de estado» y no como «detenida») | — |
 | CR1-5 | Se corta el WebSocket a mitad de una impresión | Se reconecta, la impresión sigue figurando activa y aparece «Reconectando…» |
 | CR1-6 | La subida devuelve 404 | Se muestra el mensaje de firmware sin subida por la red, sin reintentar sin fin |
 
