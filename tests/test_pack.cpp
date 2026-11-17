@@ -353,6 +353,14 @@ TEST_CASE("pack: the models a search finds, and a printer's profiles with its de
     CHECK(print.profile.kind == ProfileKind::Print);
     CHECK_THROWS_AS(pack_profiles(pack, index, "vendors/bolt/models/B2.json#default", "vendors/acme/filaments/PLA.json"),
                     PackError);
+    // A resin printer without a bed of its own: its display is the plate, from
+    // (0, 0) (resin.md, RE3), so a part centred on it fits.
+    const PackProfiles resin = pack_profiles(pack, index, "vendors/bolt/models/B2.json#default");
+    CHECK(resin.resin);
+    const auto& bed = resin.printer.settings.bed;
+    REQUIRE(bed.size() == 4);
+    CHECK(bed[0] == std::array<double, 2>{0.0, 0.0});
+    CHECK(bed[2] == std::array<double, 2>{resin.printer.settings.display_width, resin.printer.settings.display_height});
 }
 
 TEST_CASE("pack: the filaments offered for a printer (rule 12, PK7)", "[pack]") {

@@ -205,3 +205,16 @@ add_test(NAME gate_g11_cloud
 set_tests_properties(gate_g11_cloud PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSION "error: " TIMEOUT 600
                      WORKING_DIRECTORY ${TISMA_GATE_OUT}
                      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;TISMA_MOCK_CLOUD_ENGINE=$<TARGET_FILE:tisma-engine>;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${TISMA_GATE_OUT}/g11_secrets.txt")
+
+# G12, calibration: each FDM calibration test made from its card, the card
+# closed, sliced to checked G-code.
+foreach(kind dimensions temperature retraction flow speed retraction_speed pressure_advance first_layer fit max_flow
+             acceleration elephant_foot bridges_overhangs)
+  tisma_gate_test(NAME gate_g12_${kind} MODEL ${TISMA_GATE_DATA}/cube_ascii.stl SCRIPT gate_g12_${kind})
+endforeach()
+# The resin ones on the test pack's resin printer.
+foreach(kind resin_exposure resin_measure)
+  tisma_gate_test(NAME gate_g12_${kind} MODEL ${TISMA_GATE_DATA}/cube_ascii.stl SCRIPT gate_g12_${kind}
+                  ARGS --pack ${TISMA_GATE_OUT}/pack/pack --pick-pack-printer "vendors/bolt/models/B2.json#default"
+                  PROPERTIES FIXTURES_REQUIRED gate_pack)
+endforeach()

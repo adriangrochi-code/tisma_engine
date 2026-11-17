@@ -355,6 +355,22 @@ Profile pack_printer_profile(std::string_view model_json, const std::string& var
     if ((technology == "sla" || technology == "fff") &&
         !(settings.contains("machine") && settings.at("machine").is_object() && settings.at("machine").contains("technology")))
         settings["machine"]["technology"] = technology == "sla" ? "msla" : "fdm";
+    // A resin printer's plate is its display, from (0, 0) (resin.md, RE3):
+    // without a bed of its own, the display's rectangle, as the panel makes
+    // it when the technology changes. An empty bed put the part at 0, 0, off
+    // the display, and nothing sliced.
+    if (settings.contains("machine") && settings.at("machine").is_object() &&
+        settings.at("machine").value("technology", std::string()) == "msla" &&
+        (!settings.at("machine").contains("bed") || settings.at("machine").at("bed").empty())) {
+        const Settings defaults;
+        const json& m = settings.at("machine");
+        const double w = m.contains("display_width") && m.at("display_width").is_number() ? m.at("display_width").get<double>()
+                                                                                          : defaults.display_width;
+        const double h = m.contains("display_height") && m.at("display_height").is_number() ? m.at("display_height").get<double>()
+                                                                                            : defaults.display_height;
+        settings["machine"]["bed"] = json::array({json::array({0.0, 0.0}), json::array({w, 0.0}), json::array({w, h}),
+                                                  json::array({0.0, h})});
+    }
     // A printer's purge volumes are a print setting here (PF8): the print's default.
     json carried = json::object();
     if (settings.contains("wipe_tower") && settings.at("wipe_tower").is_object() &&

@@ -25077,6 +25077,7 @@ void App::calibration_panel() {
         const bool active = calibration_ && calibration_kind_ == card.kind;
         if (row(card.title, active, done(card.kind)))
             calibration_card_ = int(card.kind);
+        note_rect(std::string("cal_row_") + calibration_kind_name(card.kind));
         if (active) {
             const CalibrationPrint& c = *calibration_;
             // 1: created and sliced.
@@ -25374,6 +25375,7 @@ void App::calibration_panel() {
                 create_calibration(card->kind, false);
                 close = true;
             }
+            note_rect("cal_create");
             // Its guide, when the pack has one (assistant.md, rule 20).
             if (const std::string_view guide = guide_for_test(calibration_kind_name(card->kind));
                 !guide.empty() && knowledge_ && find_guide(*knowledge_, guide)) {
@@ -28026,6 +28028,14 @@ bool App::script_check(const ScriptStep& step, int f) {
                     unloaded);
         if (n == 0 || bad)
             return fail_step("a face of the structural map has no value");
+        next();
+    } else if (step.verb == "expect-resin-file") { // a resin slice with layers, volume and time
+        if (!result_ || !result_->ok || !result_->resin)
+            return fail_step("no resin slice");
+        const ResinPrint& r = *result_->resin;
+        std::printf("ui-script: expect-resin-file: %zu layers, %.1f mm3, %.0f s\n", r.layers.size(), r.volume, r.seconds);
+        if (r.layers.empty() || r.volume <= 0.0 || r.seconds <= 0.0)
+            return fail_step("the resin slice has no layers, volume or time");
         next();
     } else {
         return false;

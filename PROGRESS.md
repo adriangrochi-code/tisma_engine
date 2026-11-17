@@ -14785,3 +14785,10 @@ para el LBM D3Q19.
   corre `tisma-engine slice <proyecto> --sandbox` sobre el proyecto que recibe, como los nodos. El guion lamina local,
   guarda el G-code, inicia sesión, lamina en la nube y compara: igual byte a byte (117 551 bytes). Sin el maestro (la
   respuesta fija del servidor de prueba) la comparación falla, como debe.
+- **G12, calibración:** `gate_g12_<prueba>` para las 13 pruebas FDM y las 2 de resina: desde su cuadro en la pestaña
+  Calibración, «Crear» la arma y el cuadro cierra; lamina a G-code comprobado (o, en resina, capas, volumen y
+  tiempo, verbo `expect-resin-file`). Nombres nuevos para los guiones: `cal_row_<prueba>` y `cal_create`. Pasan las 15.
+- **Encontrado (GRAVE):** una impresora de resina del paquete no laminaba nada: el paquete no le daba cama y la pieza
+  quedaba en 0, 0, fuera de la pantalla («does not fit on the display»). Ahora, sin cama propia, la cama de una
+  impresora de resina es su pantalla desde (0, 0) (`src/catalog/pack.cpp`; como hace el panel al elegir resina;
+  resin.md, RE3). Prueba en `[pack]`.
