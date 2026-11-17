@@ -12444,5 +12444,10 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   Corridas en el emulador: pasan asistente, abrir (G1), laminar el cubo y el Benchy con medidas dentro de 0,1 mm (G2) y
   exportar. Segundo error real encontrado: el aviso que queda hasta cerrarlo («Guardado exported.gcode») tapaba el botón
   «Agregar una impresora»; el botón pasa al lugar de botón flotante del Scaffold, que lo sube sobre el aviso.
+  Tercer error real: al abrir la app con un archivo («Abrir con»), el último modelo restaurado se leía después y su
+  malla quedaba bajo el nombre del nuevo (el cubo con la malla del Benchy); ahora una malla solo se muestra si su archivo
+  sigue en la placa. **G16 de Android en verde** (17-11, corrida 43993864839, 1b0c835): asistente, abrir 4 archivos,
+  laminar cubo y Benchy dentro de 0,1 mm, exportar y mandar a Moonraker, OctoPrint, PrusaLink y Duet simulados (llega
+  entero y empieza). Sin probar en un teléfono real. Falta: Bambu Lab en la puerta y la puerta del iPhone.
 - Siguiente (antes: el motor como biblioteca para iOS (lo pide la sesión del
   motor); pasar la cuenta de Android a `AccountModel`.
