@@ -50,3 +50,9 @@ lanzamiento.
   Con 1 mm, la capa de interfaz que cruza entre las líneas de la base (separadas unos 2,5 mm) contaría como flotante,
   y no lo es: se apoya como un puente corto (medido el 16-11-2026 con la T y las rampas).
   El porcentaje es la longitud flotante sobre la longitud total de soporte.
+
+## Vista con el renderizador por software
+
+En la CI de macOS la ventana se dibuja con el renderizador por software de Apple (no hay GPU). Ahí el control de la
+vista sigue exigiendo que no haya píxeles negros, pero no cuenta los destellos: los da el suavizado de ese
+renderizador, no el programa. Con GPU (Linux, Windows) el tope de destellos de 1 cada 1000 sigue igual.
