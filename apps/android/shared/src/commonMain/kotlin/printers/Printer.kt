@@ -78,7 +78,11 @@ enum class PrinterKind(val wire: String, val defaultPort: Int) {
     /** Flashforge (printer_connections.md, «Flashforge en red local»): the serial number in `user`, the check code as the key. */
     FLASHFORGE("flashforge", 8898),
     /** Elegoo over SDCP v3 (printer_connections.md, «Impresoras Elegoo por red local»): WebSocket and uploads on 3030. */
-    ELEGOO("elegoo", 3030);
+    ELEGOO("elegoo", 3030),
+    /** Creality with its stock firmware (printer_connections.md, «Creality de fábrica»): Moonraker if it answers, else the state on 9999. */
+    CREALITY("creality", 9999),
+    /** Anycubic: not offered; the person is told to use Anycubic Slicer Next (the owner's decision, 17-11-2026). */
+    ANYCUBIC("anycubic", 80);
 
     companion object {
         fun of(wire: String) = entries.firstOrNull { it.wire == wire }
@@ -159,6 +163,10 @@ class PrinterException(
         const val EL_UPLOAD_FAILED = "elegoo.upload."
         /** Followed by `PrintInfo.ErrorNumber` (1 MD5, 2 read, 3 resolution, 4 format, 5 model). */
         const val EL_PRINT_ERROR = "elegoo.error."
+        const val CR_REFUSED = "creality.refused"
+        const val CR_RECONNECTING = "creality.reconnecting"
+        const val CR_NO_SEND = "creality.no_send"
+        const val AC_USE_SLICER_NEXT = "anycubic.slicer_next"
     }
 
     enum class Kind {
@@ -202,6 +210,8 @@ data class PrinterConfig(
             // Flashforge speaks HTTP on 8898 and TCP on 8899: its address is the host.
             if (kind == PrinterKind.FLASHFORGE) return if (t.startsWith("flashforge://")) t else "flashforge://" + t.substringAfter("://")
             if (kind == PrinterKind.ELEGOO) return if (t.startsWith("elegoo://")) t else "elegoo://" + t.substringAfter("://")
+            if (kind == PrinterKind.CREALITY) return if (t.startsWith("creality://")) t else "creality://" + t.substringAfter("://")
+            if (kind == PrinterKind.ANYCUBIC) return if (t.startsWith("anycubic://")) t else "anycubic://" + t.substringAfter("://")
             if (!t.startsWith("http://", true) && !t.startsWith("https://", true)) {
                 t = "http://$t"
                 val hostPart = t.removePrefix("http://").substringBefore('/')

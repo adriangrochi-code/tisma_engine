@@ -52,13 +52,20 @@ struct PrinterView: View {
                             .autocorrectionDisabled().accessibilityIdentifier("printer_user")
                     }
                     // Elegoo's SDCP has no key on the local network.
-                    if kind != "elegoo" { SecureField(kind == "bambu" ? "Access code" : kind == "flashforge" ? "Check code (empty for the Adventurer 3 and 4)"
+                    if !["elegoo", "creality", "anycubic"].contains(kind) { SecureField(kind == "bambu" ? "Access code" : kind == "flashforge" ? "Check code (empty for the Adventurer 3 and 4)"
                                 : kind == "octoprint" || kind == "moonraker" ? "API key" : "Password", text: $secret)
                         .onChange(of: secret) { _, v in Keychain.write("printer.secret", v) }
                         .accessibilityIdentifier("printer_secret") }
                     Button("Test") { run { tested = try PrinterBridge.shared.test(kind: $0.0, address: $0.1, user: $0.2, secret: $0.3) } }
                         .disabled(address.isEmpty).accessibilityIdentifier("printer_test")
                     if let tested { Text(tested).foregroundStyle(.secondary).accessibilityIdentifier("printer_tested") }
+                    if kind == "anycubic" {
+                        Text("Tisma does not connect to Anycubic printers: use Anycubic Slicer Next.").font(.footnote).foregroundStyle(.red)
+                    }
+                    if kind == "creality" {
+                        Text("Stock firmware: the state only. To send, turn on Moonraker/Fluidd. Anyone on your network can control these printers.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     if kind == "flashforge" {
                         Text("Adventurer 5M, 5M Pro, AD5X and Creator 5: turn on «LAN only»; the check code is on that network mode screen. Address: the printer's IP. Files are not sent to the Adventurer 3 and 4 yet.")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -166,6 +173,8 @@ enum PrinterKinds {
         case "bambu": return "Bambu Lab (LAN)"
         case "flashforge": return "Flashforge"
         case "elegoo": return "Elegoo (SDCP)"
+        case "creality": return "Creality (stock firmware)"
+        case "anycubic": return "Anycubic"
         default: return kind
         }
     }

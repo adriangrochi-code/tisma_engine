@@ -13,5 +13,7 @@ fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tism
         PrinterKind.BAMBU -> BambuConnection.of(url, secret.orEmpty(), certSha256.ifBlank { null })
         PrinterKind.FLASHFORGE -> Flashforge.of(url, user, secret.orEmpty(), http)
         PrinterKind.ELEGOO -> ElegooConnection.of(url, http)
+        PrinterKind.CREALITY -> CrealityConnection.of(url, http)
+        PrinterKind.ANYCUBIC -> AnycubicConnection()
     }
 

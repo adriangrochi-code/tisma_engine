@@ -80,6 +80,8 @@ object PrinterBridge {
             PrinterKind.BAMBU -> BambuConnection.of(url, secret, defaults.stringForKey(pinKey(address)))
             PrinterKind.FLASHFORGE -> Flashforge.of(url, user, secret, PlatformHttp)
             PrinterKind.ELEGOO -> ElegooConnection.of(url, PlatformHttp)
+            PrinterKind.CREALITY -> CrealityConnection.of(url, PlatformHttp)
+            PrinterKind.ANYCUBIC -> AnycubicConnection()
         }
     }
 

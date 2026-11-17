@@ -414,7 +414,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     modifier = Modifier.fillMaxWidth().testTag("printer_user"))
             }
             // Elegoo's SDCP has no key on the local network.
-            if (kind != PrinterKind.ELEGOO) OutlinedTextField(key, { key = it }, singleLine = true,
+            if (kind !in setOf(PrinterKind.ELEGOO, PrinterKind.CREALITY, PrinterKind.ANYCUBIC)) OutlinedTextField(key, { key = it }, singleLine = true,
                 label = { Text(stringResource(when (kind) {
                     PrinterKind.OCTOPRINT -> R.string.printer_key
                     PrinterKind.MOONRAKER -> R.string.printer_key_optional
@@ -422,7 +422,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     PrinterKind.DUET -> R.string.printer_board_password
                     PrinterKind.BAMBU -> R.string.printer_access_code
                     PrinterKind.FLASHFORGE -> R.string.printer_check_code
-                    PrinterKind.ELEGOO -> R.string.printer_key_optional
+                    PrinterKind.ELEGOO, PrinterKind.CREALITY, PrinterKind.ANYCUBIC -> R.string.printer_key_optional
                 })) },
                 supportingText = if (existing != null) { { Text(stringResource(R.string.printer_key_keep)) } } else null,
                 visualTransformation = PasswordVisualTransformation(),
@@ -446,6 +446,10 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("printer_flashforge_hint"))
             if (kind == PrinterKind.ELEGOO) Text(stringResource(R.string.printer_elegoo_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (kind == PrinterKind.CREALITY) Text(stringResource(R.string.printer_creality_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (kind == PrinterKind.ANYCUBIC) Text(stringResource(R.string.ac_use_slicer_next), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("anycubic_hint"))
             Text(stringResource(R.string.printer_key_safe), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -476,6 +480,8 @@ private fun kindName(k: PrinterKind) = stringResource(when (k) {
     PrinterKind.BAMBU -> R.string.kind_bambu
     PrinterKind.FLASHFORGE -> R.string.kind_flashforge
     PrinterKind.ELEGOO -> R.string.kind_elegoo
+    PrinterKind.CREALITY -> R.string.kind_creality
+    PrinterKind.ANYCUBIC -> R.string.kind_anycubic
 })
 
 private fun temp(t: Temperature): String =
@@ -521,6 +527,10 @@ fun Context.reasonText(reason: String?, detail: String): String? {
         PrinterException.Reason.EL_TOO_MANY -> getString(R.string.el_error_too_many)
         PrinterException.Reason.EL_UNREACHABLE -> getString(R.string.el_error_unreachable)
         PrinterException.Reason.EL_NO_ANSWER -> getString(R.string.el_error_no_answer)
+        PrinterException.Reason.CR_REFUSED -> getString(R.string.cr_refused)
+        PrinterException.Reason.CR_RECONNECTING -> getString(R.string.cr_reconnecting)
+        PrinterException.Reason.CR_NO_SEND -> getString(R.string.cr_no_send)
+        PrinterException.Reason.AC_USE_SLICER_NEXT -> getString(R.string.ac_use_slicer_next)
         else -> elegooCode(reason)
     }
 }

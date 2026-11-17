@@ -264,3 +264,5 @@
 "Serial number (starts with «SN»)" = "Número de serie (empieza con «SN»)";
 "Check code (empty for the Adventurer 3 and 4)" = "Código de verificación (vacío en la Adventurer 3 y 4)";
 "Adventurer 5M, 5M Pro, AD5X and Creator 5: turn on «LAN only»; the check code is on that network mode screen. Address: the printer's IP. Files are not sent to the Adventurer 3 and 4 yet." = "Adventurer 5M, 5M Pro, AD5X y Creator 5: activá «Solo LAN»; el código de verificación está en esa pantalla de modo de red. Dirección: la IP de la impresora. Todavía no se mandan archivos a la Adventurer 3 y 4.";
+"Tisma does not connect to Anycubic printers: use Anycubic Slicer Next." = "Tisma no se conecta con impresoras Anycubic: usá Anycubic Slicer Next.";
+"Stock firmware: the state only. To send, turn on Moonraker/Fluidd. Anyone on your network can control these printers." = "Firmware de fábrica: solo el estado. Para mandar, activá Moonraker/Fluidd. Cualquiera en tu red puede controlar estas impresoras.";

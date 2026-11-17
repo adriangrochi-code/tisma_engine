@@ -342,6 +342,13 @@
     <string name="el_upload_offset">offset no coincide</string>
     <string name="el_upload_open">la impresora no pudo abrir el archivo</string>
     <string name="el_upload_unknown">error desconocido</string>
+    <string name="kind_creality">Creality (firmware de fábrica)</string>
+    <string name="kind_anycubic">Anycubic</string>
+    <string name="printer_creality_hint">K1, K1C, K1 Max, K2 y Ender 3 V3 con el firmware de Creality: solo el estado. Si Moonraker está activo (puerto 7125), Tisma lo usa y puede mandar. Cualquiera en tu red puede controlar estas impresoras.</string>
+    <string name="cr_refused">La impresora no acepta conexiones de estado. Revisá la IP y que el firmware esté actualizado.</string>
+    <string name="cr_reconnecting">Reconectando…</string>
+    <string name="cr_no_send">Para mandar a esta impresora, activá Moonraker/Fluidd.</string>
+    <string name="ac_use_slicer_next">Tisma no se conecta con impresoras Anycubic: usá Anycubic Slicer Next.</string>
     <string name="bambu_confirm_title">¿Es tu impresora?</string>
     <string name="bambu_confirm_text">Número de serie %1$s\n\nCertificado %2$s\n\nSi lo es, Tisma recuerda este certificado y no se conecta si alguna vez cambia.</string>
     <string name="bambu_confirm_yes">Sí, guardarla</string>
