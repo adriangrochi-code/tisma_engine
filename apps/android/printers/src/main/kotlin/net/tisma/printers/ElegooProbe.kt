@@ -23,10 +23,11 @@ object ElegooProbe {
             val buf = ByteArray(4096)
             while (true) {
                 val left = end - System.currentTimeMillis()
-                if (left <= 0) break
-                s.soTimeout = left.toInt()
+                // In slices, so a search that is stopped (its thread interrupted) ends at once: a receive ignores interrupts.
+                if (left <= 0 || Thread.currentThread().isInterrupted) break
+                s.soTimeout = minOf(left, 100L).toInt()
                 val p = DatagramPacket(buf, buf.size)
-                try { s.receive(p) } catch (_: SocketTimeoutException) { break }
+                try { s.receive(p) } catch (_: SocketTimeoutException) { continue }
                 val a = ElegooDiscovery.parse(String(p.data, 0, p.length, Charsets.UTF_8)) ?: continue
                 val key = a.mainboardId.ifBlank { a.ip }
                 found[key] = FoundPrinter(PrinterKind.ELEGOO, a.name.ifBlank { "Elegoo" }, a.ip, ElegooConnection.PORT,

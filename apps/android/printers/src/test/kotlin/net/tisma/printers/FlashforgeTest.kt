@@ -132,6 +132,16 @@ class FlashforgeTest {
     }
 
     @Test
+    fun `an older one's answer may end in ok with a period`() {
+        legacy.status = "pause"
+        val c = Flashforge.of(legacy.url, "", "", net.tisma.cloud.UrlConnectionHttp)
+        val t0 = System.currentTimeMillis()
+        c.resume()
+        assertTrue(System.currentTimeMillis() - t0 < 5_000, "no wait for a timeout")
+        assertEquals(PrinterState.PRINTING, c.status().state)
+    }
+
+    @Test
     fun `FF1_6 a closed port says it could not connect, with the address, within the timeout`() {
         val closed = java.net.ServerSocket(0).use { it.localPort }
         val t0 = System.currentTimeMillis()

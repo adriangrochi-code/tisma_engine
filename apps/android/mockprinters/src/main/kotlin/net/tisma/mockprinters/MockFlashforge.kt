@@ -208,7 +208,8 @@ class MockFlashforge(
                     "MoveMode: READY", "Status: S:1 L:0 J:0 F:0", "LED: 1", "CurrentFile:$file", "ok")
                 "M105" -> say("CMD M105 Received.", "T0:${if (status == "printing") "210.0/210.0" else "17.9/0.0"} T1:0.0/0.0 B:18.5/0.0", "ok")
                 "M25" -> { if (status == "printing") status = "pause"; say("CMD M25 Received.", "ok") }
-                "M24" -> { if (status == "pause") status = "printing"; say("CMD M24 Received.", "ok") }
+                // Some firmware ends with «ok.»: the client takes both.
+                "M24" -> { if (status == "pause") status = "printing"; say("CMD M24 Received.", "ok.") }
                 "M26" -> { status = "ready"; say("CMD M26 Received.", "ok") }
                 else -> say("CMD $code Received.", "ok")
             }

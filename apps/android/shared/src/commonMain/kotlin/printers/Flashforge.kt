@@ -297,7 +297,8 @@ class FlashforgeTcp(private val host: String, private val port: Int) : PrinterCo
             while (true) {
                 val line = readLine() ?: break
                 out += line
-                if (line == "ok" || line.contains("Control Failed", ignoreCase = true)) break
+                // «ok» or «ok.» ends an answer; «Control Failed» may come without either.
+                if (line == "ok" || line == "ok." || line.contains("Control Failed", ignoreCase = true)) break
             }
             return out
         }

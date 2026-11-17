@@ -29,10 +29,11 @@ object FlashforgeProbe {
             val buf = ByteArray(1024)
             while (true) {
                 val left = end - System.currentTimeMillis()
-                if (left <= 0) break
-                s.soTimeout = left.toInt()
+                // In slices, so a search that is stopped (its thread interrupted) ends at once: a receive ignores interrupts.
+                if (left <= 0 || Thread.currentThread().isInterrupted) break
+                s.soTimeout = minOf(left, 100L).toInt()
                 val p = DatagramPacket(buf, buf.size)
-                try { s.receive(p) } catch (_: SocketTimeoutException) { break }
+                try { s.receive(p) } catch (_: SocketTimeoutException) { continue }
                 val a = Flashforge.parseAnswer(p.data.copyOf(p.length)) ?: continue
                 val host = p.address.hostAddress ?: continue
                 found[host] = FoundPrinter(PrinterKind.FLASHFORGE, a.name.ifBlank { "Flashforge" }, host,
