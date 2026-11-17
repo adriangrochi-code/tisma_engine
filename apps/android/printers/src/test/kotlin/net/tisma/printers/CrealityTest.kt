@@ -53,7 +53,7 @@ class CrealityTest {
 
     @Test
     fun `CR1-3 an empty model shows the board code`() {
-        assertEquals("Creality (board F012)", connect().test())
+        assertEquals("Creality (board F012) · K1C-1234", connect().test())
     }
 
     @Test

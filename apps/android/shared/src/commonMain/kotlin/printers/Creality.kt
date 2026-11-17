@@ -112,11 +112,14 @@ class CrealityConnection(
     private fun model(): String = lock.locked {
         val model = state["model"]?.contentOrNull.orEmpty()
         val board = state["modelVersion"]?.contentOrNull.orEmpty()
-        when {
+        val host = state["hostname"]?.contentOrNull.orEmpty()
+        val name = when {
             model.isNotBlank() -> if (model.startsWith("Creality", true)) model else "Creality $model"
             board.isNotBlank() -> "Creality (board $board)"
             else -> "Creality"
         }
+        // The printer's network name beside it, as the desktop shows it.
+        if (host.isNotBlank()) "$name · $host" else name
     }
 
     override fun status(): PrinterStatus {
