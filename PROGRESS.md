@@ -14852,3 +14852,12 @@ para el LBM D3Q19.
   vez. Prueba nueva: 160 mm con hueco, largo = área / separación al 3 % y ningún par de pedazos unido por la punta.
   `[combine]` y `[determinism]` (OR19) en verde.
 - **Siguiente:** panal 3D (regla 11) necesita más mediciones de la ficha; seguir con el próximo punto de PLAN.md.
+
+## 2026-11-17 — bloque nocturno: rayo, enderezar ramas (sin cambio)
+
+- Se probó enderezar las ramas del relleno rayo moviendo cada unión hacia la mediana geométrica de sus vecinos (medio
+  cordón por capa como máximo). El G-code de una caja de 60 mm y de una pieza escalonada (80 mm con un bloque de 20 mm
+  arriba) al 20 % salió idéntico: las ramas ya salen rectas desde las paredes, porque un punto de la grilla que se une
+  a una punta queda en su misma línea. Se descartó el cambio; queda en PLAN.md lo que sí rendiría: juntar las ramas
+  paralelas en troncos.
+- **Siguiente:** juntar ramas necesita diseño (más de un bloque); el próximo bloque toma el siguiente punto de PLAN.md.
