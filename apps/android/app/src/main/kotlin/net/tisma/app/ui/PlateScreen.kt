@@ -258,9 +258,15 @@ private fun PlateControls(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_share")) {
                     Text(stringResource(R.string.plate_share))
                 }
+                // The printers are read while «Send» is on screen: whether each is free and takes G-code (a resin Elegoo, a
+                // stock Creality do not) is known only from its state.
+                if (printerState.printers.isNotEmpty()) WhileVisible(printerState.printers.size) { printers.followAll() }
                 val ready = printerState.printers.filter {
                     printerState.status[it.id]?.state.let { s -> s == null || s == PrinterState.READY } &&
-                        printerState.status[it.id]?.acceptsGcode != false
+                        printerState.status[it.id]?.acceptsGcode != false &&
+                        // A stock Creality takes nothing until its state says Moonraker answers it.
+                        !(it.kind == net.tisma.printers.PrinterKind.CREALITY && printerState.status[it.id] == null) &&
+                        it.kind != net.tisma.printers.PrinterKind.ANYCUBIC
                 }
                 // A printer that takes no G-code (a resin Elegoo, a stock Creality) is not offered «Send»: it says why.
                 printerState.printers.filter { printerState.status[it.id]?.acceptsGcode == false }.forEach { p ->
