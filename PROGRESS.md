@@ -15137,3 +15137,5 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
   suelta la elección sin salir del boceto. Las 61 de diseño, boceto y textos pasan.
 - **`gate_g10_bambu` en el runner de Linux:** la búsqueda escucha 6 s y llena la lista al terminar; `expect-bambu found`
   esperaba 600 cuadros, que en un runner rápido son menos de 6 s. Ahora espera a que la búsqueda termine.
+- **CD30 completo:** la prueba suma un círculo con su cota; al borrar las dos líneas (y al deshacer y rehacer) el
+  círculo y su cota siguen ahí (verbo nuevo `expect-sketch-rules N`).

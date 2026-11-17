@@ -28250,6 +28250,15 @@ bool App::script_check(const ScriptStep& step, int f) {
             return f > 600 ? fail_step(step.key + " is not under way") : true;
         std::printf("ui-script: expect-busy %s: ok\n", step.key.c_str());
         next();
+    } else if (step.verb == "expect-sketch-rules") { // N: the sketch being drawn has N dimensions and constraints added by hand
+        const cad::Sketch* sk = editing_sketch();
+        if (!sk)
+            return fail_step("no sketch is being drawn");
+        const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
+        std::printf("ui-script: expect-sketch-rules %zu: got %zu\n", want, sk->rules.size());
+        if (sk->rules.size() != want)
+            return fail_step("the sketch has " + std::to_string(sk->rules.size()) + " rules");
+        next();
     } else {
         return false;
     }
