@@ -1156,6 +1156,7 @@ private:
     void device_disconnect();
     void device_poll();
     bool device_can_print() const;
+    bool host_takes_resin() const; // the network program takes this resin slice's file (QA, 2026-11-17: Elegoo, .goo)
     void device_print();
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
@@ -11978,7 +11979,7 @@ void App::slice_panel() {
                 loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(p.estimated_seconds).c_str());
         }
         // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
-        const bool to_host = host_ready() && !result_->resin && device_can_print();
+        const bool to_host = host_ready() && (result_->resin ? host_takes_resin() : device_can_print());
         if (to_host) {
             if (button("##export", "tisma_print", tr(T::SendToPrinter), true, false, !host_job_.valid(), nullptr, button_h)) {
                 host_dialog_name_ = host_default_name();
@@ -21468,7 +21469,9 @@ void App::more_menu() {
 // «Send G-code…» (Ctrl+Shift+G): to the tested network program, or to the
 // printer on USB (devices.md, rule 19).
 void App::send_gcode() {
-    if (!result_ || !result_->ok || viewer_ || stale_ || result_->resin || !device_can_print())
+    if (!result_ || !result_->ok || viewer_ || stale_ || (result_->resin ? !host_takes_resin() : !device_can_print()))
+        return;
+    if (result_->resin && !host_ready())
         return;
     if (host_ready()) {
         if (!host_job_.valid()) {
@@ -26626,6 +26629,12 @@ bool App::device_can_print() const {
     return result_ && !result_->gcode.empty() && (viewer_ || (result_->ok && result_->check.ok() && !stale_));
 }
 
+// A resin slice goes as the printer's own file, never as G-code: only an
+// Elegoo by SDCP takes it, as .goo (resin.md; QA, 2026-11-17).
+bool App::host_takes_resin() const {
+    return result_ && result_->resin && result_->ok && !stale_ && !viewer_ && host_.kind == device::HostKind::Elegoo;
+}
+
 void App::device_print() {
     if (!printer_ || !device_can_print())
         return;
@@ -26662,6 +26671,8 @@ std::string App::host_default_name() const {
     const std::string fallback = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
                                  : model_path_.empty()          ? std::string("tisma.gcode")
                                                                 : utf8(model_path_.stem()) + ".gcode";
+    if (result_ && result_->resin && !viewer_)
+        return model_path_.empty() ? std::string("tisma.goo") : utf8(model_path_.stem()) + ".goo";
     if (!result_ || !result_->model || viewer_)
         return fallback;
     GcodeTotals totals;
@@ -26718,12 +26729,22 @@ void App::host_upload_dialog() {
 }
 
 void App::host_send(bool start, std::string name, bool simulate) {
-    if (host_job_.valid() || !device_can_print() || host_.url.empty())
+    const bool resin = result_ && result_->resin;
+    if (host_job_.valid() || host_.url.empty() || (resin ? !host_takes_resin() : !device_can_print()))
         return;
     if (name.empty())
         name = host_default_name();
     host_job_what_ = name;
-    host_job_ = std::async(std::launch::async, [h = host_, gcode = result_->gcode, name, start, simulate] {
+    std::string gcode;
+    if (resin) {
+        // The printer's own file, as «Export» writes it.
+        std::ostringstream goo(std::ios::binary);
+        write_goo(goo, *result_->resin, result_->settings, goo_time_now());
+        gcode = goo.str();
+    } else {
+        gcode = result_->gcode;
+    }
+    host_job_ = std::async(std::launch::async, [h = host_, gcode = std::move(gcode), name, start, simulate] {
         // The program takes a file: the G-code goes through a temporary one.
         const std::filesystem::path temp =
             std::filesystem::temp_directory_path() / ("tisma_send_" + std::to_string(std::random_device{}()) + ".gcode");
@@ -27041,7 +27062,9 @@ void App::host_panel(float field, float button_h) {
         }
         if (can_cancel && button("##host_cancel", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
             host_command(2);
-    } else if (device_can_print()) {
+    } else if (result_ && result_->resin && !host_takes_resin()) {
+        loc::TextWrapped("%s", tr(T::HostResinByUsb)); // never G-code to a resin printer
+    } else if (result_ && result_->resin ? host_takes_resin() : device_can_print()) {
         ImGui::Checkbox(tr(T::HostStartPrinting), &host_start_);
         if (button("##host_send", "tisma_print", tr(T::HostSend), true, false, !working, nullptr, button_h))
             host_send(host_start_);
@@ -29199,7 +29222,9 @@ void App::script_input() {
         } else if (step.key == "level") // Flashforge: level before printing, yes or no
             host_.level_before_print = step.value == "yes";
         else if (step.key == "send") { // the last slice, uploaded and printed, as «Send» with «Start printing»
-            if (!device_can_print())
+            if (result_ && result_->resin && !host_takes_resin())
+                return fail_step("a resin slice is not offered to this program");
+            if (!(result_ && result_->resin) && !device_can_print())
                 return fail_step("nothing sliced to send");
             host_sent_.reset();
             host_send(true);

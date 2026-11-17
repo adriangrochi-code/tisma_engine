@@ -115,7 +115,10 @@ int main(int argc, char** argv) {
             bool started = false;
             for (const auto& c : p.commands)
                 started = started || c.first == 128;
-            return "started=" + std::string(started ? "1" : "0") + " name=" + p.started_file + whole(p.file) +
+            // A resin printer's own file (resin.md): GOO's header starts with its version, «V3.0».
+            const bool goo = p.started_file.size() > 4 && p.started_file.substr(p.started_file.size() - 4) == ".goo";
+            return "started=" + std::string(started ? "1" : "0") + " name=" + p.started_file +
+                   (goo ? std::string(" goo=") + (p.file.rfind("V3.0", 0) == 0 ? "1" : "0") : whole(p.file)) +
                    " pieces=" + std::to_string(p.pieces.size());
         });
     }

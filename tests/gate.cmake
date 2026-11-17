@@ -235,6 +235,27 @@ set_tests_properties(gate_g15_quit PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSIO
 # project_file starts it.
 tisma_gate_test(NAME gate_g10_bambu MODEL ${TISMA_GATE_DATA}/cube_ascii.stl SCRIPT gate_g10_bambu LANG es
                 PROPERTIES RESOURCE_LOCK ssdp_ports)
+# A resin slice: the .goo to an Elegoo, and nothing to an OctoPrint (QA, 2026-11-17).
+add_test(NAME ui_host_e2e_elegoo_resin
+  COMMAND $<TARGET_FILE:tisma_fake_print_host> elegoo ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>
+          ${TISMA_GATE_DATA}/cube_ascii.stl --lang es --size 1200x760 --pack ${TISMA_GATE_OUT}/pack/pack
+          --pick-pack-printer "vendors/bolt/models/B2.json#default"
+          --ui-script ${TISMA_GATE_DATA}/ui/host_e2e_elegoo_resin.txt
+          --screenshot ${TISMA_GATE_OUT}/ui_host_e2e_elegoo_resin.png)
+set_tests_properties(ui_host_e2e_elegoo_resin PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSION "error: "
+                     PASS_REGULAR_EXPRESSION "fake host: started=1 name=[^ ]*[.]goo goo=1"
+                     FIXTURES_REQUIRED gate_pack WORKING_DIRECTORY ${TISMA_GATE_OUT}
+                     ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+add_test(NAME ui_host_resin_not_offered
+  COMMAND $<TARGET_FILE:tisma_fake_print_host> octoprint ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>
+          ${TISMA_GATE_DATA}/cube_ascii.stl --lang es --size 1200x760 --pack ${TISMA_GATE_OUT}/pack/pack
+          --pick-pack-printer "vendors/bolt/models/B2.json#default"
+          --ui-script ${TISMA_GATE_DATA}/ui/host_resin_not_offered.txt
+          --screenshot ${TISMA_GATE_OUT}/ui_host_resin_not_offered.png)
+set_tests_properties(ui_host_resin_not_offered PROPERTIES LABELS gate FAIL_REGULAR_EXPRESSION "error: "
+                     PASS_REGULAR_EXPRESSION "fake host: started=0 name=\n"
+                     FIXTURES_REQUIRED gate_pack WORKING_DIRECTORY ${TISMA_GATE_OUT}
+                     ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
 # A stock Creality (CR1): the state by port 9999, and sending not tried.
 add_test(NAME ui_host_e2e_creality
   COMMAND $<TARGET_FILE:tisma_fake_print_host> creality ${TISMA_GATE_RUN} $<TARGET_FILE:tisma>

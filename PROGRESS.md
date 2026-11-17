@@ -15190,7 +15190,7 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
   normas).
 - **Pruebas:** EL1.1 a EL1.6 en `[device][net]` con un simulador propio (`tests/fake_sdcp.hpp`: WebSocket y subida en
   un mismo puerto, y UDP), y `ui_host_e2e_elegoo` en la puerta: la encuentra, prueba, manda entero y arranca.
-- **Sin hacer:** mandar el `.goo` de una impresora de resina (hoy manda el G-code de FDM); la variante vieja por MQTT
+- **Sin hacer:** (el `.goo` de resina, hecho más abajo); la variante vieja por MQTT
   (fuera de la primera versión según la ficha).
 - **Lo que sigue:** Creality de fábrica (CR1) y el aviso de Anycubic.
 
@@ -15211,4 +15211,14 @@ Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine s
   `ui_host_e2e_creality` en la puerta (prueba, estado imprimiendo, la orden de mandar con su aviso, y el de Anycubic).
 - **Sin hacer:** CR1-4 («detenida» tras 15 s en precalentamiento): la ficha no nombra la clave del estado ni sus
   valores; queda pendiente de la ficha.
+- No probado con hardware.
+
+## 2026-11-17 — una Elegoo de resina recibe su .goo, nunca G-code (QA)
+
+- Con un laminado de resina y el programa en la red Elegoo (SDCP), «Mandar» sube el `.goo` que escribe «Exportar»
+  (`write_goo`), con el nombre `<modelo>.goo`, y lo arranca. Con cualquier otro programa no se ofrece «Mandar»: la
+  página Impresora dice «Exportá el archivo de resina y pasalo por USB», y el botón principal sigue siendo «Exportar».
+- Pruebas en la puerta: `ui_host_e2e_elegoo_resin` (la Bolt Two de resina del paquete de prueba; el simulador recibe
+  un `.goo` con la cabecera «V3.0» y lo arranca) y `ui_host_resin_not_offered` (OctoPrint: no se manda nada, el aviso
+  aparece).
 - No probado con hardware.

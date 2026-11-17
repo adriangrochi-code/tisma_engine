@@ -1,0 +1,11 @@
+# A resin slice sent to an Elegoo by SDCP goes as its .goo, never as G-code
+# (QA, 2026-11-17; resin.md).
+slice
+expect-resin-file
+host elegoo {url}
+host test
+host-wait
+expect-host ok yes
+host send
+host-wait
+expect-host sent yes
