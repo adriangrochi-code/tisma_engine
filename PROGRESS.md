@@ -15077,3 +15077,11 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
 
 **Sigue:** 0.13.0-beta.2 sale de un `alpha` sin estos arreglos, así que su publicación falla igual. Se publica
 0.13.0-beta.3 con estos arreglos y GM22.
+
+**GM23 (gcode_macros.md regla 3, spec/next 5245ecb, medido por QA en PrusaSlicer 2.7.2):**
+- Un número calculado en el lenguaje de macros sale como `%g`: 6 cifras significativas como mucho, sin ceros al final y
+  en notación científica si es muy chico o muy grande. Se escribe con `std::to_chars` en formato `general` con
+  precisión 6, que no depende del idioma del sistema.
+- `1e-7` se lee como número.
+- La división entera entre enteros ya estaba.
+- Pruebas `[gcode]` y `[template]` bien.

@@ -93,6 +93,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   las ramas `{if}` en 447 variantes del paquete. Entre ellas: filamento abrasivo, boquilla de alto caudal, `zhop`,
   aceleración de la pared externa, orden de impresión, nombres de los perfiles, posición, lo retraído y lo usado, y las
   de Cura. Una variable que el motor todavía no llena es ahora un aviso visible (GM22).
+- G-code de la máquina: un número calculado sale como lo escribe el programa original, con 6 cifras significativas como mucho (`523.843`, no `523.8431796449507`), y `1e-7` se lee como número (GM23).
 - Publicación: el programa ya no se cierra con error si recibe SIGTERM mientras arranca y descarga el paquete; los datos firmados de las pruebas llegan iguales a Windows; el build de macOS pide macOS 13.3 o más nuevo.
 
 ## [0.12.0-beta.1] - 2026-11-10

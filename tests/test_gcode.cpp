@@ -167,6 +167,22 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
 }
 
+TEST_CASE("a computed number as the printers' G-code writes it; integer division (gcode_macros.md, rule 3, GM23)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"200"};
+    s.nozzle_diameter = 0.4;
+    TemplateContext c = template_context(s, SlicedModel{});
+    const std::pair<const char*, const char*> cases[] = {
+        {"{60}", "60"},           {"{2.5}", "2.5"},           {"{21/2.4053*60}", "523.843"},
+        {"{1/3}", "0"},           {"{100.0}", "100"},         {"{2/3*1000000}", "0"},
+        {"{0.1+0.2}", "0.3"},     {"{10/4}", "2"},            {"{first_layer_temperature[0]/3}", "66"},
+        {"{nozzle_diameter[0]*2}", "0.8"}, {"{1e-7*3}", "3e-07"}, {"{123456789.123}", "1.23457e+08"},
+    };
+    for (const auto& [text, expected] : cases)
+        CHECK(render_template(text, c, "t") == expected);
+}
+
 TEST_CASE("the machine's G-code takes the original program's branches (gcode_macros.md, rule 9 bis, GM22)",
           "[gcode][macros]") {
     Settings s = test_printer();
