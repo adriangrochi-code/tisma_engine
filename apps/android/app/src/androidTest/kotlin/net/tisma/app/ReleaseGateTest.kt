@@ -261,9 +261,23 @@ class ReleaseGateTest {
 
     /** Taps [tag]; scrolled into view first when it sits in a scrolling screen (not every screen scrolls). */
     private fun tap(tag: String) {
+        closeNotices()
         val node = compose.onNodeWithTag(tag)
         runCatching { node.performScrollTo() }
         node.performClick()
+    }
+
+    /**
+     * Closes the notices on screen, as a person does before tapping what lies under them: they stay until closed
+     * (accessibility_touch.md, rule 8) and sit over the bottom of the screen.
+     */
+    private fun closeNotices() {
+        repeat(5) {
+            val close = compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Dismiss"), useUnmergedTree = true)
+            if (close.fetchSemanticsNodes().isEmpty()) return
+            runCatching { close[0].performClick() }
+            compose.waitForIdle()
+        }
     }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
