@@ -67,6 +67,7 @@ std::optional<double> number(std::string_view t) {
 // A line read apart from what came before it, so that many lines are read at
 // once (the speed report's V5); the checker then takes them in order.
 struct ParsedLine {
+    std::string_view text;    // the whole line
     std::string_view comment; // after the ';'
     bool has_comment = false;
     bool too_many = false;       // more words than a G-code command has
@@ -84,6 +85,7 @@ struct Parameter {
 };
 
 void parse_line(std::string_view raw, ParsedLine& out, std::vector<Parameter>& parameters) {
+    out.text = raw;
     const std::size_t semicolon = raw.find(';');
     if (semicolon != std::string_view::npos) {
         out.comment = raw.substr(semicolon + 1);
@@ -158,13 +160,19 @@ public:
         }
         if (p.head.empty())
             return;
-        // A command starts with a letter (G28, T1, a Klipper macro) or a
-        // host's sign ($H, @pause, %); a line that starts with a quote, a '+'
-        // or a bracket is a printer G-code left as an unevaluated expression
-        // (QA, Z-Bolt Classic, 17-11-2026), also in the machine's own G-code.
-        if (const char c = p.head.front(); !std::isalpha(static_cast<unsigned char>(c)) && c != '$' &&
+        // A command starts with a letter (G28, T1), a Klipper macro's '_'
+        // (_ON_LAYER_CHANGE) or a host's sign ($H, @pause, %, !)
+        // (gcode_firmware.md, rule 1, FW12). Any other line is a problem in
+        // what the engine writes; in the machine's G-code it is a note, as
+        // real profiles carry lines the printer ignores (//M85, ==========),
+        // unless it is an unevaluated expression (the Z-Bolt Classic).
+        if (const char c = p.head.front(); !std::isalpha(static_cast<unsigned char>(c)) && c != '_' && c != '$' &&
                                            c != '@' && c != '%' && c != '!') {
-            problem("not a G-code command: '" + std::string(p.head) + "'");
+            const std::string message = "not a G-code command: '" + std::string(p.head) + "'";
+            if (!custom_ || unevaluated(p.text))
+                problem(message);
+            else
+                out_.notes.push_back({line_, message});
             return;
         }
         command(p, parameters.subspan(p.first, p.count));
@@ -183,6 +191,28 @@ public:
     }
 
 private:
+    // A printer G-code left as an expression (gcode_firmware.md, rule 1): it
+    // starts with a quote and goes on with "' +", or it has "if … else"
+    // outside braces.
+    static bool unevaluated(std::string_view text) {
+        const std::size_t first = text.find_first_not_of(" \t");
+        if (first != std::string_view::npos && (text[first] == '\'' || text[first] == '"') &&
+            (text.find("' +") != std::string_view::npos || text.find("\" +") != std::string_view::npos))
+            return true;
+        std::string outside;
+        int depth = 0;
+        for (const char c : text) {
+            if (c == '{')
+                ++depth;
+            else if (c == '}')
+                depth = std::max(0, depth - 1);
+            else if (depth == 0)
+                outside += c;
+        }
+        const std::size_t at_if = outside.find(" if ");
+        return at_if != std::string::npos && outside.find(" else", at_if + 3) != std::string::npos;
+    }
+
     void problem(const std::string& message) { problem_at(line_, message); }
     void problem_at(std::size_t line, const std::string& message) {
         if (out_.problems.size() < kMaxProblems)

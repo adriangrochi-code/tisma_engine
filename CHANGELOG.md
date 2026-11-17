@@ -10,6 +10,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.13.0-beta.2] - 2026-11-17
+### Corregido
+- Verificación del G-code: las macros de Klipper que empiezan con `_` (`_ON_LAYER_CHANGE` de las RatRig) son
+  comandos, y en el G-code de la máquina una línea que no es comando (`//M85`, `==========`) es un aviso y no impide
+  laminar; solo una expresión sin evaluar (Z-Bolt Classic) sigue siendo problema. En 0.13.0-beta.1, 146 de 2 267
+  variantes del paquete no laminaban (FW12).
+
 ## [0.13.0-beta.1] - 2026-11-17
 - Relleno: lista de ángulos por capa en ciclo (`infill.angles`), para lo sólido, los puentes, el planchado y los
   rellenos de líneas.
@@ -1946,7 +1953,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.2...HEAD
+[0.13.0-beta.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.13.0-beta.1...v0.13.0-beta.2
 [0.13.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.12.0-beta.1...v0.13.0-beta.1
 [0.12.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...v0.12.0-beta.1
 [0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
