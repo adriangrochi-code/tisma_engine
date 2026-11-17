@@ -360,8 +360,15 @@ private:
     // filament pulled back; the next one's, pulled back when it left, comes
     // back with its own extra.
     void tool_change(int n) {
-        if (limits_.toolchange_length.empty() || n < 0)
+        if (n < 0)
             return;
+        // Which tool prints always follows T<n>, also on a printer without a
+        // tool change's retraction: its heater is the one asked for (the
+        // Sovol SV04 in mode 02 heats and prints with T1, QA 17-11-2026).
+        if (limits_.toolchange_length.empty()) {
+            tool_ = std::size_t(n);
+            return;
+        }
         const auto at = [](std::vector<double>& list, std::size_t k) -> double& {
             if (list.size() <= k)
                 list.resize(k + 1, 0.0);

@@ -223,6 +223,16 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
             g3.insert(g3.find("G28"), set);
             CHECK(check_gcode(g3, heat).ok());
         }
+        // Heated and printing with T1 on a printer of one extruder (the Sovol
+        // SV04 in mode 02): «T1;» with its comment glued on.
+        {
+            std::string g4 = ho.gcode;
+            for (const char* m : {"M104", "M109"})
+                for (std::size_t at = g4.find(m); at != std::string::npos; at = g4.find(m))
+                    g4.replace(at, 4, "M117");
+            g4.insert(g4.find("G28"), "M104 T1 S215\nM109 T1 S215\nT1;\n");
+            CHECK(check_gcode(g4, heat).ok());
+        }
         // A printer with no heater (a filament at 0 °C, Cocoa Press): not asked for.
         Settings cold = h;
         cold.variables["temperature"] = {"0"};
