@@ -15239,3 +15239,19 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   servidor de prueba, y el corte en la nube de G15 siempre terminaba con 413. La prueba pasaba solo si llegaba a
   verlo en curso antes de la respuesta. El simulador toma el límite de `TISMA_MOCK_CLOUD_MAX_BYTES` (1 MiB si no
   está, como CC5); G15 le da 64 MiB, así su corte en la nube queda de verdad en curso al cerrar.
+
+## 2026-11-18 01:20 (Montevideo) — bloque nocturno: O1, costura precisa (`orca_2_5.md`, regla 4, OR4)
+
+- **0.13.0-beta.4:** en el segundo intento, la puerta de Linux falló en `gate_g15_quit`. Es la carrera de la nube que
+  arregla 8968c74 en dev; en el primer intento había pasado. Relancé solo los trabajos que fallaron. En `alpha` no
+  cambió nada (decisión del dueño).
+- **PLAN:** G3 marcada como hecha; pasa en la puerta desde el arreglo de G4.
+- **P2:** Flashforge (FF1), Elegoo (EL1) y Creality de fábrica (CR1) ya los hizo la sesión de interfaz. Anycubic queda
+  fuera de la beta.
+- **Siguiente ítem:** O1, el modificador de costura precisa. Diseño:
+  - `MeshModifier::seam`: vacío, `center`, `left`, `right` (fuertes) o `prefer`, `forbid`, `neutral` (débiles).
+  - Los débiles se cortan por capa como las demás zonas de modificador y se suman a `seam_enforce` y `seam_block` en el
+    orden de la lista. `neutral` borra los dos. Dentro de su zona, el débil manda sobre la pintura.
+  - Los fuertes dan un punto fijo por pared externa: el tramo más largo donde el cuerpo corta la línea media; en empate,
+    el más cercano al fondo y después el de más a la izquierda. Izquierda y derecha se miran desde afuera.
+  - Un solo aviso «Costura precisa:» junta los problemas, y el tipo se guarda en el proyecto.

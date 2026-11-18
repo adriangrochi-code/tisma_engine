@@ -1441,7 +1441,7 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 - [x] Trabajo de CI «Puerta de lanzamiento» en Linux y Windows (`.github/workflows/gate.yml`, etiqueta `gate`); la
       nightly y las versiones (alpha y release) no publican sin él.
 - [x] G2: cubo de 20 mm y Benchy, G-code comprobado, capas, filamento y tiempo, tamaño dentro de 0,1 mm.
-- [ ] G3: cada estilo con la T, la rampa a 60° y el Benchy. Arman la prueba; fallan por el motor (ver PROGRESS).
+- [x] G3: cada estilo con la T, la rampa a 60° y el Benchy (pasa desde el arreglo de G4, 2026-11-16).
 - [x] G4, G5: soporte pintado y en la vista previa.
 - [x] G6: proyecto con soportes, cambio de impresora, filamento y perfil, deshacer.
 - [x] G1: STL, OBJ, 3MF propio y de otro programa.
