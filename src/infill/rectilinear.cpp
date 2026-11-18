@@ -393,6 +393,66 @@ std::vector<Toolpath> multiline_paths(const std::vector<Toolpath>& paths, int li
     return out;
 }
 
+double trapezoid_row(double spacing, double density, double slant_degrees) {
+    // A period of 2 (flat + run) holds 2 flats and 2 slants of row / sin a:
+    // the length per area is (2 flat + 2 row / sin a) / (2 (flat + run) row).
+    const double a = slant_degrees * std::numbers::pi / 180.0;
+    const double run = 1.0 / std::tan(a), flat = std::max(1.0, 2.0 * run); // per row
+    const double per_area = (2.0 * flat + 2.0 / std::sin(a)) / (2.0 * (flat + run)); // times 1 / row
+    return per_area * spacing / density;
+}
+
+std::vector<Toolpath> trapezoid_fill(const Polygons& region, double row, double angle_degrees, double slant_degrees,
+                                     double shift, double width) {
+    std::vector<Toolpath> out;
+    if (region.empty() || !(row > 0.0))
+        return out;
+    const double a = slant_degrees * std::numbers::pi / 180.0, t = angle_degrees * std::numbers::pi / 180.0;
+    const double run = row / std::tan(a), flat = std::max(row, 2.0 * run), period = 2.0 * (flat + run);
+    const double c = std::cos(t), s = std::sin(t);
+    // The region's box in the rotated frame (u along the rows, v across).
+    const Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(region);
+    double u0 = 1e300, u1 = -1e300, v0 = 1e300, v1 = -1e300;
+    for (const double x : {to_mm(box.left), to_mm(box.right)})
+        for (const double y : {to_mm(box.top), to_mm(box.bottom)}) {
+            const double u = x * c + y * s, v = -x * s + y * c;
+            u0 = std::min(u0, u), u1 = std::max(u1, u), v0 = std::min(v0, v), v1 = std::max(v1, v);
+        }
+    const long k0 = long(std::floor((v0 - shift) / row)) - 1, k1 = long(std::ceil((v1 - shift) / row));
+    const long p0 = long(std::floor(u0 / period)) - 1, p1 = long(std::ceil(u1 / period)) + 1;
+    Clipper2Lib::Paths64 waves;
+    const auto put = [&](Clipper2Lib::Path64& path, double u, double v) {
+        path.push_back({to_units(u * c - v * s), to_units(u * s + v * c)});
+    };
+    for (long k = k0; k <= k1; ++k) {
+        const double lo = shift + double(k) * row, hi = lo + row;
+        Clipper2Lib::Path64 path;
+        for (long p = p0; p <= p1; ++p) {
+            const double u = double(p) * period;
+            put(path, u, lo);
+            put(path, u + flat, lo);
+            put(path, u + flat + run, hi);
+            put(path, u + 2.0 * flat + run, hi);
+        }
+        put(path, double(p1 + 1) * period, lo);
+        waves.push_back(std::move(path));
+    }
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddOpenSubject(waves);
+    clipper.AddClip(region);
+    Clipper2Lib::Paths64 closed, open;
+    clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+    for (const Clipper2Lib::Path64& p : open) {
+        if (p.size() < 2)
+            continue;
+        Toolpath tp;
+        for (const auto& q : p)
+            tp.points.push_back({{to_mm(q.x), to_mm(q.y)}, width});
+        out.push_back(std::move(tp));
+    }
+    return out;
+}
+
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
     const double angle = layer_angle(params, layer);
@@ -621,12 +681,27 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         one.multiline = 1;
         const double target = length(fill_layer(only, layer, one, z).sparse);
         one.density = params.density / double(params.multiline);
-        out.sparse = multiline_paths(fill_layer(only, layer, one, z).sparse, params.multiline, ws, w, surfaces.sparse);
+        // The patterns whose lines cross (part 2): trapezoid waves that never
+        // cross themselves, turning a family's angle each layer; a square
+        // wave for the grid, on the triangles' 60 degrees for the others
+        // (cubic's rows move with z like its lines).
+        const bool grid = params.pattern == InfillPattern::Grid;
+        const bool waves = grid || params.pattern == InfillPattern::Triangles || params.pattern == InfillPattern::Stars ||
+                           params.pattern == InfillPattern::Cubic;
+        const auto base = [&](const FillParams& f) {
+            if (!waves)
+                return fill_layer(only, layer, f, z).sparse;
+            const double slant = grid ? 90.0 : 60.0;
+            const double row = trapezoid_row(ws, f.density, slant);
+            const double turn = params.angle + (grid ? 90.0 : 60.0) * double(layer % (grid ? 2 : 3));
+            const double shift = params.pattern == InfillPattern::Cubic ? std::fmod(-z / std::numbers::sqrt2, row) : 0.0;
+            return trapezoid_fill(surfaces.sparse, row, turn, slant, shift, w);
+        };
+        out.sparse = multiline_paths(base(one), params.multiline, ws, w, surfaces.sparse);
         double got = length(out.sparse), best = std::abs(got - target);
         for (int round = 0; round < 3 && got > 0.0 && target > 0.0 && best > 0.01 * target; ++round) {
             one.density = std::min(1.0, one.density * target / got);
-            std::vector<Toolpath> again =
-                multiline_paths(fill_layer(only, layer, one, z).sparse, params.multiline, ws, w, surfaces.sparse);
+            std::vector<Toolpath> again = multiline_paths(base(one), params.multiline, ws, w, surfaces.sparse);
             got = length(again);
             if (std::abs(got - target) < best) {
                 best = std::abs(got - target);

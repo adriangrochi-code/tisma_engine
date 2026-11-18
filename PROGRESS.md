@@ -15576,3 +15576,15 @@ adaptativo con `distance_warp` (más ralo en el medio, menos trozos que las cás
 y `[settings]` pasan. Prueba completa en segundo plano. No probado en una impresora.
 
 **Sigue:** O2: regla 13 parte 2 (trapecios), ancho variable después de la beta.
+
+## 2026-11-18 — orca_2_5.md regla 13, parte 2: caminos en trapecio con `infill.multiline`
+
+**Hecho:** con `infill.multiline` mayor que 1, grilla, triángulos, estrellas y cúbico ya no copian sus líneas
+cruzadas: usan ondas en trapecio por filas (`trapezoid_fill`), que no se cruzan a sí mismas, giradas 90° (grilla) o
+60° por capa; en cúbico las filas se corren con z. Diseño propio, en PROVENANCE.md.
+
+**Pruebas:** la de `infill.multiline` (OR12) pasa con grilla, triángulos y cúbico sin caminos que se crucen, y el
+material a 3 % del de una línea en todos (cúbico estaba a 8 %; ahora 0,6 %). `[infill]` pasa; prueba completa en
+segundo plano. No probado en una impresora.
+
+**Sigue:** cúbico adaptativo y de soporte por tamaño de cubo y panal 3D con trapecios; luego el ancho variable de O2.

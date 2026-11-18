@@ -312,7 +312,7 @@ TEST_CASE("infill.multiline: each path as N touching lines, the same material (o
     LayerSurfaces s;
     s.sparse = square(0, 0, 40);
     for (const InfillPattern pattern : {InfillPattern::Rectilinear, InfillPattern::Cubic, InfillPattern::Gyroid,
-                                        InfillPattern::Honeycomb}) {
+                                        InfillPattern::Honeycomb, InfillPattern::Grid, InfillPattern::Triangles}) {
         INFO(int(pattern));
         FillParams p;
         p.pattern = pattern;
@@ -321,15 +321,13 @@ TEST_CASE("infill.multiline: each path as N touching lines, the same material (o
         p.multiline = 3;
         const double three = length(fill_layer(s, 0, p, 5.0).sparse);
         REQUIRE(one > 0.0);
-        // The same line length, within 3 % (OR12). Cubic's few lines on a
-        // 40 mm square change length in steps with the density: within 8 %
-        // until its own multiline paths (rule 13, part 2).
-        CHECK(std::abs(three - one) < (pattern == InfillPattern::Cubic ? 0.08 : 0.03) * one);
+        // The same line length, within 3 % (OR12).
+        std::printf("multiline %d: %.4f\n", int(pattern), three / one);
+        CHECK(std::abs(three - one) < 0.03 * one);
     }
     // OR12: cubic at 15 % with three lines, no path crosses itself.
     {
         FillParams p;
-        p.pattern = InfillPattern::Cubic;
         p.density = 0.15;
         p.multiline = 3;
         const auto crosses = [](const Toolpath& t) {
@@ -345,9 +343,20 @@ TEST_CASE("infill.multiline: each path as N touching lines, the same material (o
                 }
             return false;
         };
-        for (const double z : {1.0, 5.0, 9.0})
-            for (const Toolpath& t : fill_layer(s, 0, p, z).sparse)
-                CHECK_FALSE(crosses(t));
+        // Part 2: grid, triangles and cubic as trapezoid waves (OR12).
+        for (const InfillPattern pattern : {InfillPattern::Cubic, InfillPattern::Grid, InfillPattern::Triangles}) {
+            p.pattern = pattern;
+            for (const double z : {1.0, 5.0, 9.0})
+                for (const Toolpath& t : fill_layer(s, std::size_t(z), p, z).sparse)
+                    CHECK_FALSE(crosses(t));
+        }
+        // The square waves are the grid itself: the same length per area.
+        double waves = 0.0;
+        for (const Toolpath& t : trapezoid_fill(square(0, 0, 40), 2.0, 0.0, 90.0, 0.0, 0.4))
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                waves += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        CHECK(std::abs(waves - 1600.0) < 0.03 * 1600.0); // 2 / row mm per mm2
+        CHECK_THAT(trapezoid_row(0.4, 0.2, 90.0), WithinAbs(4.0, 1e-9));
     }
     // A straight path becomes three lines a spacing apart, the middle one on it.
     Toolpath line;

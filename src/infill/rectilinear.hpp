@@ -124,6 +124,16 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
 
 // Each path as `lines` copies side by side, `spacing` apart and centred on
 // it, clipped to the region (orca_2_5.md, rule 13).
+// Trapezoid waves (orca_2_5.md, rule 13, part 2): rows `row` mm apart along
+// `angle_degrees` (anchored to the origin, moved across by `shift`), each wave
+// along its row for a flat, up a slant at `slant_degrees` to the next row,
+// along it for a flat, and back down. With a 90 degree slant the waves are
+// a grid with no path crossing itself; with 60 degrees, trapezoids on the
+// triangles' directions. Clipped to the region as open paths.
+std::vector<Toolpath> trapezoid_fill(const Polygons& region, double row, double angle_degrees, double slant_degrees,
+                                     double shift, double width);
+// The rows' distance for a density with lines `spacing` apart in material.
+double trapezoid_row(double spacing, double density, double slant_degrees);
 std::vector<Toolpath> multiline_paths(const std::vector<Toolpath>& paths, int lines, double spacing, double width,
                                       const Polygons& region);
 
