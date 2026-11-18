@@ -2272,13 +2272,14 @@ const std::map<T, const char*>& row_keys() {
         {T::FuzzyDistance, "fuzzy.point_distance"}, {T::TopLayers, "surfaces.top_layers"},
         {T::BottomLayers, "surfaces.bottom_layers"}, {T::TopMinThickness, "surfaces.top_min_thickness"},
         {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
-        {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
+        {T::BottomPattern, "surfaces.bottom_pattern"}, {T::InternalSolidPattern, "surfaces.internal_solid_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
         {T::TopAngle, "surfaces.top_angle"}, {T::BottomAngle, "surfaces.bottom_angle"},
         {T::TopFillOrder, "surfaces.top_fill_order"}, {T::BottomFillOrder, "surfaces.bottom_fill_order"},
         {T::TopExpansion, "surfaces.top_expansion"}, {T::TopExpansionMargin, "surfaces.top_expansion_margin"},
         {T::TopExpansionDirection, "surfaces.top_expansion_direction"},
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::SmoothFactor, "infill.smooth_factor"}, {T::InfillSeparated, "infill.separated"},
+        {T::InfillMultiline, "infill.multiline"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
         {T::NonplanarRow, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
@@ -10045,6 +10046,17 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
                             {SurfacePattern::Octagram, tr(T::OctagramInfill)},
                             {SurfacePattern::SpiralInset, tr(T::SpiralInset)}});
+        if (shown("surfaces.internal_solid_pattern"))
+            changed |= row(T::InternalSolidPattern, s.internal_solid_pattern,
+                           {{SurfacePattern::Monotonic, tr(T::Monotonic)},
+                            {SurfacePattern::MonotonicLines, tr(T::MonotonicLines)},
+                            {SurfacePattern::Rectilinear, tr(T::Rectilinear)},
+                            {SurfacePattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                            {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
+                            {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)},
+                            {SurfacePattern::SpiralInset, tr(T::SpiralInset)}});
         flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
     } else if (id == "surface_angles") {
         mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : tr(T::AutoValue),
@@ -10077,6 +10089,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         // Rounded turns (orca_2_5.md, rule 11).
         mm(T::SmoothFactor, "infill.smooth_factor", s.infill_smooth_factor, 0.0, 100.0, "%.0f %%", 0.5f);
         flag(T::InfillSeparated, "infill.separated", s.infill_separated); // rule 12
+        whole(T::InfillMultiline, "infill.multiline", s.infill_multiline, 1, 10); // rule 13
         if (shown("infill.pattern"))
             changed |= row(T::InfillPattern, s.infill_pattern,
                            {{InfillPattern::Rectilinear, tr(T::Rectilinear)},

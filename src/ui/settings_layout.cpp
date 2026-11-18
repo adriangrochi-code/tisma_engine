@@ -82,6 +82,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"surfaces.bottom_min_thickness", B},
             {"surfaces.top_pattern", B},
             {"surfaces.bottom_pattern", A},
+            {"surfaces.internal_solid_pattern", A},
             {"surfaces.interface_shells", A}}},
           // The lines' directions (surfaces_infill.md; orca_2_5.md, rule 9).
           {"surface_angles", T::SubSurfaceAngles,
@@ -95,7 +96,8 @@ const std::vector<SectionLayout>& print_layout() {
            {{"surfaces.top_expansion", A}, {"surfaces.top_expansion_margin", A}, {"surfaces.top_expansion_direction", A}}},
           {"infill", T::SubInfill,
            {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}, {"infill.angles", A}, {"infill.smooth_factor", A},
-            {"infill.separated", A}}},
+            {"infill.separated", A},
+            {"infill.multiline", A}}},
           {"infill_more", T::SubInfillMore,
            {{"infill.wall_overlap", A},
             {"infill.solid_every", A},

@@ -222,6 +222,15 @@
      "delicate walls. In return, the infill pattern can show a little on the outside face of the part.\n\nExample: off "
      "for almost everything, especially parts meant to be seen; try turning it on if the inner walls come out loose or "
      "detached from the infill."},
+    {"infill.multiline",
+     "Imprime cada camino del relleno de adentro como varias líneas pegadas, de 1 a 10. El dibujo se hace más grande en "
+     "la misma proporción, así que se usa el mismo material: menos caminos, pero más gruesos. Con 1 (de fábrica), el "
+     "relleno de siempre.\n\nLas paredes gruesas del relleno resisten mejor algunos esfuerzos y hay menos "
+     "viajes.\n\nEjemplo: 2 o 3 con relleno cúbico en piezas que tienen que aguantar peso.",
+     "Prints each path of the inside infill as several touching lines, from 1 to 10. The pattern gets larger in the "
+     "same proportion, so it uses the same material: fewer paths, but thicker. At 1 (the default), the usual "
+     "infill.\n\nThick infill walls resist some loads better and there is less travel.\n\nExample: 2 or 3 with "
+     "cubic infill for parts that must carry weight."},
     {"infill.separated",
      "Con varias piezas en la cama, el dibujo del relleno de adentro es uno solo para toda la placa, así que cada pieza "
      "lo corta en un lugar distinto. Encendido, el relleno de cada pieza se centra en ella misma, como si estuviera "

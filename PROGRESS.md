@@ -15454,3 +15454,33 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
     clave; habría que preguntarle a QA.
   - El ancho variable de los lazos.
   - La línea corta del centro.
+
+**05:50 (Montevideo, 18-11) — O2, regla 13 bis, parte 3: dibujo del sólido interno.**
+- QA respondió:
+  - La clave es `surfaces.internal_solid_pattern`, con los mismos valores que `top_pattern` y `rectilinear` de
+    fábrica, así que hoy no cambia nada.
+  - El ancho variable de los lazos queda para después de la beta. Hay que medir en OrcaSlicer cómo reparte el ancho;
+    hasta entonces, ancho fijo.
+- Con un dibujo que no sea `rectilinear`, la superficie de abajo de todo sigue el dibujo de abajo. Las capas macizas
+  sobre ella y bajo la de arriba siguen el dibujo interno (curvas, espiral, monotónico o zigzag fijo).
+- En la interfaz, «Dibujo del macizo interno» en «Arriba y abajo», con su explicación en los dos idiomas.
+- Prueba `[infill]` nueva (en el mismo push que la regla 13): con `spiral_inset`, una capa maciza de adentro es una sola espiral, y la superficie de abajo
+  sigue en líneas sueltas.
+- **Siguiente:** regla 13 (`infill.multiline`). Después, la regla 10 (gyroid y TPMS adaptativos).
+
+**06:25 (Montevideo, 18-11) — O2, regla 13, parte 1: relleno de varias líneas.**
+- QA respondió: la densidad se mantiene. El dibujo se hace N veces más grande y cada camino va como N líneas pegadas,
+  con el mismo material (OR12: los gramos del relleno dentro del 3 %).
+- `infill.multiline` (1 a 10):
+  - el dibujo se arma a la densidad / N;
+  - cada camino se copia N veces a los costados, a una separación de cordón y centradas en él;
+  - las copias se recortan al relleno;
+  - como el largo de un dibujo no sigue exactamente a la densidad (uniones con las paredes, celdas, recortes), la
+    densidad se corrige hasta tres veces por el largo total, y se queda el resultado más cercano.
+- Va en el commit junto con `surfaces.internal_solid_pattern` (13 bis, parte 3), porque tocan los mismos archivos.
+- Pruebas: todas bien (1146 casos). La nueva de `[infill]`, en un cuadrado de 40 mm al 15 %: con 3 líneas, el largo total queda dentro del 3 % en
+  rectilíneo, gyroid y panal. En cúbico queda dentro del 8 %, porque sus pocas líneas cambian a saltos; mejora con los
+  caminos propios de la parte 2. Una línea recta da tres a 0,4 mm, con la del medio sobre ella.
+- **Falta (parte 2):** caminos en trapecio que no se cruzan consigo mismos para grilla, triángulos, tri-hexágono,
+  cúbico, cúbico adaptativo, de soporte y panal 3D, con el patrón girando en cada capa. Hoy esos patrones usan las
+  copias paralelas.

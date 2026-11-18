@@ -2840,6 +2840,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.top_angle = settings.top_angle;
     fill.bottom_angle = settings.bottom_angle;
     fill.top_order = settings.top_fill_order;
+    fill.internal_pattern = settings.internal_solid_pattern;
+    fill.multiline = settings.infill_multiline;
     fill.bottom_order = settings.bottom_fill_order;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};

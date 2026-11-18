@@ -540,6 +540,7 @@
     X(ArchimedeanInfill, "Cuerdas de Arquímedes", "Archimedean chords")                                               \
     X(OctagramInfill, "Espiral octagrama", "Octagram spiral")                                                         \
     X(SpiralInset, "Espiral hacia adentro", "Inward spiral") \
+    X(InternalSolidPattern, "Dibujo del macizo interno", "Internal solid pattern") \
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \
@@ -1874,6 +1875,7 @@
     X(SubTopExpansion, "Expansión de arriba", "Top surface expansion") \
     X(SmoothFactor, "Suavizar las esquinas del relleno", "Smooth the infill's corners") \
     X(InfillSeparated, "Relleno separado por pieza", "Infill separated by part") \
+    X(InfillMultiline, "Líneas por camino del relleno", "Lines per infill path") \
     X(TopExpansion, "Expandir la superficie de arriba", "Expand the top surface") \
     X(TopExpansionMargin, "Distancia a las paredes", "Distance from the walls") \
     X(TopExpansionDirection, "Hacia dónde crece", "Which way it grows") \

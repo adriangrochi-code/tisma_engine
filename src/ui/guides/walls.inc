@@ -556,6 +556,15 @@
      "Which way the top surface grows. \"Inward\" closes the gaps left around what rises from the middle. "
      "\"Outward\" grows its edge to join separate pieces. \"Inward and outward\" (the default) does both.\n\n"
      "Example: inward for a raised logo on a lid."},
+    {"surfaces.internal_solid_pattern",
+     "Debajo de la cara de arriba y encima de la de abajo hay algunas capas macizas que no se ven. Este ajuste elige "
+     "su dibujo. De fábrica van en zigzag, que es rápido; con un dibujo concéntrico o en espiral siguen la forma de la "
+     "pieza.\n\nNo cambia cómo se ven las caras de afuera.\n\nEjemplo: zigzag casi siempre; espiral hacia adentro "
+     "en piezas redondas.",
+     "Under the top face and over the bottom one there are a few solid layers you do not see. This setting picks "
+     "their pattern. By default they zig-zag, which is quick; with a concentric or spiral pattern they follow the "
+     "part's shape.\n\nIt does not change how the outside faces look.\n\nExample: zig-zag almost always; inward "
+     "spiral on round parts."},
     {"surfaces.interface_shells",
      "Solo cuenta si imprimís con más de un extrusor, por ejemplo con dos materiales o colores. Donde la parte de uno "
      "se apoya sobre la del otro, encendido, cada una lleva sus propias capas macizas de techo y de piso, como si "

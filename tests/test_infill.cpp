@@ -266,6 +266,70 @@ TEST_CASE("spiral_inset: the concentric loops joined into one spiral (orca_2_5.m
     CHECK(parse_settings(R"({"surfaces": {"top_pattern": "spiral_inset"}})").top_pattern == SurfacePattern::SpiralInset);
 }
 
+TEST_CASE("surfaces.internal_solid_pattern: the solid inside the part (orca_2_5.md, rule 13 bis)", "[infill]") {
+    // Layer over the bottom surface: its bottom solid is not exposed.
+    LayerSurfaces s;
+    s.bottom = square(0, 0, 20);
+    FillParams p;
+    const std::size_t zigzags = fill_layer(s, 1, p, 0.4).solid.size();
+    p.internal_pattern = SurfacePattern::SpiralInset;
+    const LayerFill spiral = fill_layer(s, 1, p, 0.4);
+    REQUIRE(spiral.solid.size() == 1); // one spiral
+    CHECK_FALSE(spiral.solid[0].closed);
+    CHECK(spiral.solid[0].points.size() > 20);
+    // The exposed bottom surface keeps the bottom pattern.
+    s.bottom_exposed = s.bottom;
+    p.bottom_pattern = SurfacePattern::Monotonic;
+    const LayerFill bottom = fill_layer(s, 0, p, 0.2);
+    for (const Toolpath& t : bottom.solid)
+        CHECK(t.points.size() == 2);
+    CHECK(zigzags >= 1);
+    CHECK(parse_settings(R"({"surfaces": {"internal_solid_pattern": "concentric"}})").internal_solid_pattern ==
+          SurfacePattern::Concentric);
+    CHECK(Settings{}.internal_solid_pattern == SurfacePattern::Rectilinear);
+}
+
+TEST_CASE("infill.multiline: each path as N touching lines, the same material (orca_2_5.md, rule 13)", "[infill]") {
+    const auto length = [](const std::vector<Toolpath>& paths) {
+        double total = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                total += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        return total;
+    };
+    LayerSurfaces s;
+    s.sparse = square(0, 0, 40);
+    for (const InfillPattern pattern : {InfillPattern::Rectilinear, InfillPattern::Cubic, InfillPattern::Gyroid,
+                                        InfillPattern::Honeycomb}) {
+        INFO(int(pattern));
+        FillParams p;
+        p.pattern = pattern;
+        p.density = 0.15;
+        const double one = length(fill_layer(s, 0, p, 5.0).sparse);
+        p.multiline = 3;
+        const double three = length(fill_layer(s, 0, p, 5.0).sparse);
+        REQUIRE(one > 0.0);
+        // The same line length, within 3 % (OR12). Cubic's few lines on a
+        // 40 mm square change length in steps with the density: within 8 %
+        // until its own multiline paths (rule 13, part 2).
+        CHECK(std::abs(three - one) < (pattern == InfillPattern::Cubic ? 0.08 : 0.03) * one);
+    }
+    // A straight path becomes three lines a spacing apart, the middle one on it.
+    Toolpath line;
+    line.points = {{{0.0, 5.0}, 0.4}, {{10.0, 5.0}, 0.4}};
+    const std::vector<Toolpath> copies = multiline_paths({line}, 3, 0.4, 0.4, square(-1, -1, 20));
+    REQUIRE(copies.size() == 3);
+    std::vector<double> ys;
+    for (const Toolpath& t : copies)
+        ys.push_back(t.points.front().p.y);
+    std::sort(ys.begin(), ys.end());
+    CHECK_THAT(ys[0], WithinAbs(4.6, 1e-6));
+    CHECK_THAT(ys[1], WithinAbs(5.0, 1e-6));
+    CHECK_THAT(ys[2], WithinAbs(5.4, 1e-6));
+    CHECK(parse_settings(R"({"infill": {"multiline": 3}})").infill_multiline == 3);
+    CHECK_THROWS(parse_settings(R"({"infill": {"multiline": 11}})"));
+}
+
 TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 14 to 17)", "[infill]") {
     const auto length = [](const std::vector<Toolpath>& paths) {
         double total = 0.0;

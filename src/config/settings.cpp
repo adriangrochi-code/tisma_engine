@@ -1827,11 +1827,15 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
                                   "bottom_min_thickness", "interface_shells", "top_width", "solid_width",
                                   "bottom_pattern", "bridge_angle", "top_angle", "bottom_angle",
-                                  "top_fill_order", "bottom_fill_order", "top_expansion", "top_expansion_margin",
+                                  "top_fill_order", "bottom_fill_order", "internal_solid_pattern", "top_expansion", "top_expansion_margin",
                                   "top_expansion_direction"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "bottom_pattern") {
             s.bottom_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
+            return;
+        }
+        if (n == "internal_solid_pattern") {
+            s.internal_solid_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
             return;
         }
         if (n == "top_expansion" || n == "top_expansion_margin") {
@@ -1896,12 +1900,19 @@ Settings parse_checked(std::string_view text) {
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
                                 "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width", "before_walls",
-                                "max_link", "smooth_factor", "separated"},
+                                "max_link", "smooth_factor", "separated", "multiline"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "before_walls") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             s.infill_before_walls = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "multiline") {
+            const auto& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 1 || v.get<long long>() > 10)
+                fail(k, "must be a whole number from 1 to 10");
+            s.infill_multiline = int(v.get<long long>());
             return;
         }
         if (n == "separated") {
@@ -3644,6 +3655,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", surface_pattern_name(s.top_pattern)},
         {"surfaces.bottom_pattern", surface_pattern_name(s.bottom_pattern)},
+        {"surfaces.internal_solid_pattern", surface_pattern_name(s.internal_solid_pattern)},
         {"surfaces.bridge_angle", num(s.bridge_angle)},
         {"surfaces.top_angle", num(s.top_angle)},
         {"surfaces.bottom_angle", num(s.bottom_angle)},
@@ -3716,6 +3728,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.max_link", num(s.infill_max_link)},
         {"infill.smooth_factor", num(s.infill_smooth_factor)},
         {"infill.separated", s.infill_separated ? "true" : "false"},
+        {"infill.multiline", std::to_string(s.infill_multiline)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
@@ -4307,6 +4320,7 @@ std::string settings_json(const Settings& s) {
           {"bottom_layers", s.bottom_layers},
           {"top_pattern", surface_pattern_name(s.top_pattern)},
           {"bottom_pattern", surface_pattern_name(s.bottom_pattern)},
+          {"internal_solid_pattern", surface_pattern_name(s.internal_solid_pattern)},
           {"bridge_angle", s.bridge_angle},
           {"top_angle", s.top_angle},
           {"bottom_angle", s.bottom_angle},
@@ -4331,6 +4345,7 @@ std::string settings_json(const Settings& s) {
           {"max_link", s.infill_max_link},
           {"smooth_factor", s.infill_smooth_factor},
           {"separated", s.infill_separated},
+          {"multiline", s.infill_multiline},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},

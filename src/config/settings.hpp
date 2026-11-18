@@ -312,6 +312,7 @@ struct Settings {
     // infill_patterns.md, rules 14 to 17).
     SurfacePattern top_pattern = SurfacePattern::Monotonic;
     SurfacePattern bottom_pattern = SurfacePattern::Monotonic;
+    SurfacePattern internal_solid_pattern = SurfacePattern::Rectilinear; // orca_2_5.md, rule 13 bis
     double bridge_angle = 0.0;    // degrees, the bridges' lines (surfaces.bridge_angle); 0: by the bridge
     // A fixed angle for the top and the bottom surfaces' lines (orca_2_5.md,
     // rule 9), degrees; -1: the solid infill's. The top one also irons.
@@ -763,6 +764,7 @@ struct Settings {
     // Each part's infill centred on its own 3D box, as if it were sliced
     // alone (orca_2_5.md, rule 12); off: one centre for the whole plate.
     bool infill_separated = false;
+    int infill_multiline = 1; // each sparse path as 1 to 10 touching lines, the same material (rule 13)
     double infill_max_link = 50.0;     // mm along the walls two sparse lines may be joined over (surfaces_infill.md, rule 7)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
