@@ -63,10 +63,13 @@ final class ReleaseGateTests: XCTestCase {
         let plate = app.tabBars.buttons["Plate"]
         XCTAssertTrue(plate.waitForExistence(timeout: 20), "the app opens \(name)")
         if !plate.isSelected { plate.tap() }
+        // The plate is a Form: its rows below the screen do not exist until scrolled to.
         let model = app.staticTexts["plate_model"]
+        reveal(model)
         XCTAssertTrue(model.waitForExistence(timeout: 30), "the plate names \(name) (on screen: \(screen()))")
         XCTAssertTrue(wait(60) { model.label == name }, "\(name) is on the plate (it shows «\(model.label)»)")
         let info = app.staticTexts["plate_info"]
+        reveal(info)
         XCTAssertTrue(wait(60) { info.exists && (size == nil || info.label.hasPrefix(size!)) },
                       "the size of \(name) on the plate (it shows «\(info.exists ? info.label : "nothing")»)")
     }
@@ -77,7 +80,7 @@ final class ReleaseGateTests: XCTestCase {
         scrollTo(button)
         button.tap()
         let result = app.staticTexts["plate_result"]
-        XCTAssertTrue(wait(900) { result.exists }, "\(name) sliced (on screen: \(screen()))")
+        XCTAssertTrue(wait(900) { reveal(result); return result.exists }, "\(name) sliced (on screen: \(screen()))")
         // «17 min · 1.46 m · 4.4 g · 100 layers»
         let numbers = result.label.components(separatedBy: CharacterSet(charactersIn: "0123456789.").inverted)
             .compactMap(Double.init)
@@ -105,6 +108,7 @@ final class ReleaseGateTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["printer_tested"].waitForExistence(timeout: 30), "\(kind) answers the test")
         app.tabBars.buttons["Plate"].tap()
         let send = app.buttons["plate_send"]
+        reveal(send)
         scrollTo(send)
         XCTAssertTrue(send.isEnabled, "«Send to the printer and start» for \(kind)")
         send.tap()
@@ -129,6 +133,14 @@ final class ReleaseGateTests: XCTestCase {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count))
         }
         if !text.isEmpty { field.typeText(text) }
+    }
+
+    /// Scrolls the plate until [e] is built (a Form makes its rows only near the screen), then back no further.
+    @discardableResult
+    private func reveal(_ e: XCUIElement) -> Bool {
+        var n = 0
+        while !e.exists && n < 10 { app.swipeUp(); n += 1 }
+        return e.exists
     }
 
     private func scrollTo(_ e: XCUIElement) {
