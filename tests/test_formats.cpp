@@ -104,6 +104,55 @@ TEST_CASE("formats: OBJ, the box with quads, normals and negative indices (FM2)"
     CHECK_THROWS_AS(parse_obj("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 -4\n"), ModelError);
 }
 
+TEST_CASE("formats: AMF, the box plain and zipped, in its unit (FM2)", "[formats]") {
+    // The box of box.obj written as AMF: an object with two volumes.
+    const ModelFile obj = read_model(kFormats / "box.obj");
+    std::string amf = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<amf unit=\"UNIT\" version=\"1.1\">\n"
+                      "<metadata type=\"name\">box</metadata>\n<object id=\"0\"><mesh><vertices>\n";
+    for (const Vec3f& v : obj.mesh.corners())
+        amf += "<vertex><coordinates><x>" + std::to_string(v.x) + "</x><y> " + std::to_string(v.y) + " </y><z>" +
+               std::to_string(v.z) + "</z></coordinates></vertex>\n";
+    amf += "</vertices><volume materialid=\"1\">\n";
+    for (std::size_t t = 0; t < obj.mesh.triangle_count(); ++t) {
+        if (t == 8)
+            amf += "</volume><volume>\n";
+        amf += "<triangle><v1>" + std::to_string(3 * t) + "</v1><v2>" + std::to_string(3 * t + 1) + "</v2><v3>" +
+               std::to_string(3 * t + 2) + "</v3></triangle>\n";
+    }
+    amf += "</volume></mesh></object>\n<constellation id=\"2\"><instance objectid=\"0\"/></constellation></amf>\n";
+    const auto with_unit = [&](const std::string& unit) {
+        std::string s = amf;
+        s.replace(s.find("UNIT"), 4, unit);
+        return s;
+    };
+    const ModelFile m = parse_model(with_unit("millimeter"), ".amf");
+    CHECK(m.format == ModelFormat::Amf);
+    CHECK(m.mesh.triangle_count() == 12);
+    CHECK(m.objects == 1);
+    CHECK(m.parts == 2);
+    REQUIRE(m.pieces.size() == 2);
+    CHECK(m.pieces[1].first == 8);
+    CHECK(m.pieces[1].count == 4);
+    check_box(m, 0.0, 0.0);
+    // Zipped (a compressed AMF), and in inches.
+    const std::string zipped = write_zip_stored({{"box.amf", with_unit("millimeter")}});
+    check_box(parse_model(zipped, ".AMF"), 0.0, 0.0);
+    const BoundingBox inch = parse_amf(with_unit("inch")).mesh.bounding_box();
+    CHECK_THAT(inch.max.z - inch.min.z, WithinAbs(254.0, 1e-3));
+    // Damaged files say what is wrong.
+    CHECK_THROWS_WITH(parse_amf(with_unit("cubit")), ContainsSubstring("unknown unit"));
+    CHECK_THROWS_WITH(parse_amf("<amf><object><mesh><vertices><vertex><coordinates><x>1</x><y>2</y></coordinates>"
+                                "</vertex></vertices></mesh></object></amf>"),
+                      ContainsSubstring("without x, y and z"));
+    CHECK_THROWS_WITH(parse_amf("<amf><object><mesh><vertices></vertices><volume><triangle><v1>0</v1><v2>1</v2>"
+                                "<v3>2</v3></triangle></volume></mesh></object></amf>"),
+                      ContainsSubstring("not in the object"));
+    CHECK_THROWS_WITH(parse_amf("<amf><object><mesh><vertices><vertex><coordinates><x>a</x>"),
+                      ContainsSubstring("not a number"));
+    CHECK_THROWS_WITH(parse_amf("<model/>"), ContainsSubstring("not <amf>"));
+    CHECK_THROWS_AS(parse_amf("<amf><object>"), ModelError);
+}
+
 TEST_CASE("formats: 3MF packages of the box (FM3, FM9)", "[formats]") {
     for (const char* name : {"box.3mf", "box_stored.3mf", "box_support.3mf", "box_production.3mf"}) {
         CAPTURE(name);
@@ -164,8 +213,7 @@ TEST_CASE("formats: STL, OBJ or 3MF by the content and the extension", "[formats
     CHECK(std::string(format_name(ModelFormat::ThreeMf)) == "3MF");
     // The formats not read yet say so, not that an STL is broken (the spec team's BH9).
     CHECK_THROWS_WITH(parse_model("<?xml version=\"1.0\"?><amf unit=\"millimeter\"></amf>", ".amf"),
-                      ContainsSubstring("AMF files are not supported yet"));
-    CHECK_THROWS_WITH(parse_model(file(kFormats / "box.3mf"), ".AMF"), ContainsSubstring("AMF files")); // zipped
+                      ContainsSubstring("AMF: no triangles"));
     CHECK_THROWS_WITH(parse_model("ISO-10303-21;", ".step"), ContainsSubstring("STEP files are not supported yet"));
     CHECK_THROWS_WITH(parse_model("ISO-10303-21;", ".stp"), ContainsSubstring("STEP files"));
 }

@@ -938,11 +938,12 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   rangos distintos (hoy la pila de capas es de toda la placa), las copias en grilla (regla 15), y el
   puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
-  FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
+  FM9) en la línea de comandos y en la interfaz. AMF (FM2), plano o comprimido, con su unidad, hecho (2026-11-18). Falta: STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
   (regla 4) y escribir el proyecto 3MF y las exportaciones (reglas 6 a 16)
-- [ ] `placement.md` (F1): hecho (2026-10-26) centrar la pieza en la cama o en `placement.center` (regla 2, PL1, PL2,
-  PL3, PL6); PL15 el 2026-10-27 (sin cama, solo un centro dado a mano la mueve). Falta: varias copias en grilla con `placement.spacing` (PL7, PL8) y `placement.drop_to_bed` «no» (PL5,
-  PL9); hoy la pieza siempre se apoya en la cama
+- [x] `placement.md` (F1): hecho (2026-10-26) centrar la pieza en la cama o en `placement.center` (regla 2, PL1, PL2,
+  PL3, PL6); PL15 el 2026-10-27 (sin cama, solo un centro dado a mano la mueve). Las copias en grilla con
+  `placement.spacing` (`--copies`, PL7 y PL8, en `tests/test_plate.cpp`) y `placement.drop_to_bed` «no» (PL5 y PL9,
+  en `tests/test_gcode_check.cpp`) ya estaban hechas; marcado el 2026-11-18
 - [ ] `profile_pack.md` y `presets.md` (P3): bajar el paquete libre, los perfiles del sistema y los propios. Las
   velocidades del perfil de impresión que el paquete da a cada impresora (`defaults.print`) van a su perfil de
   impresora: las velocidades son de la impresora (decisión del dueño, 2026-10-26; `docs/CONFIG.md`, «Velocidades»)

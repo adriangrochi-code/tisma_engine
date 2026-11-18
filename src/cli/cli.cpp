@@ -366,9 +366,10 @@ void print_mesh_summary(const ModelFile& stl, double seconds, std::ostream& out)
         << (stl.format == ModelFormat::StlBinary  ? "binary"
             : stl.format == ModelFormat::StlAscii ? "ascii"
             : stl.format == ModelFormat::Obj      ? "obj"
+            : stl.format == ModelFormat::Amf      ? "amf"
                                                   : "3mf")
         << "\n";
-    if (stl.format == ModelFormat::ThreeMf)
+    if (stl.format == ModelFormat::ThreeMf || stl.format == ModelFormat::Amf)
         out << "objects: " << stl.objects << "\nparts: " << stl.parts << "\n";
     out << "triangles: " << stl.mesh.triangle_count() << "\n";
     if (!box.empty) {

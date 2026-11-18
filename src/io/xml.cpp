@@ -38,6 +38,13 @@ std::size_t XmlReader::line() const {
     return 1 + std::size_t(std::count(text_.begin(), text_.begin() + std::ptrdiff_t(std::min(tag_, text_.size())), '\n'));
 }
 
+std::string_view XmlReader::text() const {
+    if (pending_end_ || pos_ >= text_.size())
+        return {};
+    const std::size_t end = text_.find('<', pos_);
+    return text_.substr(pos_, (end == std::string_view::npos ? text_.size() : end) - pos_);
+}
+
 void XmlReader::fail(const std::string& message) const {
     throw XmlError("XML, line " + std::to_string(line()) + ": " + message);
 }

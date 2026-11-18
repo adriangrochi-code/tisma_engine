@@ -20,7 +20,7 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-enum class ModelFormat { StlBinary, StlAscii, Obj, ThreeMf };
+enum class ModelFormat { StlBinary, StlAscii, Obj, ThreeMf, Amf };
 
 // A model file read into one mesh, in millimetres (docs/spec/features/
 // formats.md, rules 1 to 5 and 7 to 8).
@@ -55,6 +55,13 @@ struct ModelFile {
 // millimetres. The rest (normals, texture coordinates, groups, materials) is
 // ignored. Throws ModelError.
 ModelFile parse_obj(std::string_view text);
+
+// An AMF file (ISO/ASTM 52915), plain or as a ZIP holding one: each object's
+// vertices and the triangles of its volumes, in the file's unit (millimeter
+// when it gives none; inch, feet, meter and micron/micrometer scaled to
+// millimetres). Each volume is a part of its object; the constellations and
+// the materials and colours are not used. Throws ModelError.
+ModelFile parse_amf(std::string_view data);
 
 // A 3MF package (3MF Core Specification): the objects on its build plate,
 // each with the transform of its build item and of its components, nested
@@ -98,7 +105,7 @@ std::string write_3mf_objects(const std::vector<ThreeMfObject>& objects, std::ve
 // and its relationships, stored without compression.
 std::string write_3mf(const TriangleMesh& mesh, std::string_view name);
 
-// The model in memory: AMF, STEP, SVG and ZIP are not read yet and say so;
+// The model in memory: STEP, SVG and ZIP are not read yet and say so;
 // a ZIP package is a 3MF; otherwise the extension says (".obj"); otherwise it
 // is an STL. Throws ModelError.
 ModelFile parse_model(std::string_view data, std::string_view extension);

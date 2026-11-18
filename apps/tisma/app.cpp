@@ -214,8 +214,8 @@ constexpr const char* kIcons[] = {
     "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help", "account", "library",
 };
 
-const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
-const std::vector<std::string> kModelExtensions = {".stl", ".obj", ".3mf"};
+const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".amf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
+const std::vector<std::string> kModelExtensions = {".stl", ".obj", ".3mf", ".amf"};
 
 bool is_model(const std::filesystem::path& path) {
     const std::string ext = lower_extension(path);
@@ -5817,7 +5817,7 @@ void App::import_zip(const std::filesystem::path& path) {
         for (const ZipArchive::Entry& e : zip.entries()) {
             const std::filesystem::path name = from_utf8(e.name);
             const std::string ext = lower_extension(name);
-            if (ext != ".stl" && ext != ".obj" && ext != ".3mf")
+            if (ext != ".stl" && ext != ".obj" && ext != ".3mf" && ext != ".amf")
                 continue;
             if (e.size > (std::uint64_t(1) << 30))
                 throw std::runtime_error(e.name + ": larger than 1 GB");

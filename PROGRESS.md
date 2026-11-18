@@ -15613,3 +15613,16 @@ historial vacío; `calibration` ajusta los factores de esa impresora (regla 15).
 
 **Sigue:** pedirle el tiempo a la impresora al terminar (Device) y mostrar la estimación corregida y el error típico en
 la interfaz; es trabajo de interfaz, para la sesión de interfaz o un bloque de día.
+
+## 2026-11-18 — formats.md: leer AMF (FM2)
+
+**Hecho:** `parse_amf` lee el AMF, plano o comprimido (un ZIP con el documento adentro), en su unidad (milímetros si
+no dice; pulgadas, pies, metros y micrones a milímetros), con cada volumen como parte de su objeto. La línea de comandos
+y la interfaz lo abren (también dentro de un ZIP); antes decían que no se leía. Decisión: respetar la unidad del archivo
+(la ficha dice «en milímetros»; no midió otro caso); anotado en PROVENANCE.md.
+
+**Pruebas:** la caja de FM2 en AMF, plana, comprimida y en pulgadas, con dos volúmenes; archivos dañados con su error.
+`[formats]` pasa; prueba completa en segundo plano. También se marcó hecho `placement.md` en PLAN.md (las copias y
+`drop_to_bed` ya estaban).
+
+**Sigue:** STEP o SVG de `formats.md`, o lo siguiente del PLAN.

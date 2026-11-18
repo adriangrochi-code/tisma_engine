@@ -5,6 +5,7 @@
 
 #include "io/number.hpp"
 #include "io/stl.hpp"
+#include "io/xml.hpp"
 #include "io/zip.hpp"
 
 #include <charconv>
@@ -108,6 +109,123 @@ ModelFile parse_obj(std::string_view text) {
     return out;
 }
 
+ModelFile parse_amf(std::string_view data) {
+    std::string unzipped;
+    if (looks_like_zip(data)) {
+        // A compressed AMF: a ZIP with the AMF document inside.
+        try {
+            const ZipArchive zip(data);
+            const ZipArchive::Entry* found = nullptr;
+            for (const ZipArchive::Entry& e : zip.entries())
+                if (lower(std::filesystem::path(e.name).extension().string()) == ".amf" ||
+                    (found == nullptr && !e.name.empty() && e.name.back() != '/'))
+                    found = &e;
+            if (found == nullptr)
+                throw ModelError("AMF: an empty ZIP");
+            unzipped = zip.read(*found);
+        } catch (const ZipError& e) {
+            throw ModelError(std::string("AMF: ") + e.what());
+        }
+        data = unzipped;
+    }
+    ModelFile out;
+    out.format = ModelFormat::Amf;
+    out.objects = 0;
+    out.parts = 0;
+    try {
+        XmlReader xml(data);
+        double scale = 1.0;
+        std::vector<std::string_view> path; // local names of the open elements
+        std::vector<Vec3f> vertices;
+        Vec3f point{};
+        std::array<std::uint32_t, 3> corner{};
+        int got = 0;
+        bool seen_root = false;
+        std::size_t volume_first = 0;
+        const auto number = [&](std::string_view what) {
+            double v = 0.0;
+            std::string_view t = xml.text();
+            while (!t.empty() && (t.front() == ' ' || t.front() == '\t' || t.front() == '\n' || t.front() == '\r'))
+                t.remove_prefix(1);
+            while (!t.empty() && (t.back() == ' ' || t.back() == '\t' || t.back() == '\n' || t.back() == '\r'))
+                t.remove_suffix(1);
+            if (!parse_number(t, v) || !std::isfinite(v))
+                throw ModelError("AMF, line " + std::to_string(xml.line()) + ": " + std::string(what) + " is not a number");
+            return v;
+        };
+        for (XmlReader::Event e = xml.next(); e != XmlReader::Event::Done; e = xml.next()) {
+            const std::string_view name = XmlReader::local_name(xml.name());
+            if (e == XmlReader::Event::End) {
+                if (name == "vertex") {
+                    if (got != 7)
+                        throw ModelError("AMF, line " + std::to_string(xml.line()) + ": a vertex without x, y and z");
+                    vertices.push_back(point);
+                } else if (name == "triangle") {
+                    if (got != 7)
+                        throw ModelError("AMF, line " + std::to_string(xml.line()) + ": a triangle without v1, v2 and v3");
+                    for (const std::uint32_t k : corner)
+                        if (k >= vertices.size())
+                            throw ModelError("AMF, line " + std::to_string(xml.line()) + ": vertex " + std::to_string(k) +
+                                             " is not in the object");
+                    out.mesh.add_triangle(vertices[corner[0]], vertices[corner[1]], vertices[corner[2]]);
+                } else if (name == "volume") {
+                    const std::size_t count = out.mesh.triangle_count() - volume_first;
+                    if (count > 0) {
+                        out.pieces.push_back({"", out.objects - 1, volume_first, count, 0});
+                        ++out.parts;
+                    }
+                }
+                if (!path.empty())
+                    path.pop_back();
+                continue;
+            }
+            if (!seen_root) {
+                if (name != "amf")
+                    throw ModelError("AMF: the document is not <amf>");
+                seen_root = true;
+                const std::string unit = lower(XmlReader::decode(xml.attribute("unit").value_or("millimeter")));
+                scale = unit == "millimeter" || unit == "millimetre" || unit == "mm" ? 1.0
+                        : unit == "inch"                                            ? 25.4
+                        : unit == "feet" || unit == "foot"                          ? 304.8
+                        : unit == "meter" || unit == "metre"                        ? 1000.0
+                        : unit == "micron" || unit == "micrometer"                  ? 0.001
+                                                                                    : -1.0;
+                if (scale < 0.0)
+                    throw ModelError("AMF: unknown unit '" + unit + "'");
+            }
+            const std::string_view parent = path.empty() ? std::string_view{} : path.back();
+            path.push_back(name);
+            if (name == "object") {
+                ++out.objects;
+                vertices.clear();
+            } else if (name == "volume") {
+                volume_first = out.mesh.triangle_count();
+            } else if (name == "vertex" || name == "triangle") {
+                got = 0;
+            } else if (parent == "coordinates" && (name == "x" || name == "y" || name == "z")) {
+                const int axis = name == "x" ? 0 : name == "y" ? 1 : 2;
+                const float v = float(number(name) * scale);
+                (axis == 0 ? point.x : axis == 1 ? point.y : point.z) = v;
+                got |= 1 << axis;
+            } else if (parent == "triangle" && (name == "v1" || name == "v2" || name == "v3")) {
+                const int k = name[1] - '1';
+                const double v = number(name);
+                if (v < 0.0 || v != std::floor(v) || v > 4294967295.0)
+                    throw ModelError("AMF, line " + std::to_string(xml.line()) + ": a vertex index is not a whole number");
+                corner[std::size_t(k)] = std::uint32_t(v);
+                got |= 1 << k;
+            }
+        }
+        if (!seen_root)
+            throw ModelError("AMF: no <amf> document");
+    } catch (const XmlError& e) {
+        throw ModelError(std::string("AMF: ") + e.what());
+    }
+    if (out.mesh.empty())
+        throw ModelError("AMF: no triangles");
+    return out;
+}
+
 std::string obj_text(const TriangleMesh& mesh, std::string_view name) {
     // Corners equal bit for bit share one vertex.
     struct Key {
@@ -153,10 +271,12 @@ ModelFile parse_model(std::string_view data, std::string_view extension) {
     const std::string ext = lower(extension);
     // The formats not read yet say so, not that an STL is broken (the spec
     // team's BH9); a zipped AMF is not a 3MF either.
-    for (const auto& [unread, name] : {std::pair<const char*, const char*>{".amf", "AMF"}, {".step", "STEP"},
+    for (const auto& [unread, name] : {std::pair<const char*, const char*>{".step", "STEP"},
                                        {".stp", "STEP"}, {".svg", "SVG"}, {".zip", "ZIP"}})
         if (ext == unread)
             throw ModelError(std::string(name) + " files are not supported yet: save the model as STL, OBJ or 3MF");
+    if (ext == ".amf")
+        return parse_amf(data);
     if (looks_like_zip(data))
         return parse_3mf(data);
     if (ext == ".3mf")
@@ -201,6 +321,8 @@ const char* format_name(ModelFormat format) {
         return "OBJ";
     case ModelFormat::ThreeMf:
         return "3MF";
+    case ModelFormat::Amf:
+        return "AMF";
     }
     return "?";
 }

@@ -32,6 +32,9 @@ public:
     // The value of the attribute with this local name, as written.
     std::optional<std::string_view> attribute(std::string_view local) const;
     std::size_t line() const; // of the current tag, for messages
+    // After a start tag: the raw text up to the next tag (decode turns its
+    // references into text); empty for an empty-element tag.
+    std::string_view text() const;
 
     static std::string_view local_name(std::string_view name);
     static std::string decode(std::string_view raw);
