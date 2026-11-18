@@ -60,7 +60,7 @@ enum class ScarfMode { Nowhere, Contours, Everywhere };
 enum class SupportStyle { Grid, Organic, Snug };
 // The support base's and interface's patterns (supports_more.md, rules 9 and 11).
 enum class SupportPattern { Lines, Grid, Honeycomb };
-enum class SupportInterfacePattern { Lines, Concentric, Automatic };
+enum class SupportInterfacePattern { Lines, Concentric, Automatic, SpiralInset };
 enum class FuzzyMode { None, External, All };
 // How a short layer slows down (cooling_more.md, rule 5): everything alike,
 // or the outer wall and the one that touches it last.

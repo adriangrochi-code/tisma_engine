@@ -1482,6 +1482,13 @@ TEST_CASE("support: the base's pattern and sheath, the interface's pattern, spac
     std::sort(loops.begin(), loops.end());
     REQUIRE(loops.size() >= 5);
     CHECK_THAT(loops.back() - loops[loops.size() - 2], Catch::Matchers::WithinAbs(8.0 * loop_spacing(s.wall_width, 0.2), 0.05));
+    // spiral_inset (orca_2_5.md, rule 13 bis): the same loops joined into open spirals.
+    s.support_interface_pattern = SupportInterfacePattern::SpiralInset;
+    model = slice_model(m, s);
+    REQUIRE_FALSE(model.fills[37].support_interface.empty());
+    for (const Toolpath& t : model.fills[37].support_interface)
+        CHECK_FALSE(t.closed);
+    CHECK(model.fills[37].support_interface.size() < loops.size());
     // Contact loops: the two top interface layers start with a loop round
     // their zone; the one below them does not (3 interface layers, rule 12).
     s.support_interface_pattern = SupportInterfacePattern::Lines;

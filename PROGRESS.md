@@ -15443,3 +15443,14 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   - el dibujo para el sólido interno y para `support.interface_pattern`;
   - el ancho variable en las superficies de arriba y abajo (hoy es fijo);
   - la línea corta del centro.
+
+**05:30 (Montevideo, 18-11) — O2, regla 13 bis, parte 2: la espiral en las interfaces de soporte.**
+- `support.interface_pattern: "spiral_inset"`: la interfaz del soporte en grilla usa la misma espiral, con la
+  separación de los cordones. En la interfaz aparece como «Espiral hacia adentro».
+- Pruebas: todas bien (1144 casos). La de patrones de soporte (`[gcode]`) suma: con `spiral_inset` la interfaz son espirales abiertas, menos
+  caminos que los lazos concéntricos.
+- **Falta de 13 bis:**
+  - El sólido interno. El motor no tiene un ajuste de dibujo para él (va siempre en zigzag). La ficha no nombra la
+    clave; habría que preguntarle a QA.
+  - El ancho variable de los lazos.
+  - La línea corta del centro.

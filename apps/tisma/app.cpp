@@ -10302,7 +10302,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= row(T::SupportInterfacePatternRow, s.support_interface_pattern,
                            {{SupportInterfacePattern::Lines, tr(T::PatternLines)},
                             {SupportInterfacePattern::Concentric, tr(T::ConcentricInfill)},
-                            {SupportInterfacePattern::Automatic, tr(T::PatternAutomatic)}});
+                            {SupportInterfacePattern::Automatic, tr(T::PatternAutomatic)},
+                            {SupportInterfacePattern::SpiralInset, tr(T::SpiralInset)}});
         mm(T::SupportInterfaceSpacing, "support.interface_spacing", s.support_interface_spacing, 0.0, 100.0,
            "%.2f mm", 0.01f);
         flag(T::SupportContactLoops, "support.interface_contact_loops", s.support_contact_loops);

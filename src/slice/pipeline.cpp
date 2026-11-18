@@ -152,6 +152,8 @@ std::vector<Toolpath> support_interface(const Polygons& interface, const Polygon
                                         double bead, double width) {
     if (settings.support_interface_pattern == SupportInterfacePattern::Concentric)
         return concentric_fill(interface, bead, width);
+    if (settings.support_interface_pattern == SupportInterfacePattern::SpiralInset) // orca_2_5.md, rule 13 bis
+        return spiral_inset_fill(interface, bead, width);
     const double spacing = bead + settings.support_interface_spacing, angle = settings.support_line_angle + 90.0;
     if (!settings.support_contact_loops || contact.empty())
         return rectilinear_fill(interface, spacing, angle, width, true);

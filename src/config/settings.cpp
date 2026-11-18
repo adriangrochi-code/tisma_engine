@@ -124,9 +124,10 @@ const char* support_pattern_name(SupportPattern p) {
 }
 
 const char* support_interface_pattern_name(SupportInterfacePattern p) {
-    return p == SupportInterfacePattern::Concentric ? "concentric"
-           : p == SupportInterfacePattern::Automatic ? "automatic"
-                                                     : "lines";
+    return p == SupportInterfacePattern::Concentric    ? "concentric"
+           : p == SupportInterfacePattern::Automatic   ? "automatic"
+           : p == SupportInterfacePattern::SpiralInset ? "spiral_inset"
+                                                       : "lines";
 }
 
 const char* fuzzy_mode_name(FuzzyMode m) {
@@ -2640,7 +2641,8 @@ Settings parse_checked(std::string_view text) {
                        s.support_interface_pattern = choice<SupportInterfacePattern>(
                            g, n, k, {{"lines", SupportInterfacePattern::Lines},
                                      {"concentric", SupportInterfacePattern::Concentric},
-                                     {"automatic", SupportInterfacePattern::Automatic}});
+                                     {"automatic", SupportInterfacePattern::Automatic},
+                                     {"spiral_inset", SupportInterfacePattern::SpiralInset}});
                        return;
                    }
                    if (n == "enforce_layers") {
