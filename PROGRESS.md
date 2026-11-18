@@ -15285,3 +15285,13 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - **Sin probar:** que la costura del G-code caiga en el punto. La escritura ya respeta la costura pintada con su
   propia prueba, y este punto usa el mismo camino.
 - **Falta:** llevarlo de la CLI y del proyecto (con el tipo de cada modificador) y a la interfaz.
+
+**03:00 (Montevideo) — O1, costura precisa, parte 3:**
+- El proyecto guarda el tipo de cada modificador de costura: `ProjectVolume::seam`, la clave `seam` del volumen.
+  `seam_modifier_kind()` lee los seis nombres. El proyecto rechaza un nombre desconocido y la costura en un volumen
+  negativo.
+- Pruebas `[project]` y `[seam]` bien.
+- **Falta:**
+  - que la interfaz pase los volúmenes con `seam` a `SupportVolumes::seams` al laminar, y los muestre para elegir el
+    tipo;
+  - la CLI, que hoy toma los volúmenes solo de un 3MF de otro programa.

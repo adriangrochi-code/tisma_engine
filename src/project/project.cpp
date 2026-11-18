@@ -2,6 +2,7 @@
 // PROVENANCE.md.
 
 #include "project/project.hpp"
+#include "slice/pipeline.hpp"
 
 #include "config/profiles.hpp"
 #include "io/model.hpp"
@@ -122,6 +123,8 @@ static ordered_json project_json(const Project& project, bool offsets) {
                 item["turn"] = v.turn;
             if (!v.settings.empty())
                 item["settings"] = ordered_json::parse(v.settings);
+            if (!v.seam.empty())
+                item["seam"] = v.seam;
             models.back()["volumes"].push_back(std::move(item));
         }
         for (const ProjectPart& part : m.parts) {
@@ -357,6 +360,12 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                         };
                         volume.lattice_cell = positive("cell");
                         volume.lattice_diameter = positive("diameter");
+                    }
+                    if (v.contains("seam")) {
+                        const ordered_json& seam = v.at("seam");
+                        if (!seam.is_string() || !seam_modifier_kind(seam.get<std::string>()) || volume.negative)
+                            fail(at + ".seam: a modifier's seam is center, left, right, preferred, forbidden or neutral");
+                        volume.seam = seam.get<std::string>();
                     }
                     volume.offset = three(v, "offset", at);
                     volume.size = three(v, "size", at);

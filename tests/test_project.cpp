@@ -1,4 +1,5 @@
 #include "project/project.hpp"
+#include "slice/pipeline.hpp"
 #include "project/engineering_values.hpp"
 #include "ui/project_slice.hpp"
 #include "mesh/face_region.hpp"
@@ -722,4 +723,24 @@ TEST_CASE("the paint's slots travel with the project and pick what each mark pri
     CHECK(slotted.size(PaintChannel::Color) == 3); // the last one unpainted now
     CHECK(slotted.tree(PaintChannel::Seam, 0) == Painting::Tree{1});
     CHECK(with_color_slots(paint, {}) == paint);
+}
+
+TEST_CASE("a project keeps a precise seam modifier's kind (orca_2_5.md, rule 4)", "[project][seam]") {
+    Project p = sample();
+    ProjectVolume v;
+    v.offset = {9.0, 0.0, 0.0};
+    v.size = {4.0, 4.0, 12.0};
+    v.seam = "right";
+    p.models.front().volumes.push_back(v);
+    const Project back = read_project(write_project(p));
+    REQUIRE(back.models.front().volumes.size() == 1);
+    CHECK(back.models.front().volumes[0].seam == "right");
+    CHECK(seam_modifier_kind("right") == SeamModifierKind::Right);
+    CHECK_FALSE(seam_modifier_kind("sideways"));
+    // A kind that is not one of the six is refused.
+    std::string text = write_project(p);
+    const std::size_t at = text.find("\"right\"");
+    REQUIRE(at != std::string::npos);
+    text.replace(at, 7, "\"middle\"");
+    CHECK_THROWS_AS(read_project(text), ProjectError);
 }

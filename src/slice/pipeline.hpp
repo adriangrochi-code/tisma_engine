@@ -156,6 +156,9 @@ double support_xy_gap(const Settings& settings);
 // centre, left or right end, seen from outside, of the stretch where the
 // body cuts the outer wall. Strong before weak; first in the list wins.
 enum class SeamModifierKind { Preferred, Forbidden, Neutral, Center, Left, Right };
+// A seam modifier's kind by its name (center, left, right, preferred,
+// forbidden, neutral), as the project and the command line write it.
+std::optional<SeamModifierKind> seam_modifier_kind(std::string_view name);
 struct SeamVolume {
     IndexedMesh mesh;
     SeamModifierKind kind = SeamModifierKind::Preferred;

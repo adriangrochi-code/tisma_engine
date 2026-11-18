@@ -2089,10 +2089,12 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     return out;
 }
 
+
 namespace {
 
 // A volume's section on each level (a negative volume, a support blocker or
 // enforcer): its outline, whatever way its triangles face. Own design.
+
 std::vector<Polygons> volume_sections(const IndexedMesh& volume, const std::vector<float>& heights,
                                       double gap_closing, gpu::Context* gpu) {
     IndexedMesh oriented = volume;
@@ -3287,4 +3289,20 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
 }
 
 } // namespace
+std::optional<SeamModifierKind> seam_modifier_kind(std::string_view name) {
+    if (name == "center")
+        return SeamModifierKind::Center;
+    if (name == "left")
+        return SeamModifierKind::Left;
+    if (name == "right")
+        return SeamModifierKind::Right;
+    if (name == "preferred")
+        return SeamModifierKind::Preferred;
+    if (name == "forbidden")
+        return SeamModifierKind::Forbidden;
+    if (name == "neutral")
+        return SeamModifierKind::Neutral;
+    return std::nullopt;
+}
+
 } // namespace tisma
