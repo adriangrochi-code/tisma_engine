@@ -238,6 +238,7 @@ add_library(tisma_core
   src/infill/lightning.cpp
   src/infill/nonplanar.cpp
   src/infill/patterns.cpp
+  src/infill/smooth.cpp
   src/infill/combine.cpp
   src/infill/connect.cpp
   src/infill/stress_density.cpp

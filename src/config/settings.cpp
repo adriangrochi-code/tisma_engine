@@ -1894,12 +1894,19 @@ Settings parse_checked(std::string_view text) {
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
                                 "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width", "before_walls",
-                                "max_link"},
+                                "max_link", "smooth_factor"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "before_walls") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             s.infill_before_walls = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "smooth_factor") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.infill_smooth_factor = v;
             return;
         }
         if (n == "max_link") {
@@ -3698,6 +3705,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.width", num(s.infill_width)},
         {"infill.before_walls", s.infill_before_walls ? "true" : "false"},
         {"infill.max_link", num(s.infill_max_link)},
+        {"infill.smooth_factor", num(s.infill_smooth_factor)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
@@ -4311,6 +4319,7 @@ std::string settings_json(const Settings& s) {
           {"width", s.infill_width},
           {"before_walls", s.infill_before_walls},
           {"max_link", s.infill_max_link},
+          {"smooth_factor", s.infill_smooth_factor},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},

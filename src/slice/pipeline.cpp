@@ -11,6 +11,7 @@
 #include "infill/arcs.hpp"
 #include "infill/combine.hpp"
 #include "infill/lightning.hpp"
+#include "infill/smooth.hpp"
 #include "infill/nonplanar.hpp"
 #include "infill/patterns.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -3057,6 +3058,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // The tree's fill comes from distance fields (PLAN.md, «Soporte en árbol
     // y pintura más livianos», step 2), the layers' fields computed together
     // below, on the GPU when there is one: the same numbers either way.
+    const InfillPattern ip = settings.infill_pattern;
+    const bool smooth_sparse = settings.infill_smooth_factor > 0.0 &&
+                               (ip == InfillPattern::Hilbert || ip == InfillPattern::Octagram || ip == InfillPattern::Lightning ||
+                                ip == InfillPattern::Honeycomb || ip == InfillPattern::Honeycomb3d ||
+                                ip == InfillPattern::Concentric);
     const bool tree_by_field = settings.support_style == SupportStyle::Organic;
     std::vector<Polygons> tree_above(tree_by_field ? out.layers.size() : 0);
     std::vector<double> tree_width(tree_by_field ? out.layers.size() : 0, 0.0);
@@ -3074,6 +3080,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           out.fills[l].overhang_walls = std::move(overhang_walls[l]);
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
+                          // Rounded turns in the patterns that have them (orca_2_5.md, rule 11).
+                          if (smooth_sparse)
+                              smooth_corners(out.fills[l].sparse, settings.infill_smooth_factor / 100.0);
                           for (std::size_t b = 0; l < banded.size() && b < banded[l].size(); ++b) {
                               if (banded[l][b].empty())
                                   continue;

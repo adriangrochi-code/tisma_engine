@@ -1312,7 +1312,7 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   sin apoyo al final (hecha, 2026-11-09, OR3), modificadores de costura precisa (hecha, 2026-11-18, OR4: motor,
   proyecto, interfaz y CLI), polyholes (hecha, 2026-11-09, OR5).
 - [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba (la superficie, 2026-11-18; falta sacar las paredes internas), orden y ángulo fijo arriba y abajo (hechos, 2026-11-18, reglas 8 y 9), gyroid y TPMS
-  adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
+  adaptativos, relleno suavizado (hecho, 2026-11-18, regla 11, sin la parte de `infill.multiline`), separado por pieza, de varias líneas, espiral hacia adentro.
 - [x] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
   capa según los filamentos usados.
   Hecho (2026-11-09): reglas 20 a 22 (OR20 a OR22): `regex_replace(texto, /patrón/, reemplazo)` con `$1`, el literal

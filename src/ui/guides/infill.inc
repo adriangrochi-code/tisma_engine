@@ -222,6 +222,15 @@
      "delicate walls. In return, the infill pattern can show a little on the outside face of the part.\n\nExample: off "
      "for almost everything, especially parts meant to be seen; try turning it on if the inner walls come out loose or "
      "detached from the infill."},
+    {"infill.smooth_factor",
+     "El relleno de adentro dibuja líneas con vueltas en punta. Este valor cambia esas vueltas por curvas: con 0 (de "
+     "fábrica) quedan en punta, con 100 % la curva es la más grande que entra. La máquina no tiene que frenar en cada "
+     "esquina, así que vibra menos.\n\nSolo cuenta con los dibujos Hilbert, octagrama, lightning, panal, panal 3D y "
+     "concéntrico. El G-code queda más largo.\n\nEjemplo: 50 % suaviza sin perder la forma del dibujo.",
+     "The inside infill draws lines with pointed turns. This value turns them into curves: at 0 (the default) they "
+     "stay pointed, at 100 % the curve is the largest that fits. The machine does not have to slow down at every "
+     "corner, so it shakes less.\n\nOnly matters with the Hilbert, octagram, lightning, honeycomb, 3D honeycomb and "
+     "concentric patterns. The G-code gets longer.\n\nExample: 50 % smooths without losing the pattern's shape."},
     {"infill.max_link",
      "Para no cortar y saltar entre línea y línea, el relleno une el final de una con el comienzo de la siguiente con "
      "un tramo que corre pegado a la pared. Este ajuste es el largo máximo de ese tramo, en mm. Con 0 se usa un tope "

@@ -15364,3 +15364,27 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   4 mm se cierra 1 mm por lado hacia adentro; el margen limita lo que crece; con 0 no cambia nada.
 - **Falta (parte 2):** sacar las paredes internas que quedan sobre la superficie agrandada. Las de ancho fijo se
   sacan enteras; las de ancho variable, solo el tramo de arriba.
+
+**03:55 (Montevideo, 18-11) — O2, regla 7 parte 2 en espera; regla 11 hecha.**
+- Regla 7, parte 2 («las paredes internas que quedan sobre la superficie de arriba se sacan»): en el motor la
+  superficie agrandada solo crece dentro de las paredes, así que no hay paredes de la misma capa debajo. Le pregunté a
+  QA cuáles paredes son:
+  - (a) las internas de la misma capa que separan dos superficies;
+  - (b) las de la capa de encima;
+  - (c) otra cosa.
+  QA respondió (a): las paredes internas de la misma capa en la franja que cubre la superficie agrandada. Quedan la
+  pared de afuera y, si se pidió, la única pared de arriba. El caso es O2-7b (en `spec/next`): una placa de 20×20×5 con
+  un agujero de 6 mm, 3 paredes y 2 mm de expansión hacia adentro. QA aclaró que es su lectura de la wiki, sin medirlo
+  en Orca. Va en el próximo bloque.
+- Regla 11, `infill.smooth_factor` (0 a 100 %): las vueltas en punta del relleno poco denso pasan a ser curvas
+  (`src/infill/smooth.*`).
+  - Cada curva es una Bézier cuadrática tangente a los dos tramos. Empieza a `factor` × la mitad del tramo más corto,
+    así que dos curvas nunca se pisan.
+  - Las horquillas de más de 154° y las uniones casi rectas quedan en punta.
+  - Vale para Hilbert, octagrama, lightning, panal, panal 3D y concéntrico.
+  - Grilla, triángulos y cúbico solo cuentan con `infill.multiline` (regla 13), que todavía no está.
+- Con 0, que es el valor de fábrica, el G-code sale igual que antes. En la interfaz, el ajuste está en «Relleno», con
+  su explicación en los dos idiomas.
+- Pruebas: todas bien (1141 casos). La nueva de `[infill]`: el ángulo recto se vuelve curva de (5, 0) a (10, 5), la horquilla queda en punta y las
+  puntas de los extremos no se mueven.
+- **Siguiente:** reglas 12 (relleno separado por pieza) y 13 (varias líneas).

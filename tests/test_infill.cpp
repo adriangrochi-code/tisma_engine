@@ -2,6 +2,7 @@
 #include "gcode/order.hpp"
 #include "infill/gyroid.hpp"
 #include "infill/rectilinear.hpp"
+#include "infill/smooth.hpp"
 #include "perimeters/coverage.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -190,6 +191,37 @@ TEST_CASE("surfaces.top_fill_order and bottom_fill_order: centre out or edge in 
     CHECK(read.top_fill_order == FillOrder::Outward);
     CHECK(read.bottom_fill_order == FillOrder::Inward);
     CHECK_THROWS(parse_settings(R"({"surfaces": {"top_fill_order": "sideways"}})"));
+}
+
+TEST_CASE("infill.smooth_factor: the sparse infill's turns become curves (orca_2_5.md, rule 11)", "[infill]") {
+    // A path with a right angle, a hairpin and a nearly straight join.
+    Toolpath t;
+    for (const Point2d p : {Point2d{0, 0}, Point2d{10, 0}, Point2d{10, 10}, Point2d{10.5, 0.2}, Point2d{20.5, 0.25}})
+        t.points.push_back({p, 0.4});
+    std::vector<Toolpath> paths{t};
+    smooth_corners(paths, 0.0);
+    CHECK(paths[0].points.size() == 5);
+    smooth_corners(paths, 1.0);
+    const std::vector<ToolpathPoint>& out = paths[0].points;
+    // The ends stay; the right angle becomes a curve from (5, 0) to (10, 5).
+    CHECK(out.front().p.x == 0.0);
+    CHECK(out.back().p.x == 20.5);
+    CHECK(out.size() > 5);
+    CHECK_THAT(out[1].p.x, WithinAbs(5.0, 1e-9));
+    bool corner_kept = false, hairpin_kept = false;
+    for (const ToolpathPoint& q : out) {
+        corner_kept = corner_kept || (std::abs(q.p.x - 10.0) < 1e-9 && std::abs(q.p.y) < 1e-9);
+        hairpin_kept = hairpin_kept || (std::abs(q.p.x - 10.0) < 1e-9 && std::abs(q.p.y - 10.0) < 1e-9);
+    }
+    CHECK_FALSE(corner_kept);
+    CHECK(hairpin_kept);
+    // No point of the curve is farther from the corner than half the shorter stretch.
+    for (const ToolpathPoint& q : out)
+        if (q.p.y < 5.0 + 1e-9 && q.p.x > 4.99 && q.p.x < 10.0 + 1e-9)
+            CHECK(std::hypot(q.p.x - 10.0, q.p.y) <= 5.0 + 1e-9);
+    // The setting reads and is checked.
+    CHECK(parse_settings(R"({"infill": {"smooth_factor": 40}})").infill_smooth_factor == 40.0);
+    CHECK_THROWS(parse_settings(R"({"infill": {"smooth_factor": 140}})"));
 }
 
 TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 14 to 17)", "[infill]") {

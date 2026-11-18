@@ -93,7 +93,8 @@ const std::vector<SectionLayout>& print_layout() {
           // The top surface grown into the infill (orca_2_5.md, rule 7).
           {"top_expansion", T::SubTopExpansion,
            {{"surfaces.top_expansion", A}, {"surfaces.top_expansion_margin", A}, {"surfaces.top_expansion_direction", A}}},
-          {"infill", T::SubInfill, {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}, {"infill.angles", A}}},
+          {"infill", T::SubInfill,
+           {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}, {"infill.angles", A}, {"infill.smooth_factor", A}}},
           {"infill_more", T::SubInfillMore,
            {{"infill.wall_overlap", A},
             {"infill.solid_every", A},

@@ -756,6 +756,9 @@ struct Settings {
     bool walls_clockwise = false;      // every loop clockwise (rule 9)
     bool walls_outer_first = false;    // each island's walls from the outer one in (perimeters.md, rule 4)
     bool infill_before_walls = false;  // each island's fills before its walls (gcode_motion.md, rule 8)
+    // Percent of the largest curve the sparse infill's sharp turns become
+    // (orca_2_5.md, rule 11); 0: pointed, as always.
+    double infill_smooth_factor = 0.0;
     double infill_max_link = 50.0;     // mm along the walls two sparse lines may be joined over (surfaces_infill.md, rule 7)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
