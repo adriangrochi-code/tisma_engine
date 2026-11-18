@@ -151,10 +151,10 @@ wiki no da los eligió la ficha; con el ajuste principal apagado no cambian nada
      superficie siga entera: las paredes de ancho fijo enteras, las de ancho variable solo en el tramo de arriba;
      son las de la **misma capa** (no las de la capa de encima): las paredes internas que separan dos superficies de
      arriba, o una superficie de arriba de un agujero, en la franja que cubre la superficie agrandada. Se quedan la
-     pared de afuera de cada isla y, si se pidió una sola pared arriba, esa. Caso: dos cubos de 20 × 20 × 10 mm
-     pegados por una cara (una sola isla con una costura interna), 3 paredes, expansión 2 mm hacia afuera: en la
-     última capa la superficie de arriba cruza de un cubo al otro sin paredes internas en la unión, y la pared de
-     afuera de la isla sigue entera (prueba O2-7b);
+     pared de afuera de cada isla y, si se pidió una sola pared arriba, esa. Caso: placa de 20 × 20 × 5 mm con un agujero
+     pasante de 6 mm de diámetro en el centro, 3 paredes, 3 capas de arriba, expansión 2 mm `inward`: en la última
+     capa, alrededor del agujero queda solo la pared que lo toca; las otras dos paredes internas del agujero no están y
+     la superficie de arriba llega hasta esa pared; las 3 paredes del borde de afuera de la placa no cambian (prueba O2-7b);
    - sin efecto con 0 capas de arriba o con densidad de superficie 0 %.
 8. **Orden del relleno de arriba y de abajo** (`surfaces.top_fill_order`, `surfaces.bottom_fill_order`; misma
    página): solo en patrones que salen del centro (concéntrico, espiral de la regla 13 bis, cuerdas de Arquímedes,
