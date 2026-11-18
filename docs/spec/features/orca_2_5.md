@@ -155,6 +155,11 @@ wiki no da los eligió la ficha; con el ajuste principal apagado no cambian nada
      pasante de 6 mm de diámetro en el centro, 3 paredes, 3 capas de arriba, expansión 2 mm `inward`: en la última
      capa, alrededor del agujero queda solo la pared que lo toca; las otras dos paredes internas del agujero no están y
      la superficie de arriba llega hasta esa pared; las 3 paredes del borde de afuera de la placa no cambian (prueba O2-7b);
+     hacia afuera (`outward` o `inward_and_outward`) la superficie solo cruza una banda de paredes cuando del otro lado
+     hay otra superficie de arriba de la misma capa (para unirlas); en el borde de afuera de la isla no cruza: se
+     queda a `surfaces.top_expansion_margin` de la banda y las paredes del borde quedan todas (decisión de QA,
+     18-11-2026: sacar las paredes del borde debilita la pieza y cambia su cara exterior) (prueba O2-7c: la placa de
+     O2-7b con `inward_and_outward`: las 3 paredes del borde de afuera siguen en la última capa);
    - sin efecto con 0 capas de arriba o con densidad de superficie 0 %.
 8. **Orden del relleno de arriba y de abajo** (`surfaces.top_fill_order`, `surfaces.bottom_fill_order`; misma
    página): solo en patrones que salen del centro (concéntrico, espiral de la regla 13 bis, cuerdas de Arquímedes,
