@@ -11,6 +11,7 @@
 #include "infill/adaptive.hpp"
 #include "infill/arcs.hpp"
 #include "infill/combine.hpp"
+#include "infill/gyroid.hpp"
 #include "infill/lightning.hpp"
 #include "infill/smooth.hpp"
 #include "infill/nonplanar.hpp"
@@ -3092,6 +3093,41 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // y pintura más livianos», step 2), the layers' fields computed together
     // below, on the GPU when there is one: the same numbers either way.
     const InfillPattern ip = settings.infill_pattern;
+    // Adaptive gyroid density (orca_2_5.md, rule 10): shells of gyroid, each
+    // about 1.5 times denser than the one inside, from infill.density at the
+    // surfaces to the interior density at the deepest point, by how deep
+    // each point lies (a 0.5 mm field). Every mode uses the shells for now.
+    DepthField gyroid_depth;
+    if (ip == InfillPattern::Gyroid && settings.infill_adaptive_mode != AdaptiveMode::Disabled &&
+        settings.infill_density > 0.0 && settings.infill_density < 100.0) {
+        std::vector<Polygons> sparse(out.surfaces.size());
+        for (std::size_t l = 0; l < sparse.size(); ++l)
+            sparse[l] = out.surfaces[l].sparse;
+        gyroid_depth = sparse_depth(sparse, out.layers, 0.5);
+    }
+    const auto gyroid_shells = [&](std::size_t l, const FillParams& params) {
+        std::vector<Toolpath> sparse;
+        const double S = settings.infill_density / 100.0, I = settings.infill_adaptive_interior_density / 100.0;
+        const double deep = gyroid_depth.deepest, z = out.layers[l].slice_z();
+        const int n = S > 0.0 && I > 0.0 && I != S ? std::max(1, int(std::ceil(std::abs(std::log(I / S)) / std::log(1.5))))
+                                                   : 1;
+        const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
+        const double ws = w - std::clamp(params.overlap, 0.0, 0.5 * w);
+        Polygons outside = out.surfaces[l].sparse;
+        for (int k = 0; k < n && !outside.empty(); ++k) {
+            const double t0 = double(k) / n, t1 = double(k + 1) / n;
+            const Polygons inner = k + 1 < n ? deep_region(gyroid_depth, z, t1 * deep) : Polygons{};
+            const Polygons shell = inner.empty() ? outside
+                                                 : Clipper2Lib::Difference(outside, inner, Clipper2Lib::FillRule::NonZero);
+            outside = inner.empty() ? Polygons{} : Clipper2Lib::Intersect(outside, inner, Clipper2Lib::FillRule::NonZero);
+            const double rho = adaptive_density(S, I, 0.5 * (t0 + t1), settings.infill_adaptive_gradient);
+            if (shell.empty() || !(rho > 0.0))
+                continue;
+            for (Toolpath& t : gyroid_fill(shell, gyroid_period(ws, std::min(rho, 1.0)), z, w))
+                sparse.push_back(std::move(t));
+        }
+        return sparse;
+    };
     // Each part's sparse infill centred on its own 3D box (orca_2_5.md, rule
     // 12); not with the patterns that already go by part or by the outline.
     const bool separate = settings.infill_separated && settings.infill_density > 0.0 &&
@@ -3163,6 +3199,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                               kBridgeAnchor + settings.wall_width);
                           out.fills[l].arcs = std::move(arc_paths[l]);
                           out.fills[l].overhang_walls = std::move(overhang_walls[l]);
+                          if (!gyroid_depth.empty() && gyroid_depth.deepest > 0.5)
+                              out.fills[l].sparse = gyroid_shells(l, overlapping(l == 0 ? first_fill : fill, l));
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
                           // Rounded turns in the patterns that have them (orca_2_5.md, rule 11).

@@ -28,6 +28,12 @@ enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRecti
 enum class FillOrder { Default, Outward, Inward };
 // Where the top surface grows (orca_2_5.md, rule 7).
 enum class TopExpansion { Inward, Outward, InwardAndOutward };
+// Adaptive gyroid density (orca_2_5.md, rule 10): how the cells grow from
+// the surfaces to the centre, and the density at depth t (0 to 1).
+enum class AdaptiveMode { Disabled, DistanceWarp, SmoothBlend, SteppedShells, Lobes, NormalZ, NormalY, NormalX };
+enum class AdaptiveGradient { Linear, Quadratic, Exponential };
+// S + (I - S) t, S + (I - S) t^2, or S (I / S)^t.
+double adaptive_density(double surface, double interior, double t, AdaptiveGradient gradient);
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram, Honeycomb3d };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
@@ -764,6 +770,9 @@ struct Settings {
     // Each part's infill centred on its own 3D box, as if it were sliced
     // alone (orca_2_5.md, rule 12); off: one centre for the whole plate.
     bool infill_separated = false;
+    AdaptiveMode infill_adaptive_mode = AdaptiveMode::Disabled; // rule 10
+    double infill_adaptive_interior_density = 20.0;            // percent, at the centre
+    AdaptiveGradient infill_adaptive_gradient = AdaptiveGradient::Linear;
     int infill_multiline = 1; // each sparse path as 1 to 10 touching lines, the same material (rule 13)
     double infill_max_link = 50.0;     // mm along the walls two sparse lines may be joined over (surfaces_infill.md, rule 7)
     // The filament's own values of these (rule 10), by name
@@ -1052,6 +1061,8 @@ const char* infill_pattern_name(InfillPattern pattern);
 const char* surface_pattern_name(SurfacePattern pattern);
 const char* fill_order_name(FillOrder order);
 const char* top_expansion_name(TopExpansion direction);
+const char* adaptive_mode_name(AdaptiveMode mode);
+const char* adaptive_gradient_name(AdaptiveGradient gradient);
 
 // The name of a flavor in the settings ("marlin", "no_extrusion"...).
 const char* flavor_name(GcodeFlavor flavor);

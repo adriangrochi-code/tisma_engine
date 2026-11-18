@@ -15484,3 +15484,25 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - **Falta (parte 2):** caminos en trapecio que no se cruzan consigo mismos para grilla, triángulos, tri-hexágono,
   cúbico, cúbico adaptativo, de soporte y panal 3D, con el patrón girando en cada capa. Hoy esos patrones usan las
   copias paralelas.
+
+**06:40 (Montevideo, 18-11) — O2, regla 10, parte 1: densidad adaptativa del gyroid (cáscaras escalonadas).**
+- Ajustes nuevos:
+  - `infill.adaptive_mode` (los ocho valores de la ficha, `disabled` de fábrica);
+  - `infill.adaptive_interior_density` (20 % de fábrica);
+  - `infill.adaptive_gradient` (`linear`, `quadratic` o `exponential`, con las fórmulas de la ficha).
+- Con gyroid y un modo prendido, el relleno se arma en cáscaras según la profundidad (`sparse_depth` con un campo de
+  0,5 mm y `deep_region`).
+  - Hay tantas cáscaras como el logaritmo de I/S en pasos de 1,5, y cada una va a la densidad de su profundidad media.
+  - Una pieza más fina que el campo usa el patrón normal.
+- **Decisión:** por ahora todos los modos usan las cáscaras escalonadas.
+  - `distance_warp` (un solo patrón con el período variando punto a punto) deforma mucho lejos del origen, porque la
+    fase cambia con x · Δk. Hay que armarlo con una fase integrada.
+  - `smooth_blend`, `lobes` y los `normal_*` quedan para después.
+  - TPMS-D y TPMS-FK no existen todavía en el motor.
+- En la interfaz, una subsección nueva, «Densidad adaptativa (experimental)», con los tres ajustes y su explicación.
+- Pruebas: todas bien (1147 casos). La nueva (`[surfaces][infill]`), parecida a OR9: un cubo de 40 mm con gyroid al 15 % y 5 % en el centro, lineal.
+  - Sin la opción, el largo de línea por mm² es parejo.
+  - Con ella, en el centro queda por debajo del 70 % de la franja junto a las caras.
+  - También se prueban las tres fórmulas.
+- La prueba de la regla 13 suma OR12: con cúbico al 15 % y 3 líneas, ningún camino se cruza consigo mismo.
+- **Siguiente:** `distance_warp` con fase integrada, o los modos que faltan.

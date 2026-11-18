@@ -4,6 +4,7 @@
 #include "slice/pipeline.hpp"
 #include "surfaces/surfaces.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -188,6 +189,44 @@ TEST_CASE("infill.separated: each part's infill centred on its own box (orca_2_5
     CHECK(points(own, 0, true) == points(shared, 0, true));
     CHECK(parse_settings(R"({"infill": {"separated": true}})").infill_separated);
     CHECK_THROWS(parse_settings(R"({"infill": {"separated": 1}})"));
+}
+
+TEST_CASE("infill.adaptive_mode: gyroid denser by the faces, sparser inside (orca_2_5.md, rule 10, OR9)", "[surfaces][infill]") {
+    CHECK(adaptive_density(0.15, 0.05, 0.5, AdaptiveGradient::Linear) == Catch::Approx(0.10));
+    CHECK(adaptive_density(0.15, 0.05, 0.5, AdaptiveGradient::Quadratic) == Catch::Approx(0.125));
+    CHECK(adaptive_density(0.15, 0.05, 0.5, AdaptiveGradient::Exponential) == Catch::Approx(0.15 * std::sqrt(1.0 / 3.0)));
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 40, 40, 40);
+    Settings s;
+    s.wall_width = s.outer_wall_width = 0.4;
+    s.infill_pattern = InfillPattern::Gyroid;
+    s.infill_density = 15.0;
+    s.infill_solid_below_area = 0.0;
+    // The sparse lines' length per mm2 at mid height: in a ring by the faces and in the middle.
+    const auto per_area = [](const SlicedModel& m) {
+        double ring = 0.0, middle = 0.0;
+        for (const Toolpath& t : m.fills[m.fills.size() / 2].sparse)
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const Point2d a = t.points[i - 1].p, b = t.points[i].p;
+                const double x = 0.5 * (a.x + b.x), y = 0.5 * (a.y + b.y), len = std::hypot(b.x - a.x, b.y - a.y);
+                if (std::abs(x - 20.0) < 6.0 && std::abs(y - 20.0) < 6.0)
+                    middle += len;
+                else if (std::min({x, y, 40.0 - x, 40.0 - y}) < 6.0)
+                    ring += len;
+            }
+        const double ring_area = 40.0 * 40.0 - 28.0 * 28.0, middle_area = 12.0 * 12.0;
+        return std::pair{ring / ring_area, middle / middle_area};
+    };
+    const auto [ring0, middle0] = per_area(slice_model(weld_exact(mesh), s));
+    CHECK(std::abs(ring0 - middle0) < 0.2 * ring0); // even without it
+    s.infill_adaptive_mode = AdaptiveMode::SteppedShells;
+    s.infill_adaptive_interior_density = 5.0;
+    const auto [ring1, middle1] = per_area(slice_model(weld_exact(mesh), s));
+    CHECK(middle1 < 0.7 * ring1); // sparser in the middle
+    CHECK(middle1 < 0.7 * middle0);
+    CHECK(parse_settings(R"({"infill": {"adaptive_mode": "distance_warp", "adaptive_gradient": "quadratic"}})")
+              .infill_adaptive_gradient == AdaptiveGradient::Quadratic);
+    CHECK_THROWS(parse_settings(R"({"infill": {"adaptive_mode": "wavy"}})"));
 }
 
 TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {

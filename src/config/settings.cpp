@@ -563,6 +563,49 @@ const std::map<std::string, TopExpansion>& top_expansions() {
 }
 } // namespace
 
+double adaptive_density(double surface, double interior, double t, AdaptiveGradient gradient) {
+    t = std::clamp(t, 0.0, 1.0);
+    switch (gradient) {
+    case AdaptiveGradient::Quadratic:
+        return surface + (interior - surface) * t * t;
+    case AdaptiveGradient::Exponential:
+        return surface > 0.0 && interior > 0.0 ? surface * std::pow(interior / surface, t) : surface + (interior - surface) * t;
+    default:
+        return surface + (interior - surface) * t;
+    }
+}
+
+namespace {
+const std::map<std::string, AdaptiveMode>& adaptive_modes() {
+    static const std::map<std::string, AdaptiveMode> m = {
+        {"disabled", AdaptiveMode::Disabled},   {"distance_warp", AdaptiveMode::DistanceWarp},
+        {"smooth_blend", AdaptiveMode::SmoothBlend}, {"stepped_shells", AdaptiveMode::SteppedShells},
+        {"lobes", AdaptiveMode::Lobes},         {"normal_z", AdaptiveMode::NormalZ},
+        {"normal_y", AdaptiveMode::NormalY},    {"normal_x", AdaptiveMode::NormalX}};
+    return m;
+}
+const std::map<std::string, AdaptiveGradient>& adaptive_gradients() {
+    static const std::map<std::string, AdaptiveGradient> g = {{"linear", AdaptiveGradient::Linear},
+                                                              {"quadratic", AdaptiveGradient::Quadratic},
+                                                              {"exponential", AdaptiveGradient::Exponential}};
+    return g;
+}
+} // namespace
+
+const char* adaptive_mode_name(AdaptiveMode mode) {
+    for (const auto& [name, m] : adaptive_modes())
+        if (m == mode)
+            return name.c_str();
+    return "disabled";
+}
+
+const char* adaptive_gradient_name(AdaptiveGradient gradient) {
+    for (const auto& [name, g] : adaptive_gradients())
+        if (g == gradient)
+            return name.c_str();
+    return "linear";
+}
+
 const char* top_expansion_name(TopExpansion direction) {
     for (const auto& [name, d] : top_expansions())
         if (d == direction)
@@ -1900,12 +1943,28 @@ Settings parse_checked(std::string_view text) {
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
                                 "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width", "before_walls",
-                                "max_link", "smooth_factor", "separated", "multiline"},
+                                "max_link", "smooth_factor", "separated", "multiline", "adaptive_mode",
+                                "adaptive_interior_density", "adaptive_gradient"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "before_walls") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             s.infill_before_walls = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "adaptive_mode") {
+            s.infill_adaptive_mode = choice<AdaptiveMode>(g, n, k, adaptive_modes());
+            return;
+        }
+        if (n == "adaptive_gradient") {
+            s.infill_adaptive_gradient = choice<AdaptiveGradient>(g, n, k, adaptive_gradients());
+            return;
+        }
+        if (n == "adaptive_interior_density") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.infill_adaptive_interior_density = v;
             return;
         }
         if (n == "multiline") {
@@ -3729,6 +3788,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.smooth_factor", num(s.infill_smooth_factor)},
         {"infill.separated", s.infill_separated ? "true" : "false"},
         {"infill.multiline", std::to_string(s.infill_multiline)},
+        {"infill.adaptive_mode", adaptive_mode_name(s.infill_adaptive_mode)},
+        {"infill.adaptive_interior_density", num(s.infill_adaptive_interior_density)},
+        {"infill.adaptive_gradient", adaptive_gradient_name(s.infill_adaptive_gradient)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
@@ -4346,6 +4408,9 @@ std::string settings_json(const Settings& s) {
           {"smooth_factor", s.infill_smooth_factor},
           {"separated", s.infill_separated},
           {"multiline", s.infill_multiline},
+          {"adaptive_mode", adaptive_mode_name(s.infill_adaptive_mode)},
+          {"adaptive_interior_density", s.infill_adaptive_interior_density},
+          {"adaptive_gradient", adaptive_gradient_name(s.infill_adaptive_gradient)},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},

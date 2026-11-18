@@ -314,6 +314,29 @@ TEST_CASE("infill.multiline: each path as N touching lines, the same material (o
         // until its own multiline paths (rule 13, part 2).
         CHECK(std::abs(three - one) < (pattern == InfillPattern::Cubic ? 0.08 : 0.03) * one);
     }
+    // OR12: cubic at 15 % with three lines, no path crosses itself.
+    {
+        FillParams p;
+        p.pattern = InfillPattern::Cubic;
+        p.density = 0.15;
+        p.multiline = 3;
+        const auto crosses = [](const Toolpath& t) {
+            const auto& q = t.points;
+            const auto side = [](Point2d a, Point2d b, Point2d c) {
+                return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+            };
+            for (std::size_t i = 1; i < q.size(); ++i)
+                for (std::size_t j = i + 2; j < q.size(); ++j) {
+                    const Point2d a = q[i - 1].p, b = q[i].p, c = q[j - 1].p, d = q[j].p;
+                    if (side(a, b, c) * side(a, b, d) < -1e-12 && side(c, d, a) * side(c, d, b) < -1e-12)
+                        return true;
+                }
+            return false;
+        };
+        for (const double z : {1.0, 5.0, 9.0})
+            for (const Toolpath& t : fill_layer(s, 0, p, z).sparse)
+                CHECK_FALSE(crosses(t));
+    }
     // A straight path becomes three lines a spacing apart, the middle one on it.
     Toolpath line;
     line.points = {{{0.0, 5.0}, 0.4}, {{10.0, 5.0}, 0.4}};

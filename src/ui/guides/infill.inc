@@ -222,6 +222,29 @@
      "delicate walls. In return, the infill pattern can show a little on the outside face of the part.\n\nExample: off "
      "for almost everything, especially parts meant to be seen; try turning it on if the inner walls come out loose or "
      "detached from the infill."},
+    {"infill.adaptive_mode",
+     "Solo con el relleno gyroid. Lo hace más denso junto a las paredes y las caras de arriba y abajo, donde la pieza "
+     "trabaja más, y más ralo en el centro, donde casi no hace falta. Ahorra material y tiempo. Es experimental: por "
+     "ahora todos los modos arman cáscaras, cada una algo más densa que la de adentro.\n\nEjemplo: cáscaras "
+     "escalonadas con 15 % afuera y 5 % en el centro.",
+     "Gyroid infill only. It makes the infill denser next to the walls and the top and bottom faces, where the part "
+     "works hardest, and sparser in the middle, where it is hardly needed. It saves material and time. It is "
+     "experimental: for now every mode builds shells, each a little denser than the one inside.\n\nExample: stepped "
+     "shells with 15 % outside and 5 % in the middle."},
+    {"infill.adaptive_interior_density",
+     "La densidad del relleno en el punto más hondo de la pieza, cuando la densidad adaptativa está prendida. Junto a "
+     "las paredes vale la densidad del relleno de siempre. Puede ser mayor que esa, para un núcleo más denso.\n\n"
+     "Ejemplo: 5 % con 15 % de relleno ahorra material en piezas grandes.",
+     "The infill density at the deepest point of the part, when adaptive density is on. Next to the walls the usual "
+     "infill density applies. It can be higher than that, for a denser core.\n\nExample: 5 % with 15 % infill saves "
+     "material on large parts."},
+    {"infill.adaptive_gradient",
+     "Cómo pasa la densidad de la de afuera a la del centro a medida que se entra en la pieza. «Lineal» cambia "
+     "parejo. «Cuadrática» se queda cerca de la de afuera más tiempo y cambia hacia el centro. «Exponencial» cambia en "
+     "proporción, rápido al principio.\n\nEjemplo: lineal casi siempre.",
+     "How the density goes from the outside one to the centre one as you go into the part. \"Linear\" changes "
+     "evenly. \"Quadratic\" stays near the outside one longer and changes towards the centre. \"Exponential\" "
+     "changes in proportion, quickly at first.\n\nExample: linear almost always."},
     {"infill.multiline",
      "Imprime cada camino del relleno de adentro como varias líneas pegadas, de 1 a 10. El dibujo se hace más grande en "
      "la misma proporción, así que se usa el mismo material: menos caminos, pero más gruesos. Con 1 (de fábrica), el "

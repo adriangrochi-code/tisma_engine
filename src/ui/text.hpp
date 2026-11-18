@@ -1876,6 +1876,21 @@
     X(SmoothFactor, "Suavizar las esquinas del relleno", "Smooth the infill's corners") \
     X(InfillSeparated, "Relleno separado por pieza", "Infill separated by part") \
     X(InfillMultiline, "Líneas por camino del relleno", "Lines per infill path") \
+    X(SubInfillAdaptive, "Densidad adaptativa (experimental)", "Adaptive density (experimental)") \
+    X(AdaptiveMode, "Modo", "Mode") \
+    X(AdaptiveInterior, "Densidad en el centro", "Density at the centre") \
+    X(AdaptiveGradient, "Cómo cambia", "How it changes") \
+    X(AdaptiveDisabled, "Apagada", "Off") \
+    X(AdaptiveDistanceWarp, "Deformada por la distancia", "Distance warp") \
+    X(AdaptiveSmoothBlend, "Mezcla suave", "Smooth blend") \
+    X(AdaptiveSteppedShells, "Cáscaras escalonadas", "Stepped shells") \
+    X(AdaptiveLobes, "Por lóbulos", "Lobes") \
+    X(AdaptiveNormalZ, "Por cortes en Z", "Normal to Z") \
+    X(AdaptiveNormalY, "Por cortes en Y", "Normal to Y") \
+    X(AdaptiveNormalX, "Por cortes en X", "Normal to X") \
+    X(GradientLinear, "Lineal", "Linear") \
+    X(GradientQuadratic, "Cuadrática", "Quadratic") \
+    X(GradientExponential, "Exponencial", "Exponential") \
     X(TopExpansion, "Expandir la superficie de arriba", "Expand the top surface") \
     X(TopExpansionMargin, "Distancia a las paredes", "Distance from the walls") \
     X(TopExpansionDirection, "Hacia dónde crece", "Which way it grows") \

@@ -2280,6 +2280,8 @@ const std::map<T, const char*>& row_keys() {
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::SmoothFactor, "infill.smooth_factor"}, {T::InfillSeparated, "infill.separated"},
         {T::InfillMultiline, "infill.multiline"},
+        {T::AdaptiveMode, "infill.adaptive_mode"}, {T::AdaptiveInterior, "infill.adaptive_interior_density"},
+        {T::AdaptiveGradient, "infill.adaptive_gradient"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
         {T::NonplanarRow, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
@@ -10149,6 +10151,25 @@ bool App::card_rows(std::string_view id, bool& bed) {
             }
             editing = ImGui::IsItemActive();
         }
+    } else if (id == "infill_adaptive") {
+        // Adaptive gyroid density (orca_2_5.md, rule 10), experimental.
+        if (shown("infill.adaptive_mode"))
+            changed |= row(T::AdaptiveMode, s.infill_adaptive_mode,
+                           {{AdaptiveMode::Disabled, tr(T::AdaptiveDisabled)},
+                            {AdaptiveMode::DistanceWarp, tr(T::AdaptiveDistanceWarp)},
+                            {AdaptiveMode::SmoothBlend, tr(T::AdaptiveSmoothBlend)},
+                            {AdaptiveMode::SteppedShells, tr(T::AdaptiveSteppedShells)},
+                            {AdaptiveMode::Lobes, tr(T::AdaptiveLobes)},
+                            {AdaptiveMode::NormalZ, tr(T::AdaptiveNormalZ)},
+                            {AdaptiveMode::NormalY, tr(T::AdaptiveNormalY)},
+                            {AdaptiveMode::NormalX, tr(T::AdaptiveNormalX)}});
+        mm(T::AdaptiveInterior, "infill.adaptive_interior_density", s.infill_adaptive_interior_density, 0.0, 100.0, "%.0f %%",
+           0.2f);
+        if (shown("infill.adaptive_gradient"))
+            changed |= row(T::AdaptiveGradient, s.infill_adaptive_gradient,
+                           {{AdaptiveGradient::Linear, tr(T::GradientLinear)},
+                            {AdaptiveGradient::Quadratic, tr(T::GradientQuadratic)},
+                            {AdaptiveGradient::Exponential, tr(T::GradientExponential)}});
     } else if (id == "infill_more") {
         mm(T::WallOverlap, "infill.wall_overlap", s.infill_wall_overlap, 0.0, 100.0, "%.0f %%", 0.5f);
         flag(T::InfillBeforeWalls, "infill.before_walls", s.infill_before_walls);

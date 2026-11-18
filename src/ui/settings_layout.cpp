@@ -98,6 +98,9 @@ const std::vector<SectionLayout>& print_layout() {
            {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}, {"infill.angles", A}, {"infill.smooth_factor", A},
             {"infill.separated", A},
             {"infill.multiline", A}}},
+          // Adaptive gyroid density (orca_2_5.md, rule 10), experimental.
+          {"infill_adaptive", T::SubInfillAdaptive,
+           {{"infill.adaptive_mode", A}, {"infill.adaptive_interior_density", A}, {"infill.adaptive_gradient", A}}},
           {"infill_more", T::SubInfillMore,
            {{"infill.wall_overlap", A},
             {"infill.solid_every", A},
@@ -686,6 +689,9 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.polyholes ? tr(T::SumOn) : tr(T::SumOff);
     if (id == "top_bottom")
         return format(T::SumTopBottom, s.top_layers, s.bottom_layers);
+    if (id == "infill_adaptive")
+        return s.infill_adaptive_mode == AdaptiveMode::Disabled ? std::string(tr(T::SumOff))
+                                                                : number(s.infill_adaptive_interior_density, 0) + " %";
     if (id == "top_expansion")
         return s.top_expansion > 0.0 ? (number(s.top_expansion, 2) + " mm") : std::string(tr(T::SumOff));
     if (id == "surface_angles")
