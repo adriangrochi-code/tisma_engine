@@ -15526,3 +15526,17 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
     (las capas macizas).
   - La prueba del cubo suma `normal_z`: el centro queda más ralo.
 - Siguen usando las cáscaras `distance_warp` (necesita una fase integrada) y `lobes`.
+
+**07:15 (Montevideo, 18-11) — O2, regla 10, parte 4: el modo `lobes`.**
+- `lobe_peaks` arma los lóbulos del campo de profundidad.
+  - Inunda los vóxeles de más hondo a menos hondo; cada punto más hondo local abre una cuenca.
+  - Dos cuencas que se tocan se unen si el punto donde se tocan está a más de 0,8 del pico de la menor (una ondita,
+    no un cuello).
+  - Cada vóxel guarda el pico de su lóbulo.
+- Con `lobes`, t es la profundidad dividida por el pico del lóbulo, con la misma mezcla que `smooth_blend`.
+- Pruebas: todas bien (1148 casos).
+  - `[adaptive]`: un cuadrado de 30 mm y uno de 12 mm unidos por una barra de 2 mm. El pico del chico es el suyo
+    (unos 6 mm), no el del grande, así que su centro llega a t ≈ 1.
+  - En el cubo, `lobes` deja el centro más ralo.
+- De la regla 10 solo falta `distance_warp`, que necesita una fase integrada y hoy usa las cáscaras, y TPMS-D y
+  TPMS-FK, que no existen todavía en el motor.

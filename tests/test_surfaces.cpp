@@ -235,6 +235,10 @@ TEST_CASE("infill.adaptive_mode: gyroid denser by the faces, sparser inside (orc
     s.infill_adaptive_mode = AdaptiveMode::NormalZ;
     const auto [ring3, middle3] = per_area(slice_model(weld_exact(mesh), s));
     CHECK(middle3 < 0.8 * ring3);
+    // lobes: one lobe in a cube, the same gradient.
+    s.infill_adaptive_mode = AdaptiveMode::Lobes;
+    const auto [ring4, middle4] = per_area(slice_model(weld_exact(mesh), s));
+    CHECK(middle4 < 0.8 * ring4);
     CHECK(parse_settings(R"({"infill": {"adaptive_mode": "distance_warp", "adaptive_gradient": "quadratic"}})")
               .infill_adaptive_gradient == AdaptiveGradient::Quadratic);
     CHECK_THROWS(parse_settings(R"({"infill": {"adaptive_mode": "wavy"}})"));

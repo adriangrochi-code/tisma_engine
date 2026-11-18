@@ -57,6 +57,15 @@ enum class DepthFrom { Surfaces, TopsAndWalls, PlaneX, PlaneY, PlaneZ };
 DepthField sparse_depth(const std::vector<Polygons>& sparse, const std::vector<Layer>& layers, double cell,
                         DepthFrom from = DepthFrom::Surfaces, std::size_t max_voxels = std::size_t(1) << 22);
 
+// The lobes of the field (orca_2_5.md, rule 10): each voxel's lobe's deepest
+// depth, 0 outside. A lobe is a basin flooded from a deepest point, the
+// voxels taken deepest first; two basins that meet become one when the
+// depth where they meet is more than `merge` of the shallower one's peak (a
+// ripple, not a neck).
+std::vector<float> lobe_peaks(const DepthField& field, double merge = 0.8);
+// A grid's value at the voxel that holds a point, 0 off the grid.
+float voxel_at(const DepthField& field, const std::vector<float>& grid, double x, double y, double z);
+
 // Where, in the plane at height z, the infill is at least `depth` mm deep.
 Polygons deep_region(const DepthField& field, double z, double depth);
 

@@ -108,6 +108,31 @@ TEST_CASE("distance transform: exact, against every pair", "[adaptive]") {
             }
 }
 
+TEST_CASE("lobe_peaks: each lobe towards its own deepest point (orca_2_5.md, rule 10)", "[adaptive]") {
+    // A 30 mm square and a 12 mm one joined by a 2 mm bar, 40 mm tall.
+    Block b;
+    Polygons shape = Clipper2Lib::Union(square(0, 0, 30), square(40, 9, 12), Clipper2Lib::FillRule::NonZero);
+    shape = Clipper2Lib::Union(shape,
+                               Polygons{{{to_units(29), to_units(14)}, {to_units(41), to_units(14)},
+                                         {to_units(41), to_units(16)}, {to_units(29), to_units(16)}}},
+                               Clipper2Lib::FillRule::NonZero);
+    for (double z = 0.0; z + 0.1 < 40.0; z += 0.2) {
+        b.layers.push_back({z, z + 0.2});
+        b.sparse.push_back(z >= 1.0 - 1e-9 && z + 0.2 <= 39.0 + 1e-9 ? shape : Polygons{});
+    }
+    const DepthField f = sparse_depth(b.sparse, b.layers, 0.5);
+    REQUIRE_FALSE(f.empty());
+    const std::vector<float> peaks = lobe_peaks(f);
+    const double big = voxel_at(f, peaks, 15.0, 15.0, 20.0), small = voxel_at(f, peaks, 46.0, 15.0, 20.0);
+    CHECK_THAT(big, WithinAbs(f.deepest, 0.6));
+    CHECK_THAT(small, WithinAbs(6.0, 0.8)); // its own peak, not the big one's
+    // So the small one's centre is as deep, for its lobe, as the big one's is for its own.
+    CHECK(f.at(46.0, 15.0, 20.0) / small > 0.8);
+    CHECK(f.at(46.0, 15.0, 20.0) / f.deepest < 0.5);
+    // Outside, nothing.
+    CHECK(voxel_at(f, peaks, 35.0, 30.0, 20.0) == 0.0f);
+}
+
 TEST_CASE("depth field: how deep a block of sparse infill is", "[adaptive]") {
     // 30 mm square, sparse from z 1 to 19.
     const Block b = block(30.0, 20.0, 1.0, 19.0);

@@ -219,6 +219,65 @@ DepthField sparse_depth(const std::vector<Polygons>& sparse, const std::vector<L
     return f;
 }
 
+std::vector<float> lobe_peaks(const DepthField& f, double merge) {
+    const std::size_t n = f.depth.size();
+    std::vector<float> out(n, 0.0f);
+    std::vector<std::size_t> order;
+    for (std::size_t c = 0; c < n; ++c)
+        if (f.depth[c] > 0.0f)
+            order.push_back(c);
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) { return f.depth[a] > f.depth[b]; });
+    constexpr std::size_t kNone = std::size_t(-1);
+    std::vector<std::size_t> basin(n, kNone), parent;
+    std::vector<float> peak;
+    const auto find = [&](std::size_t b) {
+        while (parent[b] != b)
+            b = parent[b] = parent[parent[b]];
+        return b;
+    };
+    const std::size_t sx = std::size_t(f.nx), sxy = std::size_t(f.nx) * std::size_t(f.ny);
+    for (const std::size_t c : order) {
+        const int i = int(c % sx), j = int((c / sx) % std::size_t(f.ny)), k = int(c / sxy);
+        std::vector<std::size_t> near;
+        const int step[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+        for (const auto& s : step) {
+            const int a = i + s[0], b = j + s[1], d = k + s[2];
+            if (a < 0 || b < 0 || d < 0 || a >= f.nx || b >= f.ny || d >= f.nz)
+                continue;
+            const std::size_t m = f.index(a, b, d);
+            if (basin[m] != kNone) {
+                const std::size_t r = find(basin[m]);
+                if (std::find(near.begin(), near.end(), r) == near.end())
+                    near.push_back(r);
+            }
+        }
+        if (near.empty()) { // a new deepest point
+            basin[c] = parent.size();
+            parent.push_back(parent.size());
+            peak.push_back(f.depth[c]);
+            continue;
+        }
+        // The deepest basin takes the voxel; the others join it if this is no neck.
+        std::sort(near.begin(), near.end(), [&](std::size_t a, std::size_t b) { return peak[a] > peak[b]; });
+        const std::size_t main = near.front();
+        for (std::size_t q = 1; q < near.size(); ++q)
+            if (f.depth[c] > merge * std::min(peak[main], peak[near[q]]))
+                parent[near[q]] = main;
+        basin[c] = main;
+    }
+    for (const std::size_t c : order)
+        out[c] = peak[find(basin[c])];
+    return out;
+}
+
+float voxel_at(const DepthField& f, const std::vector<float>& grid, double x, double y, double z) {
+    const int i = int(std::floor((x - f.x0) / f.cell)), j = int(std::floor((y - f.y0) / f.cell)),
+              k = int(std::floor((z - f.z0) / f.cell));
+    if (i < 0 || j < 0 || k < 0 || i >= f.nx || j >= f.ny || k >= f.nz || grid.size() != f.depth.size())
+        return 0.0f;
+    return grid[f.index(i, j, k)];
+}
+
 double DepthField::at(double x, double y, double z) const {
     if (depth.empty())
         return 0.0;

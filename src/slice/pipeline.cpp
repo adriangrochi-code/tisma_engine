@@ -3097,8 +3097,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // about 1.5 times denser than the one inside, from infill.density at the
     // surfaces to the interior density at the deepest point, by how deep
     // each point lies (a 0.5 mm field); smooth_blend and the normal_* modes
-    // (depth within the planes normal to their axis) blend them in one field;
-    // distance_warp and lobes use the shells for now.
+    // (depth within the planes normal to their axis) and lobes (each lobe
+    // towards its own deepest point) blend them in one field; distance_warp
+    // uses the shells for now.
     DepthField gyroid_depth;
     if (ip == InfillPattern::Gyroid && settings.infill_adaptive_mode != AdaptiveMode::Disabled &&
         settings.infill_density > 0.0 && settings.infill_density < 100.0) {
@@ -3112,6 +3113,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                     : m == AdaptiveMode::NormalZ ? DepthFrom::PlaneZ
                                                                  : DepthFrom::Surfaces);
     }
+    // lobes: each part joined to the rest by a neck towards its own centre.
+    const std::vector<float> lobes = settings.infill_adaptive_mode == AdaptiveMode::Lobes && !gyroid_depth.empty()
+                                         ? lobe_peaks(gyroid_depth)
+                                         : std::vector<float>{};
     const auto gyroid_shells = [&](std::size_t l, const FillParams& params) {
         std::vector<Toolpath> sparse;
         const double S = settings.infill_density / 100.0, I = settings.infill_adaptive_interior_density / 100.0;
@@ -3125,14 +3130,17 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         // The normal_* modes blend too, by the depth within their planes.
         const AdaptiveMode m = settings.infill_adaptive_mode;
         if ((m == AdaptiveMode::SmoothBlend || m == AdaptiveMode::NormalX || m == AdaptiveMode::NormalY ||
-             m == AdaptiveMode::NormalZ) &&
+             m == AdaptiveMode::NormalZ || m == AdaptiveMode::Lobes) &&
             S > 0.0 && I > 0.0) {
             std::vector<double> levels(std::size_t(n) + 1);
             for (int k = 0; k <= n; ++k)
                 levels[std::size_t(k)] = S * std::pow(I / S, double(k) / n);
             const double finest = gyroid_period(ws, std::min(1.0, std::max(S, I)));
             const GyroidField field = [&](double x, double y) {
-                const double t = deep > 0.0 ? gyroid_depth.at(x, y, z) / deep : 0.0;
+                // t from the surface (0) to the deepest point (1): of the
+                // whole part, or of the point's own lobe.
+                const double own = lobes.empty() ? deep : double(voxel_at(gyroid_depth, lobes, x, y, z));
+                const double t = own > 0.0 ? std::min(1.0, gyroid_depth.at(x, y, z) / own) : 0.0;
                 const double rho = adaptive_density(S, I, t, settings.infill_adaptive_gradient);
                 // The pair of levels round rho, or the end nearest it.
                 std::size_t k = std::abs(rho - levels.front()) <= std::abs(rho - levels.back()) ? 0 : levels.size() - 2;
