@@ -212,6 +212,10 @@ wiki no da los eligió la ficha; con el ajuste principal apagado no cambian nada
       en trapecio que no se cruzan a sí mismos, y el patrón gira en cada capa;
     - en cúbico, los caminos siguen las mismas líneas que el patrón de una sola línea; en cúbico adaptativo y de
       soporte, en cada tamaño de cubo.
+    - **la densidad no cambia** (wiki de OrcaSlicer, «Fill Multiline»: mantiene la densidad pedida y el material):
+      con N líneas, el patrón se dibuja N veces más grande y cada camino va como N líneas pegadas, así que el largo
+      total de línea y los gramos son los mismos que con 1. Prueba OR12 con `infill.multiline` 3: los gramos de
+      relleno quedan dentro del 3 % de los de 1 (lo que cambia es dónde va el material, no cuánto);
 
 13 bis. **Espiral hacia adentro** (patrón `spiral_inset` para `surfaces.top_pattern`, `surfaces.bottom_pattern`, el
 relleno sólido interno y `support.interface_pattern`; wiki, patrones):
