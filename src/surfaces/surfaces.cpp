@@ -144,13 +144,16 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
     return out;
 }
 
-void expand_top_surfaces(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygons>& infill, double distance,
-                         double margin, TopExpansionDirection direction) {
+std::vector<Polygons> expand_top_surfaces(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygons>& infill,
+                                          double distance, double margin, TopExpansionDirection direction,
+                                          const std::vector<Polygons>* regions, double outer_band) {
+    std::vector<Polygons> gained(surfaces.size());
     if (!(distance > 0.0))
-        return;
+        return gained;
     tbb::parallel_for(std::size_t(0), surfaces.size(), [&](std::size_t l) {
         LayerSurfaces& s = surfaces[l];
-        if (s.top.empty() || s.sparse.empty() || l >= infill.size())
+        const bool walls = regions && l < regions->size();
+        if (s.top.empty() || (s.sparse.empty() && !walls) || l >= infill.size())
             return;
         const Polygons surface = s.top_under.empty() ? s.top : Clipper2Lib::Difference(s.top, s.top_under, FillRule::NonZero);
         if (surface.empty())
@@ -174,14 +177,25 @@ void expand_top_surfaces(std::vector<LayerSurfaces>& surfaces, const std::vector
             }
             grown = Clipper2Lib::Difference(offset(outers, distance), holes, FillRule::NonZero);
         }
-        const Polygons allowed = margin > 0.0 ? offset(infill[l], -margin) : infill[l];
-        const Polygons added = Clipper2Lib::Intersect(Clipper2Lib::Intersect(grown, allowed, FillRule::NonZero),
-                                                      s.sparse, FillRule::NonZero);
+        // Where it may grow: the sparse infill and, with the regions, the
+        // inner walls' band, as far as the outer wall less the margin.
+        const Polygons allowed = walls ? offset((*regions)[l], -(outer_band + margin))
+                                 : margin > 0.0 ? offset(infill[l], -margin)
+                                                : infill[l];
+        const Polygons takeable =
+            walls ? Clipper2Lib::Union(s.sparse, Clipper2Lib::Difference((*regions)[l], infill[l], FillRule::NonZero),
+                                       FillRule::NonZero)
+                  : s.sparse;
+        Polygons added = Clipper2Lib::Intersect(Clipper2Lib::Intersect(grown, allowed, FillRule::NonZero), takeable,
+                                                FillRule::NonZero);
+        added = Clipper2Lib::Difference(added, s.top, FillRule::NonZero);
         if (added.empty())
             return;
         s.top = Clipper2Lib::Union(s.top, added, FillRule::NonZero);
         s.sparse = Clipper2Lib::Difference(s.sparse, added, FillRule::NonZero);
+        gained[l] = std::move(added);
     });
+    return gained;
 }
 
 } // namespace tisma

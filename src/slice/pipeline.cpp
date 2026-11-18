@@ -3,6 +3,7 @@
 #include "slice/pipeline.hpp"
 
 #include "slice/job.hpp"
+#include "slice/local_layers.hpp"
 
 #include "adhesion/adhesion.hpp"
 #include "gcode/order.hpp"
@@ -2425,11 +2426,38 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                            skin_counts(stack.share, bottom_count, -1), settings.wall_width, &slopes)
                        : classify_surfaces(skins, infill, top_count * ratio, bottom_count * ratio,
                                            settings.wall_width, &slopes);
-    // The top surface grows before the bridges are found (orca_2_5.md, rule 7).
-    expand_top_surfaces(out.surfaces, infill, settings.top_expansion, settings.top_expansion_margin,
-                        settings.top_expansion_direction == TopExpansion::Inward    ? TopExpansionDirection::Inward
-                        : settings.top_expansion_direction == TopExpansion::Outward ? TopExpansionDirection::Outward
-                                                                                    : TopExpansionDirection::Both);
+    // The top surface grows before the bridges are found (orca_2_5.md, rule
+    // 7), over the inner walls' band too; the inner walls it covers go, the
+    // outer wall of each island stays.
+    if (settings.top_expansion > 0.0) {
+        double outer = 0.0;
+        for (const LayerWalls& w : out.walls)
+            for (const Toolpath& t : w.toolpaths)
+                if (t.index == 0)
+                    for (const ToolpathPoint& q : t.points)
+                        outer = std::max(outer, q.width);
+        const std::vector<Polygons> gained = expand_top_surfaces(
+            out.surfaces, infill, settings.top_expansion, settings.top_expansion_margin,
+            settings.top_expansion_direction == TopExpansion::Inward    ? TopExpansionDirection::Inward
+            : settings.top_expansion_direction == TopExpansion::Outward ? TopExpansionDirection::Outward
+                                                                        : TopExpansionDirection::Both,
+            &out.regions, outer > 0.0 ? outer : settings.wall_width);
+        tbb::parallel_for(std::size_t(0), gained.size(), [&](std::size_t l) {
+            if (gained[l].empty() || l >= out.walls.size())
+                return;
+            std::vector<Toolpath> kept;
+            for (Toolpath& t : out.walls[l].toolpaths) {
+                if (t.index == 0) {
+                    kept.push_back(std::move(t));
+                    continue;
+                }
+                for (Toolpath& piece : clip_toolpaths({t}, gained[l], false))
+                    if (piece.points.size() >= 2)
+                        kept.push_back(std::move(piece));
+            }
+            out.walls[l].toolpaths = std::move(kept);
+        });
+    }
     // What the other extruders' parts lay counts as printed below.
     std::vector<Polygons> others;
     if (frame && frame->cover) {

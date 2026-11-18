@@ -15388,3 +15388,18 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - Pruebas: todas bien (1141 casos). La nueva de `[infill]`: el ángulo recto se vuelve curva de (5, 0) a (10, 5), la horquilla queda en punta y las
   puntas de los extremos no se mueven.
 - **Siguiente:** reglas 12 (relleno separado por pieza) y 13 (varias líneas).
+
+**04:15 (Montevideo, 18-11) — O2, regla 7, parte 2: la superficie agrandada se queda con las paredes internas.**
+- Con `top_expansion` mayor que 0, la superficie también puede crecer sobre la banda de las paredes internas de la
+  misma capa, hasta la pared de afuera de cada isla menos el margen. Las paredes internas (índice > 0) que quedan en
+  lo agregado se recortan con `clip_toolpaths`.
+- Esto cubre las paredes de ancho fijo enteras y, en las de ancho variable, solo el tramo cubierto. Las paredes de
+  afuera no cambian.
+- Pruebas: todas bien (1142 casos). La nueva, O2-7b (`[surfaces]`): una placa de 20 × 20 × 5 con un agujero de 6 mm, 3 paredes y 2 mm hacia adentro. En la
+  última capa no queda ninguna pared interna junto al agujero, las paredes internas del borde de afuera siguen igual,
+  las paredes de afuera son las mismas y la superficie crece más de 10 mm². Las capas de abajo no cambian.
+- Me quedó una duda, sin preguntarla todavía: con `outward` o `inward_and_outward` (el valor de fábrica), también se
+  van las paredes internas del borde de afuera de cada isla. Es lo que sale de «se quedan la pared de afuera de cada
+  isla».
+- Con esto la regla 7 queda hecha. Faltan en O2 la regla 10 (gyroid y TPMS adaptativos), la 12 (separado por pieza),
+  la 13 (varias líneas) y la 13 bis (espiral hacia adentro).

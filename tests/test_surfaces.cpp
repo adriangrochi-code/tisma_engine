@@ -91,6 +91,54 @@ TEST_CASE("surfaces.top_expansion: the top surface grows into the infill (orca_2
     CHECK_THROWS(parse_settings(R"({"surfaces": {"top_expansion_direction": "up"}})"));
 }
 
+TEST_CASE("O2-7b: the expanded top surface takes the inner walls round a hole (orca_2_5.md, rule 7)", "[surfaces]") {
+    // A 20 x 20 x 5 mm plate with a 6 mm square hole in the middle, of four boxes.
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 20, 7.5f, 5);
+    add_box(mesh, 0, 12.5f, 0, 20, 20, 5);
+    add_box(mesh, 0, 7, 0, 7, 13, 5);
+    add_box(mesh, 13, 7, 0, 20, 13, 5);
+    Settings s; // 3 walls, 3 top layers
+    s.wall_width = s.outer_wall_width = 0.4;
+    s.infill_solid_below_area = 0.0;
+    // The inner walls (index > 0) of the last layer by the hole and by the plate's edge.
+    const auto inner_walls = [](const SlicedModel& m) {
+        int hole = 0, edge = 0;
+        for (const Toolpath& t : m.walls.back().toolpaths) {
+            if (t.index == 0)
+                continue;
+            for (const ToolpathPoint& q : t.points) {
+                if (q.p.x > 5.5 && q.p.x < 14.5 && q.p.y > 5.5 && q.p.y < 14.5)
+                    ++hole;
+                if (q.p.x < 1.5 || q.p.x > 18.5 || q.p.y < 1.5 || q.p.y > 18.5)
+                    ++edge;
+            }
+        }
+        return std::pair{hole, edge};
+    };
+    const SlicedModel plain = slice_model(weld_exact(mesh), s);
+    const auto [hole_before, edge_before] = inner_walls(plain);
+    CHECK(hole_before > 0);
+    CHECK(edge_before > 0);
+    s.top_expansion = 2.0;
+    s.top_expansion_direction = TopExpansion::Inward;
+    const SlicedModel grown = slice_model(weld_exact(mesh), s);
+    const auto [hole_after, edge_after] = inner_walls(grown);
+    CHECK(hole_after == 0);       // only the wall touching the hole stays round it
+    CHECK(edge_after == edge_before); // the plate's edge keeps its 3 walls
+    // The outer walls are all still there, and the surface reaches the hole's wall.
+    const auto outer = [](const SlicedModel& m) {
+        int n = 0;
+        for (const Toolpath& t : m.walls.back().toolpaths)
+            n += t.index == 0;
+        return n;
+    };
+    CHECK(outer(grown) == outer(plain));
+    CHECK(area_mm2(grown.surfaces.back().top) > area_mm2(plain.surfaces.back().top) + 10.0);
+    // The layers under the top surface keep their walls.
+    CHECK(grown.walls.front().toolpaths.size() == plain.walls.front().toolpaths.size());
+}
+
 TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {
     // Ten layers of a 10 mm square; the infill is the whole square.
     const std::vector<Polygons> regions(10, square(0, 0, 10));
