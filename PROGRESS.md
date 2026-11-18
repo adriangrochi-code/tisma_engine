@@ -180,7 +180,7 @@ triángulos por capas antes de cortar.
     modelo o por encima: la altura impresa se redondea a la capa más cercana.
   - `slice_levels` corta todos los niveles de un campo. Cada triángulo se reparte en los niveles que cruza su rango
     de valores, y cada nivel corta solo sus triángulos. Sirve igual para un campo curvo (regla 1 del diseño).
-- Pruebas: todas bien (1147 casos).
+- Pruebas:
   - plan de capas, y alturas no válidas;
   - cubo: 50 capas de 100 mm²;
   - pirámide: el área de cada capa coincide con el área exacta de la sección (10 − z)², con error menor a 0,001 mm²;
@@ -11473,7 +11473,7 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Al conectar, la interfaz llena los datos vacíos del perfil (regla 4) con un aviso «N datos del perfil tomados de la
   impresora (firmware)». Si la cama está vacía y la impresora no informa su tamaño, avisa que hay que escribirlo a mano
   (regla 6).
-- Pruebas: todas bien (1147 casos).
+- Pruebas:
   - `[device]`: el simulador da el área de trabajo y los límites;
   - `ui_device_limits`: aparece el aviso al conectar.
 - **Falta:** Moonraker (toolhead y configfile al probar la conexión), la lista para aceptar uno por uno lo que difiere,
