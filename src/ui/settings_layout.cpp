@@ -594,6 +594,10 @@ const char* pattern_title(InfillPattern pattern) {
         return tr(T::OctagramInfill);
     case InfillPattern::Honeycomb3d:
         return tr(T::Honeycomb3d);
+    case InfillPattern::TpmsD:
+        return tr(T::TpmsD);
+    case InfillPattern::TpmsFk:
+        return tr(T::TpmsFk);
     }
     return "";
 }

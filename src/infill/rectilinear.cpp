@@ -299,6 +299,8 @@ std::size_t fill_period(const FillParams& params) {
         return 2;
     switch (params.pattern) {
     case InfillPattern::Gyroid:
+    case InfillPattern::TpmsD:
+    case InfillPattern::TpmsFk:
     case InfillPattern::Cubic:
     case InfillPattern::AdaptiveCubic:
     case InfillPattern::SupportCubic:
@@ -653,6 +655,17 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     case InfillPattern::Gyroid:
         out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(ws, params.density), z, w);
         break;
+    case InfillPattern::TpmsD:
+    case InfillPattern::TpmsFk: {
+        // Schwarz D and Fischer-Koch S (orca_2_5.md, rule 10), marched like
+        // the gyroid with the period their own length per area gives.
+        const Tpms kind = params.pattern == InfillPattern::TpmsD ? Tpms::SchwarzD : Tpms::FischerKochS;
+        const double period = tpms_period(kind, ws, params.density);
+        const GyroidField field = [&](double x, double y) { return tpms_value(kind, x, y, z, period); };
+        // Fischer-Koch S has twice the frequency in each term: a finer grid.
+        out.sparse = gyroid_fill(surfaces.sparse, kind == Tpms::FischerKochS ? 0.5 * period : period, z, w, &field);
+        break;
+    }
     case InfillPattern::Triangles:
     case InfillPattern::Stars:
     case InfillPattern::Cubic: {

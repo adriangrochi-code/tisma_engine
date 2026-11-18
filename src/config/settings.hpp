@@ -34,7 +34,7 @@ enum class AdaptiveMode { Disabled, DistanceWarp, SmoothBlend, SteppedShells, Lo
 enum class AdaptiveGradient { Linear, Quadratic, Exponential };
 // S + (I - S) t, S + (I - S) t^2, or S (I / S)^t.
 double adaptive_density(double surface, double interior, double t, AdaptiveGradient gradient);
-enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram, Honeycomb3d };
+enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram, Honeycomb3d, TpmsD, TpmsFk };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
 // how the others differ in src/gcode/dialect.hpp.

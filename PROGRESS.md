@@ -15560,3 +15560,19 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 nueva queda a menos de 2 % (sin ajustar, 4,7 %). Prueba completa en segundo plano.
 
 **Sigue:** la interfaz y guardar los registros por impresora (regla 15) y la regla 11. No probado en una impresora.
+
+## 2026-11-18 — orca_2_5.md regla 10: patrones TPMS-D y TPMS-FK, y `distance_warp`
+
+**Hecho** (con las respuestas de QA):
+- `infill.pattern` acepta `tpms_d` (Schwarz D) y `tpms_fk` (Fischer–Koch S), marchados como el gyroid, con su
+  período por el largo por área medido (3,44 y 4,40 contra 2,61 del gyroid). Valen sin el modo adaptativo; el modo
+  adaptativo sigue siendo del gyroid.
+- `infill.adaptive_mode = distance_warp`: un solo gyroid continuo deformado alrededor del punto más hondo, con el
+  período que pide la densidad de cada profundidad a lo largo de cada rayo desde el centro (diseño propio, en
+  PROVENANCE.md). Ya no usa las cáscaras.
+
+**Pruebas:** la nueva de TPMS (puntos sobre la superficie, 21,4 % y 19,8 % de material a 20 %) y la del modo
+adaptativo con `distance_warp` (más ralo en el medio, menos trozos que las cáscaras) pasan; `[infill]`, `[surfaces]`
+y `[settings]` pasan. Prueba completa en segundo plano. No probado en una impresora.
+
+**Sigue:** O2: regla 13 parte 2 (trapecios), ancho variable después de la beta.

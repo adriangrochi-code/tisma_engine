@@ -265,7 +265,9 @@ double infill_strength_exponent(InfillPattern pattern) {
     case InfillPattern::AdaptiveCubic:
     case InfillPattern::SupportCubic:
     case InfillPattern::Octagram: return 1.4;
-    case InfillPattern::Gyroid: return 1.5;
+    case InfillPattern::Gyroid:
+    case InfillPattern::TpmsD:
+    case InfillPattern::TpmsFk: return 1.5;
     case InfillPattern::Lightning: return 2.5;
     default: return 1.2;
     }

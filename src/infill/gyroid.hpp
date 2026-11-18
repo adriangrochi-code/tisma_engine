@@ -35,10 +35,40 @@ inline double gyroid_value(double x, double y, double z, double period) {
     return std::sin(k * x) * std::cos(k * y) + std::sin(k * y) * std::cos(k * z) + std::sin(k * z) * std::cos(k * x);
 }
 
+// Two more triply periodic minimal surfaces marched the same way
+// (orca_2_5.md, rule 10), by their usual level-set approximations:
+// Schwarz D (Diamond), cos X cos Y cos Z - sin X sin Y sin Z = 0, and
+// Fischer-Koch S, cos 2X sin Y cos Z + cos X cos 2Y sin Z + sin X cos Y cos 2Z = 0.
+enum class Tpms { Gyroid, SchwarzD, FischerKochS };
+inline double tpms_value(Tpms kind, double x, double y, double z, double period) {
+    const double k = 2.0 * 3.14159265358979323846 / period;
+    const double X = k * x, Y = k * y, Z = k * z;
+    switch (kind) {
+    case Tpms::SchwarzD:
+        return std::cos(X) * std::cos(Y) * std::cos(Z) - std::sin(X) * std::sin(Y) * std::sin(Z);
+    case Tpms::FischerKochS:
+        return std::cos(2.0 * X) * std::sin(Y) * std::cos(Z) + std::cos(X) * std::cos(2.0 * Y) * std::sin(Z) +
+               std::sin(X) * std::cos(Y) * std::cos(2.0 * Z);
+    case Tpms::Gyroid:
+        break;
+    }
+    return gyroid_value(x, y, z, period);
+}
+
 // The period for a density (0 to 1) with beads of this width: at fixed z the
 // curves are about 2.61 / period long per unit area (measured numerically,
 // averaged over z), and the material is that length times the width.
 inline constexpr double kGyroidLengthPerArea = 2.61;
 inline double gyroid_period(double width, double density) { return kGyroidLengthPerArea * width / density; }
+// The same for Schwarz D (3.44) and Fischer-Koch S (4.40), measured the same
+// way against the gyroid's 2.61.
+inline constexpr double kSchwarzDLengthPerArea = 3.44;
+inline constexpr double kFischerKochLengthPerArea = 4.40;
+inline double tpms_period(Tpms kind, double width, double density) {
+    const double c = kind == Tpms::SchwarzD       ? kSchwarzDLengthPerArea
+                     : kind == Tpms::FischerKochS ? kFischerKochLengthPerArea
+                                                  : kGyroidLengthPerArea;
+    return c * width / density;
+}
 
 } // namespace tisma

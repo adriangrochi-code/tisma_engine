@@ -534,6 +534,8 @@
     X(Zigzag, "Zigzag", "Zigzag")                                                                                     \
     X(LineInfill, "Línea", "Line")                                                                                    \
     X(Honeycomb3d, "Panal 3D", "3D honeycomb")                                                                     \
+    X(TpmsD, "TPMS-D (Schwarz D)", "TPMS-D (Schwarz D)")                                                           \
+    X(TpmsFk, "TPMS-FK (Fischer-Koch S)", "TPMS-FK (Fischer-Koch S)")                                              \
     X(Honeycomb, "Panal", "Honeycomb")                                                                                \
     X(ConcentricInfill, "Concéntrico", "Concentric")                                                                  \
     X(HilbertInfill, "Hilbert", "Hilbert")                                                                            \

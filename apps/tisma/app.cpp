@@ -10108,6 +10108,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {InfillPattern::Lightning, tr(T::Lightning)},
                             {InfillPattern::Honeycomb, tr(T::Honeycomb)},
                             {InfillPattern::Honeycomb3d, tr(T::Honeycomb3d)},
+                            {InfillPattern::TpmsD, tr(T::TpmsD)},
+                            {InfillPattern::TpmsFk, tr(T::TpmsFk)},
                             {InfillPattern::Concentric, tr(T::ConcentricInfill)},
                             {InfillPattern::Hilbert, tr(T::HilbertInfill)},
                             {InfillPattern::Archimedean, tr(T::ArchimedeanInfill)},

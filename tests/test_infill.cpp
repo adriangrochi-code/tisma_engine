@@ -594,6 +594,45 @@ TEST_CASE("gyroid infill: points on the surface, the density's material, curves 
     CHECK(fill_layer(s, 0, p, 0.3).sparse.size() == at0.size());
 }
 
+TEST_CASE("TPMS-D and TPMS-FK infill: points on their surfaces, the density's material (orca_2_5.md, rule 10)", "[infill]") {
+    const Polygons region = square(0, 0, 20);
+    LayerSurfaces s;
+    s.sparse = region;
+    for (const auto [pattern, kind] : {std::pair{InfillPattern::TpmsD, Tpms::SchwarzD},
+                                       std::pair{InfillPattern::TpmsFk, Tpms::FischerKochS}}) {
+        INFO("pattern " << int(pattern));
+        FillParams p;
+        p.pattern = pattern;
+        p.density = 0.2;
+        p.width = 0.4;
+        p.overlap = 0.0;
+        CHECK(fill_period(p) == 0); // changes with z, never repeats by layers
+        const double period = tpms_period(kind, 0.4, 0.2);
+        const LayerFill at = fill_layer(s, 0, p, 0.7);
+        REQUIRE_FALSE(at.sparse.empty());
+        double worst = 0.0;
+        for (const Toolpath& t : at.sparse)
+            for (const ToolpathPoint& q : t.points) {
+                const bool on_boundary = std::fabs(q.p.x - 0.2) < 1e-3 || std::fabs(q.p.x - 19.8) < 1e-3 ||
+                                         std::fabs(q.p.y - 0.2) < 1e-3 || std::fabs(q.p.y - 19.8) < 1e-3;
+                if (!on_boundary)
+                    worst = std::max(worst, std::fabs(tpms_value(kind, q.p.x, q.p.y, 0.7, period)));
+            }
+        CHECK(worst < 0.02);
+        // About the density's material, averaged over a period of z (the
+        // joins along the edge add a little, as with the gyroid).
+        double laid = 0.0;
+        const int heights = 8;
+        for (int i = 0; i < heights; ++i)
+            laid += measure_coverage(region, fill_layer(s, 0, p, period * i / heights).sparse).deposited;
+        laid /= heights;
+        std::printf("tpms %d at 20%% on a 20 mm square: lays %.1f%%\n", int(pattern), laid / 4.0);
+        CHECK_THAT(laid / 400.0, WithinAbs(0.21, 0.025));
+    }
+    CHECK(parse_settings(R"({"infill": {"pattern": "tpms_fk"}})").infill_pattern == InfillPattern::TpmsFk);
+    CHECK(parse_settings(R"({"infill": {"pattern": "tpms_d"}})").infill_pattern == InfillPattern::TpmsD);
+}
+
 TEST_CASE("monotonic top surfaces: one direction, nothing before the touching line below", "[infill]") {
     // A U: a 10 x 3 mm bar with two 3 mm arms up to y = 10. At 0 degrees the
     // lines are horizontal; above y = 3 each line has a piece in each arm.

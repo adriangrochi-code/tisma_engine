@@ -3099,7 +3099,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // each point lies (a 0.5 mm field); smooth_blend and the normal_* modes
     // (depth within the planes normal to their axis) and lobes (each lobe
     // towards its own deepest point) blend them in one field; distance_warp
-    // uses the shells for now.
+    // warps one gyroid round the deepest point, its period following the
+    // density at each depth.
     DepthField gyroid_depth;
     if (ip == InfillPattern::Gyroid && settings.infill_adaptive_mode != AdaptiveMode::Disabled &&
         settings.infill_density > 0.0 && settings.infill_density < 100.0) {
@@ -3117,6 +3118,17 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     const std::vector<float> lobes = settings.infill_adaptive_mode == AdaptiveMode::Lobes && !gyroid_depth.empty()
                                          ? lobe_peaks(gyroid_depth)
                                          : std::vector<float>{};
+    // distance_warp's centre: the deepest voxel's centre.
+    double warp_c[3] = {0.0, 0.0, 0.0};
+    if (settings.infill_adaptive_mode == AdaptiveMode::DistanceWarp && !gyroid_depth.empty()) {
+        const DepthField& f = gyroid_depth;
+        const std::size_t at = std::size_t(std::max_element(f.depth.begin(), f.depth.end()) - f.depth.begin());
+        const int i = int(at % std::size_t(f.nx)), j = int(at / std::size_t(f.nx) % std::size_t(f.ny)),
+                  k = int(at / (std::size_t(f.nx) * std::size_t(f.ny)));
+        warp_c[0] = f.x0 + (i + 0.5) * f.cell;
+        warp_c[1] = f.y0 + (j + 0.5) * f.cell;
+        warp_c[2] = f.z0 + (k + 0.5) * f.cell;
+    }
     const auto gyroid_shells = [&](std::size_t l, const FillParams& params) {
         std::vector<Toolpath> sparse;
         const double S = settings.infill_density / 100.0, I = settings.infill_adaptive_interior_density / 100.0;
@@ -3129,6 +3141,30 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         // round each point's own density mixed by where it falls between them.
         // The normal_* modes blend too, by the depth within their planes.
         const AdaptiveMode m = settings.infill_adaptive_mode;
+        if (m == AdaptiveMode::DistanceWarp && S > 0.0 && I > 0.0) {
+            // One continuous gyroid of the finest period, its coordinates
+            // pulled towards the centre: a point at R from it is moved to
+            // R times the mean, along the ray from the centre, of the finest
+            // period over the period each depth asks for, so the period
+            // along the ray follows the density at each depth (across it,
+            // that mean); no cuts anywhere.
+            const double finest = gyroid_period(ws, std::min(1.0, std::max(S, I)));
+            constexpr int kSteps = 8;
+            const GyroidField field = [&](double x, double y) {
+                const double q[3] = {x - warp_c[0], y - warp_c[1], z - warp_c[2]};
+                double ratio = 0.0;
+                for (int s = 0; s < kSteps; ++s) {
+                    const double f = (s + 0.5) / kSteps;
+                    const double d = gyroid_depth.at(warp_c[0] + f * q[0], warp_c[1] + f * q[1], warp_c[2] + f * q[2]);
+                    const double rho = adaptive_density(S, I, deep > 0.0 ? std::min(1.0, d / deep) : 0.0,
+                                                        settings.infill_adaptive_gradient);
+                    ratio += finest / gyroid_period(ws, std::clamp(rho, 1e-3, 1.0));
+                }
+                ratio /= kSteps;
+                return gyroid_value(warp_c[0] + ratio * q[0], warp_c[1] + ratio * q[1], warp_c[2] + ratio * q[2], finest);
+            };
+            return gyroid_fill(out.surfaces[l].sparse, finest, z, w, &field);
+        }
         if ((m == AdaptiveMode::SmoothBlend || m == AdaptiveMode::NormalX || m == AdaptiveMode::NormalY ||
              m == AdaptiveMode::NormalZ || m == AdaptiveMode::Lobes) &&
             S > 0.0 && I > 0.0) {
