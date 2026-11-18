@@ -315,7 +315,7 @@ double level_depth(int level, double spacing) {
 }
 
 std::vector<Toolpath> adaptive_cubic_fill(const Polygons& region, const DepthField* field, double spacing,
-                                          double width, double z) {
+                                          double width, double z, bool waves, double angle_degrees) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -333,6 +333,14 @@ std::vector<Toolpath> adaptive_cubic_fill(const Polygons& region, const DepthFie
     // starts: the lines of level r lie 2^(r + 1) spacings apart, starting
     // 2^r in. Where no level deeper fits, all the lines left at once.
     const auto lines = [&](const Polygons& part, double step, double base) {
+        if (waves) {
+            // Three families `step` apart lay 3 / step mm per mm2; the
+            // 60 degree waves lay 4 / (3 row).
+            const double row = 4.0 * step / 9.0;
+            for (Toolpath& t : trapezoid_fill(part, row, angle_degrees, 60.0, std::fmod(base, row), width))
+                out.push_back(std::move(t));
+            return;
+        }
         for (int k = 0; k < 3; ++k)
             for (Toolpath& t : rectilinear_fill(part, step, 60.0 * k, width, false, false, false, 0.0, base))
                 out.push_back(std::move(t));

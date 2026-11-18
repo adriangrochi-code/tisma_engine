@@ -15588,3 +15588,16 @@ material a 3 % del de una línea en todos (cúbico estaba a 8 %; ahora 0,6 %). `
 segundo plano. No probado en una impresora.
 
 **Sigue:** cúbico adaptativo y de soporte por tamaño de cubo y panal 3D con trapecios; luego el ancho variable de O2.
+
+## 2026-11-18 — regla 13, parte 2 (fin): cúbico adaptativo y de soporte, panal 3D
+
+**Hecho:** con `infill.multiline` mayor que 1, el cúbico adaptativo y el de soporte usan ondas en trapecio por cada
+tamaño de cubo (`adaptive_cubic_fill(..., waves, angle)`). El panal 3D ya iba en filas onduladas; sus copias se
+cruzaban en los escalones de unión junto a la pared: `multiline_paths` salta ahora los tramos más cortos que el medio
+ancho de las copias. La corrección del material, hasta seis veces (el panal 3D quedaba a 4 %).
+
+**Pruebas:** OR12 con cúbico, grilla, triángulos, cúbico adaptativo y panal 3D sin cruces; material a 3 % en los ocho
+patrones (panal 3D 1,6 %). `[infill]` y `[adaptive]` pasan; prueba completa en segundo plano. No probado en una
+impresora.
+
+**Sigue:** O2: el ancho variable (después de la beta); luego lo siguiente del PLAN.

@@ -312,7 +312,8 @@ TEST_CASE("infill.multiline: each path as N touching lines, the same material (o
     LayerSurfaces s;
     s.sparse = square(0, 0, 40);
     for (const InfillPattern pattern : {InfillPattern::Rectilinear, InfillPattern::Cubic, InfillPattern::Gyroid,
-                                        InfillPattern::Honeycomb, InfillPattern::Grid, InfillPattern::Triangles}) {
+                                        InfillPattern::Honeycomb, InfillPattern::Grid, InfillPattern::Triangles,
+                                        InfillPattern::AdaptiveCubic, InfillPattern::Honeycomb3d}) {
         INFO(int(pattern));
         FillParams p;
         p.pattern = pattern;
@@ -344,7 +345,8 @@ TEST_CASE("infill.multiline: each path as N touching lines, the same material (o
             return false;
         };
         // Part 2: grid, triangles and cubic as trapezoid waves (OR12).
-        for (const InfillPattern pattern : {InfillPattern::Cubic, InfillPattern::Grid, InfillPattern::Triangles}) {
+        for (const InfillPattern pattern : {InfillPattern::Cubic, InfillPattern::Grid, InfillPattern::Triangles,
+                                            InfillPattern::AdaptiveCubic, InfillPattern::Honeycomb3d}) {
             p.pattern = pattern;
             for (const double z : {1.0, 5.0, 9.0})
                 for (const Toolpath& t : fill_layer(s, std::size_t(z), p, z).sparse)

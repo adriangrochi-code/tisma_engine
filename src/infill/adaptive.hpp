@@ -79,7 +79,10 @@ double level_depth(int level, double spacing);
 // the infill angle), moving across by z / sqrt(2) with the height; where the
 // field says level l fits, only every 2^l-th line. With no field, the cubic
 // infill at those angles.
+// With `waves` (several lines per path, orca_2_5.md rule 13): each cube
+// size's lines as trapezoid waves at 60 degrees along `angle_degrees`, the
+// same material, that never cross themselves (trapezoid_fill).
 std::vector<Toolpath> adaptive_cubic_fill(const Polygons& region, const DepthField* field, double spacing,
-                                          double width, double z);
+                                          double width, double z, bool waves = false, double angle_degrees = 0.0);
 
 } // namespace tisma

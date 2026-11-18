@@ -336,7 +336,20 @@ std::vector<Toolpath> multiline_paths(const std::vector<Toolpath>& paths, int li
                                       const Polygons& region) {
     std::vector<Toolpath> out;
     Clipper2Lib::Paths64 copies;
-    for (const Toolpath& t : paths) {
+    for (const Toolpath& path : paths) {
+        // Steps shorter than the copies' half width (a join's jog along a
+        // wall) left out: their normals would twist the copies across each other.
+        Toolpath t;
+        t.closed = path.closed;
+        for (const ToolpathPoint& q : path.points) {
+            if (!t.points.empty() &&
+                std::hypot(q.p.x - t.points.back().p.x, q.p.y - t.points.back().p.y) < 0.5 * lines * spacing) {
+                if (&q == &path.points.back() && t.points.size() > 1)
+                    t.points.back() = q; // the end stays where it is
+                continue;
+            }
+            t.points.push_back(q);
+        }
         const std::size_t n = t.points.size();
         if (n < 2)
             continue;
@@ -665,7 +678,7 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     // times larger (density / N), each path as N touching lines; the same
     // material.
     // A pattern's length does not follow its density exactly (joins along
-    // the walls, cells, clipping), so the density is corrected (up to three
+    // the walls, cells, clipping), so the density is corrected (up to six
     // times, the nearest kept) for the lines to add up to the single line's length.
     if (params.multiline > 1 && params.pattern != InfillPattern::Lightning && !surfaces.sparse.empty()) {
         const auto length = [](const std::vector<Toolpath>& paths) {
@@ -686,20 +699,24 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         // wave for the grid, on the triangles' 60 degrees for the others
         // (cubic's rows move with z like its lines).
         const bool grid = params.pattern == InfillPattern::Grid;
-        const bool waves = grid || params.pattern == InfillPattern::Triangles || params.pattern == InfillPattern::Stars ||
-                           params.pattern == InfillPattern::Cubic;
+        const bool adaptive =
+            params.pattern == InfillPattern::AdaptiveCubic || params.pattern == InfillPattern::SupportCubic;
+        const bool waves = grid || adaptive || params.pattern == InfillPattern::Triangles ||
+                           params.pattern == InfillPattern::Stars || params.pattern == InfillPattern::Cubic;
         const auto base = [&](const FillParams& f) {
             if (!waves)
                 return fill_layer(only, layer, f, z).sparse;
             const double slant = grid ? 90.0 : 60.0;
             const double row = trapezoid_row(ws, f.density, slant);
             const double turn = params.angle + (grid ? 90.0 : 60.0) * double(layer % (grid ? 2 : 3));
+            if (adaptive) // each cube size its own waves
+                return adaptive_cubic_fill(surfaces.sparse, f.depth, 3.0 * ws / f.density, w, z, true, turn);
             const double shift = params.pattern == InfillPattern::Cubic ? std::fmod(-z / std::numbers::sqrt2, row) : 0.0;
             return trapezoid_fill(surfaces.sparse, row, turn, slant, shift, w);
         };
         out.sparse = multiline_paths(base(one), params.multiline, ws, w, surfaces.sparse);
         double got = length(out.sparse), best = std::abs(got - target);
-        for (int round = 0; round < 3 && got > 0.0 && target > 0.0 && best > 0.01 * target; ++round) {
+        for (int round = 0; round < 6 && got > 0.0 && target > 0.0 && best > 0.01 * target; ++round) {
             one.density = std::min(1.0, one.density * target / got);
             std::vector<Toolpath> again = multiline_paths(base(one), params.multiline, ws, w, surfaces.sparse);
             got = length(again);
