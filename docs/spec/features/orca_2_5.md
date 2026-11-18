@@ -172,6 +172,14 @@ wiki no da los eligió la ficha; con el ajuste principal apagado no cambian nada
 10. **Densidad adaptativa en gyroid y TPMS** (`infill.adaptive_mode`; wiki, patrones):
     - solo con los patrones gyroid, TPMS-D y TPMS-FK; las celdas son finas al lado de las paredes y de las
       superficies de arriba y abajo y crecen hacia el centro de la pieza;
+    - TPMS-D y TPMS-FK son dos valores nuevos de `infill.pattern`: `tpms_d`, la superficie mínima triplemente periódica
+      de Schwarz D (Diamond; la wiki la describe como un punto medio entre el entrecruzado y el gyroid, rígida y de
+      transiciones suaves), y `tpms_fk`, la de Fischer–Koch S. Se usan también sin densidad adaptativa, como el gyroid;
+    - `distance_warp` según la wiki: «la distancia a la superficie más cercana, con un solo patrón continuo deformado
+      alrededor de los centros de los lóbulos»; en placas y piezas largas el patrón queda cizallado. La wiki no da la
+      fórmula de la deformación: el motor hace que el período de las celdas cambie con la densidad pedida a cada
+      profundidad y que el patrón siga continuo (sin cortes entre capas ni dentro de una capa); la forma exacta es
+      diseño propio y se anota en PROVENANCE.md;
     - en la superficie, la densidad es `infill.density` (S); en el centro, `infill.adaptive_interior_density` (I),
       que puede ser mayor que S para un núcleo más denso; con t de 0 en la superficie a 1 en el punto más lejano de
       ella:
