@@ -105,3 +105,31 @@ TEST_CASE("print_time.md rules 15 and 16: a factor per part learned from finishe
     CHECK_THAT(remaining_time(3600.0, 1800.0, 2700.0), WithinRel(2700.0, 1e-9));
     CHECK_THAT(remaining_time(3600.0, 0.0, 0.0), WithinRel(3600.0, 1e-9));
 }
+
+TEST_CASE("print_time.md rule 11: the printer's own time, kept by printer", "[time]") {
+    CHECK_THAT(*parse_print_duration("echo:Print time: 1h 2m 3s"), WithinRel(3723.0, 1e-12));
+    CHECK_THAT(*parse_print_duration("echo:Print time: 1d 0h 0m 5s"), WithinRel(86405.0, 1e-12));
+    CHECK_THAT(*parse_print_duration("echo:Print time: 12 min, 30 sec"), WithinRel(750.0, 1e-12));
+    CHECK_THAT(*parse_print_duration(R"({"print_stats": {"print_duration": 1234.5, "state": "complete"}})"),
+               WithinRel(1234.5, 1e-12));
+    CHECK_FALSE(parse_print_duration("ok T:200.0 /200.0").has_value());
+    CHECK_FALSE(parse_print_duration("echo:Print time: soon").has_value());
+    TimeHistory h;
+    for (int i = 0; i < 60; ++i)
+        h.add("Kobra 3", {TimeSplit{100.0, 1000.0 + i, 800.0, 300.0, 120.0}, 2600.0 + i});
+    h.add("Ender", {TimeSplit{10.0, 20.0, 30.0, 40.0, 50.0}, 170.0});
+    CHECK(h.printers["Kobra 3"].size() == kTimeRecordsKept); // the newest kept
+    CHECK(h.printers["Kobra 3"].front().actual == 2610.0);
+    CHECK(h.calibration("Kobra 3").fitted);
+    CHECK_FALSE(h.calibration("Ender").fitted);
+    CHECK_FALSE(h.calibration("none").fitted);
+    const TimeHistory back = parse_time_history(time_history_json(h));
+    REQUIRE(back.printers.size() == 2);
+    CHECK(back.printers.at("Kobra 3").size() == kTimeRecordsKept);
+    CHECK(back.printers.at("Ender").front().estimate[4] == 50.0);
+    // Broken records and files are left out, not fatal.
+    CHECK(parse_time_history("not json").printers.empty());
+    CHECK(parse_time_history(R"({"printers": {"P": [{"estimate": [1, 2], "actual": 5}, {"estimate": [1, 2, 3, 4, 5], "actual": 0}]}})")
+              .printers.empty());
+    CHECK(load_time_history("/nonexistent/dir/times.json").printers.empty());
+}

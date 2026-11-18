@@ -15601,3 +15601,15 @@ patrones (panal 3D 1,6 %). `[infill]` y `[adaptive]` pasan; prueba completa en s
 impresora.
 
 **Sigue:** O2: el ancho variable (después de la beta); luego lo siguiente del PLAN.
+
+## 2026-11-18 — print_time.md regla 11: el tiempo real de la impresora, guardado por impresora (núcleo)
+
+**Hecho:** `parse_print_duration` lee el tiempo de una impresión terminada de la respuesta de `M31` (Marlin, con días,
+horas, minutos y segundos o «min, sec») y de `print_duration` (Klipper). `TimeHistory` guarda los pares (estimación
+por parte, tiempo real) de cada impresora, los 50 más nuevos, en un JSON; leer un archivo roto o que falta da un
+historial vacío; `calibration` ajusta los factores de esa impresora (regla 15).
+
+**Pruebas:** `[time]` (16 casos) pasa. Prueba completa en segundo plano. No probado con una impresora.
+
+**Sigue:** pedirle el tiempo a la impresora al terminar (Device) y mostrar la estimación corregida y el error típico en
+la interfaz; es trabajo de interfaz, para la sesión de interfaz o un bloque de día.

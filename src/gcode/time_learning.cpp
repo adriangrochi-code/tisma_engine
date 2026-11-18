@@ -4,8 +4,14 @@
 
 #include "gcode/time_learning.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 
 namespace tisma {
 
@@ -73,6 +79,118 @@ double remaining_time(double estimated_total, double estimated_elapsed, double r
     if (!(estimated_elapsed > 0.0) || !(real_elapsed > 0.0))
         return rest;
     return rest * real_elapsed / estimated_elapsed;
+}
+
+std::optional<double> parse_print_duration(const std::string& text) {
+    // Klipper: "print_duration": 1234.5
+    if (const std::size_t k = text.find("print_duration"); k != std::string::npos) {
+        std::size_t i = k + 14;
+        while (i < text.size() && (text[i] == '"' || text[i] == ':' || std::isspace(static_cast<unsigned char>(text[i]))))
+            ++i;
+        const char* start = text.c_str() + i;
+        char* end = nullptr;
+        const double v = std::strtod(start, &end);
+        if (end != start && std::isfinite(v) && v >= 0.0)
+            return v;
+        return std::nullopt;
+    }
+    // Marlin M31: numbers, each followed by its unit (d, h, m or min, s or sec).
+    const std::size_t k = text.find("Print time:");
+    if (k == std::string::npos)
+        return std::nullopt;
+    double total = 0.0;
+    bool any = false;
+    std::size_t i = k + 11;
+    while (i < text.size() && text[i] != '\n') {
+        if (!std::isdigit(static_cast<unsigned char>(text[i]))) {
+            ++i;
+            continue;
+        }
+        const char* start = text.c_str() + i;
+        char* end = nullptr;
+        const double v = std::strtod(start, &end);
+        i += std::size_t(end - start);
+        while (i < text.size() && text[i] == ' ')
+            ++i;
+        const char u = i < text.size() ? char(std::tolower(static_cast<unsigned char>(text[i]))) : '\0';
+        const double unit = u == 'd' ? 86400.0 : u == 'h' ? 3600.0 : u == 'm' ? 60.0 : u == 's' ? 1.0 : 0.0;
+        if (unit == 0.0)
+            return std::nullopt;
+        total += v * unit;
+        any = true;
+        while (i < text.size() && std::isalpha(static_cast<unsigned char>(text[i])))
+            ++i;
+    }
+    return any ? std::optional<double>(total) : std::nullopt;
+}
+
+void TimeHistory::add(const std::string& printer, const TimeRecord& record) {
+    std::vector<TimeRecord>& list = printers[printer];
+    list.push_back(record);
+    if (list.size() > kTimeRecordsKept)
+        list.erase(list.begin(), list.begin() + std::ptrdiff_t(list.size() - kTimeRecordsKept));
+}
+
+TimeCalibration TimeHistory::calibration(const std::string& printer) const {
+    const auto it = printers.find(printer);
+    return fit_time(it == printers.end() ? std::vector<TimeRecord>{} : it->second);
+}
+
+std::string time_history_json(const TimeHistory& history) {
+    nlohmann::json root = nlohmann::json::object();
+    for (const auto& [name, list] : history.printers) {
+        nlohmann::json items = nlohmann::json::array();
+        for (const TimeRecord& r : list)
+            items.push_back({{"estimate", std::vector<double>(r.estimate.begin(), r.estimate.end())}, {"actual", r.actual}});
+        root[name] = std::move(items);
+    }
+    return nlohmann::json{{"version", 1}, {"printers", std::move(root)}}.dump(1);
+}
+
+TimeHistory parse_time_history(const std::string& json) {
+    TimeHistory out;
+    const nlohmann::json root = nlohmann::json::parse(json, nullptr, false);
+    if (!root.is_object() || !root.contains("printers") || !root["printers"].is_object())
+        return out;
+    for (const auto& [name, items] : root["printers"].items()) {
+        if (!items.is_array())
+            continue;
+        for (const nlohmann::json& item : items) {
+            if (!item.is_object() || !item.contains("estimate") || !item.contains("actual"))
+                continue;
+            const nlohmann::json& e = item["estimate"];
+            const nlohmann::json& a = item["actual"];
+            if (!e.is_array() || e.size() != kTimeParts || !a.is_number() || !(a.get<double>() > 0.0))
+                continue;
+            TimeRecord r;
+            bool ok = true;
+            for (std::size_t k = 0; k < kTimeParts; ++k) {
+                ok = ok && e[k].is_number() && e[k].get<double>() >= 0.0;
+                r.estimate[k] = ok ? e[k].get<double>() : 0.0;
+            }
+            r.actual = a.get<double>();
+            if (ok)
+                out.add(name, r);
+        }
+    }
+    return out;
+}
+
+bool save_time_history(const TimeHistory& history, const std::string& path) {
+    std::ofstream f(path, std::ios::binary | std::ios::trunc);
+    if (!f)
+        return false;
+    f << time_history_json(history);
+    return bool(f);
+}
+
+TimeHistory load_time_history(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f)
+        return {};
+    std::ostringstream text;
+    text << f.rdbuf();
+    return parse_time_history(text.str());
 }
 
 } // namespace tisma

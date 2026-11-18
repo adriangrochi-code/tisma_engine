@@ -913,7 +913,7 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   desviación, RepRapFirmware con tirón. Reglas 10 y 14 (PT7): `machine.heat_rate_nozzle`/`heat_rate_bed` (°C/s),
   `home_time` y `probe_time`; el calentamiento de cada espera, `G28`, `G29` y `G4` suman a la preparación, que el G-code
   dice aparte (`; estimated preparation time`). La interfaz la muestra («1 h 4 min (impresión 58 min, preparación 6 min)» y una
-  fila en la leyenda). Cambios de herramienta y purga en la torre como preparación, hecho (2026-11-13). Reglas 15 y 16, el núcleo del motor (un factor por parte aprendido de las impresiones terminadas y el tiempo restante), hecho (2026-11-18); quedan la regla 11 y, de la 15, la interfaz y guardar los registros por impresora (aprender de la impresora)
+  fila en la leyenda). Cambios de herramienta y purga en la torre como preparación, hecho (2026-11-13). Reglas 15 y 16, el núcleo del motor (un factor por parte aprendido de las impresiones terminadas y el tiempo restante), hecho (2026-11-18); regla 11, el núcleo (leer el tiempo de `M31` y de Klipper, guardar los pares por impresora en un JSON), hecho (2026-11-18); queda, de la 11 y la 15, pedirle el tiempo a la impresora al terminar y mostrarlo en la interfaz (aprender de la impresora)
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
