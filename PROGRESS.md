@@ -15427,3 +15427,19 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - Pruebas: todas bien (1143 casos). La prueba de la regla 12 suma dos chequeos: la capa 1 (sólido interno) sale igual en los dos cubos, y la capa 0 (superficie de
   abajo) no cambia respecto del valor de fábrica.
 - **Siguiente:** regla 13 (`infill.multiline`) o 13 bis (espiral hacia adentro).
+
+**05:15 (Montevideo, 18-11) — O2, regla 13 bis, parte 1: espiral hacia adentro.**
+- Nuevo dibujo `spiral_inset` para `surfaces.top_pattern` y `surfaces.bottom_pattern` (`spiral_inset_fill`).
+  - Junta los lazos concéntricos en espirales, de afuera hacia adentro.
+  - Empieza en la esquina convexa del lazo de afuera más cerca de un ángulo recto. Cada lazo se corta una separación
+    antes de cerrar y sigue, extruyendo, al punto más cercano del lazo siguiente.
+  - Empieza otra espiral si el lazo siguiente está a más de cuatro separaciones o si el paso saldría de la región.
+  - El orden de la regla 8 la da vuelta con `outward`.
+- En la interfaz, «Espiral hacia adentro» en los dibujos de arriba y de abajo.
+- Pruebas: todas bien (1144 casos). La nueva de `[infill]`: en un cuadrado de 20 mm sale una sola espiral. Su largo es el de los lazos más los pasos,
+  empieza en una esquina y termina cerca del centro. Dos islas lejanas dan dos espirales, y con `outward` empieza en el
+  centro.
+- **Falta (parte 2):**
+  - el dibujo para el sólido interno y para `support.interface_pattern`;
+  - el ancho variable en las superficies de arriba y abajo (hoy es fijo);
+  - la línea corta del centro.

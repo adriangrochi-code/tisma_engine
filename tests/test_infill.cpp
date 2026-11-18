@@ -1,6 +1,7 @@
 #include "config/settings.hpp"
 #include "gcode/order.hpp"
 #include "infill/gyroid.hpp"
+#include "infill/patterns.hpp"
 #include "infill/rectilinear.hpp"
 #include "infill/smooth.hpp"
 #include "perimeters/coverage.hpp"
@@ -222,6 +223,47 @@ TEST_CASE("infill.smooth_factor: the sparse infill's turns become curves (orca_2
     // The setting reads and is checked.
     CHECK(parse_settings(R"({"infill": {"smooth_factor": 40}})").infill_smooth_factor == 40.0);
     CHECK_THROWS(parse_settings(R"({"infill": {"smooth_factor": 140}})"));
+}
+
+TEST_CASE("spiral_inset: the concentric loops joined into one spiral (orca_2_5.md, rule 13 bis)", "[infill]") {
+    const auto length = [](const std::vector<Toolpath>& paths) {
+        double total = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                total += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        return total;
+    };
+    // A 20 mm square: one spiral, as long as the loops less a spacing each, plus the steps.
+    const std::vector<Toolpath> loops = concentric_fill(square(0, 0, 20), 0.4, 0.4);
+    const std::vector<Toolpath> spiral = spiral_inset_fill(square(0, 0, 20), 0.4, 0.4);
+    REQUIRE(spiral.size() == 1);
+    CHECK_FALSE(spiral[0].closed);
+    double loops_length = 0.0;
+    for (const Toolpath& t : loops)
+        for (std::size_t i = 0; i < t.points.size(); ++i)
+            loops_length += std::hypot(t.points[(i + 1) % t.points.size()].p.x - t.points[i].p.x,
+                                       t.points[(i + 1) % t.points.size()].p.y - t.points[i].p.y);
+    CHECK(std::abs(length(spiral) - loops_length) < 0.5 * double(loops.size()));
+    // It starts at a corner of the outer loop (a right angle) and runs inwards.
+    const Point2d s = spiral[0].points.front().p;
+    CHECK((std::abs(s.x - 0.2) < 1e-6 || std::abs(s.x - 19.8) < 1e-6));
+    CHECK((std::abs(s.y - 0.2) < 1e-6 || std::abs(s.y - 19.8) < 1e-6));
+    const Point2d e = spiral[0].points.back().p;
+    CHECK(std::hypot(e.x - 10.0, e.y - 10.0) < 2.0);
+    // Two islands far apart: a spiral each.
+    const Polygons two = Clipper2Lib::Union(square(0, 0, 10), square(30, 0, 10), Clipper2Lib::FillRule::NonZero);
+    CHECK(spiral_inset_fill(two, 0.4, 0.4).size() == 2);
+    // As a top surface, rule 8's order turns it round.
+    LayerSurfaces top;
+    top.top = square(0, 0, 20);
+    FillParams p;
+    p.top_pattern = SurfacePattern::SpiralInset;
+    p.top_order = FillOrder::Outward;
+    const LayerFill out = fill_layer(top, 0, p, 0.2);
+    REQUIRE(out.top.size() == 1);
+    CHECK(std::hypot(out.top[0].points.front().p.x - 10.0, out.top[0].points.front().p.y - 10.0) < 2.0);
+    CHECK(out.top[0].in_order);
+    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "spiral_inset"}})").top_pattern == SurfacePattern::SpiralInset);
 }
 
 TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 14 to 17)", "[infill]") {

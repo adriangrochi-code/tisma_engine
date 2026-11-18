@@ -21,7 +21,8 @@ enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
 // The pattern of the top surface and of the bottom one (surfaces.top_pattern,
 // surfaces.bottom_pattern; infill_patterns.md, rules 14 to 17).
-enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram };
+enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram,
+                            SpiralInset };
 // The order of a surface in a centre-out pattern (orca_2_5.md, rule 8): the
 // shortest way, from the centre to the edge, or from the edge to the centre.
 enum class FillOrder { Default, Outward, Inward };

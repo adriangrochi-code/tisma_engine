@@ -359,6 +359,8 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
             return archimedean_fill(region, spacing, params.centre, width);
         case SurfacePattern::Octagram:
             return octagram_fill(region, spacing, params.centre, width);
+        case SurfacePattern::SpiralInset: // orca_2_5.md, rule 13 bis
+            return spiral_inset_fill(region, spacing, width);
         default:
             return std::nullopt;
         }
@@ -370,9 +372,18 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const auto in_order = [&](std::vector<Toolpath> paths, SurfacePattern pattern, FillOrder order) {
         if (order == FillOrder::Default ||
             (pattern != SurfacePattern::Concentric && pattern != SurfacePattern::Archimedean &&
-             pattern != SurfacePattern::Octagram))
+             pattern != SurfacePattern::Octagram && pattern != SurfacePattern::SpiralInset))
             return paths;
         bool outward = order == FillOrder::Outward;
+        if (pattern == SurfacePattern::SpiralInset) {
+            // Each spiral runs from the outside in: turned round for outward.
+            for (Toolpath& t : paths) {
+                if (outward)
+                    std::reverse(t.points.begin(), t.points.end());
+                t.in_order = t.one_way = true;
+            }
+            return paths;
+        }
         if (pattern != SurfacePattern::Concentric) {
             const auto from_centre = [&](const ToolpathPoint& q) {
                 return std::hypot(q.p.x - params.centre.x, q.p.y - params.centre.y);

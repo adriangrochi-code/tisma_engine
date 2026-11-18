@@ -539,7 +539,8 @@ const std::map<std::string, SurfacePattern>& surface_patterns() {
         {"concentric", SurfacePattern::Concentric},
         {"hilbert", SurfacePattern::Hilbert},
         {"archimedean", SurfacePattern::Archimedean},
-        {"octagram", SurfacePattern::Octagram}};
+        {"octagram", SurfacePattern::Octagram},
+        {"spiral_inset", SurfacePattern::SpiralInset}};
     return p;
 }
 } // namespace

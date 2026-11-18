@@ -10032,7 +10032,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
                             {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
                             {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
-                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)},
+                            {SurfacePattern::SpiralInset, tr(T::SpiralInset)}});
         if (shown("surfaces.bottom_pattern"))
             changed |= row(T::BottomPattern, s.bottom_pattern,
                            {{SurfacePattern::Monotonic, tr(T::Monotonic)},
@@ -10042,7 +10043,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
                             {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
                             {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
-                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)},
+                            {SurfacePattern::SpiralInset, tr(T::SpiralInset)}});
         flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
     } else if (id == "surface_angles") {
         mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : tr(T::AutoValue),
