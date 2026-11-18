@@ -160,9 +160,9 @@ TEST_CASE("infill.separated: each part's infill centred on its own box (orca_2_5
     s.infill_solid_below_area = 0.0;
     // The sparse infill's points of the middle layer on each cube, the second
     // moved back by 23.3 mm, rounded to the micron.
-    const auto points = [](const SlicedModel& m) {
+    const auto points = [](const SlicedModel& m, std::size_t layer = 25, bool solid = false) {
         std::set<std::pair<long, long>> left, right;
-        for (const Toolpath& t : m.fills[m.fills.size() / 2].sparse)
+        for (const Toolpath& t : solid ? m.fills[layer].solid : m.fills[layer].sparse)
             for (const ToolpathPoint& q : t.points) {
                 if (q.p.x < 15.0)
                     left.insert({std::lround(q.p.x * 1000), std::lround(q.p.y * 1000)});
@@ -171,13 +171,21 @@ TEST_CASE("infill.separated: each part's infill centred on its own box (orca_2_5
             }
         return std::pair{left, right};
     };
-    const auto [a, b] = points(slice_model(weld_exact(mesh), s));
+    const SlicedModel shared = slice_model(weld_exact(mesh), s);
+    const auto [a, b] = points(shared);
     REQUIRE_FALSE(a.empty());
     CHECK(a != b); // one grid for the plate: the cubes' lines differ
     s.infill_separated = true;
-    const auto [c, d] = points(slice_model(weld_exact(mesh), s));
+    const SlicedModel own = slice_model(weld_exact(mesh), s);
+    const auto [c, d] = points(own);
     REQUIRE_FALSE(c.empty());
     CHECK(c == d); // each on its own centre: the same lines
+    // The solid inside the part (layer 1, over the bottom surface) too.
+    const auto [e, f] = points(own, 1, true);
+    REQUIRE_FALSE(e.empty());
+    CHECK(e == f);
+    // The bottom surface itself stays where the plate puts it.
+    CHECK(points(own, 0, true) == points(shared, 0, true));
     CHECK(parse_settings(R"({"infill": {"separated": true}})").infill_separated);
     CHECK_THROWS(parse_settings(R"({"infill": {"separated": 1}})"));
 }

@@ -15417,3 +15417,13 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - Pruebas: todas bien (1143 casos). La nueva (`[surfaces][infill]`): dos cubos de 10 mm a 23,3 mm uno del otro. Sin la opción, sus líneas difieren; con
   ella, son las mismas trasladadas.
 - **Falta (parte 2):** el sólido interno y los puentes (la regla los incluye; las superficies de arriba y abajo no).
+
+**05:00 (Montevideo, 18-11) — O2, regla 12, parte 2: el sólido interno y los puentes también. La regla 12 queda hecha.**
+- `separated_fill` reemplaza a `fill_layer` cuando `infill.separated` está prendido.
+  - La superficie de arriba y la de abajo de todo se llenan como siempre.
+  - El relleno poco denso, el sólido interno (las capas bajo una superficie de arriba y sobre una de abajo) y los
+    puentes se llenan isla por isla, trasladados al centro de su pieza.
+  - Va antes de redondear los puentes y de apoyarlos sobre el soporte, igual que antes.
+- Pruebas: todas bien (1143 casos). La prueba de la regla 12 suma dos chequeos: la capa 1 (sólido interno) sale igual en los dos cubos, y la capa 0 (superficie de
+  abajo) no cambia respecto del valor de fábrica.
+- **Siguiente:** regla 13 (`infill.multiline`) o 13 bis (espiral hacia adentro).

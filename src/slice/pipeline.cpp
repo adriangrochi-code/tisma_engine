@@ -3095,26 +3095,48 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           ip != InfillPattern::Lightning && ip != InfillPattern::Concentric;
     const std::vector<std::vector<PartIsland>> parts =
         separate ? separated_parts(out.regions, out.layers) : std::vector<std::vector<PartIsland>>{};
-    // The sparse infill of layer l, island by island, each filled as if its
-    // part's centre were the origin and moved back.
-    const auto separated_sparse = [&](std::size_t l, const FillParams& params) {
-        std::vector<Toolpath> sparse;
+    // Layer l's fill with the sparse infill, the solid inside the part (the
+    // layers under a top surface and over a bottom one) and the bridges
+    // filled island by island, each as if its part's centre were the origin
+    // and moved back; the top and bottom surfaces themselves as always.
+    const auto separated_fill = [&](std::size_t l, const FillParams& params) {
+        const LayerSurfaces& all = out.surfaces[l];
+        const auto cut = [](const Polygons& a, const Polygons& b) {
+            return a.empty() || b.empty() ? Polygons{} : Clipper2Lib::Intersect(a, b, Clipper2Lib::FillRule::NonZero);
+        };
+        const auto minus = [](const Polygons& a, const Polygons& b) {
+            return a.empty() || b.empty() ? a : Clipper2Lib::Difference(a, b, Clipper2Lib::FillRule::NonZero);
+        };
+        const Polygons inner_bottom = minus(all.bottom, all.bottom_exposed);
+        LayerSurfaces faces;
+        faces.top = minus(all.top, all.top_under);
+        faces.bottom = cut(all.bottom, all.bottom_exposed);
+        faces.bottom_exposed = faces.bottom;
+        LayerFill fill = fill_layer(faces, l, params, out.layers[l].slice_z());
         for (const PartIsland& part : parts[l]) {
-            Polygons mine = Clipper2Lib::Intersect(out.surfaces[l].sparse, part.island, Clipper2Lib::FillRule::NonZero);
-            if (mine.empty())
-                continue;
             const std::int64_t dx = std::llround(part.centre.x * kUnitsPerMm), dy = std::llround(part.centre.y * kUnitsPerMm);
-            LayerSurfaces only;
-            only.sparse = Clipper2Lib::TranslatePaths(mine, -dx, -dy);
-            FillParams own = params;
-            own.centre = {0.0, 0.0};
-            for (Toolpath& t : fill_layer(only, l, own, out.layers[l].slice_z() - part.z_centre).sparse) {
-                for (ToolpathPoint& q : t.points)
-                    q.p = {q.p.x + to_mm(dx), q.p.y + to_mm(dy)};
-                sparse.push_back(std::move(t));
-            }
+            const auto moved = [&](const Polygons& p) { return Clipper2Lib::TranslatePaths(cut(p, part.island), -dx, -dy); };
+            LayerSurfaces own;
+            own.sparse = moved(all.sparse);
+            own.bottom = moved(inner_bottom);
+            own.top = own.top_under = moved(all.top_under);
+            own.bridge = moved(all.bridge);
+            own.bridge_angle = all.bridge_angle;
+            own.bridge_support = Clipper2Lib::TranslatePaths(all.bridge_support, -dx, -dy);
+            if (own.sparse.empty() && own.bottom.empty() && own.top.empty() && own.bridge.empty())
+                continue;
+            FillParams mine = params;
+            mine.centre = {0.0, 0.0};
+            LayerFill f = fill_layer(own, l, mine, out.layers[l].slice_z() - part.z_centre);
+            for (auto [to, from] : {std::pair{&fill.sparse, &f.sparse}, {&fill.solid, &f.solid}, {&fill.bridge, &f.bridge},
+                                    {&fill.gaps, &f.gaps}})
+                for (Toolpath& t : *from) {
+                    for (ToolpathPoint& q : t.points)
+                        q.p = {q.p.x + to_mm(dx), q.p.y + to_mm(dy)};
+                    to->push_back(std::move(t));
+                }
         }
-        return sparse;
+        return fill;
     };
     const bool smooth_sparse = settings.infill_smooth_factor > 0.0 &&
                                (ip == InfillPattern::Hilbert || ip == InfillPattern::Octagram || ip == InfillPattern::Lightning ||
@@ -3127,16 +3149,16 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                       [&](std::size_t l) {
                           if (repeats[l])
                               return;
-                          out.fills[l] = fill_layer(out.surfaces[l], l, overlapping(l == 0 ? first_fill : fill, l),
-                                                    out.layers[l].slice_z());
+                          out.fills[l] = separate && l < parts.size()
+                                             ? separated_fill(l, overlapping(l == 0 ? first_fill : fill, l))
+                                             : fill_layer(out.surfaces[l], l, overlapping(l == 0 ? first_fill : fill, l),
+                                                          out.layers[l].slice_z());
                           round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
                           if (!out.on_support[l].empty())
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
                                               kBridgeAnchor + settings.wall_width);
                           out.fills[l].arcs = std::move(arc_paths[l]);
                           out.fills[l].overhang_walls = std::move(overhang_walls[l]);
-                          if (separate && l < parts.size())
-                              out.fills[l].sparse = separated_sparse(l, overlapping(l == 0 ? first_fill : fill, l));
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
                           // Rounded turns in the patterns that have them (orca_2_5.md, rule 11).
