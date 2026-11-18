@@ -15548,3 +15548,15 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - Pruebas: todas bien (1148 casos). La de `[infill]`: un rectángulo de 30 × 3,1 mm termina en una línea por el medio (y ≈ 1,55) de más de 20 mm de
   largo. Las demás comprobaciones de la espiral siguen bien.
 - La regla 13 bis queda hecha, salvo el ancho variable, que QA dejó para después de la beta.
+
+## 2026-11-18 — print_time.md reglas 15 y 16: aprender el tiempo de cada impresora (núcleo)
+
+**Hecho:**
+- `src/gcode/time_learning.*`: con las impresiones terminadas (estimación por parte y tiempo real) se ajusta un factor
+  por parte por mínimos cuadrados con regularización hacia 1, recortado entre 0,5 y 2; con menos de tres impresiones no
+  se ajusta y la estimación queda como está. `remaining_time` escala el resto con lo que ya tardó la impresora.
+
+**Pruebas:** `[time]` (15 casos) pasa; con 8 impresiones simuladas con 1 % de ruido, la estimación ajustada de una
+nueva queda a menos de 2 % (sin ajustar, 4,7 %). Prueba completa en segundo plano.
+
+**Sigue:** la interfaz y guardar los registros por impresora (regla 15) y la regla 11. No probado en una impresora.

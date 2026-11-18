@@ -1,4 +1,5 @@
 #include "gcode/print_time.hpp"
+#include "gcode/time_learning.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -68,4 +69,39 @@ TEST_CASE("durations as the preview reads them", "[time]") {
     CHECK(format_duration(36.0) == "36s");
     CHECK(format_duration(3605.0) == "1h 0m 5s");
     CHECK(format_duration(2 * 86400.0 + 3605.0) == "2d 1h 0m 5s");
+}
+
+TEST_CASE("print_time.md rules 15 and 16: a factor per part learned from finished prints", "[time]") {
+    // A printer slower than the estimate on travel (1.3) and infill (1.1),
+    // faster on walls (0.95), slower to prepare (1.2), with 1 % of noise.
+    const TimeSplit truth{1.0, 0.95, 1.1, 1.3, 1.2};
+    const auto real = [&](const TimeSplit& e, int i) {
+        double t = 0.0;
+        for (std::size_t k = 0; k < kTimeParts; ++k)
+            t += truth[k] * e[k];
+        return t * (1.0 + 0.01 * ((i % 3) - 1));
+    };
+    std::vector<TimeRecord> records;
+    for (int i = 0; i < 8; ++i) {
+        const TimeSplit e{300.0 + 40.0 * i, 1200.0 + 300.0 * (i % 4), 900.0 + 500.0 * ((i + 1) % 3), 200.0 + 60.0 * (i % 5),
+                          240.0 + 30.0 * (i % 2)};
+        records.push_back({e, real(e, i)});
+    }
+    // Fewer than three: not fitted, the estimate as it is.
+    const TimeCalibration two = fit_time({records[0], records[1]});
+    CHECK_FALSE(two.fitted);
+    CHECK(two.adjust(records[0].estimate) == records[0].estimate[0] + records[0].estimate[1] + records[0].estimate[2] +
+                                                records[0].estimate[3] + records[0].estimate[4]);
+    const TimeCalibration fit = fit_time(records);
+    REQUIRE(fit.fitted);
+    CHECK(fit.prints == 8);
+    // A new print: within 2 % once adjusted (the goal with five prints), worse without.
+    const TimeSplit next{500.0, 2000.0, 1500.0, 400.0, 300.0};
+    const double actual = real(next, 1), plain = 4700.0;
+    CHECK(std::abs(fit.adjust(next) - actual) < 0.02 * actual);
+    CHECK(std::abs(plain - actual) > 0.03 * actual);
+    CHECK(fit.typical_error < 0.02 * actual);
+    // Rule 16: half the estimate gone in more real time: the rest scales the same.
+    CHECK_THAT(remaining_time(3600.0, 1800.0, 2700.0), WithinRel(2700.0, 1e-9));
+    CHECK_THAT(remaining_time(3600.0, 0.0, 0.0), WithinRel(3600.0, 1e-9));
 }
