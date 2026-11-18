@@ -552,6 +552,22 @@ const std::map<std::string, FillOrder>& fill_orders() {
 }
 } // namespace
 
+namespace {
+const std::map<std::string, TopExpansion>& top_expansions() {
+    static const std::map<std::string, TopExpansion> d = {{"inward", TopExpansion::Inward},
+                                                          {"outward", TopExpansion::Outward},
+                                                          {"inward_and_outward", TopExpansion::InwardAndOutward}};
+    return d;
+}
+} // namespace
+
+const char* top_expansion_name(TopExpansion direction) {
+    for (const auto& [name, d] : top_expansions())
+        if (d == direction)
+            return name.c_str();
+    return "inward_and_outward";
+}
+
 const char* fill_order_name(FillOrder order) {
     for (const auto& [name, o] : fill_orders())
         if (o == order)
@@ -1809,10 +1825,22 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
                                   "bottom_min_thickness", "interface_shells", "top_width", "solid_width",
                                   "bottom_pattern", "bridge_angle", "top_angle", "bottom_angle",
-                                  "top_fill_order", "bottom_fill_order"},
+                                  "top_fill_order", "bottom_fill_order", "top_expansion", "top_expansion_margin",
+                                  "top_expansion_direction"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "bottom_pattern") {
             s.bottom_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
+            return;
+        }
+        if (n == "top_expansion" || n == "top_expansion_margin") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 mm");
+            (n == "top_expansion" ? s.top_expansion : s.top_expansion_margin) = v;
+            return;
+        }
+        if (n == "top_expansion_direction") {
+            s.top_expansion_direction = choice<TopExpansion>(g, n, k, top_expansions());
             return;
         }
         if (n == "top_fill_order" || n == "bottom_fill_order") {
@@ -3605,6 +3633,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.bottom_angle", num(s.bottom_angle)},
         {"surfaces.top_fill_order", fill_order_name(s.top_fill_order)},
         {"surfaces.bottom_fill_order", fill_order_name(s.bottom_fill_order)},
+        {"surfaces.top_expansion", num(s.top_expansion)},
+        {"surfaces.top_expansion_margin", num(s.top_expansion_margin)},
+        {"surfaces.top_expansion_direction", top_expansion_name(s.top_expansion_direction)},
         {"surfaces.top_width", num(s.top_width)},
         {"surfaces.solid_width", num(s.solid_width)},
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
@@ -4263,6 +4294,9 @@ std::string settings_json(const Settings& s) {
           {"bottom_angle", s.bottom_angle},
           {"top_fill_order", fill_order_name(s.top_fill_order)},
           {"bottom_fill_order", fill_order_name(s.bottom_fill_order)},
+          {"top_expansion", s.top_expansion},
+          {"top_expansion_margin", s.top_expansion_margin},
+          {"top_expansion_direction", top_expansion_name(s.top_expansion_direction)},
           {"top_width", s.top_width},
           {"solid_width", s.solid_width},
           {"top_min_thickness", s.top_min_thickness},

@@ -42,6 +42,55 @@ Polygons square(double x0, double y0, double side) {
 
 } // namespace
 
+TEST_CASE("surfaces.top_expansion: the top surface grows into the infill (orca_2_5.md, rule 7)", "[surfaces]") {
+    const auto mm2 = [](const Polygons& p) { return Clipper2Lib::Area(p) / (kUnitsPerMm * kUnitsPerMm); };
+    const auto rect = [](double x0, double y0, double x1, double y1) {
+        return Polygons{{{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)},
+                         {to_units(x0), to_units(y1)}}};
+    };
+    const std::vector<Polygons> infill{square(0, 0, 20)};
+    // Two surfaces split by a 2 mm strip of infill: outward joins them, inward does not.
+    LayerSurfaces split;
+    split.top = Clipper2Lib::Union(rect(0, 0, 9, 20), rect(11, 0, 20, 20), Clipper2Lib::FillRule::NonZero);
+    split.sparse = rect(9, 0, 11, 20);
+    for (const TopExpansionDirection d : {TopExpansionDirection::Outward, TopExpansionDirection::Both}) {
+        std::vector<LayerSurfaces> s{split};
+        expand_top_surfaces(s, infill, 1.5, 0.0, d);
+        CHECK_THAT(mm2(s[0].top), WithinAbs(400.0, 1e-3));
+        CHECK(s[0].sparse.empty());
+    }
+    std::vector<LayerSurfaces> inward{split};
+    expand_top_surfaces(inward, infill, 1.5, 0.0, TopExpansionDirection::Inward);
+    CHECK_THAT(mm2(inward[0].top), WithinAbs(360.0, 1e-3));
+    // A surface with a hole around what rises from it: inward closes 1 mm of it.
+    LayerSurfaces holed;
+    holed.top = Clipper2Lib::Difference(square(0, 0, 20), rect(8, 8, 12, 12), Clipper2Lib::FillRule::NonZero);
+    holed.sparse = rect(8, 8, 12, 12);
+    std::vector<LayerSurfaces> closed{holed};
+    expand_top_surfaces(closed, infill, 1.0, 0.0, TopExpansionDirection::Inward);
+    CHECK_THAT(mm2(closed[0].sparse), WithinAbs(4.0, 1e-3));
+    std::vector<LayerSurfaces> kept{holed};
+    expand_top_surfaces(kept, infill, 1.0, 0.0, TopExpansionDirection::Outward);
+    CHECK_THAT(mm2(kept[0].sparse), WithinAbs(16.0, 1e-3));
+    // The margin keeps what grows that far from the walls.
+    LayerSurfaces half;
+    half.top = rect(0, 0, 9, 20);
+    half.sparse = rect(9, 0, 20, 20);
+    std::vector<LayerSurfaces> margin{half};
+    expand_top_surfaces(margin, infill, 5.0, 8.0, TopExpansionDirection::Outward);
+    CHECK_THAT(mm2(margin[0].top), WithinAbs(180.0 + 3.0 * 4.0, 1e-3));
+    // 0 leaves it as it was.
+    std::vector<LayerSurfaces> off{split};
+    expand_top_surfaces(off, infill, 0.0, 0.0, TopExpansionDirection::Both);
+    CHECK_THAT(mm2(off[0].top), WithinAbs(360.0, 1e-3));
+    // The settings read and are checked.
+    const Settings read = parse_settings(
+        R"({"surfaces": {"top_expansion": 1, "top_expansion_margin": 0.2, "top_expansion_direction": "inward"}})");
+    CHECK(read.top_expansion == 1.0);
+    CHECK(read.top_expansion_direction == TopExpansion::Inward);
+    CHECK_THROWS(parse_settings(R"({"surfaces": {"top_expansion_direction": "up"}})"));
+}
+
 TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {
     // Ten layers of a 10 mm square; the infill is the whole square.
     const std::vector<Polygons> regions(10, square(0, 0, 10));

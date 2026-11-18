@@ -2424,6 +2424,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                            skin_counts(stack.share, bottom_count, -1), settings.wall_width, &slopes)
                        : classify_surfaces(skins, infill, top_count * ratio, bottom_count * ratio,
                                            settings.wall_width, &slopes);
+    // The top surface grows before the bridges are found (orca_2_5.md, rule 7).
+    expand_top_surfaces(out.surfaces, infill, settings.top_expansion, settings.top_expansion_margin,
+                        settings.top_expansion_direction == TopExpansion::Inward    ? TopExpansionDirection::Inward
+                        : settings.top_expansion_direction == TopExpansion::Outward ? TopExpansionDirection::Outward
+                                                                                    : TopExpansionDirection::Both);
     // What the other extruders' parts lay counts as printed below.
     std::vector<Polygons> others;
     if (frame && frame->cover) {

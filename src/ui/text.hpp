@@ -1870,6 +1870,13 @@
     X(SubPolyholes, "Agujeros redondos", "Round holes") \
     X(SubSurfaceAngles, "Dirección y orden de las superficies", "Surface direction and order") \
     X(TopFillOrder, "Orden de arriba", "Top surface order") \
+    X(SubTopExpansion, "Expansión de arriba", "Top surface expansion") \
+    X(TopExpansion, "Expandir la superficie de arriba", "Expand the top surface") \
+    X(TopExpansionMargin, "Distancia a las paredes", "Distance from the walls") \
+    X(TopExpansionDirection, "Hacia dónde crece", "Which way it grows") \
+    X(TopExpansionInward, "Hacia adentro", "Inward") \
+    X(TopExpansionOutward, "Hacia afuera", "Outward") \
+    X(TopExpansionBoth, "Hacia adentro y afuera", "Inward and outward") \
     X(BottomFillOrder, "Orden de abajo", "Bottom surface order") \
     X(FillOrderDefault, "El camino más corto", "Shortest path") \
     X(FillOrderOutward, "Del centro al borde", "Centre to edge") \

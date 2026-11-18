@@ -533,6 +533,29 @@
      "or octagram. \"Shortest path\" (the default) prints in the order that travels least. \"Edge to centre\" "
      "starts with the outer rounds, which hold best to the bed on the first layer. \"Centre to edge\" does the "
      "opposite.\n\nExample: edge to centre if the part lifts at the corners."},
+    {"surfaces.top_expansion",
+     "La superficie de arriba es la capa maciza que queda a la vista. A veces sale partida en pedazos, o con un hueco "
+     "alrededor de algo que sobresale, como un texto en relieve. Este valor la agranda esa cantidad de milímetros sobre "
+     "el relleno de la misma capa, para que salga entera. Con 0 (de fábrica) no crece.\n\nGasta un poco más de "
+     "material y de tiempo.\n\nEjemplo: 1 mm junta superficies separadas por un pasillo angosto.",
+     "The top surface is the solid layer you see. Sometimes it comes out in pieces, or with a gap around something "
+     "that rises from it, like raised text. This value grows it by that many millimetres over the same layer's "
+     "infill, so it comes out whole. At 0 (the default) it does not grow.\n\nIt uses a little more material and "
+     "time.\n\nExample: 1 mm joins surfaces split by a narrow gap."},
+    {"surfaces.top_expansion_margin",
+     "Cuando la superficie de arriba se agranda, esta es la distancia que deja hasta las paredes, para no pisarlas. Con "
+     "0 (de fábrica) puede llegar hasta las paredes.\n\nSirve si ves que lo agrandado empuja material contra el borde "
+     "y lo marca.\n\nEjemplo: 0,2 mm deja un pequeño respiro junto a las paredes.",
+     "When the top surface grows, this is the gap it keeps from the walls so it does not run over them. At 0 (the "
+     "default) it may reach the walls.\n\nIt helps if the grown part pushes material against the edge and marks "
+     "it.\n\nExample: 0.2 mm leaves a small gap by the walls."},
+    {"surfaces.top_expansion_direction",
+     "Hacia dónde se agranda la superficie de arriba. «Hacia adentro» cierra los huecos que quedan alrededor de lo que "
+     "sobresale en el medio. «Hacia afuera» agranda su borde para unir pedazos separados. «Hacia adentro y afuera» (de "
+     "fábrica) hace las dos cosas.\n\nEjemplo: hacia adentro para un logo en relieve sobre una tapa.",
+     "Which way the top surface grows. \"Inward\" closes the gaps left around what rises from the middle. "
+     "\"Outward\" grows its edge to join separate pieces. \"Inward and outward\" (the default) does both.\n\n"
+     "Example: inward for a raised logo on a lid."},
     {"surfaces.interface_shells",
      "Solo cuenta si imprimís con más de un extrusor, por ejemplo con dos materiales o colores. Donde la parte de uno "
      "se apoya sobre la del otro, encendido, cada una lleva sus propias capas macizas de techo y de piso, como si "

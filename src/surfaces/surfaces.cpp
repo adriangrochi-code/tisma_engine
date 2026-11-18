@@ -5,6 +5,7 @@
 
 #include <oneapi/tbb/parallel_for.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace tisma {
@@ -141,6 +142,46 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
         if (same[i])
             out[i] = out[i - 1];
     return out;
+}
+
+void expand_top_surfaces(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygons>& infill, double distance,
+                         double margin, TopExpansionDirection direction) {
+    if (!(distance > 0.0))
+        return;
+    tbb::parallel_for(std::size_t(0), surfaces.size(), [&](std::size_t l) {
+        LayerSurfaces& s = surfaces[l];
+        if (s.top.empty() || s.sparse.empty() || l >= infill.size())
+            return;
+        const Polygons surface = s.top_under.empty() ? s.top : Clipper2Lib::Difference(s.top, s.top_under, FillRule::NonZero);
+        if (surface.empty())
+            return;
+        Polygons grown;
+        if (direction == TopExpansionDirection::Both) {
+            grown = offset(surface, distance);
+        } else if (direction == TopExpansionDirection::Inward) {
+            grown = offset_holes(surface, -distance);
+        } else {
+            // The outer edges out, the holes as they were.
+            const Polygons whole = Clipper2Lib::Union(surface, FillRule::NonZero);
+            Polygons outers, holes;
+            for (const Polygon& p : whole) {
+                if (Clipper2Lib::IsPositive(p)) {
+                    outers.push_back(p);
+                } else {
+                    holes.push_back(p);
+                    std::reverse(holes.back().begin(), holes.back().end());
+                }
+            }
+            grown = Clipper2Lib::Difference(offset(outers, distance), holes, FillRule::NonZero);
+        }
+        const Polygons allowed = margin > 0.0 ? offset(infill[l], -margin) : infill[l];
+        const Polygons added = Clipper2Lib::Intersect(Clipper2Lib::Intersect(grown, allowed, FillRule::NonZero),
+                                                      s.sparse, FillRule::NonZero);
+        if (added.empty())
+            return;
+        s.top = Clipper2Lib::Union(s.top, added, FillRule::NonZero);
+        s.sparse = Clipper2Lib::Difference(s.sparse, added, FillRule::NonZero);
+    });
 }
 
 } // namespace tisma

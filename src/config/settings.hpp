@@ -25,6 +25,8 @@ enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRecti
 // The order of a surface in a centre-out pattern (orca_2_5.md, rule 8): the
 // shortest way, from the centre to the edge, or from the edge to the centre.
 enum class FillOrder { Default, Outward, Inward };
+// Where the top surface grows (orca_2_5.md, rule 7).
+enum class TopExpansion { Inward, Outward, InwardAndOutward };
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram, Honeycomb3d };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
@@ -314,6 +316,10 @@ struct Settings {
     // rule 9), degrees; -1: the solid infill's. The top one also irons.
     double top_angle = -1.0, bottom_angle = -1.0;
     FillOrder top_fill_order = FillOrder::Default, bottom_fill_order = FillOrder::Default; // rule 8
+    // Top surface expansion (rule 7): mm it grows (0: off), how near the walls
+    // it may come, and which way.
+    double top_expansion = 0.0, top_expansion_margin = 0.0;
+    TopExpansion top_expansion_direction = TopExpansion::InwardAndOutward;
     // Line widths of their own, mm; 0: from the nozzle, not the walls
     // (surfaces_infill.md, I9).
     double top_width = 0.0;    // the top surface; 0: one nozzle
@@ -1036,6 +1042,7 @@ std::string settings_json(const Settings& settings);
 const char* infill_pattern_name(InfillPattern pattern);
 const char* surface_pattern_name(SurfacePattern pattern);
 const char* fill_order_name(FillOrder order);
+const char* top_expansion_name(TopExpansion direction);
 
 // The name of a flavor in the settings ("marlin", "no_extrusion"...).
 const char* flavor_name(GcodeFlavor flavor);

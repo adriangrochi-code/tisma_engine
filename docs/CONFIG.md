@@ -173,6 +173,9 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `bottom_angle` | número | −1 | −1, o 0 a 360 | Lo mismo con las superficies de abajo (regla 9) |
 | `top_fill_order` | texto | `"default"` | `default`, `outward`, `inward` | Orden de la superficie de arriba cuando su dibujo sale del centro (`concentric`, `archimedean`, `octagram`): `default` por el camino más corto; `outward` del centro al borde; `inward` del borde al centro (ficha `orca_2_5.md`, regla 8) |
 | `bottom_fill_order` | texto | `"default"` | los mismos | Lo mismo con la superficie de abajo de todo (regla 8) |
+| `top_expansion` | mm | 0 | 0 a 100 | La superficie de arriba crece esa distancia sobre el relleno de la capa, para unir superficies partidas y cerrar los huecos alrededor de lo que sale de ella; 0 lo apaga (ficha `orca_2_5.md`, regla 7) |
+| `top_expansion_margin` | mm | 0 | 0 a 100 | Cuánto se queda lejos de las paredes lo que crece (regla 7) |
+| `top_expansion_direction` | texto | `"inward_and_outward"` | `inward`, `outward`, `inward_and_outward` | `inward` cierra los huecos de la superficie; `outward` agranda su borde de afuera; `inward_and_outward` las dos cosas (regla 7) |
 
 ### `infill`
 

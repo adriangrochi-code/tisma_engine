@@ -15350,3 +15350,17 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - Pruebas: todas bien (1139 casos). La nueva de `[infill]`: con los tres dibujos, las distancias al centro crecen con `outward` y bajan con `inward`, y
   `order_paths` respeta el orden.
 - **Siguiente:** la regla 7, expansión de la superficie de arriba, en partes.
+
+**03:20 (Montevideo, 18-11) — O2, regla 7, parte 1: la superficie de arriba crece.**
+- `surfaces.top_expansion` (mm, 0 la apaga), `surfaces.top_expansion_margin` y `surfaces.top_expansion_direction`
+  (`inward`, `outward` o `inward_and_outward`, que es el valor de fábrica).
+- `expand_top_surfaces` hace crecer la superficie de arriba de cada capa (sin las capas macizas de debajo) sobre el
+  relleno ralo de la misma capa, a una distancia de las paredes igual al margen. Va antes de buscar los puentes.
+  - `outward` agranda los bordes de afuera y une superficies partidas.
+  - `inward` cierra los agujeros alrededor de lo que sale de la superficie.
+- En la interfaz, una subsección nueva, «Expansión de arriba», con sus tres ajustes y su explicación en los dos
+  idiomas.
+- Pruebas: todas bien (1140 casos). La nueva de `[surfaces]`: dos superficies separadas por 2 mm se unen hacia afuera y no hacia adentro; un agujero de
+  4 mm se cierra 1 mm por lado hacia adentro; el margen limita lo que crece; con 0 no cambia nada.
+- **Falta (parte 2):** sacar las paredes internas que quedan sobre la superficie agrandada. Las de ancho fijo se
+  sacan enteras; las de ancho variable, solo el tramo de arriba.

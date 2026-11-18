@@ -2275,6 +2275,8 @@ const std::map<T, const char*>& row_keys() {
         {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
         {T::TopAngle, "surfaces.top_angle"}, {T::BottomAngle, "surfaces.bottom_angle"},
         {T::TopFillOrder, "surfaces.top_fill_order"}, {T::BottomFillOrder, "surfaces.bottom_fill_order"},
+        {T::TopExpansion, "surfaces.top_expansion"}, {T::TopExpansionMargin, "surfaces.top_expansion_margin"},
+        {T::TopExpansionDirection, "surfaces.top_expansion_direction"},
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
@@ -10058,6 +10060,15 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= row(T::TopFillOrder, s.top_fill_order, orders());
         if (shown("surfaces.bottom_fill_order"))
             changed |= row(T::BottomFillOrder, s.bottom_fill_order, orders());
+    } else if (id == "top_expansion") {
+        // The top surface grown into the infill (orca_2_5.md, rule 7).
+        mm(T::TopExpansion, "surfaces.top_expansion", s.top_expansion, 0.0, 100.0, "%.2f mm", 0.01f);
+        mm(T::TopExpansionMargin, "surfaces.top_expansion_margin", s.top_expansion_margin, 0.0, 100.0, "%.2f mm", 0.01f);
+        if (shown("surfaces.top_expansion_direction"))
+            changed |= row(T::TopExpansionDirection, s.top_expansion_direction,
+                           {{TopExpansion::Inward, tr(T::TopExpansionInward)},
+                            {TopExpansion::Outward, tr(T::TopExpansionOutward)},
+                            {TopExpansion::InwardAndOutward, tr(T::TopExpansionBoth)}});
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         if (shown("infill.pattern"))
