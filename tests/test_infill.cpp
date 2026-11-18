@@ -1,4 +1,5 @@
 #include "config/settings.hpp"
+#include "gcode/order.hpp"
 #include "infill/gyroid.hpp"
 #include "infill/rectilinear.hpp"
 #include "perimeters/coverage.hpp"
@@ -125,6 +126,70 @@ TEST_CASE("surfaces.top_angle and bottom_angle: a fixed angle for the surfaces' 
     CHECK(read.top_angle == 30.0);
     CHECK(read.bottom_angle == -1.0);
     CHECK_THROWS(parse_settings(R"({"surfaces": {"top_angle": -5}})"));
+}
+
+TEST_CASE("surfaces.top_fill_order and bottom_fill_order: centre out or edge in (orca_2_5.md, rule 8)", "[infill]") {
+    // How far each path's first point lies from the centre, in the order given.
+    const auto distances = [](const std::vector<Toolpath>& paths, Point2d c) {
+        std::vector<double> out;
+        for (const Toolpath& t : paths)
+            if (!t.points.empty()) {
+                double d = 0.0;
+                for (const ToolpathPoint& q : t.points) // a loop: its mean distance
+                    d += std::hypot(q.p.x - c.x, q.p.y - c.y);
+                const double front = std::hypot(t.points.front().p.x - c.x, t.points.front().p.y - c.y);
+                const double back = std::hypot(t.points.back().p.x - c.x, t.points.back().p.y - c.y);
+                out.push_back(t.closed ? d / double(t.points.size()) : std::min(front, back));
+            }
+        return out;
+    };
+    LayerSurfaces s;
+    s.top = square(0, 0, 20);
+    FillParams p;
+    p.centre = {10.0, 10.0};
+    for (const SurfacePattern pattern : {SurfacePattern::Concentric, SurfacePattern::Archimedean, SurfacePattern::Octagram}) {
+        INFO(int(pattern));
+        p.top_pattern = pattern;
+        p.top_order = FillOrder::Outward;
+        const LayerFill out = fill_layer(s, 0, p, 0.2);
+        REQUIRE(out.top.size() >= 2);
+        const std::vector<double> d = distances(out.top, p.centre);
+        CHECK(std::is_sorted(d.begin(), d.end()));
+        for (const Toolpath& t : out.top) {
+            CHECK(t.in_order);
+            CHECK(t.one_way == !t.closed);
+        }
+        p.top_order = FillOrder::Inward;
+        const LayerFill in = fill_layer(s, 0, p, 0.2);
+        const std::vector<double> e = distances(in.top, p.centre);
+        CHECK(std::is_sorted(e.rbegin(), e.rend()));
+        // Each spiral piece runs towards the centre.
+        for (const Toolpath& t : in.top)
+            if (!t.closed)
+                CHECK(std::hypot(t.points.back().p.x - 10.0, t.points.back().p.y - 10.0) <=
+                      std::hypot(t.points.front().p.x - 10.0, t.points.front().p.y - 10.0));
+        p.top_order = FillOrder::Default;
+        for (const Toolpath& t : fill_layer(s, 0, p, 0.2).top)
+            CHECK_FALSE(t.in_order);
+    }
+    // Ordered paths keep their order when the G-code orders a group.
+    std::vector<Toolpath> group;
+    for (int i = 0; i < 3; ++i) {
+        Toolpath t;
+        t.points = {{{double(10 * (2 - i)), 0.0}, 0.4}, {{double(10 * (2 - i)) + 1.0, 0.0}, 0.4}};
+        t.in_order = t.one_way = true;
+        group.push_back(t);
+    }
+    Point2d cursor{0.0, 0.0};
+    SeamMemory memory;
+    const std::vector<Toolpath> ordered = order_paths(group, cursor, SeamMode::Nearest, 1, memory);
+    REQUIRE(ordered.size() == 3);
+    CHECK(ordered[0].points.front().p.x == 20.0);
+    CHECK(ordered[2].points.front().p.x == 0.0);
+    const Settings read = parse_settings(R"({"surfaces": {"top_fill_order": "outward", "bottom_fill_order": "inward"}})");
+    CHECK(read.top_fill_order == FillOrder::Outward);
+    CHECK(read.bottom_fill_order == FillOrder::Inward);
+    CHECK_THROWS(parse_settings(R"({"surfaces": {"top_fill_order": "sideways"}})"));
 }
 
 TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 14 to 17)", "[infill]") {

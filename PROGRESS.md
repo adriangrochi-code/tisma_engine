@@ -15338,3 +15338,15 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - **0.13.0-beta.4:** el tercer intento falló otra vez en `gate_g15_quit` (Linux). Es la segunda falla seguida, así que
   no es un flake. El arreglo de la prueba (8968c74) está en dev y no en alpha. No empujo a alpha sin permiso del dueño:
   se lo pregunté a QA.
+
+**03:00 (Montevideo, 18-11) — O2, regla 8: orden de las superficies que salen del centro.**
+- `surfaces.top_fill_order` y `surfaces.bottom_fill_order`: `default`, `outward` o `inward`. Cuentan en los dibujos
+  `concentric`, `archimedean` y `octagram` de la superficie de arriba y de la capa de abajo de todo.
+- `default` deja el G-code igual que antes. Con `outward` o `inward`, cada camino lleva la marca `Toolpath::in_order`
+  y los tramos abiertos van en un solo sentido. `order_paths` imprime primero los demás caminos del grupo por
+  cercanía, y después los marcados, en su orden y de a uno, así cada uno elige su costura o su punta desde el cursor.
+- En la interfaz, la subsección pasó a llamarse «Dirección y orden de las superficies» y tiene los dos selectores
+  nuevos, con su explicación en los dos idiomas.
+- Pruebas: todas bien (1139 casos). La nueva de `[infill]`: con los tres dibujos, las distancias al centro crecen con `outward` y bajan con `inward`, y
+  `order_paths` respeta el orden.
+- **Siguiente:** la regla 7, expansión de la superficie de arriba, en partes.

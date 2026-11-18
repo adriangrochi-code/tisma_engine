@@ -2274,6 +2274,7 @@ const std::map<T, const char*>& row_keys() {
         {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
         {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
         {T::TopAngle, "surfaces.top_angle"}, {T::BottomAngle, "surfaces.bottom_angle"},
+        {T::TopFillOrder, "surfaces.top_fill_order"}, {T::BottomFillOrder, "surfaces.bottom_fill_order"},
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
@@ -10047,6 +10048,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::TopAngle, "surfaces.top_angle", s.top_angle, -1.0, 360.0, s.top_angle >= 0.0 ? "%.0f°" : tr(T::AutoValue), 0.5f);
         mm(T::BottomAngle, "surfaces.bottom_angle", s.bottom_angle, -1.0, 360.0,
            s.bottom_angle >= 0.0 ? "%.0f°" : tr(T::AutoValue), 0.5f);
+        // The order of a centre-out pattern (orca_2_5.md, rule 8).
+        const auto orders = [&]() -> std::vector<std::pair<FillOrder, const char*>> {
+            return {{FillOrder::Default, tr(T::FillOrderDefault)},
+                    {FillOrder::Outward, tr(T::FillOrderOutward)},
+                    {FillOrder::Inward, tr(T::FillOrderInward)}};
+        };
+        if (shown("surfaces.top_fill_order"))
+            changed |= row(T::TopFillOrder, s.top_fill_order, orders());
+        if (shown("surfaces.bottom_fill_order"))
+            changed |= row(T::BottomFillOrder, s.bottom_fill_order, orders());
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         if (shown("infill.pattern"))

@@ -363,6 +363,46 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
             return std::nullopt;
         }
     };
+    // A centre-out pattern in a set order (orca_2_5.md, rule 8): the concentric
+    // loops come from the edge in, the spirals' pieces are sorted by how near
+    // the centre they start and turned to run away from it; inward is the
+    // reverse. Each is then printed in that order.
+    const auto in_order = [&](std::vector<Toolpath> paths, SurfacePattern pattern, FillOrder order) {
+        if (order == FillOrder::Default ||
+            (pattern != SurfacePattern::Concentric && pattern != SurfacePattern::Archimedean &&
+             pattern != SurfacePattern::Octagram))
+            return paths;
+        bool outward = order == FillOrder::Outward;
+        if (pattern != SurfacePattern::Concentric) {
+            const auto from_centre = [&](const ToolpathPoint& q) {
+                return std::hypot(q.p.x - params.centre.x, q.p.y - params.centre.y);
+            };
+            std::vector<std::pair<double, std::size_t>> keys;
+            for (std::size_t i = 0; i < paths.size(); ++i) {
+                Toolpath& t = paths[i];
+                if (!t.closed && t.points.size() >= 2 && from_centre(t.points.back()) < from_centre(t.points.front()))
+                    std::reverse(t.points.begin(), t.points.end());
+                keys.push_back({t.points.empty() ? 0.0 : from_centre(t.points.front()), i});
+            }
+            std::stable_sort(keys.begin(), keys.end());
+            std::vector<Toolpath> sorted;
+            for (const auto& [key, i] : keys)
+                sorted.push_back(std::move(paths[i]));
+            paths = std::move(sorted); // now from the centre out
+            if (!outward)
+                for (Toolpath& t : paths)
+                    if (!t.closed)
+                        std::reverse(t.points.begin(), t.points.end());
+            outward = !outward; // the list runs from the centre: turned for inward
+        }
+        if (outward)
+            std::reverse(paths.begin(), paths.end());
+        for (Toolpath& t : paths) {
+            t.in_order = true;
+            t.one_way = !t.closed;
+        }
+        return paths;
+    };
     // monotonic_lines (rule 14, P10): each line a piece of its own, and all
     // printed the same way, at the layer's angle: a piece that runs against
     // it is turned round.
@@ -386,7 +426,7 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     // the same all one way (monotonic_lines), zig-zags, zig-zags that do not
     // turn between layers (aligned_rectilinear, rule 15), or a curve.
     if (auto c = curves(params.top_pattern, surface, top))
-        out.top = std::move(*c);
+        out.top = in_order(std::move(*c), params.top_pattern, params.top_order);
     else if (params.top_pattern == SurfacePattern::MonotonicLines)
         out.top = one_way(rectilinear_fill(surface, top - d, top_angle, top, false, true, true, params.wall_overlap * top + d / 2.0),
                           top_angle);
@@ -433,7 +473,7 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         // The bottom surface itself in its pattern, the rest in zig-zags.
         const Polygons exposed = Clipper2Lib::Intersect(surfaces.bottom, surfaces.bottom_exposed, Clipper2Lib::FillRule::NonZero);
         if (auto c = curves(bp, exposed, inner))
-            out.solid = std::move(*c);
+            out.solid = in_order(std::move(*c), bp, params.bottom_order);
         else // aligned_rectilinear: the zig-zags at the infill's angle in every layer
             out.solid = zigzag(exposed, fixed_bottom ? bottom_angle : params.angle);
         if (fixed_bottom)

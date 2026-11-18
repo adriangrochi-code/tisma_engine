@@ -171,6 +171,8 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `bridge_angle` | número | 0 | −360 a 360 | Dirección de las líneas de todos los puentes, en grados (ficha `surfaces_infill.md`); 0: la de cada puente, según dónde se apoya |
 | `top_angle` | número | −1 | −1, o 0 a 360 | Ángulo fijo, en grados, de las líneas de la superficie de arriba y del planchado; −1: el del relleno sólido, que gira por capa (ficha `orca_2_5.md`, regla 9) |
 | `bottom_angle` | número | −1 | −1, o 0 a 360 | Lo mismo con las superficies de abajo (regla 9) |
+| `top_fill_order` | texto | `"default"` | `default`, `outward`, `inward` | Orden de la superficie de arriba cuando su dibujo sale del centro (`concentric`, `archimedean`, `octagram`): `default` por el camino más corto; `outward` del centro al borde; `inward` del borde al centro (ficha `orca_2_5.md`, regla 8) |
+| `bottom_fill_order` | texto | `"default"` | los mismos | Lo mismo con la superficie de abajo de todo (regla 8) |
 
 ### `infill`
 

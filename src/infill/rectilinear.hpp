@@ -87,6 +87,8 @@ struct FillParams {
     // A fixed angle for the top surface's and the bottom surfaces' lines
     // (surfaces.top_angle and bottom_angle, orca_2_5.md rule 9); -1: the layer's.
     double top_angle = -1.0, bottom_angle = -1.0;
+    // The order of a top or bottom surface in a centre-out pattern (rule 8).
+    FillOrder top_order = FillOrder::Default, bottom_order = FillOrder::Default;
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,

@@ -2802,6 +2802,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.bottom_pattern = settings.bottom_pattern;
     fill.top_angle = settings.top_angle;
     fill.bottom_angle = settings.bottom_angle;
+    fill.top_order = settings.top_fill_order;
+    fill.bottom_order = settings.bottom_fill_order;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress

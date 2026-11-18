@@ -65,6 +65,9 @@ struct Toolpath {
     double gap = 0.0;
     bool retract = false; // retract before it, however short the travel (each arc, arc_overhangs.md rule 4)
     bool one_way = false; // printed as it runs, never turned round to save a travel (monotonic_lines, BH21)
+    // Printed in the order of its list, after the group's other paths: a
+    // surface filled from the centre out or from the edge in (orca_2_5.md, rule 8).
+    bool in_order = false;
     // The extruder of the part it belongs to, from 1 (multi_extruder.md,
     // rule 1); 0: the default one, or for what belongs to no part (support,
     // skirt) whichever extruder is printing.

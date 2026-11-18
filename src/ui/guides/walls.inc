@@ -515,6 +515,24 @@
      "always run that way.\n\nIt helps the face on the bed come out with the lines you want, for example across "
      "the length of the part so it holds better.\n\nExample: −1 almost always; 90° lays the lines along the Y "
      "axis."},
+    {"surfaces.top_fill_order",
+     "Solo cuenta si la superficie de arriba usa un dibujo que sale del centro: concéntrico, espiral de Arquímedes u "
+     "octagrama. «El camino más corto» (de fábrica) imprime los tramos en el orden que menos viaja. «Del centro al "
+     "borde» empieza en el medio y termina en el borde, y lo que sobra de material queda en el borde, donde se nota "
+     "menos. «Del borde al centro» hace lo contrario.\n\nEjemplo: del centro al borde para una tapa lisa.",
+     "Only matters if the top surface uses a pattern that grows from the centre: concentric, Archimedean spiral or "
+     "octagram. \"Shortest path\" (the default) prints the pieces in the order that travels least. \"Centre to "
+     "edge\" starts in the middle and ends at the edge, so any extra material ends up at the edge, where it shows "
+     "less. \"Edge to centre\" does the opposite.\n\nExample: centre to edge for a smooth lid."},
+    {"surfaces.bottom_fill_order",
+     "Solo cuenta si la capa de abajo de todo usa un dibujo que sale del centro: concéntrico, espiral de Arquímedes u "
+     "octagrama. «El camino más corto» (de fábrica) imprime en el orden que menos viaja. «Del borde al centro» "
+     "empieza por las vueltas de afuera, que son las que más se pegan a la cama en la primera capa. «Del centro al "
+     "borde» hace lo contrario.\n\nEjemplo: del borde al centro si la pieza se despega por las esquinas.",
+     "Only matters if the very bottom layer uses a pattern that grows from the centre: concentric, Archimedean spiral "
+     "or octagram. \"Shortest path\" (the default) prints in the order that travels least. \"Edge to centre\" "
+     "starts with the outer rounds, which hold best to the bed on the first layer. \"Centre to edge\" does the "
+     "opposite.\n\nExample: edge to centre if the part lifts at the corners."},
     {"surfaces.interface_shells",
      "Solo cuenta si imprimís con más de un extrusor, por ejemplo con dos materiales o colores. Donde la parte de uno "
      "se apoya sobre la del otro, encendido, cada una lleva sus propias capas macizas de techo y de piso, como si "

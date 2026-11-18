@@ -1868,7 +1868,12 @@
     X(SubSpeedLimits, "Velocidades", "Speeds") \
     X(SubPreparation, "Preparación", "Preparation") \
     X(SubPolyholes, "Agujeros redondos", "Round holes") \
-    X(SubSurfaceAngles, "Ángulos de las superficies", "Surface angles") \
+    X(SubSurfaceAngles, "Dirección y orden de las superficies", "Surface direction and order") \
+    X(TopFillOrder, "Orden de arriba", "Top surface order") \
+    X(BottomFillOrder, "Orden de abajo", "Bottom surface order") \
+    X(FillOrderDefault, "El camino más corto", "Shortest path") \
+    X(FillOrderOutward, "Del centro al borde", "Centre to edge") \
+    X(FillOrderInward, "Del borde al centro", "Edge to centre") \
     X(SubAccel, "Aceleraciones", "Accelerations") \
     X(SubMaxTemps, "Temperaturas máximas", "Maximum temperatures") \
     X(SubFirmware, "Firmware", "Firmware") \
