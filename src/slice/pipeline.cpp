@@ -3113,6 +3113,30 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                                    : 1;
         const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
         const double ws = w - std::clamp(params.overlap, 0.0, 0.5 * w);
+        // smooth_blend: one field, the gyroids of the two shell densities
+        // round each point's own density mixed by where it falls between them.
+        if (settings.infill_adaptive_mode == AdaptiveMode::SmoothBlend && S > 0.0 && I > 0.0) {
+            std::vector<double> levels(std::size_t(n) + 1);
+            for (int k = 0; k <= n; ++k)
+                levels[std::size_t(k)] = S * std::pow(I / S, double(k) / n);
+            const double finest = gyroid_period(ws, std::min(1.0, std::max(S, I)));
+            const GyroidField field = [&](double x, double y) {
+                const double t = deep > 0.0 ? gyroid_depth.at(x, y, z) / deep : 0.0;
+                const double rho = adaptive_density(S, I, t, settings.infill_adaptive_gradient);
+                // The pair of levels round rho, or the end nearest it.
+                std::size_t k = std::abs(rho - levels.front()) <= std::abs(rho - levels.back()) ? 0 : levels.size() - 2;
+                for (std::size_t i = 0; i + 1 < levels.size(); ++i)
+                    if ((rho - levels[i]) * (rho - levels[i + 1]) <= 0.0) {
+                        k = i;
+                        break;
+                    }
+                const double a = levels[k], b = levels[k + 1];
+                const double wa = a != b ? std::clamp((rho - b) / (a - b), 0.0, 1.0) : 1.0;
+                return wa * gyroid_value(x, y, z, gyroid_period(ws, std::min(1.0, a))) +
+                       (1.0 - wa) * gyroid_value(x, y, z, gyroid_period(ws, std::min(1.0, b)));
+            };
+            return gyroid_fill(out.surfaces[l].sparse, finest, z, w, &field);
+        }
         Polygons outside = out.surfaces[l].sparse;
         for (int k = 0; k < n && !outside.empty(); ++k) {
             const double t0 = double(k) / n, t1 = double(k + 1) / n;

@@ -15506,3 +15506,12 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   - También se prueban las tres fórmulas.
 - La prueba de la regla 13 suma OR12: con cúbico al 15 % y 3 líneas, ningún camino se cruza consigo mismo.
 - **Siguiente:** `distance_warp` con fase integrada, o los modos que faltan.
+
+**06:55 (Montevideo, 18-11) — O2, regla 10, parte 2: `smooth_blend`.**
+- `gyroid_fill` ahora acepta un campo propio (`GyroidField`) para marchar en lugar del gyroid de un solo período.
+- Con `smooth_blend`, el campo de cada punto mezcla los gyroides de los dos niveles de densidad que rodean la suya. Los
+  niveles van en pasos de 1,5 de la superficie al centro, y el peso sale de dónde cae la densidad entre ellos. Sale un
+  solo dibujo continuo, sin los cortes entre cáscaras.
+- Pruebas: todas bien (1147 casos). La prueba suma: con `smooth_blend` el centro queda más ralo que la franja, y en la capa del medio hay menos caminos
+  sueltos que con las cáscaras.
+- Siguen usando las cáscaras `distance_warp`, `lobes` y los `normal_*`.

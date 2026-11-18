@@ -221,9 +221,16 @@ TEST_CASE("infill.adaptive_mode: gyroid denser by the faces, sparser inside (orc
     CHECK(std::abs(ring0 - middle0) < 0.2 * ring0); // even without it
     s.infill_adaptive_mode = AdaptiveMode::SteppedShells;
     s.infill_adaptive_interior_density = 5.0;
-    const auto [ring1, middle1] = per_area(slice_model(weld_exact(mesh), s));
+    const SlicedModel shells = slice_model(weld_exact(mesh), s);
+    const auto [ring1, middle1] = per_area(shells);
     CHECK(middle1 < 0.7 * ring1); // sparser in the middle
     CHECK(middle1 < 0.7 * middle0);
+    // smooth_blend: the same gradient as one blended field, without the shells' cuts.
+    s.infill_adaptive_mode = AdaptiveMode::SmoothBlend;
+    const SlicedModel blended = slice_model(weld_exact(mesh), s);
+    const auto [ring2, middle2] = per_area(blended);
+    CHECK(middle2 < 0.8 * ring2);
+    CHECK(blended.fills[blended.fills.size() / 2].sparse.size() < shells.fills[shells.fills.size() / 2].sparse.size());
     CHECK(parse_settings(R"({"infill": {"adaptive_mode": "distance_warp", "adaptive_gradient": "quadratic"}})")
               .infill_adaptive_gradient == AdaptiveGradient::Quadratic);
     CHECK_THROWS(parse_settings(R"({"infill": {"adaptive_mode": "wavy"}})"));
