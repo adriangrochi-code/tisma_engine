@@ -231,6 +231,10 @@ TEST_CASE("infill.adaptive_mode: gyroid denser by the faces, sparser inside (orc
     const auto [ring2, middle2] = per_area(blended);
     CHECK(middle2 < 0.8 * ring2);
     CHECK(blended.fills[blended.fills.size() / 2].sparse.size() < shells.fills[shells.fills.size() / 2].sparse.size());
+    // normal_z: the depth within each layer, the same gradient from the walls.
+    s.infill_adaptive_mode = AdaptiveMode::NormalZ;
+    const auto [ring3, middle3] = per_area(slice_model(weld_exact(mesh), s));
+    CHECK(middle3 < 0.8 * ring3);
     CHECK(parse_settings(R"({"infill": {"adaptive_mode": "distance_warp", "adaptive_gradient": "quadratic"}})")
               .infill_adaptive_gradient == AdaptiveGradient::Quadratic);
     CHECK_THROWS(parse_settings(R"({"infill": {"adaptive_mode": "wavy"}})"));

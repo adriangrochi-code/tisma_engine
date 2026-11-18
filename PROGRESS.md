@@ -180,7 +180,7 @@ triángulos por capas antes de cortar.
     modelo o por encima: la altura impresa se redondea a la capa más cercana.
   - `slice_levels` corta todos los niveles de un campo. Cada triángulo se reparte en los niveles que cruza su rango
     de valores, y cada nivel corta solo sus triángulos. Sirve igual para un campo curvo (regla 1 del diseño).
-- Pruebas:
+- Pruebas: todas bien (1147 casos).
   - plan de capas, y alturas no válidas;
   - cubo: 50 capas de 100 mm²;
   - pirámide: el área de cada capa coincide con el área exacta de la sección (10 − z)², con error menor a 0,001 mm²;
@@ -11473,7 +11473,7 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Al conectar, la interfaz llena los datos vacíos del perfil (regla 4) con un aviso «N datos del perfil tomados de la
   impresora (firmware)». Si la cama está vacía y la impresora no informa su tamaño, avisa que hay que escribirlo a mano
   (regla 6).
-- Pruebas:
+- Pruebas: todas bien (1147 casos).
   - `[device]`: el simulador da el área de trabajo y los límites;
   - `ui_device_limits`: aparece el aviso al conectar.
 - **Falta:** Moonraker (toolhead y configfile al probar la conexión), la lista para aceptar uno por uno lo que difiere,
@@ -15515,3 +15515,14 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - Pruebas: todas bien (1147 casos). La prueba suma: con `smooth_blend` el centro queda más ralo que la franja, y en la capa del medio hay menos caminos
   sueltos que con las cáscaras.
 - Siguen usando las cáscaras `distance_warp`, `lobes` y los `normal_*`.
+
+**07:05 (Montevideo, 18-11) — O2, regla 10, parte 3: los modos `normal_x`, `normal_y` y `normal_z`.**
+- `distance_transform` acepta `skip_axis`: sin la pasada de un eje, da la distancia dentro de cada plano normal a él.
+  `sparse_depth` lo usa con `DepthFrom::PlaneX/Y/Z`.
+- Los modos `normal_*` usan la mezcla de `smooth_blend` con esa profundidad. Por ejemplo, con `normal_z` cada capa va
+  sola y solo cuentan las paredes.
+- Pruebas: todas bien (1147 casos).
+  - `[adaptive]`: en el bloque de 30 mm, lo más hondo en los planos Z da 15 mm (las paredes) y en los planos X da 9 mm
+    (las capas macizas).
+  - La prueba del cubo suma `normal_z`: el centro queda más ralo.
+- Siguen usando las cáscaras `distance_warp` (necesita una fase integrada) y `lobes`.

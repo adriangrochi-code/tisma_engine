@@ -3096,14 +3096,21 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // Adaptive gyroid density (orca_2_5.md, rule 10): shells of gyroid, each
     // about 1.5 times denser than the one inside, from infill.density at the
     // surfaces to the interior density at the deepest point, by how deep
-    // each point lies (a 0.5 mm field). Every mode uses the shells for now.
+    // each point lies (a 0.5 mm field); smooth_blend and the normal_* modes
+    // (depth within the planes normal to their axis) blend them in one field;
+    // distance_warp and lobes use the shells for now.
     DepthField gyroid_depth;
     if (ip == InfillPattern::Gyroid && settings.infill_adaptive_mode != AdaptiveMode::Disabled &&
         settings.infill_density > 0.0 && settings.infill_density < 100.0) {
         std::vector<Polygons> sparse(out.surfaces.size());
         for (std::size_t l = 0; l < sparse.size(); ++l)
             sparse[l] = out.surfaces[l].sparse;
-        gyroid_depth = sparse_depth(sparse, out.layers, 0.5);
+        const AdaptiveMode m = settings.infill_adaptive_mode;
+        gyroid_depth = sparse_depth(sparse, out.layers, 0.5,
+                                    m == AdaptiveMode::NormalX   ? DepthFrom::PlaneX
+                                    : m == AdaptiveMode::NormalY ? DepthFrom::PlaneY
+                                    : m == AdaptiveMode::NormalZ ? DepthFrom::PlaneZ
+                                                                 : DepthFrom::Surfaces);
     }
     const auto gyroid_shells = [&](std::size_t l, const FillParams& params) {
         std::vector<Toolpath> sparse;
@@ -3115,7 +3122,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         const double ws = w - std::clamp(params.overlap, 0.0, 0.5 * w);
         // smooth_blend: one field, the gyroids of the two shell densities
         // round each point's own density mixed by where it falls between them.
-        if (settings.infill_adaptive_mode == AdaptiveMode::SmoothBlend && S > 0.0 && I > 0.0) {
+        // The normal_* modes blend too, by the depth within their planes.
+        const AdaptiveMode m = settings.infill_adaptive_mode;
+        if ((m == AdaptiveMode::SmoothBlend || m == AdaptiveMode::NormalX || m == AdaptiveMode::NormalY ||
+             m == AdaptiveMode::NormalZ) &&
+            S > 0.0 && I > 0.0) {
             std::vector<double> levels(std::size_t(n) + 1);
             for (int k = 0; k <= n; ++k)
                 levels[std::size_t(k)] = S * std::pow(I / S, double(k) / n);

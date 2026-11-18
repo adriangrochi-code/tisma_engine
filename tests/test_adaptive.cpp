@@ -125,6 +125,11 @@ TEST_CASE("depth field: how deep a block of sparse infill is", "[adaptive]") {
     split.sparse[50] = {}; // z 10 to 10.2
     const DepthField g = sparse_depth(split.sparse, split.layers, 0.5);
     CHECK_THAT(g.deepest, WithinAbs(4.5, 0.5));
+    // Within the planes normal to an axis (orca_2_5.md, rule 10, the normal_*
+    // modes): in the Z planes only the walls count, 15 mm away; in the X
+    // planes the solid layers still do, 9 mm.
+    CHECK_THAT(sparse_depth(b.sparse, b.layers, 0.5, DepthFrom::PlaneZ).deepest, WithinAbs(15.0, 0.5));
+    CHECK_THAT(sparse_depth(b.sparse, b.layers, 0.5, DepthFrom::PlaneX).deepest, WithinAbs(9.0, 0.5));
     // Too many voxels: wider ones.
     const DepthField coarse = sparse_depth(b.sparse, b.layers, 0.1, DepthFrom::Surfaces, 100000);
     CHECK(coarse.cell > 0.1);

@@ -118,7 +118,7 @@ void rasterize(const Polygons& region, const DepthField& f, std::vector<char>& o
 
 } // namespace
 
-std::vector<float> distance_transform(const std::vector<char>& set, int nx, int ny, int nz) {
+std::vector<float> distance_transform(const std::vector<char>& set, int nx, int ny, int nz, int skip_axis) {
     const std::size_t n = std::size_t(nx) * std::size_t(ny) * std::size_t(nz);
     std::vector<float> d(n);
     for (std::size_t i = 0; i < n; ++i)
@@ -127,10 +127,13 @@ std::vector<float> distance_transform(const std::vector<char>& set, int nx, int 
         return d;
     // Squared distances add up over the axes, so one pass per axis is exact (section 3).
     const std::size_t sx = std::size_t(nx), sxy = std::size_t(nx) * std::size_t(ny);
-    transform_lines(d, nx, 1, std::size_t(ny) * std::size_t(nz), [&](std::size_t line) { return line * sx; });
-    transform_lines(d, ny, sx, sx * std::size_t(nz),
-                    [&](std::size_t line) { return (line / sx) * sxy + line % sx; });
-    transform_lines(d, nz, sxy, sxy, [](std::size_t line) { return line; });
+    if (skip_axis != 0)
+        transform_lines(d, nx, 1, std::size_t(ny) * std::size_t(nz), [&](std::size_t line) { return line * sx; });
+    if (skip_axis != 1)
+        transform_lines(d, ny, sx, sx * std::size_t(nz),
+                        [&](std::size_t line) { return (line / sx) * sxy + line % sx; });
+    if (skip_axis != 2)
+        transform_lines(d, nz, sxy, sxy, [](std::size_t line) { return line; });
     for (std::size_t i = 0; i < n; ++i)
         d[i] = set[i] != 0 ? std::sqrt(d[i]) : 0.0f;
     return d;
@@ -185,6 +188,9 @@ DepthField sparse_depth(const std::vector<Polygons>& sparse, const std::vector<L
     });
     if (from == DepthFrom::Surfaces) {
         f.depth = distance_transform(inside, f.nx, f.ny, f.nz);
+    } else if (from == DepthFrom::PlaneX || from == DepthFrom::PlaneY || from == DepthFrom::PlaneZ) {
+        f.depth = distance_transform(inside, f.nx, f.ny, f.nz,
+                                     from == DepthFrom::PlaneX ? 0 : from == DepthFrom::PlaneY ? 1 : 2);
     } else {
         // What the infill holds up: the voxels right above it, outside it.
         std::vector<char> far(inside.size(), 1);
