@@ -78,7 +78,7 @@ std::vector<PlateObject> project_objects(std::vector<ProjectModel>& models) {
                                  v.lattice    ? PlateVolume::Shape::Lattice
                                  : v.cylinder ? PlateVolume::Shape::Cylinder
                                               : PlateVolume::Shape::Box,
-                                 v.offset, v.size, v.settings, v.turn, v.lattice_cell, v.lattice_diameter});
+                                 v.offset, v.size, v.settings, v.turn, v.lattice_cell, v.lattice_diameter, v.seam});
         for (const ProjectRange& r : m.ranges)
             o.ranges.push_back({r.from, r.to, r.settings});
         for (const ProjectPart& part : m.parts)
@@ -129,6 +129,12 @@ PlateSlice plate_slice(const std::vector<PlateObject>& objects, const std::vecto
             if (v.kind == PlateVolume::Kind::Negative) {
                 for (std::size_t t = 0; t < shape.triangle_count(); ++t)
                     out.volumes.negative.add_triangle(shape.corner(t, 0), shape.corner(t, 1), shape.corner(t, 2));
+            } else if (const auto seam = seam_modifier_kind(v.seam)) {
+                // A precise seam modifier (orca_2_5.md, rule 4): it moves the
+                // seam, and its settings, if any, apply as a modifier's.
+                if (!v.settings.empty())
+                    out.volumes.modifiers.push_back({objects[i].name + " modifier " + std::to_string(k + 1), i, shape, v.settings});
+                out.volumes.seams.push_back({std::move(shape), *seam});
             } else {
                 out.volumes.modifiers.push_back(
                     {objects[i].name + " modifier " + std::to_string(k + 1), i, std::move(shape), v.settings});

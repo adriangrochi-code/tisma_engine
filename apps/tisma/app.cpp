@@ -5583,7 +5583,7 @@ Project App::current_project() const {
         for (const PlateVolume& v : objects_[i].volumes)
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
                                                v.offset, v.size, v.settings, v.turn, v.shape == PlateVolume::Shape::Lattice,
-                                               v.lattice_cell, v.lattice_diameter});
+                                               v.lattice_cell, v.lattice_diameter, v.seam});
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
         p.models.back().engineering = objects_[i].engineering;

@@ -70,7 +70,13 @@ Settings without_gcode_settings(Settings settings);
 struct SliceVolumes {
     TriangleMesh negative;
     std::vector<MeshModifier> modifiers;
-    bool empty() const { return negative.empty() && modifiers.empty(); }
+    // Precise seam modifiers (orca_2_5.md, rule 4), in list order.
+    struct Seam {
+        TriangleMesh mesh;
+        SeamModifierKind kind = SeamModifierKind::Preferred;
+    };
+    std::vector<Seam> seams{};
+    bool empty() const { return negative.empty() && modifiers.empty() && seams.empty(); }
 };
 bool same_volumes(const SliceVolumes& a, const SliceVolumes& b);
 

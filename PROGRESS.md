@@ -15295,3 +15295,16 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   - que la interfaz pase los volúmenes con `seam` a `SupportVolumes::seams` al laminar, y los muestre para elegir el
     tipo;
   - la CLI, que hoy toma los volúmenes solo de un 3MF de otro programa.
+
+**02:00 (Montevideo, 18-11) — O1, costura precisa, parte 4:**
+- La interfaz pasa al motor los modificadores de costura del proyecto al laminar. `PlateVolume::seam` viene del
+  proyecto y vuelve a él. `plate_slice` los separa en `SliceVolumes::seams`, y si además tienen ajustes también
+  quedan como modificador. `Slicer` los pasa a `slice_model` como `SupportVolumes::seams`, y `same_volumes` los
+  compara.
+- Corregido: `ProjectVolume::seam` iba antes de `lattice_cell`, lo que rompía el armado por posición de la interfaz.
+  Ahora va al final.
+- Pruebas `[project]` (incluye la nueva comprobación de `plate_slice`), `[plate]`, `[paint]` y `[seam]` bien. La
+  interfaz compila.
+- **Falta:**
+  - el control para elegir el tipo en la lista de volúmenes;
+  - la CLI.
