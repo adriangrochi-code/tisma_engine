@@ -15398,8 +15398,11 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - Pruebas: todas bien (1142 casos). La nueva, O2-7b (`[surfaces]`): una placa de 20 × 20 × 5 con un agujero de 6 mm, 3 paredes y 2 mm hacia adentro. En la
   última capa no queda ninguna pared interna junto al agujero, las paredes internas del borde de afuera siguen igual,
   las paredes de afuera son las mismas y la superficie crece más de 10 mm². Las capas de abajo no cambian.
-- Me quedó una duda, sin preguntarla todavía: con `outward` o `inward_and_outward` (el valor de fábrica), también se
-  van las paredes internas del borde de afuera de cada isla. Es lo que sale de «se quedan la pared de afuera de cada
-  isla».
+- QA respondió la duda de hacia afuera (decisión de QA, O2-7c en `spec/next`): hacia afuera, la superficie cruza una
+  banda de paredes solo para unirse con otro pedazo de superficie de la misma capa. En el borde de afuera de la isla
+  queda a la distancia del margen, y las paredes del borde quedan todas. Lo hice así: sobre la banda de paredes solo
+  entra lo que crece hacia adentro, y de lo que crece hacia afuera, donde se juntan dos pedazos. La prueba suma O2-7c:
+  con `inward_and_outward` el borde conserva sus 3 paredes, y con `outward` solo no cambia nada en el agujero ni en el
+  borde.
 - Con esto la regla 7 queda hecha. Faltan en O2 la regla 10 (gyroid y TPMS adaptativos), la 12 (separado por pieza),
   la 13 (varias líneas) y la 13 bis (espiral hacia adentro).

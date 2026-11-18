@@ -91,7 +91,7 @@ TEST_CASE("surfaces.top_expansion: the top surface grows into the infill (orca_2
     CHECK_THROWS(parse_settings(R"({"surfaces": {"top_expansion_direction": "up"}})"));
 }
 
-TEST_CASE("O2-7b: the expanded top surface takes the inner walls round a hole (orca_2_5.md, rule 7)", "[surfaces]") {
+TEST_CASE("O2-7b and O2-7c: the expanded top surface takes the inner walls round a hole, not at the edge (orca_2_5.md, rule 7)", "[surfaces]") {
     // A 20 x 20 x 5 mm plate with a 6 mm square hole in the middle, of four boxes.
     TriangleMesh mesh;
     add_box(mesh, 0, 0, 0, 20, 7.5f, 5);
@@ -137,6 +137,16 @@ TEST_CASE("O2-7b: the expanded top surface takes the inner walls round a hole (o
     CHECK(area_mm2(grown.surfaces.back().top) > area_mm2(plain.surfaces.back().top) + 10.0);
     // The layers under the top surface keep their walls.
     CHECK(grown.walls.front().toolpaths.size() == plain.walls.front().toolpaths.size());
+    // O2-7c: outward too, the island's edge keeps all its walls; the hole's go as before.
+    s.top_expansion_direction = TopExpansion::InwardAndOutward;
+    const SlicedModel both = slice_model(weld_exact(mesh), s);
+    const auto [hole_both, edge_both] = inner_walls(both);
+    CHECK(hole_both == 0);
+    CHECK(edge_both == edge_before);
+    s.top_expansion_direction = TopExpansion::Outward;
+    const auto [hole_out, edge_out] = inner_walls(slice_model(weld_exact(mesh), s));
+    CHECK(hole_out == hole_before);
+    CHECK(edge_out == edge_before);
 }
 
 TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {

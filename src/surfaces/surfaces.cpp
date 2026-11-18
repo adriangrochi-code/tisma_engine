@@ -158,36 +158,49 @@ std::vector<Polygons> expand_top_surfaces(std::vector<LayerSurfaces>& surfaces, 
         const Polygons surface = s.top_under.empty() ? s.top : Clipper2Lib::Difference(s.top, s.top_under, FillRule::NonZero);
         if (surface.empty())
             return;
-        Polygons grown;
-        if (direction == TopExpansionDirection::Both) {
-            grown = offset(surface, distance);
-        } else if (direction == TopExpansionDirection::Inward) {
-            grown = offset_holes(surface, -distance);
-        } else {
-            // The outer edges out, the holes as they were.
-            const Polygons whole = Clipper2Lib::Union(surface, FillRule::NonZero);
-            Polygons outers, holes;
-            for (const Polygon& p : whole) {
-                if (Clipper2Lib::IsPositive(p)) {
-                    outers.push_back(p);
-                } else {
-                    holes.push_back(p);
-                    std::reverse(holes.back().begin(), holes.back().end());
-                }
+        const bool inward = direction != TopExpansionDirection::Outward;
+        const bool outward = direction != TopExpansionDirection::Inward;
+        // The surface's outer contours (each piece) and its holes.
+        const Polygons whole = Clipper2Lib::Union(surface, FillRule::NonZero);
+        Polygons outers, holes;
+        for (const Polygon& p : whole) {
+            if (Clipper2Lib::IsPositive(p)) {
+                outers.push_back(p);
+            } else {
+                holes.push_back(p);
+                std::reverse(holes.back().begin(), holes.back().end());
             }
-            grown = Clipper2Lib::Difference(offset(outers, distance), holes, FillRule::NonZero);
         }
-        // Where it may grow: the sparse infill and, with the regions, the
-        // inner walls' band, as far as the outer wall less the margin.
-        const Polygons allowed = walls ? offset((*regions)[l], -(outer_band + margin))
-                                 : margin > 0.0 ? offset(infill[l], -margin)
-                                                : infill[l];
-        const Polygons takeable =
-            walls ? Clipper2Lib::Union(s.sparse, Clipper2Lib::Difference((*regions)[l], infill[l], FillRule::NonZero),
-                                       FillRule::NonZero)
-                  : s.sparse;
-        Polygons added = Clipper2Lib::Intersect(Clipper2Lib::Intersect(grown, allowed, FillRule::NonZero), takeable,
+        // Inward closes the holes; outward moves the outer edges out, the holes as they were.
+        const Polygons in_grown = inward ? offset_holes(surface, -distance) : Polygons{};
+        const Polygons out_grown =
+            outward ? Clipper2Lib::Difference(offset(outers, distance), holes, FillRule::NonZero) : Polygons{};
+        // The sparse infill, no nearer the walls than the margin.
+        const Polygons in_infill = Clipper2Lib::Intersect(margin > 0.0 ? offset(infill[l], -margin) : infill[l], s.sparse,
+                                                          FillRule::NonZero);
+        Polygons added = Clipper2Lib::Intersect(Clipper2Lib::Union(in_grown, out_grown, FillRule::NonZero), in_infill,
                                                 FillRule::NonZero);
+        if (walls) {
+            // Over the inner walls' band, as far as the outer wall less the
+            // margin: inward always (round a hole, O2-7b); outward only where
+            // two pieces of the surface grow into each other (O2-7c: the
+            // island's edge keeps its walls).
+            const Polygons band = Clipper2Lib::Intersect(
+                offset((*regions)[l], -(outer_band + margin)),
+                Clipper2Lib::Difference((*regions)[l], infill[l], FillRule::NonZero), FillRule::NonZero);
+            Polygons over = Clipper2Lib::Intersect(in_grown, band, FillRule::NonZero);
+            if (outward && outers.size() >= 2 && outers.size() <= 64) {
+                std::vector<Polygons> each;
+                for (const Polygon& o : outers)
+                    each.push_back(Clipper2Lib::Intersect(offset(Polygons{o}, distance), band, FillRule::NonZero));
+                for (std::size_t a = 0; a < each.size(); ++a)
+                    for (std::size_t b = a + 1; b < each.size(); ++b)
+                        if (!each[a].empty() && !each[b].empty())
+                            over = Clipper2Lib::Union(over, Clipper2Lib::Intersect(each[a], each[b], FillRule::NonZero),
+                                                      FillRule::NonZero);
+            }
+            added = Clipper2Lib::Union(added, over, FillRule::NonZero);
+        }
         added = Clipper2Lib::Difference(added, s.top, FillRule::NonZero);
         if (added.empty())
             return;
