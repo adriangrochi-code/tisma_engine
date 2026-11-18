@@ -31,6 +31,7 @@
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <numeric>
 #include <cstdio>
@@ -2854,8 +2855,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     if (volumes && !volumes->seams.empty()) {
         out.seam_enforce.resize(out.layers.size());
         out.seam_block.resize(out.layers.size());
+        const auto strong = [](SeamModifierKind k) {
+            return k == SeamModifierKind::Center || k == SeamModifierKind::Left || k == SeamModifierKind::Right;
+        };
         for (auto v = volumes->seams.rbegin(); v != volumes->seams.rend(); ++v) {
-            if (v->mesh.triangles.empty())
+            if (v->mesh.triangles.empty() || strong(v->kind))
                 continue;
             const std::vector<Polygons> sections = volume_sections(v->mesh, heights, settings.gap_closing_radius, gpu);
             tbb::parallel_for(std::size_t(0), std::min(sections.size(), out.layers.size()), [&](std::size_t l) {
@@ -2873,6 +2877,135 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                     off = Clipper2Lib::Union(off, zone, FillRule::NonZero);
             });
         }
+        // The strong ones, over the weak, the first in the list deciding a
+        // wall first: on each outer wall the longest stretch inside the body
+        // (ties: nearest the bed's back, then leftmost) gives a point that
+        // becomes the only place the seam may go on that wall.
+        std::vector<std::vector<std::pair<Point2d, double>>> fixed(out.layers.size()); // point, radius
+        std::array<std::atomic<int>, 3> trouble{}; // not reaching the wall, several stretches, whole wall
+        for (const SeamVolume& v : volumes->seams) {
+            if (v.mesh.triangles.empty() || !strong(v.kind))
+                continue;
+            const std::vector<Polygons> sections = volume_sections(v.mesh, heights, settings.gap_closing_radius, gpu);
+            std::atomic<bool> reached{false};
+            tbb::parallel_for(std::size_t(0), std::min(sections.size(), out.layers.size()), [&](std::size_t l) {
+                const Polygons& zone = sections[l];
+                if (zone.empty())
+                    return;
+                for (const Toolpath& t : out.walls[l].toolpaths) {
+                    if (!t.closed || t.index != 0 || t.points.size() < 3)
+                        continue;
+                    bool taken = false;
+                    for (const auto& [q, r] : fixed[l])
+                        for (const ToolpathPoint& tp : t.points)
+                            taken = taken || std::hypot(tp.p.x - q.x, tp.p.y - q.y) < 2.0 * r + 1e-6;
+                    if (taken)
+                        continue; // a wall another strong body already decided
+                    Clipper2Lib::Path64 loop;
+                    double total = 0.0;
+                    for (std::size_t i = 0; i <= t.points.size(); ++i) {
+                        const Point2d& a = t.points[i % t.points.size()].p;
+                        loop.push_back({to_units(a.x), to_units(a.y)});
+                        if (i > 0) {
+                            const Point2d& b = t.points[i - 1].p;
+                            total += std::hypot(a.x - b.x, a.y - b.y);
+                        }
+                    }
+                    Clipper2Lib::Clipper64 clip;
+                    clip.AddOpenSubject({loop});
+                    clip.AddClip(zone);
+                    Polygons closed, open;
+                    clip.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+                    if (open.empty())
+                        continue;
+                    reached = true;
+                    const auto length = [](const Clipper2Lib::Path64& path) {
+                        double sum = 0.0;
+                        for (std::size_t i = 1; i < path.size(); ++i)
+                            sum += std::hypot(to_mm(path[i].x - path[i - 1].x), to_mm(path[i].y - path[i - 1].y));
+                        return sum;
+                    };
+                    // Pieces split where the loop closes join again.
+                    std::size_t best = 0;
+                    double best_len = -1.0, best_y = 0.0, best_x = 0.0;
+                    for (std::size_t k = 0; k < open.size(); ++k) {
+                        const double len = length(open[k]);
+                        double y = -1e300, x = 1e300;
+                        for (const auto& q : open[k])
+                            y = std::max(y, to_mm(q.y)), x = std::min(x, to_mm(q.x));
+                        if (len > best_len + 1e-6 ||
+                            (std::abs(len - best_len) <= 1e-6 && (y > best_y + 1e-6 || (std::abs(y - best_y) <= 1e-6 && x < best_x)))) {
+                            best = k, best_len = len, best_y = y, best_x = x;
+                        }
+                    }
+                    if (open.size() > 1)
+                        ++trouble[1];
+                    if (best_len >= total - settings.wall_width) {
+                        ++trouble[2]; // the body holds the whole wall: not used here
+                        continue;
+                    }
+                    const Clipper2Lib::Path64& piece = open[best];
+                    // The piece's direction against the loop's, and the side
+                    // the material is on: left and right as seen from outside.
+                    const Point2d first{to_mm(piece.front().x), to_mm(piece.front().y)};
+                    const Point2d second{to_mm(piece[1].x), to_mm(piece[1].y)};
+                    const double dx = second.x - first.x, dy = second.y - first.y, n = std::hypot(dx, dy);
+                    bool end_is_right = true;
+                    if (n > 0.0) {
+                        const double e = settings.wall_width;
+                        const double mx = (first.x + second.x) / 2.0, my = (first.y + second.y) / 2.0;
+                        // material on the left of travel: the outside on the right, the viewer's right is the travel
+                        end_is_right = region_contains(out.regions[l], mx - dy / n * e, my + dx / n * e);
+                    }
+                    Point2d at;
+                    const bool want_end = v.kind == SeamModifierKind::Right ? end_is_right
+                                          : v.kind == SeamModifierKind::Left ? !end_is_right
+                                                                               : false;
+                    if (v.kind == SeamModifierKind::Center) {
+                        double half = best_len / 2.0;
+                        at = first;
+                        for (std::size_t i = 1; i < piece.size(); ++i) {
+                            const Point2d a{to_mm(piece[i - 1].x), to_mm(piece[i - 1].y)};
+                            const Point2d b{to_mm(piece[i].x), to_mm(piece[i].y)};
+                            const double seg = std::hypot(b.x - a.x, b.y - a.y);
+                            if (seg >= half && seg > 0.0) {
+                                at = {a.x + (b.x - a.x) * half / seg, a.y + (b.y - a.y) * half / seg};
+                                break;
+                            }
+                            half -= seg;
+                            at = b;
+                        }
+                    } else {
+                        at = want_end ? Point2d{to_mm(piece.back().x), to_mm(piece.back().y)} : first;
+                    }
+                    fixed[l].push_back({at, settings.wall_width / 4.0});
+                }
+            });
+            if (!reached)
+                ++trouble[0];
+        }
+        for (std::size_t l = 0; l < fixed.size(); ++l)
+            for (const auto& [q, r] : fixed[l]) {
+                // Only there on that wall: a small disc enforced, the rest of
+                // the wall's surroundings blocked.
+                Polygon disc;
+                for (int k = 0; k < 16; ++k) {
+                    const double a = 2.0 * std::numbers::pi * k / 16.0;
+                    disc.push_back({to_units(q.x + r * std::cos(a)), to_units(q.y + r * std::sin(a))});
+                }
+                using Clipper2Lib::FillRule;
+                out.seam_enforce[l] = Clipper2Lib::Union(out.seam_enforce[l], Polygons{disc}, FillRule::NonZero);
+                out.seam_block[l] = Clipper2Lib::Difference(out.seam_block[l], Polygons{disc}, FillRule::NonZero);
+            }
+        std::string said;
+        if (trouble[0] > 0)
+            said += " a body does not reach the outer wall's mid-line;";
+        if (trouble[1] > 0)
+            said += " a body cuts a wall in several stretches (the longest is used);";
+        if (trouble[2] > 0)
+            said += " a strong body holds a whole wall (not used there);";
+        if (!said.empty())
+            out.notices.push_back("Costura precisa:" + said.substr(0, said.size() - 1));
     }
     if (!out.regions.empty() && !frame) {
         const double first = out.layers.front().top - out.layers.front().bottom;

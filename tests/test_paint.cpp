@@ -598,3 +598,44 @@ TEST_CASE("precise seam modifiers, the weak ones: preferred, forbidden and neutr
     const SlicedModel cleared = zone(SeamModifierKind::Neutral, &p);
     CHECK_FALSE(contains(cleared.seam_enforce[l], x, 10));
 }
+
+TEST_CASE("precise seam modifiers, the strong ones: centre, left and right of the stretch (orca_2_5.md, rule 4, OR4)",
+          "[paint][seam]") {
+    const Settings s = test_printer();
+    const IndexedMesh part = weld_exact(box(0, 0, 0, 20, 20, 10));
+    // A body across the +X face from y = 8 to y = 12.
+    const IndexedMesh body = weld_exact(box(18, 8, -1, 4, 4, 12));
+    const auto layer_at = [](const SlicedModel& m, double z) {
+        for (std::size_t l = 0; l < m.layers.size(); ++l)
+            if (m.layers[l].bottom <= z && z < m.layers[l].top)
+                return l;
+        return m.layers.size();
+    };
+    const auto with = [&](SeamModifierKind kind) {
+        SupportVolumes v;
+        v.seams.push_back({body, kind});
+        return slice_model(part, s, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &v);
+    };
+    const double x = 20.0 - s.wall_width / 2.0;
+    const SlicedModel centre = with(SeamModifierKind::Center);
+    const std::size_t l = layer_at(centre, 5.0);
+    REQUIRE(l < centre.seam_enforce.size());
+    CHECK(contains(centre.seam_enforce[l], x, 10));
+    CHECK_FALSE(contains(centre.seam_enforce[l], x, 9));
+    // Seen from outside the +X face, right is +Y.
+    const SlicedModel right = with(SeamModifierKind::Right);
+    CHECK(contains(right.seam_enforce[l], x, 11.99));
+    CHECK_FALSE(contains(right.seam_enforce[l], x, 10));
+    const SlicedModel left = with(SeamModifierKind::Left);
+    CHECK(contains(left.seam_enforce[l], x, 8.01));
+    // A body holding the whole wall is not used, and is said.
+    SupportVolumes whole;
+    whole.seams.push_back({weld_exact(box(-1, -1, -1, 22, 22, 12)), SeamModifierKind::Center});
+    const SlicedModel all = slice_model(part, s, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &whole);
+    REQUIRE(l < all.seam_enforce.size());
+    CHECK(all.seam_enforce[l].empty());
+    bool said = false;
+    for (const std::string& n : all.notices)
+        said = said || n.starts_with("Costura precisa:");
+    CHECK(said);
+}

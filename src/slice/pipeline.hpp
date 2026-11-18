@@ -152,8 +152,10 @@ double support_xy_gap(const Settings& settings);
 // Precise seam modifiers (orca_2_5.md, rule 4), in the same coordinates: a
 // body that prints nothing and says where the outer wall's seam goes. The
 // weak ones mark zones (walls.seam still chooses): preferred, forbidden, or
-// neutral, which clears the paint too. First in the list wins.
-enum class SeamModifierKind { Preferred, Forbidden, Neutral };
+// neutral, which clears the paint too. The strong ones fix the point: the
+// centre, left or right end, seen from outside, of the stretch where the
+// body cuts the outer wall. Strong before weak; first in the list wins.
+enum class SeamModifierKind { Preferred, Forbidden, Neutral, Center, Left, Right };
 struct SeamVolume {
     IndexedMesh mesh;
     SeamModifierKind kind = SeamModifierKind::Preferred;

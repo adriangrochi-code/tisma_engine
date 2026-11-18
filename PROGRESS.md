@@ -15268,3 +15268,20 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   - el aviso «Costura precisa:»;
   - llevarlo de la CLI y el proyecto a `SeamVolume`;
   - la interfaz.
+
+**02:40 (Montevideo) — O1, costura precisa, los fuertes (OR4, parte 2):**
+- Los tipos centro, izquierda y derecha dan un punto fijo por pared externa:
+  - se toma el tramo más largo donde el cuerpo corta la pared; en un empate, el más cercano al fondo y después el de más
+    a la izquierda;
+  - la derecha y la izquierda se miran desde afuera, del lado donde no hay pieza; en un agujero, desde adentro del
+    agujero;
+  - el punto queda como un disco chico obligado para la costura, por encima de los débiles y de la pintura;
+  - si dos cuerpos fuertes tocan la misma pared, gana el primero de la lista.
+- Un cuerpo que contiene la pared entera no se usa en esa pared. Un solo aviso «Costura precisa:» junta tres casos: el
+  cuerpo no llega a la línea media de la pared, la corta en varios tramos, o la contiene entera.
+- **A confirmar con QA:** cómo se interpreta «se invierten en la pared de un agujero».
+- Prueba `[seam]` con centro, derecha (+Y en la cara +X), izquierda y el cuerpo que contiene todo. Pasan `[paint]` y
+  `[support]`.
+- **Sin probar:** que la costura del G-code caiga en el punto. La escritura ya respeta la costura pintada con su
+  propia prueba, y este punto usa el mismo camino.
+- **Falta:** llevarlo de la CLI y del proyecto (con el tipo de cada modificador) y a la interfaz.
