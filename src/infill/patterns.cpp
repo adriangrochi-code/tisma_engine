@@ -543,8 +543,44 @@ std::vector<Toolpath> spiral_inset_fill(const Polygons& region, double spacing, 
                 if (e <= d && step_inside(end, p))
                     d = e, next = k, segment = s, at = p;
             }
-            if (next == loops.size())
+            if (next == loops.size()) {
+                // What the last loop leaves in its middle, too narrow for
+                // another loop: a short line along it, from the spiral's end.
+                Polygon last;
+                for (const Point2d& q : loops[current].points)
+                    last.push_back({to_units(q.x), to_units(q.y)});
+                const Polygons hole = offset(Polygons{last}, -width / 2.0);
+                std::vector<Point2d> pts;
+                for (const Polygon& h : hole)
+                    for (const Point64& q : h)
+                        pts.push_back({to_mm(q.x), to_mm(q.y)});
+                if (pts.size() >= 3) {
+                    // The hole's long axis, from its points' second moments.
+                    double cx = 0.0, cy = 0.0;
+                    for (const Point2d& q : pts)
+                        cx += q.x, cy += q.y;
+                    cx /= double(pts.size()), cy /= double(pts.size());
+                    double sxx = 0.0, syy = 0.0, sxy = 0.0;
+                    for (const Point2d& q : pts)
+                        sxx += (q.x - cx) * (q.x - cx), syy += (q.y - cy) * (q.y - cy), sxy += (q.x - cx) * (q.y - cy);
+                    const double angle = 0.5 * std::atan2(2.0 * sxy, sxx - syy), ux = std::cos(angle), uy = std::sin(angle);
+                    double lo = std::numeric_limits<double>::max(), hi = std::numeric_limits<double>::lowest();
+                    for (const Point2d& q : pts) {
+                        const double t = (q.x - cx) * ux + (q.y - cy) * uy;
+                        lo = std::min(lo, t), hi = std::max(hi, t);
+                    }
+                    if (hi - lo > 1e-3) {
+                        Point2d a{cx + ux * lo, cy + uy * lo}, b{cx + ux * hi, cy + uy * hi};
+                        if (std::hypot(a.x - end.x, a.y - end.y) > std::hypot(b.x - end.x, b.y - end.y))
+                            std::swap(a, b);
+                        if (step_inside(end, a)) {
+                            spiral.points.push_back({a, width});
+                            spiral.points.push_back({b, width});
+                        }
+                    }
+                }
                 break;
+            }
             current = next;
             ring = opened(loops[next].points, segment, at);
         }

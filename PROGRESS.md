@@ -15540,3 +15540,11 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   - En el cubo, `lobes` deja el centro más ralo.
 - De la regla 10 solo falta `distance_warp`, que necesita una fase integrada y hoy usa las cáscaras, y TPMS-D y
   TPMS-FK, que no existen todavía en el motor.
+
+**07:25 (Montevideo, 18-11) — O2, regla 13 bis, parte 4: la línea del centro de la espiral.**
+- Cuando la espiral no encuentra otro lazo adentro, mira lo que deja el último lazo en el medio (el lazo achicado medio
+  cordón). Si queda algo, le agrega una línea a lo largo de su eje largo (de los segundos momentos de sus puntos),
+  unida al final de la espiral con un paso extruido.
+- Pruebas: todas bien (1148 casos). La de `[infill]`: un rectángulo de 30 × 3,1 mm termina en una línea por el medio (y ≈ 1,55) de más de 20 mm de
+  largo. Las demás comprobaciones de la espiral siguen bien.
+- La regla 13 bis queda hecha, salvo el ancho variable, que QA dejó para después de la beta.

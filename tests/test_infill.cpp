@@ -250,6 +250,18 @@ TEST_CASE("spiral_inset: the concentric loops joined into one spiral (orca_2_5.m
     CHECK((std::abs(s.y - 0.2) < 1e-6 || std::abs(s.y - 19.8) < 1e-6));
     const Point2d e = spiral[0].points.back().p;
     CHECK(std::hypot(e.x - 10.0, e.y - 10.0) < 2.0);
+    // A long rectangle: the last loop leaves a strip in the middle, filled by
+    // a line along it at the spiral's end.
+    const Polygons strip{{{to_units(0), to_units(0)}, {to_units(30), to_units(0)}, {to_units(30), to_units(3.1)},
+                          {to_units(0), to_units(3.1)}}};
+    const std::vector<Toolpath> long_spiral = spiral_inset_fill(strip, 0.4, 0.4);
+    REQUIRE(long_spiral.size() == 1);
+    const auto& tail = long_spiral[0].points;
+    REQUIRE(tail.size() >= 2);
+    const Point2d c0 = tail[tail.size() - 2].p, c1 = tail.back().p;
+    CHECK(std::abs(c0.y - 1.55) < 0.3); // along the middle
+    CHECK(std::abs(c1.y - 1.55) < 0.3);
+    CHECK(std::abs(c1.x - c0.x) > 20.0); // along the long axis
     // Two islands far apart: a spiral each.
     const Polygons two = Clipper2Lib::Union(square(0, 0, 10), square(30, 0, 10), Clipper2Lib::FillRule::NonZero);
     CHECK(spiral_inset_fill(two, 0.4, 0.4).size() == 2);

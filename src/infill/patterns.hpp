@@ -46,7 +46,9 @@ std::vector<Toolpath> concentric_fill(const Polygons& region, double spacing, do
 // to the nearest point of the next loop in. A spiral starts at the convex
 // corner of its outer loop nearest to a right angle; another one starts when
 // the next loop is more than four spacings away or the step would leave the
-// region (another island, a hole, a notch). Open paths, outside in.
+// region (another island, a hole, a notch). What the last loop leaves in
+// its middle, too narrow for another loop, gets a short line along its long
+// axis at the spiral's end. Open paths, outside in.
 std::vector<Toolpath> spiral_inset_fill(const Polygons& region, double spacing, double width);
 
 // The curves of rule 12, the same in every layer, clipped to the region and
