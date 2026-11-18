@@ -607,6 +607,59 @@ TEST_CASE("slice --mixes and --mix: a blend from the command line (color_mixing.
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("slice --seam-modifier: a precise seam modifier from the command line (orca_2_5.md, rule 4)", "[cli][seam]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_seam";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json", volume = dir / "seam.stl", plain = dir / "plain.gcode",
+               moved = dir / "moved.gcode";
+    REQUIRE(run({"profile", "--printer", "Prusa Research Original Prusa MK4S", "--filament", "Prusament Prusament PLA",
+                 "-o", config.string()})
+                .code == kExitOk);
+    // A box across the cube's +X face, in the model's coordinates.
+    {
+        std::ofstream f(volume);
+        f << "solid seam\n";
+        const double x0 = 8.0, x1 = 12.0, y0 = 3.0, y1 = 7.0, z0 = -1.0, z1 = 11.0;
+        const double v[8][3] = {{x0, y0, z0}, {x1, y0, z0}, {x1, y1, z0}, {x0, y1, z0},
+                                {x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}};
+        const int faces[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                                  {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+        for (const auto& t : faces) {
+            f << "facet normal 0 0 0\nouter loop\n";
+            for (int c = 0; c < 3; ++c)
+                f << "vertex " << v[t[c]][0] << " " << v[t[c]][1] << " " << v[t[c]][2] << "\n";
+            f << "endloop\nendfacet\n";
+        }
+        f << "endsolid seam\n";
+    }
+    REQUIRE(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", plain.string()}).code == kExitOk);
+    Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--seam-modifier",
+                 "center:" + volume.string(), "-o", moved.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    // The moves alone: a date in the machine G-code does not count.
+    const auto moves = [](const std::filesystem::path& p) {
+        std::ifstream f(p);
+        std::string out, line;
+        while (std::getline(f, line))
+            if (line.rfind("G1 ", 0) == 0 || line.rfind("G0 ", 0) == 0)
+                out += line + "\n";
+        return out;
+    };
+    const std::string before = moves(plain), after = moves(moved);
+    CHECK_FALSE(before.empty());
+    CHECK(before != after);
+    // A kind that is not one of the six, or no file.
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--seam-modifier",
+               "middle:" + volume.string(), "-o", moved.string()})
+              .code == kExitUsage);
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "--seam-modifier", "center:", "-o",
+               moved.string()})
+              .code == kExitUsage);
+    std::filesystem::remove_all(dir);
+}
+
 TEST_CASE("slice --copies: as many as fit, with the skirt around them on the bed too (BH52)", "[cli]") {
     const auto dir = test_temp_dir() / "tisma_test_copies_fit";
     std::filesystem::remove_all(dir);

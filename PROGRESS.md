@@ -15314,3 +15314,13 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   centro, a la izquierda, a la derecha, zona preferida, prohibida o neutra.
 - Pruebas `[text]` y `[ui]` bien, y la interfaz compila. La pantalla no se miró: no hay captura.
 - **Falta:** la CLI.
+
+**02:15 (Montevideo, 18-11) — O1, costura precisa, parte 6: la CLI. O1 queda completo.**
+- Nueva opción `slice --seam-modifier <tipo>:<volumen.stl>`, que se puede repetir. El volumen va en las coordenadas
+  del modelo y lo sigue igual que los bloqueadores. Un tipo desconocido o un archivo vacío dan error de uso.
+- `slice <proyecto.3mf>` desde `node` ya laminaba con `ui::Slicer`, así que los modificadores del proyecto ya
+  funcionaban por ese camino.
+- Prueba `[cli][seam]`: con un modificador «center» sobre la cara +X del cubo, los movimientos del G-code cambian, y
+  la opción mal escrita da error. `[cli]` completo bien.
+- **Pendiente con QA:** confirmar cómo se lee «invertir en agujeros».
+- **Siguiente:** O2 de `orca_2_5.md`.

@@ -114,6 +114,8 @@ constexpr std::string_view kUsage =
     "                     [--mixes <mixes.json> --mix <n>]   (the blends, as a project keeps them, and the one the model prints\n"
     "                      with: docs/spec/features/color_mixing.md, rule 15)\n"
     "                     [--align-to-y-axis]   (the copies in one column along Y)\n"
+    "                     [--seam-modifier <kind>:<volume.stl>]...   (a precise seam modifier in the model's coordinates;\n"
+    "                      kind: center, left, right, preferred, forbidden or neutral: orca_2_5.md, rule 4)\n"
     "                     [--strict]   (a warning is an error: no G-code, exit code 4)\n"
     "                     [--ground-largest-face | --ground-face-normal X,Y,Z | --ground-face-point X,Y,Z]\n"
     "                     [--inspect-mesh <out.json|->] [--export-statistics <out.json|->] [--export-settings <out.json|->]\n"
@@ -181,6 +183,8 @@ struct SliceArgs {
     // Blends (color_mixing.md, rule 15) and the one the model prints with.
     std::string mixes;
     int mix = 0;
+    // Precise seam modifiers (orca_2_5.md, rule 4): each kind and its mesh's file, in order.
+    std::vector<std::pair<SeamModifierKind, std::string>> seam_modifiers;
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -268,6 +272,18 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
                 return std::nullopt;
             }
             out.copies = std::size_t(v);
+        } else if (a == "--seam-modifier" && !analyze) {
+            std::string v;
+            if (!value(v))
+                return std::nullopt;
+            const std::size_t colon = v.find(':');
+            const auto kind = colon == std::string::npos ? std::nullopt : seam_modifier_kind(std::string_view(v).substr(0, colon));
+            if (!kind || colon + 1 >= v.size()) {
+                err << "error: --seam-modifier needs <kind>:<file>, kind one of center, left, right, preferred, "
+                       "forbidden, neutral\n";
+                return std::nullopt;
+            }
+            out.seam_modifiers.emplace_back(*kind, v.substr(colon + 1));
         } else if (a == "--mixes" && !analyze) {
             if (!value(out.mixes))
                 return std::nullopt;
@@ -619,7 +635,7 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
     // The negative volumes (model_tools.md, rule 2) follow the part; not yet
     // through a cut, a split or copies.
     if (negative && (copies > 1 || settings.transform_cut_z || settings.transform_split)) {
-        err << "error: negative volumes and support blockers or enforcers do not go with --copies, transform.cut_z or "
+        err << "error: negative volumes, support blockers or enforcers and seam modifiers do not go with --copies, transform.cut_z or "
                "transform.split yet\n";
         return false;
     }
@@ -815,9 +831,18 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
     job_step("slicing", 5);
     // A face on the bed (orca_2_5.md, rule 25), before the transforms and the placement.
+    std::vector<TriangleMesh> seam_meshes;
+    for (const auto& [kind, path] : parsed->seam_modifiers) {
+        ModelFile volume;
+        double ignored = 0.0;
+        if (int rc = load_model(path, volume, ignored, err); rc != kExitOk)
+            return rc;
+        seam_meshes.push_back(std::move(volume.mesh));
+    }
     if (parsed->ground != SliceArgs::Ground::None) {
-        if (!stl.negative.empty() || !stl.support_blockers.empty() || !stl.support_enforcers.empty()) {
-            err << "error: --ground-* does not go with negative volumes or support blockers and enforcers yet\n";
+        if (!stl.negative.empty() || !stl.support_blockers.empty() || !stl.support_enforcers.empty() ||
+            !seam_meshes.empty()) {
+            err << "error: --ground-* does not go with negative volumes, support blockers and enforcers or seam modifiers yet\n";
             return kExitUsage;
         }
         const std::optional<std::array<double, 3>> normal =
@@ -854,9 +879,13 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     // part together, then are taken apart again (their triangles in order).
     const std::size_t negatives = stl.negative.triangle_count(), blockers = stl.support_blockers.triangle_count();
     TriangleMesh followers = stl.negative;
-    for (const TriangleMesh* more : {&stl.support_blockers, &stl.support_enforcers})
-        for (std::size_t t = 0; t < more->triangle_count(); ++t)
-            followers.add_triangle(more->corner(t, 0), more->corner(t, 1), more->corner(t, 2));
+    const std::size_t enforcers = stl.support_enforcers.triangle_count();
+    std::vector<const TriangleMesh*> more{&stl.support_blockers, &stl.support_enforcers};
+    for (const TriangleMesh& m : seam_meshes)
+        more.push_back(&m);
+    for (const TriangleMesh* m : more)
+        for (std::size_t t = 0; t < m->triangle_count(); ++t)
+            followers.add_triangle(m->corner(t, 0), m->corner(t, 1), m->corner(t, 2));
     if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &followers, parsed->align_y))
         return kExitUsage;
     // The blends and the one the model prints with (color_mixing.md, rule 15).
@@ -895,7 +924,13 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     stl.negative = piece(0, negatives);
     SupportVolumes support_volumes;
     support_volumes.blockers = weld_exact(piece(negatives, negatives + blockers));
-    support_volumes.enforcers = weld_exact(piece(negatives + blockers, followers.triangle_count()));
+    std::size_t at = negatives + blockers + enforcers;
+    support_volumes.enforcers = weld_exact(piece(negatives + blockers, at));
+    for (std::size_t k = 0; k < seam_meshes.size(); ++k) {
+        const std::size_t count = seam_meshes[k].triangle_count();
+        support_volumes.seams.push_back({weld_exact(piece(at, at + count)), parsed->seam_modifiers[k].first});
+        at += count;
+    }
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
