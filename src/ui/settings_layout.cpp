@@ -82,9 +82,25 @@ const std::vector<SectionLayout>& print_layout() {
             {"surfaces.bottom_min_thickness", B},
             {"surfaces.top_pattern", B},
             {"surfaces.bottom_pattern", A},
-            {"surfaces.bridge_angle", A},
+            {"surfaces.internal_solid_pattern", A},
             {"surfaces.interface_shells", A}}},
-          {"infill", T::SubInfill, {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}, {"infill.angles", A}}},
+          // The lines' directions (surfaces_infill.md; orca_2_5.md, rule 9).
+          {"surface_angles", T::SubSurfaceAngles,
+           {{"surfaces.bridge_angle", A},
+            {"surfaces.top_angle", A},
+            {"surfaces.bottom_angle", A},
+            {"surfaces.top_fill_order", A},
+            {"surfaces.bottom_fill_order", A}}},
+          // The top surface grown into the infill (orca_2_5.md, rule 7).
+          {"top_expansion", T::SubTopExpansion,
+           {{"surfaces.top_expansion", A}, {"surfaces.top_expansion_margin", A}, {"surfaces.top_expansion_direction", A}}},
+          {"infill", T::SubInfill,
+           {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}, {"infill.angles", A}, {"infill.smooth_factor", A},
+            {"infill.separated", A},
+            {"infill.multiline", A}}},
+          // Adaptive gyroid density (orca_2_5.md, rule 10), experimental.
+          {"infill_adaptive", T::SubInfillAdaptive,
+           {{"infill.adaptive_mode", A}, {"infill.adaptive_interior_density", A}, {"infill.adaptive_gradient", A}}},
           {"infill_more", T::SubInfillMore,
            {{"infill.wall_overlap", A},
             {"infill.solid_every", A},
@@ -673,6 +689,16 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.polyholes ? tr(T::SumOn) : tr(T::SumOff);
     if (id == "top_bottom")
         return format(T::SumTopBottom, s.top_layers, s.bottom_layers);
+    if (id == "infill_adaptive")
+        return s.infill_adaptive_mode == AdaptiveMode::Disabled ? std::string(tr(T::SumOff))
+                                                                : number(s.infill_adaptive_interior_density, 0) + " %";
+    if (id == "top_expansion")
+        return s.top_expansion > 0.0 ? (number(s.top_expansion, 2) + " mm") : std::string(tr(T::SumOff));
+    if (id == "surface_angles")
+        return s.bridge_angle == 0.0 && s.top_angle < 0.0 && s.bottom_angle < 0.0 &&
+                       s.top_fill_order == FillOrder::Default && s.bottom_fill_order == FillOrder::Default
+                   ? tr(T::AutoValue)
+                   : tr(T::SumOn);
     if (id == "infill")
         return format(T::SumInfill, number(s.infill_density, 1).c_str(), pattern_title(s.infill_pattern));
     if (id == "infill_more") {

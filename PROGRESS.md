@@ -15139,3 +15139,390 @@ Los builds de `release.yml` fallaron en los tres sistemas, aunque la puerta pasa
   esperaba 600 cuadros, que en un runner rápido son menos de 6 s. Ahora espera a que la búsqueda termine.
 - **CD30 completo:** la prueba suma un círculo con su cota; al borrar las dos líneas (y al deshacer y rehacer) el
   círculo y su cota siguen ahí (verbo nuevo `expect-sketch-rules N`).
+
+## 2026-11-17 — F6: el motor con y sin GPU sobre el banco (primera medición)
+
+Commit 4c5c5f6, Release, 4 núcleos. El mejor de 3 laminados con `tisma-engine slice` y los ajustes del banco
+(`compute.gpu` en `off` y en `auto`):
+
+| Pieza | Capas | Sin GPU | Con GPU (llvmpipe) | G-code igual |
+|---|---|---|---|---|
+| 3DBenchy | 240 | 570 ms | 552 ms | sí (solo cambia la línea `compute.gpu`) |
+| 3DBenchy, giroide 20 % | 240 | 590 ms | 557 ms | sí |
+| Esfera de 1 001 112 triángulos | 500 | 1156 ms | 1099 ms | sí |
+
+- **Sin probar en una GPU de verdad:** acá la única es llvmpipe, Vulkan por software en la CPU. Estos números muestran
+  que el camino de GPU funciona y da el mismo G-code que la CPU, pero no cuánto acelera. Para eso hay que correr
+  `bench/run_benchy.sh` en una máquina con GPU, por ejemplo la del dueño.
+- Faltan dos piezas del banco del plan, el conejo ×1,5 y el tornillo ×4. Siguen sin archivos con licencia confirmada
+  (`bench/README.md`).
+
+**Sigue:** la medición en una GPU real; después P2 (fichas de QA) y W4.
+## 2026-11-17 — Flashforge en red local (beta del 24-11, printer_connections.md, FF1)
+
+- **Modernas (5M, 5M Pro, AD5X, Creator 5), HTTP 8898:** nuevo tipo «Flashforge» en las impresoras de red. Probar y
+  estado por `/detail` (status, `rightTemp`, `platTemp`, `printProgress` de 0 a 1, `estimatedTime`, `printFileName`),
+  subida multipart `gcodeFile` con número de serie, código de verificación, `fileSize`, `printNow` y
+  `levelingBeforePrint` en cabeceras, y pausa, reanudar y cancelar por `/control` (`jobCtl_cmd`), confirmados leyendo
+  `/detail` porque `/control` responde éxito a todo. Códigos 1/2/3/-1 con los mensajes de la ficha; sin conexión,
+  «no se pudo conectar … en http://<IP>:8898 … modo Solo LAN». La IP sola recibe http:// y el puerto 8898. En el
+  panel: número de serie, código de verificación y «Nivelar antes de imprimir».
+- **Pruebas:** `[device][net]` con el simulador (FF1.2, FF1.3, FF1.4, FF1.6) y `ui_host_e2e_flashforge` en la puerta
+  (G10): el archivo llega entero, arranca y pide nivelar.
+- **Legado (Adventurer 3 y 4), TCP 8899:** tipo «Flashforge (Adventurer 3, 4)»: cada pedido abre la sesión con
+  `M601 S1`, consulta y la libera con `M602`; probar con M115 (modelo y serie), estado con M119 y M105, pausa M25,
+  reanudar M24, cancelar M26. «Control Failed» dice «otro programa está controlando la impresora» y no manda nada más
+  (FF1.5). Mandar archivos no se ofrece: M28/M29 no están confirmados en la ficha; el panel lo dice (pendrive).
+- **Búsqueda (FF1.1):** botón Buscar en los dos tipos Flashforge: datagrama a 225.0.0.9:19000, 255.255.255.255:48899
+  y 225.0.0.9:8899; respuestas de 196 bytes o más (modernas: nombre, puertos y serie en big endian) y de 140 (legado,
+  sin serie). Elegir una completa el tipo, la dirección y, en las modernas, la serie.
+- **Pruebas:** `[device][net]` con simuladores propios (`tests/fake_flashforge_net.hpp`: TCP de legado, con y sin
+  «Control Failed», y respuestas UDP de 280 y 140 bytes) y `ui_host_e2e_flashforge` en la puerta, que además busca y
+  encuentra las dos. FF1.1 a FF1.6 cubiertos.
+- **Elegoo por SDCP v3 (EL1):** tipo «Elegoo (Centauri Carbon, resina)». Búsqueda con `M99999` por UDP 3000 (una
+  impresora por `MainboardID`); cada pedido abre un WebSocket a `ws://<IP>:3030/websocket`, manda el comando con su
+  `RequestID` y espera la respuesta que lo repite; el estado sale de `sdcp/status` (`PrintInfo.Status`, capas, y las
+  temperaturas de FDM donde estén anidadas). Subida por HTTP a `/uploadFile/upload` en trozos de 1 MB con
+  `S-File-MD5`, `Offset`, `Uuid` y `TotalSize`; «000000» sigue, otro código corta con su motivo (−2: «el offset no
+  coincide»). Imprimir 128 (cada Ack con su texto), pausar 129, parar 130, reanudar 131. Un 500 al conectar es
+  «demasiadas conexiones abiertas». Sin `MainboardID`, se lo pide a la IP con `M99999`. Cliente WebSocket propio
+  (`src/net/websocket.*`, RFC 6455, con SHA-1 de FIPS 180-4 y Base64 de RFC 4648, probados con los vectores de las
+  normas).
+- **Pruebas:** EL1.1 a EL1.6 en `[device][net]` con un simulador propio (`tests/fake_sdcp.hpp`: WebSocket y subida en
+  un mismo puerto, y UDP), y `ui_host_e2e_elegoo` en la puerta: la encuentra, prueba, manda entero y arranca.
+- **Sin hacer:** (el `.goo` de resina, hecho más abajo); la variante vieja por MQTT
+  (fuera de la primera versión según la ficha).
+- **Lo que sigue:** Creality de fábrica (CR1) y el aviso de Anycubic.
+
+## 2026-11-17 — Creality de fábrica (CR1) y el aviso de Anycubic (beta del 24-11)
+
+- **Creality de fábrica:** tipo «Creality (K1, K2, Ender 3 V3, Hi)». Primero se prueba Moonraker en 7125; si
+  responde, se usa esa conexión (CR1-1). Si no, el estado por el WebSocket `ws://<IP>:9999/`: la impresora empuja
+  JSON y se junta lo que llega en 1,5 s. `printJobTime` y `printLeftTime` en segundos, y el avance sale de los dos
+  (CR1-2). Con `model` vacío, el modelo es «Creality (board F012)» (CR1-3). Con el enlace cortado a mitad de una
+  impresión sigue figurando activa y el panel dice «Reconectando…» (CR1-5). La subida y las órdenes no se intentan
+  por 9999: el aviso «Para mandar a esta impresora, activá Moonraker/Fluidd» (CR1-6, decisión de QA). El panel avisa
+  que sin contraseña cualquiera en la red puede controlarla. Sin temperaturas: la ficha no confirma sus nombres, y el
+  panel no muestra −1.
+- **Anycubic:** fuera de la beta; el panel de programas en la red dice «usá Anycubic Slicer Next».
+- **Arreglo:** los `send` de los sockets propios (WebSocket, Flashforge y los simuladores) usan `MSG_NOSIGNAL`: un
+  par que cerraba terminaba el programa con SIGPIPE en Linux.
+- **Pruebas:** CR1-1, 2, 3, 5 y 6 en `[device][net]` con un simulador propio (`fake_sdcp::Creality`), y
+  `ui_host_e2e_creality` en la puerta (prueba, estado imprimiendo, la orden de mandar con su aviso, y el de Anycubic).
+- **CR1-4 fuera de la beta** (spec/next a2611fe): hasta medirlo con una Creality real, lo que no imprime (lista,
+  terminada o parada) se muestra «sin datos de estado», nunca «detenida».
+- No probado con hardware.
+
+## 2026-11-17 — una Elegoo de resina recibe su .goo, nunca G-code (QA)
+
+- Con un laminado de resina y el programa en la red Elegoo (SDCP), «Mandar» sube el `.goo` que escribe «Exportar»
+  (`write_goo`), con el nombre `<modelo>.goo`, y lo arranca. Con cualquier otro programa no se ofrece «Mandar»: la
+  página Impresora dice «Exportá el archivo de resina y pasalo por USB», y el botón principal sigue siendo «Exportar».
+- Pruebas en la puerta: `ui_host_e2e_elegoo_resin` (la Bolt Two de resina del paquete de prueba; el simulador recibe
+  un `.goo` con la cabecera «V3.0» y lo arranca) y `ui_host_resin_not_offered` (OctoPrint: no se manda nada, el aviso
+  aparece).
+- No probado con hardware.
+
+**0.13.0-beta.3 publicada (17-11, 19:22 UTC)** para Linux, Windows y Android. macOS espera en la cola de GitHub las
+corridas de su puerta. QA la probó en Linux: la A1 mini da `F523.843`. Las 72 capturas de la puerta salían sueltas
+junto a los instaladores. Desde ahora `release.yml` no las sube: ni sueltas ni en zip. Quedan solo como artifact de la CI (decisión del dueño,
+17-11). En la beta.3
+siguen sueltas: no tengo herramienta para borrar archivos de una versión publicada.
+## 2026-11-17 — la puerta de macOS en 0.13.0-beta.3: G11 y G15
+
+- En macOS (CI), G11 y G15 fallaron justo después de `menu cloud_close`: la ventana de la nube quedó abierta, y el
+  clic siguiente no llegó. El verbo `menu` del guion ahora mira dónde cayó la pulsación (`MouseClickedPos`). Si cayó
+  fuera de la entrada (el cursor real de macOS), apunta de nuevo y repite, hasta 3 veces. Cada vez lo dice en la
+  salida.
+- G15, línea 23 (`expect-busy cloud`, macOS x86_64): se reproduce en Linux con carga (–j4). Ahora la falla escribe
+  los últimos avisos de la pantalla. Con eso salió la causa: el proyecto del Benchy pasa el límite de 1 MiB del
+  servidor de prueba, y el corte en la nube de G15 siempre terminaba con 413. La prueba pasaba solo si llegaba a
+  verlo en curso antes de la respuesta. El simulador toma el límite de `TISMA_MOCK_CLOUD_MAX_BYTES` (1 MiB si no
+  está, como CC5); G15 le da 64 MiB, así su corte en la nube queda de verdad en curso al cerrar.
+
+## 2026-11-18 01:20 (Montevideo) — bloque nocturno: O1, costura precisa (`orca_2_5.md`, regla 4, OR4)
+
+- **0.13.0-beta.4:** en el segundo intento, la puerta de Linux falló en `gate_g15_quit`. Es la carrera de la nube que
+  arregla 8968c74 en dev; en el primer intento había pasado. Relancé solo los trabajos que fallaron. En `alpha` no
+  cambió nada (decisión del dueño).
+- **PLAN:** G3 marcada como hecha; pasa en la puerta desde el arreglo de G4.
+- **P2:** Flashforge (FF1), Elegoo (EL1) y Creality de fábrica (CR1) ya los hizo la sesión de interfaz. Anycubic queda
+  fuera de la beta.
+- **Siguiente ítem:** O1, el modificador de costura precisa. Diseño:
+  - `MeshModifier::seam`: vacío, `center`, `left`, `right` (fuertes) o `prefer`, `forbid`, `neutral` (débiles).
+  - Los débiles se cortan por capa como las demás zonas de modificador y se suman a `seam_enforce` y `seam_block` en el
+    orden de la lista. `neutral` borra los dos. Dentro de su zona, el débil manda sobre la pintura.
+  - Los fuertes dan un punto fijo por pared externa: el tramo más largo donde el cuerpo corta la línea media; en empate,
+    el más cercano al fondo y después el de más a la izquierda. Izquierda y derecha se miran desde afuera.
+  - Un solo aviso «Costura precisa:» junta los problemas, y el tipo se guarda en el proyecto.
+
+**02:00 (Montevideo) — O1, costura precisa, los débiles (OR4, parte 1):**
+- `SupportVolumes::seams`: cuerpos con su tipo (preferida, prohibida, neutra), movidos como la pieza.
+- Cada cuerpo se corta por capa con `volume_sections`, como los bloqueadores de soporte. Su sección se suma a
+  `seam_enforce` (preferida) o a `seam_block` (prohibida), o borra las dos (neutra), por encima de la pintura. Con
+  varios cuerpos, manda el primero de la lista.
+- Prueba `[seam]`: un cuerpo sobre la cara +X de un cubo de 20 mm marca, bloquea, y la neutra borra la costura pintada.
+  Pasan `[paint]` y `[support]`.
+- **Falta:**
+  - los fuertes (centro, izquierda, derecha): un punto fijo por pared;
+  - el aviso «Costura precisa:»;
+  - llevarlo de la CLI y el proyecto a `SeamVolume`;
+  - la interfaz.
+
+**02:40 (Montevideo) — O1, costura precisa, los fuertes (OR4, parte 2):**
+- Los tipos centro, izquierda y derecha dan un punto fijo por pared externa:
+  - se toma el tramo más largo donde el cuerpo corta la pared; en un empate, el más cercano al fondo y después el de más
+    a la izquierda;
+  - la derecha y la izquierda se miran desde afuera, del lado donde no hay pieza; en un agujero, desde adentro del
+    agujero;
+  - el punto queda como un disco chico obligado para la costura, por encima de los débiles y de la pintura;
+  - si dos cuerpos fuertes tocan la misma pared, gana el primero de la lista.
+- Un cuerpo que contiene la pared entera no se usa en esa pared. Un solo aviso «Costura precisa:» junta tres casos: el
+  cuerpo no llega a la línea media de la pared, la corta en varios tramos, o la contiene entera.
+- **A confirmar con QA:** cómo se interpreta «se invierten en la pared de un agujero».
+- Prueba `[seam]` con centro, derecha (+Y en la cara +X), izquierda y el cuerpo que contiene todo. Pasan `[paint]` y
+  `[support]`.
+- **Sin probar:** que la costura del G-code caiga en el punto. La escritura ya respeta la costura pintada con su
+  propia prueba, y este punto usa el mismo camino.
+- **Falta:** llevarlo de la CLI y del proyecto (con el tipo de cada modificador) y a la interfaz.
+
+**03:00 (Montevideo) — O1, costura precisa, parte 3:**
+- El proyecto guarda el tipo de cada modificador de costura: `ProjectVolume::seam`, la clave `seam` del volumen.
+  `seam_modifier_kind()` lee los seis nombres. El proyecto rechaza un nombre desconocido y la costura en un volumen
+  negativo.
+- Pruebas `[project]` y `[seam]` bien.
+- **Falta:**
+  - que la interfaz pase los volúmenes con `seam` a `SupportVolumes::seams` al laminar, y los muestre para elegir el
+    tipo;
+  - la CLI, que hoy toma los volúmenes solo de un 3MF de otro programa.
+
+**02:00 (Montevideo, 18-11) — O1, costura precisa, parte 4:**
+- La interfaz pasa al motor los modificadores de costura del proyecto al laminar. `PlateVolume::seam` viene del
+  proyecto y vuelve a él. `plate_slice` los separa en `SliceVolumes::seams`, y si además tienen ajustes también
+  quedan como modificador. `Slicer` los pasa a `slice_model` como `SupportVolumes::seams`, y `same_volumes` los
+  compara.
+- Corregido: `ProjectVolume::seam` iba antes de `lattice_cell`, lo que rompía el armado por posición de la interfaz.
+  Ahora va al final.
+- Pruebas `[project]` (incluye la nueva comprobación de `plate_slice`), `[plate]`, `[paint]` y `[seam]` bien. La
+  interfaz compila.
+- **Falta:**
+  - el control para elegir el tipo en la lista de volúmenes;
+  - la CLI.
+
+**02:00 (Montevideo, 18-11) — O1, costura precisa, parte 5:**
+- La ventana de ajustes del objeto tiene un selector «Costura» en cada modificador: sin costura (solo ajustes), en el
+  centro, a la izquierda, a la derecha, zona preferida, prohibida o neutra.
+- Pruebas `[text]` y `[ui]` bien, y la interfaz compila. La pantalla no se miró: no hay captura.
+- **Falta:** la CLI.
+
+**02:15 (Montevideo, 18-11) — O1, costura precisa, parte 6: la CLI. O1 queda completo.**
+- Nueva opción `slice --seam-modifier <tipo>:<volumen.stl>`, que se puede repetir. El volumen va en las coordenadas
+  del modelo y lo sigue igual que los bloqueadores. Un tipo desconocido o un archivo vacío dan error de uso.
+- `slice <proyecto.3mf>` desde `node` ya laminaba con `ui::Slicer`, así que los modificadores del proyecto ya
+  funcionaban por ese camino.
+- Prueba `[cli][seam]`: con un modificador «center» sobre la cara +X del cubo, los movimientos del G-code cambian, y
+  la opción mal escrita da error. `[cli]` completo bien.
+- **Pendiente con QA:** confirmar cómo se lee «invertir en agujeros».
+- **Siguiente:** O2 de `orca_2_5.md`.
+
+**02:40 (Montevideo, 18-11) — O2 de `orca_2_5.md`, regla 9: ángulo fijo arriba y abajo.**
+- Empecé O2 por la regla 9 porque es corta y no depende de las demás. La 7 (expansión de la superficie de arriba) es la
+  más grande y va después, en partes.
+- `surfaces.top_angle` y `surfaces.bottom_angle` (−1, o de 0 a 360): un ángulo fijo para las líneas de la superficie de
+  arriba y de las de abajo. Las capas macizas bajo una superficie de arriba siguen girando con la capa. El planchado
+  toma el ángulo fijo de arriba como base.
+- Con −1, el G-code sale igual que antes. En la interfaz, los tres ángulos (puentes, arriba y abajo) van en la
+  subsección nueva «Ángulos de las superficies», porque «Arriba y abajo» ya tenía 8 ajustes. Cada uno tiene su
+  explicación en los dos idiomas.
+- Pruebas: todas bien (1138 casos), con la nueva de `[infill]`.
+- **0.13.0-beta.4:** el tercer intento falló otra vez en `gate_g15_quit` (Linux). Es la segunda falla seguida, así que
+  no es un flake. El arreglo de la prueba (8968c74) está en dev y no en alpha. No empujo a alpha sin permiso del dueño:
+  se lo pregunté a QA.
+
+**03:00 (Montevideo, 18-11) — O2, regla 8: orden de las superficies que salen del centro.**
+- `surfaces.top_fill_order` y `surfaces.bottom_fill_order`: `default`, `outward` o `inward`. Cuentan en los dibujos
+  `concentric`, `archimedean` y `octagram` de la superficie de arriba y de la capa de abajo de todo.
+- `default` deja el G-code igual que antes. Con `outward` o `inward`, cada camino lleva la marca `Toolpath::in_order`
+  y los tramos abiertos van en un solo sentido. `order_paths` imprime primero los demás caminos del grupo por
+  cercanía, y después los marcados, en su orden y de a uno, así cada uno elige su costura o su punta desde el cursor.
+- En la interfaz, la subsección pasó a llamarse «Dirección y orden de las superficies» y tiene los dos selectores
+  nuevos, con su explicación en los dos idiomas.
+- Pruebas: todas bien (1139 casos). La nueva de `[infill]`: con los tres dibujos, las distancias al centro crecen con `outward` y bajan con `inward`, y
+  `order_paths` respeta el orden.
+- **Siguiente:** la regla 7, expansión de la superficie de arriba, en partes.
+
+**03:20 (Montevideo, 18-11) — O2, regla 7, parte 1: la superficie de arriba crece.**
+- `surfaces.top_expansion` (mm, 0 la apaga), `surfaces.top_expansion_margin` y `surfaces.top_expansion_direction`
+  (`inward`, `outward` o `inward_and_outward`, que es el valor de fábrica).
+- `expand_top_surfaces` hace crecer la superficie de arriba de cada capa (sin las capas macizas de debajo) sobre el
+  relleno ralo de la misma capa, a una distancia de las paredes igual al margen. Va antes de buscar los puentes.
+  - `outward` agranda los bordes de afuera y une superficies partidas.
+  - `inward` cierra los agujeros alrededor de lo que sale de la superficie.
+- En la interfaz, una subsección nueva, «Expansión de arriba», con sus tres ajustes y su explicación en los dos
+  idiomas.
+- Pruebas: todas bien (1140 casos). La nueva de `[surfaces]`: dos superficies separadas por 2 mm se unen hacia afuera y no hacia adentro; un agujero de
+  4 mm se cierra 1 mm por lado hacia adentro; el margen limita lo que crece; con 0 no cambia nada.
+- **Falta (parte 2):** sacar las paredes internas que quedan sobre la superficie agrandada. Las de ancho fijo se
+  sacan enteras; las de ancho variable, solo el tramo de arriba.
+
+**03:55 (Montevideo, 18-11) — O2, regla 7 parte 2 en espera; regla 11 hecha.**
+- Regla 7, parte 2 («las paredes internas que quedan sobre la superficie de arriba se sacan»): en el motor la
+  superficie agrandada solo crece dentro de las paredes, así que no hay paredes de la misma capa debajo. Le pregunté a
+  QA cuáles paredes son:
+  - (a) las internas de la misma capa que separan dos superficies;
+  - (b) las de la capa de encima;
+  - (c) otra cosa.
+  QA respondió (a): las paredes internas de la misma capa en la franja que cubre la superficie agrandada. Quedan la
+  pared de afuera y, si se pidió, la única pared de arriba. El caso es O2-7b (en `spec/next`): una placa de 20×20×5 con
+  un agujero de 6 mm, 3 paredes y 2 mm de expansión hacia adentro. QA aclaró que es su lectura de la wiki, sin medirlo
+  en Orca. Va en el próximo bloque.
+- Regla 11, `infill.smooth_factor` (0 a 100 %): las vueltas en punta del relleno poco denso pasan a ser curvas
+  (`src/infill/smooth.*`).
+  - Cada curva es una Bézier cuadrática tangente a los dos tramos. Empieza a `factor` × la mitad del tramo más corto,
+    así que dos curvas nunca se pisan.
+  - Las horquillas de más de 154° y las uniones casi rectas quedan en punta.
+  - Vale para Hilbert, octagrama, lightning, panal, panal 3D y concéntrico.
+  - Grilla, triángulos y cúbico solo cuentan con `infill.multiline` (regla 13), que todavía no está.
+- Con 0, que es el valor de fábrica, el G-code sale igual que antes. En la interfaz, el ajuste está en «Relleno», con
+  su explicación en los dos idiomas.
+- Pruebas: todas bien (1141 casos). La nueva de `[infill]`: el ángulo recto se vuelve curva de (5, 0) a (10, 5), la horquilla queda en punta y las
+  puntas de los extremos no se mueven.
+- **Siguiente:** reglas 12 (relleno separado por pieza) y 13 (varias líneas).
+
+**04:15 (Montevideo, 18-11) — O2, regla 7, parte 2: la superficie agrandada se queda con las paredes internas.**
+- Con `top_expansion` mayor que 0, la superficie también puede crecer sobre la banda de las paredes internas de la
+  misma capa, hasta la pared de afuera de cada isla menos el margen. Las paredes internas (índice > 0) que quedan en
+  lo agregado se recortan con `clip_toolpaths`.
+- Esto cubre las paredes de ancho fijo enteras y, en las de ancho variable, solo el tramo cubierto. Las paredes de
+  afuera no cambian.
+- Pruebas: todas bien (1142 casos). La nueva, O2-7b (`[surfaces]`): una placa de 20 × 20 × 5 con un agujero de 6 mm, 3 paredes y 2 mm hacia adentro. En la
+  última capa no queda ninguna pared interna junto al agujero, las paredes internas del borde de afuera siguen igual,
+  las paredes de afuera son las mismas y la superficie crece más de 10 mm². Las capas de abajo no cambian.
+- QA respondió la duda de hacia afuera (decisión de QA, O2-7c en `spec/next`): hacia afuera, la superficie cruza una
+  banda de paredes solo para unirse con otro pedazo de superficie de la misma capa. En el borde de afuera de la isla
+  queda a la distancia del margen, y las paredes del borde quedan todas. Lo hice así: sobre la banda de paredes solo
+  entra lo que crece hacia adentro, y de lo que crece hacia afuera, donde se juntan dos pedazos. La prueba suma O2-7c:
+  con `inward_and_outward` el borde conserva sus 3 paredes, y con `outward` solo no cambia nada en el agujero ni en el
+  borde.
+- Con esto la regla 7 queda hecha. Faltan en O2 la regla 10 (gyroid y TPMS adaptativos), la 12 (separado por pieza),
+  la 13 (varias líneas) y la 13 bis (espiral hacia adentro).
+
+**04:45 (Montevideo, 18-11) — O2, regla 12, parte 1: relleno separado por pieza, el poco denso.**
+- `infill.separated` (apagado de fábrica): el relleno poco denso de cada pieza se centra en su propia caja 3D, como si
+  se laminara sola.
+- Las piezas son las islas de cada capa unidas con las de la capa de abajo que pisan (`src/slice/separated.*`). Dos
+  que se tocan en la misma capa son una sola isla, y por lo tanto una sola pieza.
+- El relleno de cada isla se calcula trasladado al centro de su pieza (también en Z, para el gyroid) y vuelve a su
+  lugar. No cambia el cúbico adaptativo, el de soporte, lightning ni el concéntrico.
+- Pruebas: todas bien (1143 casos). La nueva (`[surfaces][infill]`): dos cubos de 10 mm a 23,3 mm uno del otro. Sin la opción, sus líneas difieren; con
+  ella, son las mismas trasladadas.
+- **Falta (parte 2):** el sólido interno y los puentes (la regla los incluye; las superficies de arriba y abajo no).
+
+**05:00 (Montevideo, 18-11) — O2, regla 12, parte 2: el sólido interno y los puentes también. La regla 12 queda hecha.**
+- `separated_fill` reemplaza a `fill_layer` cuando `infill.separated` está prendido.
+  - La superficie de arriba y la de abajo de todo se llenan como siempre.
+  - El relleno poco denso, el sólido interno (las capas bajo una superficie de arriba y sobre una de abajo) y los
+    puentes se llenan isla por isla, trasladados al centro de su pieza.
+  - Va antes de redondear los puentes y de apoyarlos sobre el soporte, igual que antes.
+- Pruebas: todas bien (1143 casos). La prueba de la regla 12 suma dos chequeos: la capa 1 (sólido interno) sale igual en los dos cubos, y la capa 0 (superficie de
+  abajo) no cambia respecto del valor de fábrica.
+- **Siguiente:** regla 13 (`infill.multiline`) o 13 bis (espiral hacia adentro).
+
+**05:15 (Montevideo, 18-11) — O2, regla 13 bis, parte 1: espiral hacia adentro.**
+- Nuevo dibujo `spiral_inset` para `surfaces.top_pattern` y `surfaces.bottom_pattern` (`spiral_inset_fill`).
+  - Junta los lazos concéntricos en espirales, de afuera hacia adentro.
+  - Empieza en la esquina convexa del lazo de afuera más cerca de un ángulo recto. Cada lazo se corta una separación
+    antes de cerrar y sigue, extruyendo, al punto más cercano del lazo siguiente.
+  - Empieza otra espiral si el lazo siguiente está a más de cuatro separaciones o si el paso saldría de la región.
+  - El orden de la regla 8 la da vuelta con `outward`.
+- En la interfaz, «Espiral hacia adentro» en los dibujos de arriba y de abajo.
+- Pruebas: todas bien (1144 casos). La nueva de `[infill]`: en un cuadrado de 20 mm sale una sola espiral. Su largo es el de los lazos más los pasos,
+  empieza en una esquina y termina cerca del centro. Dos islas lejanas dan dos espirales, y con `outward` empieza en el
+  centro.
+- **Falta (parte 2):**
+  - el dibujo para el sólido interno y para `support.interface_pattern`;
+  - el ancho variable en las superficies de arriba y abajo (hoy es fijo);
+  - la línea corta del centro.
+
+**05:30 (Montevideo, 18-11) — O2, regla 13 bis, parte 2: la espiral en las interfaces de soporte.**
+- `support.interface_pattern: "spiral_inset"`: la interfaz del soporte en grilla usa la misma espiral, con la
+  separación de los cordones. En la interfaz aparece como «Espiral hacia adentro».
+- Pruebas: todas bien (1144 casos). La de patrones de soporte (`[gcode]`) suma: con `spiral_inset` la interfaz son espirales abiertas, menos
+  caminos que los lazos concéntricos.
+- **Falta de 13 bis:**
+  - El sólido interno. El motor no tiene un ajuste de dibujo para él (va siempre en zigzag). La ficha no nombra la
+    clave; habría que preguntarle a QA.
+  - El ancho variable de los lazos.
+  - La línea corta del centro.
+
+**05:50 (Montevideo, 18-11) — O2, regla 13 bis, parte 3: dibujo del sólido interno.**
+- QA respondió:
+  - La clave es `surfaces.internal_solid_pattern`, con los mismos valores que `top_pattern` y `rectilinear` de
+    fábrica, así que hoy no cambia nada.
+  - El ancho variable de los lazos queda para después de la beta. Hay que medir en OrcaSlicer cómo reparte el ancho;
+    hasta entonces, ancho fijo.
+- Con un dibujo que no sea `rectilinear`, la superficie de abajo de todo sigue el dibujo de abajo. Las capas macizas
+  sobre ella y bajo la de arriba siguen el dibujo interno (curvas, espiral, monotónico o zigzag fijo).
+- En la interfaz, «Dibujo del macizo interno» en «Arriba y abajo», con su explicación en los dos idiomas.
+- Prueba `[infill]` nueva (en el mismo push que la regla 13): con `spiral_inset`, una capa maciza de adentro es una sola espiral, y la superficie de abajo
+  sigue en líneas sueltas.
+- **Siguiente:** regla 13 (`infill.multiline`). Después, la regla 10 (gyroid y TPMS adaptativos).
+
+**06:25 (Montevideo, 18-11) — O2, regla 13, parte 1: relleno de varias líneas.**
+- QA respondió: la densidad se mantiene. El dibujo se hace N veces más grande y cada camino va como N líneas pegadas,
+  con el mismo material (OR12: los gramos del relleno dentro del 3 %).
+- `infill.multiline` (1 a 10):
+  - el dibujo se arma a la densidad / N;
+  - cada camino se copia N veces a los costados, a una separación de cordón y centradas en él;
+  - las copias se recortan al relleno;
+  - como el largo de un dibujo no sigue exactamente a la densidad (uniones con las paredes, celdas, recortes), la
+    densidad se corrige hasta tres veces por el largo total, y se queda el resultado más cercano.
+- Va en el commit junto con `surfaces.internal_solid_pattern` (13 bis, parte 3), porque tocan los mismos archivos.
+- Pruebas: todas bien (1146 casos). La nueva de `[infill]`, en un cuadrado de 40 mm al 15 %: con 3 líneas, el largo total queda dentro del 3 % en
+  rectilíneo, gyroid y panal. En cúbico queda dentro del 8 %, porque sus pocas líneas cambian a saltos; mejora con los
+  caminos propios de la parte 2. Una línea recta da tres a 0,4 mm, con la del medio sobre ella.
+- **Falta (parte 2):** caminos en trapecio que no se cruzan consigo mismos para grilla, triángulos, tri-hexágono,
+  cúbico, cúbico adaptativo, de soporte y panal 3D, con el patrón girando en cada capa. Hoy esos patrones usan las
+  copias paralelas.
+
+**06:40 (Montevideo, 18-11) — O2, regla 10, parte 1: densidad adaptativa del gyroid (cáscaras escalonadas).**
+- Ajustes nuevos:
+  - `infill.adaptive_mode` (los ocho valores de la ficha, `disabled` de fábrica);
+  - `infill.adaptive_interior_density` (20 % de fábrica);
+  - `infill.adaptive_gradient` (`linear`, `quadratic` o `exponential`, con las fórmulas de la ficha).
+- Con gyroid y un modo prendido, el relleno se arma en cáscaras según la profundidad (`sparse_depth` con un campo de
+  0,5 mm y `deep_region`).
+  - Hay tantas cáscaras como el logaritmo de I/S en pasos de 1,5, y cada una va a la densidad de su profundidad media.
+  - Una pieza más fina que el campo usa el patrón normal.
+- **Decisión:** por ahora todos los modos usan las cáscaras escalonadas.
+  - `distance_warp` (un solo patrón con el período variando punto a punto) deforma mucho lejos del origen, porque la
+    fase cambia con x · Δk. Hay que armarlo con una fase integrada.
+  - `smooth_blend`, `lobes` y los `normal_*` quedan para después.
+  - TPMS-D y TPMS-FK no existen todavía en el motor.
+- En la interfaz, una subsección nueva, «Densidad adaptativa (experimental)», con los tres ajustes y su explicación.
+- Pruebas: todas bien (1147 casos). La nueva (`[surfaces][infill]`), parecida a OR9: un cubo de 40 mm con gyroid al 15 % y 5 % en el centro, lineal.
+  - Sin la opción, el largo de línea por mm² es parejo.
+  - Con ella, en el centro queda por debajo del 70 % de la franja junto a las caras.
+  - También se prueban las tres fórmulas.
+- La prueba de la regla 13 suma OR12: con cúbico al 15 % y 3 líneas, ningún camino se cruza consigo mismo.
+- **Siguiente:** `distance_warp` con fase integrada, o los modos que faltan.
+
+**06:55 (Montevideo, 18-11) — O2, regla 10, parte 2: `smooth_blend`.**
+- `gyroid_fill` ahora acepta un campo propio (`GyroidField`) para marchar en lugar del gyroid de un solo período.
+- Con `smooth_blend`, el campo de cada punto mezcla los gyroides de los dos niveles de densidad que rodean la suya. Los
+  niveles van en pasos de 1,5 de la superficie al centro, y el peso sale de dónde cae la densidad entre ellos. Sale un
+  solo dibujo continuo, sin los cortes entre cáscaras.
+- Pruebas: todas bien (1147 casos). La prueba suma: con `smooth_blend` el centro queda más ralo que la franja, y en la capa del medio hay menos caminos
+  sueltos que con las cáscaras.
+- Siguen usando las cáscaras `distance_warp`, `lobes` y los `normal_*`.
+
+**07:05 (Montevideo, 18-11) — O2, regla 10, parte 3: los modos `normal_x`, `normal_y` y `normal_z`.**
+- `distance_transform` acepta `skip_axis`: sin la pasada de un eje, da la distancia dentro de cada plano normal a él.
+  `sparse_depth` lo usa con `DepthFrom::PlaneX/Y/Z`.
+- Los modos `normal_*` usan la mezcla de `smooth_blend` con esa profundidad. Por ejemplo, con `normal_z` cada capa va
+  sola y solo cuentan las paredes.
+- Pruebas: todas bien (1147 casos).
+  - `[adaptive]`: en el bloque de 30 mm, lo más hondo en los planos Z da 15 mm (las paredes) y en los planos X da 9 mm
+    (las capas macizas).
+  - La prueba del cubo suma `normal_z`: el centro queda más ralo.
+- Siguen usando las cáscaras `distance_warp` (necesita una fase integrada) y `lobes`.

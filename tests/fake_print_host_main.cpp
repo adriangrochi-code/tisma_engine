@@ -5,7 +5,9 @@
 // program ends, one line says what the fake saw («fake host: started=1
 // name=...»); the exit code is the program's. Own design, as mock_cloud_main.
 #include "cad/process.hpp"
+#include "fake_flashforge_net.hpp"
 #include "fake_print_hosts.hpp"
+#include "fake_sdcp.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -95,6 +97,56 @@ int main(int argc, char** argv) {
         FakeRepetier fake;
         return run<FakeRepetier>(fake, argc, argv, [](const FakeRepetier& f) {
             return "started=" + std::string(f.job != "none" ? "1" : "0") + " name=" + f.uploaded_name + whole(f.uploaded);
+        });
+    }
+    if (kind == "elegoo") {
+        fake_sdcp::Printer fake;
+        const std::string udp = "127.0.0.1:" + std::to_string(fake.udp_port());
+#ifdef _WIN32
+        _putenv_s("TISMA_TEST_SDCP_DISCOVERY", udp.c_str());
+        _putenv_s("TISMA_TEST_SDCP_UDP", std::to_string(fake.udp_port()).c_str());
+#else
+        setenv("TISMA_TEST_SDCP_DISCOVERY", udp.c_str(), 1);
+        setenv("TISMA_TEST_SDCP_UDP", std::to_string(fake.udp_port()).c_str(), 1);
+#endif
+        return run<fake_sdcp::Printer>(fake, argc, argv, [](const fake_sdcp::Printer& f) {
+            auto& p = const_cast<fake_sdcp::Printer&>(f);
+            std::lock_guard lock(p.mutex);
+            bool started = false;
+            for (const auto& c : p.commands)
+                started = started || c.first == 128;
+            // A resin printer's own file (resin.md): GOO's header starts with its version, «V3.0».
+            const bool goo = p.started_file.size() > 4 && p.started_file.substr(p.started_file.size() - 4) == ".goo";
+            return "started=" + std::string(started ? "1" : "0") + " name=" + p.started_file +
+                   (goo ? std::string(" goo=") + (p.file.rfind("V3.0", 0) == 0 ? "1" : "0") : whole(p.file)) +
+                   " pieces=" + std::to_string(p.pieces.size());
+        });
+    }
+    if (kind == "creality") {
+        // Stock firmware, Moonraker off (CR1): its state by the WebSocket only.
+        fake_sdcp::Creality fake;
+#ifdef _WIN32
+        _putenv_s("TISMA_TEST_CREALITY_MOONRAKER_PORT", "9");
+#else
+        setenv("TISMA_TEST_CREALITY_MOONRAKER_PORT", "9", 1);
+#endif
+        return run<fake_sdcp::Creality>(fake, argc, argv, [](const fake_sdcp::Creality&) {
+            return std::string("started=0 creality");
+        });
+    }
+    if (kind == "flashforge") {
+        FakeFlashforge fake;
+        // The search's answers too (FF1.1): a newer and an older printer.
+        fake_flashforge::Discovery discovery;
+        const std::string target = "127.0.0.1:" + std::to_string(discovery.port());
+#ifdef _WIN32
+        _putenv_s("TISMA_TEST_FLASHFORGE_DISCOVERY", target.c_str());
+#else
+        setenv("TISMA_TEST_FLASHFORGE_DISCOVERY", target.c_str(), 1);
+#endif
+        return run<FakeFlashforge>(fake, argc, argv, [](const FakeFlashforge& f) {
+            return "started=" + std::string(f.print_now == "true" ? "1" : "0") + " name=" + f.uploaded_name +
+                   whole(f.uploaded) + " leveling=" + f.leveling;
         });
     }
     std::fprintf(stderr, "tisma_fake_print_host: unknown kind %s\n", kind.c_str());

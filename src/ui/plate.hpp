@@ -50,6 +50,9 @@ struct PlateVolume {
     std::string settings{};
     Rotation turn = kNoRotation; // its own turn in the model's frame, about its centre
     double lattice_cell = 0.0, lattice_diameter = 0.0; // mm, for a lattice
+    // A precise seam modifier (orca_2_5.md, rule 4): its kind (center, left,
+    // right, preferred, forbidden, neutral); empty: a settings modifier.
+    std::string seam{};
     friend bool operator==(const PlateVolume&, const PlateVolume&) = default;
 };
 // A height range of an object (model_tools.md, rule 6): from and to over its

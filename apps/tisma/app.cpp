@@ -47,7 +47,9 @@
 #include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
 #include "device/mdns.hpp"
+#include "device/flashforge.hpp"
 #include "device/print_host.hpp"
+#include "device/sdcp.hpp"
 #include "device/printer_limits.hpp"
 #include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
@@ -1154,6 +1156,7 @@ private:
     void device_disconnect();
     void device_poll();
     bool device_can_print() const;
+    bool host_takes_resin() const; // the network program takes this resin slice's file (QA, 2026-11-17: Elegoo, .goo)
     void device_print();
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
@@ -1872,6 +1875,10 @@ private:
     // Klipper's Moonraker on the network (printer_connections.md, «Búsqueda en
     // la red»): its `_moonraker._tcp` services that answer /server/info.
     std::future<std::vector<device::FoundHost>> moonraker_search_;
+    std::future<std::vector<device::FlashforgePrinter>> flashforge_search_;
+    std::future<std::vector<device::SdcpPrinter>> sdcp_search_;
+    std::vector<device::SdcpPrinter> sdcp_found_;
+    std::vector<device::FlashforgePrinter> flashforge_found_;
     std::vector<device::FoundHost> moonraker_found_;
     // What another program's project brought that has no equivalent
     // (project_import.md, rules 6 and 9: «sin equivalente», by name and value).
@@ -2143,6 +2150,7 @@ private:
     long long view_calls_ = -1; // the 3D view's draw calls in the last frame (--draw-stats)
     bool quit_ = false;
     std::optional<bool> host_sent_; // script: how the last send to a network program went
+    std::string host_sent_code_;    // script: and its code
     std::vector<std::future<void>> busy_jobs_; // script: stuck jobs, to time the exit (busy-job)
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
@@ -2264,8 +2272,16 @@ const std::map<T, const char*>& row_keys() {
         {T::FuzzyDistance, "fuzzy.point_distance"}, {T::TopLayers, "surfaces.top_layers"},
         {T::BottomLayers, "surfaces.bottom_layers"}, {T::TopMinThickness, "surfaces.top_min_thickness"},
         {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
-        {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
+        {T::BottomPattern, "surfaces.bottom_pattern"}, {T::InternalSolidPattern, "surfaces.internal_solid_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
+        {T::TopAngle, "surfaces.top_angle"}, {T::BottomAngle, "surfaces.bottom_angle"},
+        {T::TopFillOrder, "surfaces.top_fill_order"}, {T::BottomFillOrder, "surfaces.bottom_fill_order"},
+        {T::TopExpansion, "surfaces.top_expansion"}, {T::TopExpansionMargin, "surfaces.top_expansion_margin"},
+        {T::TopExpansionDirection, "surfaces.top_expansion_direction"},
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
+        {T::SmoothFactor, "infill.smooth_factor"}, {T::InfillSeparated, "infill.separated"},
+        {T::InfillMultiline, "infill.multiline"},
+        {T::AdaptiveMode, "infill.adaptive_mode"}, {T::AdaptiveInterior, "infill.adaptive_interior_density"},
+        {T::AdaptiveGradient, "infill.adaptive_gradient"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
         {T::NonplanarRow, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
@@ -2669,7 +2685,28 @@ std::string g_last_field; // the last of them, for a field narrower than its cel
 // The entries of a menu drawn this frame, by a name in English, for
 // --ui-script's menu step: min x, min y, max x, max y.
 std::map<std::string, ImVec4> g_menu_rects;
-std::optional<std::chrono::steady_clock::time_point> g_quit_at; // script: when «quit» closed the window
+std::optional<std::chrono::steady_clock::time_point> g_quit_at;
+// The tests' Elegoo on this machine: TISMA_TEST_SDCP_DISCOVERY=127.0.0.1:<port>.
+std::vector<std::pair<std::string, int>> sdcp_test_targets() {
+    std::vector<std::pair<std::string, int>> out;
+    if (const char* v = std::getenv("TISMA_TEST_SDCP_DISCOVERY")) {
+        const std::string t = v;
+        if (const std::size_t colon = t.rfind(':'); colon != std::string::npos)
+            out.push_back({t.substr(0, colon), std::atoi(t.c_str() + colon + 1)});
+    }
+    return out;
+}
+// The tests' Flashforge on this machine, asked directly by the search:
+// TISMA_TEST_FLASHFORGE_DISCOVERY=127.0.0.1:<port>.
+std::vector<std::pair<std::string, int>> flashforge_test_targets() {
+    std::vector<std::pair<std::string, int>> out;
+    if (const char* v = std::getenv("TISMA_TEST_FLASHFORGE_DISCOVERY")) {
+        const std::string t = v;
+        if (const std::size_t colon = t.rfind(':'); colon != std::string::npos)
+            out.push_back({t.substr(0, colon), std::atoi(t.c_str() + colon + 1)});
+    }
+    return out;
+} // script: when «quit» closed the window
 // The named entries drawn greyed this frame (--ui-script's expect-enabled).
 std::set<std::string> g_menu_disabled;
 // The scripted tests: the control a click is about to aim at. The panel that
@@ -5554,7 +5591,7 @@ Project App::current_project() const {
         for (const PlateVolume& v : objects_[i].volumes)
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
                                                v.offset, v.size, v.settings, v.turn, v.shape == PlateVolume::Shape::Lattice,
-                                               v.lattice_cell, v.lattice_diameter});
+                                               v.lattice_cell, v.lattice_diameter, v.seam});
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
         p.models.back().engineering = objects_[i].engineering;
@@ -9998,7 +10035,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
                             {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
                             {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
-                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)},
+                            {SurfacePattern::SpiralInset, tr(T::SpiralInset)}});
         if (shown("surfaces.bottom_pattern"))
             changed |= row(T::BottomPattern, s.bottom_pattern,
                            {{SurfacePattern::Monotonic, tr(T::Monotonic)},
@@ -10008,12 +10046,52 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
                             {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
                             {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
-                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)},
+                            {SurfacePattern::SpiralInset, tr(T::SpiralInset)}});
+        if (shown("surfaces.internal_solid_pattern"))
+            changed |= row(T::InternalSolidPattern, s.internal_solid_pattern,
+                           {{SurfacePattern::Monotonic, tr(T::Monotonic)},
+                            {SurfacePattern::MonotonicLines, tr(T::MonotonicLines)},
+                            {SurfacePattern::Rectilinear, tr(T::Rectilinear)},
+                            {SurfacePattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                            {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
+                            {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)},
+                            {SurfacePattern::SpiralInset, tr(T::SpiralInset)}});
+        flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
+    } else if (id == "surface_angles") {
         mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : tr(T::AutoValue),
            0.5f);
-        flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
+        // A fixed angle, or -1 for the solid infill's (orca_2_5.md, rule 9).
+        mm(T::TopAngle, "surfaces.top_angle", s.top_angle, -1.0, 360.0, s.top_angle >= 0.0 ? "%.0f°" : tr(T::AutoValue), 0.5f);
+        mm(T::BottomAngle, "surfaces.bottom_angle", s.bottom_angle, -1.0, 360.0,
+           s.bottom_angle >= 0.0 ? "%.0f°" : tr(T::AutoValue), 0.5f);
+        // The order of a centre-out pattern (orca_2_5.md, rule 8).
+        const auto orders = [&]() -> std::vector<std::pair<FillOrder, const char*>> {
+            return {{FillOrder::Default, tr(T::FillOrderDefault)},
+                    {FillOrder::Outward, tr(T::FillOrderOutward)},
+                    {FillOrder::Inward, tr(T::FillOrderInward)}};
+        };
+        if (shown("surfaces.top_fill_order"))
+            changed |= row(T::TopFillOrder, s.top_fill_order, orders());
+        if (shown("surfaces.bottom_fill_order"))
+            changed |= row(T::BottomFillOrder, s.bottom_fill_order, orders());
+    } else if (id == "top_expansion") {
+        // The top surface grown into the infill (orca_2_5.md, rule 7).
+        mm(T::TopExpansion, "surfaces.top_expansion", s.top_expansion, 0.0, 100.0, "%.2f mm", 0.01f);
+        mm(T::TopExpansionMargin, "surfaces.top_expansion_margin", s.top_expansion_margin, 0.0, 100.0, "%.2f mm", 0.01f);
+        if (shown("surfaces.top_expansion_direction"))
+            changed |= row(T::TopExpansionDirection, s.top_expansion_direction,
+                           {{TopExpansion::Inward, tr(T::TopExpansionInward)},
+                            {TopExpansion::Outward, tr(T::TopExpansionOutward)},
+                            {TopExpansion::InwardAndOutward, tr(T::TopExpansionBoth)}});
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
+        // Rounded turns (orca_2_5.md, rule 11).
+        mm(T::SmoothFactor, "infill.smooth_factor", s.infill_smooth_factor, 0.0, 100.0, "%.0f %%", 0.5f);
+        flag(T::InfillSeparated, "infill.separated", s.infill_separated); // rule 12
+        whole(T::InfillMultiline, "infill.multiline", s.infill_multiline, 1, 10); // rule 13
         if (shown("infill.pattern"))
             changed |= row(T::InfillPattern, s.infill_pattern,
                            {{InfillPattern::Rectilinear, tr(T::Rectilinear)},
@@ -10073,6 +10151,25 @@ bool App::card_rows(std::string_view id, bool& bed) {
             }
             editing = ImGui::IsItemActive();
         }
+    } else if (id == "infill_adaptive") {
+        // Adaptive gyroid density (orca_2_5.md, rule 10), experimental.
+        if (shown("infill.adaptive_mode"))
+            changed |= row(T::AdaptiveMode, s.infill_adaptive_mode,
+                           {{AdaptiveMode::Disabled, tr(T::AdaptiveDisabled)},
+                            {AdaptiveMode::DistanceWarp, tr(T::AdaptiveDistanceWarp)},
+                            {AdaptiveMode::SmoothBlend, tr(T::AdaptiveSmoothBlend)},
+                            {AdaptiveMode::SteppedShells, tr(T::AdaptiveSteppedShells)},
+                            {AdaptiveMode::Lobes, tr(T::AdaptiveLobes)},
+                            {AdaptiveMode::NormalZ, tr(T::AdaptiveNormalZ)},
+                            {AdaptiveMode::NormalY, tr(T::AdaptiveNormalY)},
+                            {AdaptiveMode::NormalX, tr(T::AdaptiveNormalX)}});
+        mm(T::AdaptiveInterior, "infill.adaptive_interior_density", s.infill_adaptive_interior_density, 0.0, 100.0, "%.0f %%",
+           0.2f);
+        if (shown("infill.adaptive_gradient"))
+            changed |= row(T::AdaptiveGradient, s.infill_adaptive_gradient,
+                           {{AdaptiveGradient::Linear, tr(T::GradientLinear)},
+                            {AdaptiveGradient::Quadratic, tr(T::GradientQuadratic)},
+                            {AdaptiveGradient::Exponential, tr(T::GradientExponential)}});
     } else if (id == "infill_more") {
         mm(T::WallOverlap, "infill.wall_overlap", s.infill_wall_overlap, 0.0, 100.0, "%.0f %%", 0.5f);
         flag(T::InfillBeforeWalls, "infill.before_walls", s.infill_before_walls);
@@ -10239,7 +10336,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= row(T::SupportInterfacePatternRow, s.support_interface_pattern,
                            {{SupportInterfacePattern::Lines, tr(T::PatternLines)},
                             {SupportInterfacePattern::Concentric, tr(T::ConcentricInfill)},
-                            {SupportInterfacePattern::Automatic, tr(T::PatternAutomatic)}});
+                            {SupportInterfacePattern::Automatic, tr(T::PatternAutomatic)},
+                            {SupportInterfacePattern::SpiralInset, tr(T::SpiralInset)}});
         mm(T::SupportInterfaceSpacing, "support.interface_spacing", s.support_interface_spacing, 0.0, 100.0,
            "%.2f mm", 0.01f);
         flag(T::SupportContactLoops, "support.interface_contact_loops", s.support_contact_loops);
@@ -11950,7 +12048,7 @@ void App::slice_panel() {
                 loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(p.estimated_seconds).c_str());
         }
         // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
-        const bool to_host = host_ready() && !result_->resin && device_can_print();
+        const bool to_host = host_ready() && (result_->resin ? host_takes_resin() : device_can_print());
         if (to_host) {
             if (button("##export", "tisma_print", tr(T::SendToPrinter), true, false, !host_job_.valid(), nullptr, button_h)) {
                 host_dialog_name_ = host_default_name();
@@ -12430,6 +12528,25 @@ bool App::volume_editor(PlateObject& o, std::size_t k, bool& removed) {
     };
     three("##offset", T::VolumeOffset, v.offset, -1000.0);
     three("##size", T::VolumeSize, v.size, 0.1);
+    // A precise seam modifier (orca_2_5.md, rule 4): its kind, or none.
+    if (!negative) {
+        static constexpr const char* kinds[] = {"", "center", "left", "right", "preferred", "forbidden", "neutral"};
+        const char* labels[] = {tr(T::VolumeSeamNone),      tr(T::VolumeSeamCenter),    tr(T::VolumeSeamLeft),
+                                tr(T::VolumeSeamRight),     tr(T::VolumeSeamPreferred), tr(T::VolumeSeamForbidden),
+                                tr(T::VolumeSeamNeutral)};
+        int kind = 0;
+        for (int i = 1; i < 7; ++i)
+            if (v.seam == kinds[i])
+                kind = i;
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::VolumeSeam));
+        ImGui::SameLine(110.0f * scale_);
+        ImGui::SetNextItemWidth(3.0f * field);
+        if (ImGui::Combo("##seam", &kind, labels, 7)) {
+            v.seam = kinds[kind];
+            changed = true;
+        }
+    }
     if (!negative)
         changed |= own_settings_editor(v.settings, o.settings, false,
                                        format(tr(T::ModifierItem), int(k) + 1));
@@ -21440,7 +21557,9 @@ void App::more_menu() {
 // «Send G-code…» (Ctrl+Shift+G): to the tested network program, or to the
 // printer on USB (devices.md, rule 19).
 void App::send_gcode() {
-    if (!result_ || !result_->ok || viewer_ || stale_ || result_->resin || !device_can_print())
+    if (!result_ || !result_->ok || viewer_ || stale_ || (result_->resin ? !host_takes_resin() : !device_can_print()))
+        return;
+    if (result_->resin && !host_ready())
         return;
     if (host_ready()) {
         if (!host_job_.valid()) {
@@ -26598,6 +26717,12 @@ bool App::device_can_print() const {
     return result_ && !result_->gcode.empty() && (viewer_ || (result_->ok && result_->check.ok() && !stale_));
 }
 
+// A resin slice goes as the printer's own file, never as G-code: only an
+// Elegoo by SDCP takes it, as .goo (resin.md; QA, 2026-11-17).
+bool App::host_takes_resin() const {
+    return result_ && result_->resin && result_->ok && !stale_ && !viewer_ && host_.kind == device::HostKind::Elegoo;
+}
+
 void App::device_print() {
     if (!printer_ || !device_can_print())
         return;
@@ -26634,6 +26759,8 @@ std::string App::host_default_name() const {
     const std::string fallback = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
                                  : model_path_.empty()          ? std::string("tisma.gcode")
                                                                 : utf8(model_path_.stem()) + ".gcode";
+    if (result_ && result_->resin && !viewer_)
+        return model_path_.empty() ? std::string("tisma.goo") : utf8(model_path_.stem()) + ".goo";
     if (!result_ || !result_->model || viewer_)
         return fallback;
     GcodeTotals totals;
@@ -26690,12 +26817,22 @@ void App::host_upload_dialog() {
 }
 
 void App::host_send(bool start, std::string name, bool simulate) {
-    if (host_job_.valid() || !device_can_print() || host_.url.empty())
+    const bool resin = result_ && result_->resin;
+    if (host_job_.valid() || host_.url.empty() || (resin ? !host_takes_resin() : !device_can_print()))
         return;
     if (name.empty())
         name = host_default_name();
     host_job_what_ = name;
-    host_job_ = std::async(std::launch::async, [h = host_, gcode = result_->gcode, name, start, simulate] {
+    std::string gcode;
+    if (resin) {
+        // The printer's own file, as «Export» writes it.
+        std::ostringstream goo(std::ios::binary);
+        write_goo(goo, *result_->resin, result_->settings, goo_time_now());
+        gcode = goo.str();
+    } else {
+        gcode = result_->gcode;
+    }
+    host_job_ = std::async(std::launch::async, [h = host_, gcode = std::move(gcode), name, start, simulate] {
         // The program takes a file: the G-code goes through a temporary one.
         const std::filesystem::path temp =
             std::filesystem::temp_directory_path() / ("tisma_send_" + std::to_string(std::random_device{}()) + ".gcode");
@@ -26754,16 +26891,28 @@ void App::host_poll() {
         host_found_ = host_search_.get();
         host_searched_ = true;
     }
+    if (sdcp_search_.valid() && sdcp_search_.wait_for(0ms) == std::future_status::ready) {
+        sdcp_found_ = sdcp_search_.get();
+        host_searched_ = true;
+    }
+    if (flashforge_search_.valid() && flashforge_search_.wait_for(0ms) == std::future_status::ready) {
+        flashforge_found_ = flashforge_search_.get();
+        host_searched_ = true;
+    }
     if (moonraker_search_.valid() && moonraker_search_.wait_for(0ms) == std::future_status::ready) {
         moonraker_found_ = moonraker_search_.get();
         host_searched_ = true;
     }
     if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
         const device::HostResult r = host_job_.get();
-        if (!host_job_what_.empty())
+        if (!host_job_what_.empty()) {
             host_sent_ = r.ok;
+            host_sent_code_ = r.code;
+        }
         if (r.ok && !host_job_what_.empty())
             notify(format(tr(T::HostSent), host_job_what_.c_str(), host_.url.c_str()));
+        else if (!r.ok && host_.kind == device::HostKind::Creality && r.code == "unsupported")
+            notify(tr(T::HostCrealitySend), true); // not tried over 9999 (CR1-6)
         else if (!r.ok)
             notify(format(tr(T::HostFailed), r.error.c_str()), true);
         host_refresh();
@@ -26777,7 +26926,9 @@ void App::host_panel(float field, float button_h) {
     ImGui::SetNextItemWidth(field * 1.4f);
     if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
         for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
-                                         device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier})
+                                         device::HostKind::Duet, device::HostKind::AstroBox, device::HostKind::Repetier,
+                                         device::HostKind::Flashforge, device::HostKind::FlashforgeLegacy,
+                                         device::HostKind::Elegoo, device::HostKind::Creality})
             if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
                 host_.kind = k;
                 host_tested_ = false;
@@ -26785,6 +26936,8 @@ void App::host_panel(float field, float button_h) {
             }
         ImGui::EndCombo();
     }
+    // Anycubic is out of the beta (QA, 2026-11-17): say where to send from.
+    loc::TextWrapped("%s", tr(T::HostAnycubicNote));
     // OctoPrint announces itself by Zeroconf (printer_connections.md, «Búsqueda en la red»).
     if (host_.kind == device::HostKind::OctoPrint) {
         ImGui::BeginDisabled(host_search_.valid());
@@ -26836,6 +26989,58 @@ void App::host_panel(float field, float button_h) {
         if (host_searched_ && moonraker_found_.empty() && !moonraker_search_.valid())
             loc::TextDisabled("%s", tr(T::HostNoneFound));
     }
+    // Flashforge answers a UDP datagram (printer_connections.md, FF1.1): the
+    // newer ones with their serial number, the older without.
+    if (host_.kind == device::HostKind::Flashforge || host_.kind == device::HostKind::FlashforgeLegacy) {
+        ImGui::BeginDisabled(flashforge_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            flashforge_search_ = std::async(std::launch::async, [] { return device::flashforge_discover(3000, flashforge_test_targets()); });
+        }
+        note_rect("flashforge_search");
+        ImGui::EndDisabled();
+        if (flashforge_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::FlashforgePrinter& p : flashforge_found_) {
+            const std::string label = p.name + "  " + p.address + (p.serial.empty() ? std::string() : "  " + p.serial);
+            if (ImGui::Selectable(label.c_str(), host_.url.find(p.address) != std::string::npos)) {
+                host_.kind = p.modern ? device::HostKind::Flashforge : device::HostKind::FlashforgeLegacy;
+                host_.url = p.modern ? "http://" + p.address + ":" + std::to_string(p.http_port)
+                                     : p.address + ":" + std::to_string(p.tcp_port);
+                if (p.modern)
+                    host_.printer = p.serial;
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && flashforge_found_.empty() && !flashforge_search_.valid())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
+    }
+    // Elegoo answers «M99999» on UDP 3000 (printer_connections.md, EL1.1).
+    if (host_.kind == device::HostKind::Elegoo) {
+        ImGui::BeginDisabled(sdcp_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            sdcp_search_ = std::async(std::launch::async, [] { return device::sdcp_discover(3000, sdcp_test_targets()); });
+        }
+        note_rect("elegoo_search");
+        ImGui::EndDisabled();
+        if (sdcp_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::SdcpPrinter& p : sdcp_found_) {
+            const std::string label = (p.name.empty() ? p.machine : p.name) + "  " + p.address + "  " + p.mainboard_id;
+            if (ImGui::Selectable(label.c_str(), host_.printer == p.mainboard_id)) {
+                host_.url = p.address;
+                host_.printer = p.mainboard_id;
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && sdcp_found_.empty() && !sdcp_search_.valid())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
+    }
     ImGui::SetNextItemWidth(field * 1.4f);
     if (ImGui::InputTextWithHint(tr(T::HostUrl), "http://192.168.1.50", &host_.url))
         host_tested_ = false;
@@ -26843,6 +27048,24 @@ void App::host_panel(float field, float button_h) {
     if (host_.kind == device::HostKind::Duet) {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else if (host_.kind == device::HostKind::Creality) {
+        // Port 9999 asks for nothing: say who can reach it (CR1, «Advertencia de seguridad»).
+        loc::TextWrapped("%s", tr(T::HostCrealityHelp));
+    } else if (host_.kind == device::HostKind::Elegoo) {
+        loc::TextDisabled("%s", tr(T::HostElegooHelp)); // no login on the local network
+    } else if (host_.kind == device::HostKind::FlashforgeLegacy) {
+        loc::TextDisabled("%s", tr(T::HostFlashforgeLegacyHelp)); // no login; files by USB stick
+    } else if (host_.kind == device::HostKind::Flashforge) {
+        // The serial number and the check code from the printer's network
+        // mode screen (printer_connections.md, «Flashforge en red local»).
+        ImGui::SetNextItemWidth(field);
+        if (ImGui::InputTextWithHint(tr(T::HostSerial), "SN…", &host_.printer))
+            host_tested_ = false;
+        ImGui::SetNextItemWidth(field);
+        if (ImGui::InputText(tr(T::HostCheckCode), &host_.api_key, ImGuiInputTextFlags_Password))
+            host_tested_ = false;
+        ImGui::Checkbox(tr(T::HostLevelFirst), &host_.level_before_print);
+        loc::TextDisabled("%s", tr(T::HostFlashforgeHelp));
     } else {
         ImGui::SetNextItemWidth(field);
         ImGui::InputText(tr(T::HostApiKey), &host_.api_key, ImGuiInputTextFlags_Password);
@@ -26883,14 +27106,23 @@ void App::host_panel(float field, float button_h) {
     loc::TextDisabled("%s", host_version_.server.c_str());
     const device::HostStatus& st = host_status_;
     if (st.ok) {
-        loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
+        if (st.nozzle < 0.0 && st.bed < 0.0) // not reported (a stock Creality, CR1)
+            loc::Text("%s", st.state == "no_state" ? tr(T::HostNoStateData) : st.state.c_str());
+        else
+            loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
         if (st.printing) {
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
             ImGui::ProgressBar(float(std::max(0.0, st.progress) / 100.0), ImVec2(-FLT_MIN, 0.0f));
             ImGui::PopStyleColor();
-            loc::Text("%s: %.0f %%, %s", st.file.c_str(), std::max(0.0, st.progress),
-                      format_duration(std::max(0.0, st.seconds_left)).c_str());
+            if (st.seconds_done > 0.0) // Creality reports times, not a share (CR1-2)
+                loc::Text(tr(T::HostElapsed), format_duration(st.seconds_done).c_str(),
+                          format_duration(std::max(0.0, st.seconds_left)).c_str());
+            else
+                loc::Text("%s: %.0f %%, %s", st.file.c_str(), std::max(0.0, st.progress),
+                          format_duration(std::max(0.0, st.seconds_left)).c_str());
         }
+        if (st.code == "reconnecting") // never a lost print for a cut link (CR1-5)
+            loc::TextColored(rgb(0xE5A50A), "%s", tr(T::HostReconnecting));
     } else if (!st.code.empty()) {
         loc::TextColored(rgb(0xE5484D), tr(T::HostFailed), st.error.c_str());
     }
@@ -26918,7 +27150,9 @@ void App::host_panel(float field, float button_h) {
         }
         if (can_cancel && button("##host_cancel", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
             host_command(2);
-    } else if (device_can_print()) {
+    } else if (result_ && result_->resin && !host_takes_resin()) {
+        loc::TextWrapped("%s", tr(T::HostResinByUsb)); // never G-code to a resin printer
+    } else if (result_ && result_->resin ? host_takes_resin() : device_can_print()) {
         ImGui::Checkbox(tr(T::HostStartPrinting), &host_start_);
         if (button("##host_send", "tisma_print", tr(T::HostSend), true, false, !working, nullptr, button_h))
             host_send(host_start_);
@@ -28246,8 +28480,14 @@ bool App::script_check(const ScriptStep& step, int f) {
         next();
     } else if (step.verb == "expect-busy") { // slice|cloud: that work is under way now (waits up to 600 frames)
         const bool busy = step.key == "slice" ? slice_job_.running() : step.key == "cloud" ? cloud_slice_.valid() : false;
-        if (!busy)
-            return f > 600 ? fail_step(step.key + " is not under way") : true;
+        if (!busy) {
+            if (f <= 600)
+                return true;
+            // What was said meanwhile, to tell why (G15 on the CI).
+            for (std::size_t i = toasts_shown_.size() > 5 ? toasts_shown_.size() - 5 : 0; i < toasts_shown_.size(); ++i)
+                std::printf("ui-script: expect-busy %s: toast «%s»\n", step.key.c_str(), toasts_shown_[i].c_str());
+            return fail_step(step.key + " is not under way");
+        }
         std::printf("ui-script: expect-busy %s: ok\n", step.key.c_str());
         next();
     } else if (step.verb == "expect-sketch-rules") { // N: the sketch being drawn has N dimensions and constraints added by hand
@@ -28712,6 +28952,9 @@ void App::script_input() {
             g_scroll_to = step.key;
             return;
         }
+        static int retries = 0;
+        if (f == 1) // a new entry: its own tries
+            retries = 0;
         if (f >= 1008) // clicked: the menu has closed
             return next();
         const auto it = g_menu_rects.find(step.key);
@@ -28736,6 +28979,17 @@ void App::script_input() {
             io.AddMouseButtonEvent(0, true);
         } else if (f == 1005) {
             io.AddMouseButtonEvent(0, false);
+        } else if (f == 1006) {
+            // Where the press landed (macOS on the CI: the real cursor's
+            // place can still win a frame): not on the entry, aimed again.
+            const ImVec2 at = io.MouseClickedPos[0];
+            const bool on = at.x >= r.x - 1.0f && at.x <= r.z + 1.0f && at.y >= r.y - 1.0f && at.y <= r.w + 1.0f;
+            if (!on && retries < 3) {
+                ++retries;
+                std::printf("ui-script: menu %s: the press landed at %.0f,%.0f, off the entry; again\n", step.key.c_str(),
+                            double(at.x), double(at.y));
+                script_frame_ = 1000;
+            }
         }
     } else if (step.verb == "slide") { // a click on a named slider, VALUE (0 to 1) of the way across
         const auto it = g_menu_rects.find(step.key);
@@ -29064,10 +29318,21 @@ void App::script_input() {
             host_.user = step.value;
         else if (step.key == "password")
             host_.password = step.value;
-        else if (step.key == "printer") // Repetier-Server's printer
+        else if (step.key == "printer") // Repetier-Server's printer; Flashforge's serial number
             host_.printer = step.value;
+        else if (step.key == "search" && host_.kind == device::HostKind::Elegoo) {
+            host_searched_ = false;
+            sdcp_search_ = std::async(std::launch::async, [] { return device::sdcp_discover(1500, sdcp_test_targets()); });
+        } else if (step.key == "search" && (host_.kind == device::HostKind::Flashforge ||
+                                          host_.kind == device::HostKind::FlashforgeLegacy)) {
+            host_searched_ = false;
+            flashforge_search_ = std::async(std::launch::async, [] { return device::flashforge_discover(1500, flashforge_test_targets()); });
+        } else if (step.key == "level") // Flashforge: level before printing, yes or no
+            host_.level_before_print = step.value == "yes";
         else if (step.key == "send") { // the last slice, uploaded and printed, as «Send» with «Start printing»
-            if (!device_can_print())
+            if (result_ && result_->resin && !host_takes_resin())
+                return fail_step("a resin slice is not offered to this program");
+            if (!(result_ && result_->resin) && !device_can_print())
                 return fail_step("nothing sliced to send");
             host_sent_.reset();
             host_send(true);
@@ -29095,9 +29360,22 @@ void App::script_input() {
             got = host_tested_ && host_version_.ok ? "yes" : "no";
         else if (step.key == "sent") // the last send: yes, no, or none
             got = !host_sent_ ? "none" : *host_sent_ ? "yes" : "no";
+        else if (step.key == "sent-code") // the last send's code: unsupported, busy…
+            got = host_sent_code_;
         else if (step.key == "printing")
             got = host_status_.ok && host_status_.printing ? "yes" : "no";
-        else
+        else if (step.key == "found") { // the Flashforge search listed this serial number, or «older» for an older one;
+                                          // the Elegoo search, this MainboardID
+            if (flashforge_search_.valid() || sdcp_search_.valid())
+                return f > 36000 ? fail_step("the search never ended") : void();
+            got = "nothing";
+            for (const device::SdcpPrinter& p : sdcp_found_)
+                if (p.mainboard_id == step.value)
+                    got = step.value;
+            for (const device::FlashforgePrinter& p : flashforge_found_)
+                if ((p.modern && p.serial == step.value) || (!p.modern && step.value == "older"))
+                    got = step.value;
+        } else
             return fail_step("unknown expect-host key");
         if (got == step.value) {
             std::printf("ui-script: expect-host %s %s: ok\n", step.key.c_str(), step.value.c_str());

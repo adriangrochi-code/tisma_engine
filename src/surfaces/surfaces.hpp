@@ -55,4 +55,18 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
                                              int top_layers, int bottom_layers, double min_width = 0.0,
                                              const ShellCheck* shell = nullptr);
 
+// Top surface expansion (orca_2_5.md, rule 7): each layer's top surface (top
+// without top_under) grows by `distance` into the layer's sparse infill and,
+// with `regions`, over the band of its inner walls too: it may reach to
+// `outer_band` from the region's edge (the outer wall stays), less `margin`.
+// Without `regions` it stays `margin` inside `infill`. Outward grows the
+// surface's outer edges (joining split surfaces), inward closes its holes
+// (around what rises from it), both does the two. What it takes stops being
+// sparse infill. Returns what each layer's surface gained (the inner walls
+// there are to be taken out). Runs before the bridges are found. Layers in parallel.
+enum class TopExpansionDirection { Inward, Outward, Both };
+std::vector<Polygons> expand_top_surfaces(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygons>& infill,
+                                          double distance, double margin, TopExpansionDirection direction,
+                                          const std::vector<Polygons>* regions = nullptr, double outer_band = 0.0);
+
 } // namespace tisma

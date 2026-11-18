@@ -539,6 +539,8 @@
     X(HilbertInfill, "Hilbert", "Hilbert")                                                                            \
     X(ArchimedeanInfill, "Cuerdas de Arquímedes", "Archimedean chords")                                               \
     X(OctagramInfill, "Espiral octagrama", "Octagram spiral")                                                         \
+    X(SpiralInset, "Espiral hacia adentro", "Inward spiral") \
+    X(InternalSolidPattern, "Dibujo del macizo interno", "Internal solid pattern") \
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \
@@ -1730,6 +1732,19 @@
     X(EditRotate, "Girar", "Rotate") \
     X(EditScale, "Escalar", "Scale") \
     X(EditErase, "Borrar", "Erase") \
+    X(HostSerial, "Número de serie", "Serial number") \
+    X(HostCheckCode, "Código de verificación", "Check code") \
+    X(HostLevelFirst, "Nivelar antes de imprimir", "Level before printing") \
+    X(HostCrealityHelp, "Creality con el firmware de fábrica (K1, K2, Ender 3 V3, Hi): el estado por la red local. Para mandar trabajos, activá Moonraker/Fluidd; si responde, se usa esa conexión. Aviso: sin contraseña, cualquiera en tu red puede controlar la impresora; no la expongas fuera de ella.", "Creality with the stock firmware (K1, K2, Ender 3 V3, Hi): its state over the local network. To send jobs, turn on Moonraker/Fluidd; when it answers, that connection is used. Warning: with no password, anyone on your network can control the printer; never expose it outside it.") \
+    X(HostReconnecting, "Reconectando… la impresión sigue en curso.", "Reconnecting… the print goes on.") \
+    X(HostElapsed, "Transcurrido %s, faltan %s", "%s elapsed, %s left") \
+    X(HostCrealitySend, "Para mandar a esta impresora, activá Moonraker/Fluidd en ella (con el firmware de fábrica la subida por la red no está confirmada).", "To send to this printer, turn on Moonraker/Fluidd on it (with the stock firmware, sending over the network is not confirmed).") \
+    X(HostAnycubicNote, "¿Una Anycubic? Por ahora no se manda desde acá: usá Anycubic Slicer Next con el G-code exportado.", "An Anycubic? Not sent from here for now: use Anycubic Slicer Next with the exported G-code.") \
+    X(HostResinByUsb, "Exportá el archivo de resina y pasalo por USB.", "Export the resin file and take it over by USB.") \
+    X(HostNoStateData, "sin datos de estado", "no state data") \
+    X(HostElegooHelp, "Elegoo Centauri Carbon y resinas con WiFi (SDCP): sin contraseña en la red local. Dirección: la IP. La Centauri Carbon 2 y la Neptune 4 usan otra conexión.", "Elegoo Centauri Carbon and Wi-Fi resin printers (SDCP): no password on the local network. Address: the IP. The Centauri Carbon 2 and the Neptune 4 use another connection.") \
+    X(HostFlashforgeLegacyHelp, "Adventurer 3 y 4: sin contraseña; se ven el estado y se puede pausar o cancelar. Mandar archivos por la red todavía no está confirmado: copialos a un pendrive. Dirección: la IP.", "Adventurer 3 and 4: no password; the state shows and you can pause or cancel. Sending files over the network is not confirmed yet: copy them to a USB stick. Address: the IP.") \
+    X(HostFlashforgeHelp, "Adventurer 5M, 5M Pro, AD5X y Creator 5: activá «Solo LAN» en la impresora; ahí se ven el número de serie y el código de verificación. Dirección: http://<IP>:8898.", "Adventurer 5M, 5M Pro, AD5X and Creator 5: turn on «LAN only» on the printer; its screen shows the serial number and the check code. Address: http://<IP>:8898.") \
     X(SketchNothingToUndo, "No hay nada para deshacer en el boceto", "Nothing to undo in the sketch") \
     X(SketchNothingToRedo, "No hay nada para rehacer en el boceto", "Nothing to redo in the sketch") \
     X(PromptTrim, "Recortar: hacé clic en la parte a quitar (Enter termina)", "Trim: click the part to cut away (Enter ends)") \
@@ -1855,6 +1870,37 @@
     X(SubSpeedLimits, "Velocidades", "Speeds") \
     X(SubPreparation, "Preparación", "Preparation") \
     X(SubPolyholes, "Agujeros redondos", "Round holes") \
+    X(SubSurfaceAngles, "Dirección y orden de las superficies", "Surface direction and order") \
+    X(TopFillOrder, "Orden de arriba", "Top surface order") \
+    X(SubTopExpansion, "Expansión de arriba", "Top surface expansion") \
+    X(SmoothFactor, "Suavizar las esquinas del relleno", "Smooth the infill's corners") \
+    X(InfillSeparated, "Relleno separado por pieza", "Infill separated by part") \
+    X(InfillMultiline, "Líneas por camino del relleno", "Lines per infill path") \
+    X(SubInfillAdaptive, "Densidad adaptativa (experimental)", "Adaptive density (experimental)") \
+    X(AdaptiveMode, "Modo", "Mode") \
+    X(AdaptiveInterior, "Densidad en el centro", "Density at the centre") \
+    X(AdaptiveGradient, "Cómo cambia", "How it changes") \
+    X(AdaptiveDisabled, "Apagada", "Off") \
+    X(AdaptiveDistanceWarp, "Deformada por la distancia", "Distance warp") \
+    X(AdaptiveSmoothBlend, "Mezcla suave", "Smooth blend") \
+    X(AdaptiveSteppedShells, "Cáscaras escalonadas", "Stepped shells") \
+    X(AdaptiveLobes, "Por lóbulos", "Lobes") \
+    X(AdaptiveNormalZ, "Por cortes en Z", "Normal to Z") \
+    X(AdaptiveNormalY, "Por cortes en Y", "Normal to Y") \
+    X(AdaptiveNormalX, "Por cortes en X", "Normal to X") \
+    X(GradientLinear, "Lineal", "Linear") \
+    X(GradientQuadratic, "Cuadrática", "Quadratic") \
+    X(GradientExponential, "Exponencial", "Exponential") \
+    X(TopExpansion, "Expandir la superficie de arriba", "Expand the top surface") \
+    X(TopExpansionMargin, "Distancia a las paredes", "Distance from the walls") \
+    X(TopExpansionDirection, "Hacia dónde crece", "Which way it grows") \
+    X(TopExpansionInward, "Hacia adentro", "Inward") \
+    X(TopExpansionOutward, "Hacia afuera", "Outward") \
+    X(TopExpansionBoth, "Hacia adentro y afuera", "Inward and outward") \
+    X(BottomFillOrder, "Orden de abajo", "Bottom surface order") \
+    X(FillOrderDefault, "El camino más corto", "Shortest path") \
+    X(FillOrderOutward, "Del centro al borde", "Centre to edge") \
+    X(FillOrderInward, "Del borde al centro", "Edge to centre") \
     X(SubAccel, "Aceleraciones", "Accelerations") \
     X(SubMaxTemps, "Temperaturas máximas", "Maximum temperatures") \
     X(SubFirmware, "Firmware", "Firmware") \
@@ -2216,6 +2262,8 @@
     X(CornerSmoothing, "Esquinas redondeadas", "Corner smoothing") \
     X(BottomPattern, "Patrón de abajo", "Bottom pattern") \
     X(BridgeAngle, "Dirección de los puentes", "Bridge direction") \
+    X(TopAngle, "Ángulo de arriba", "Top surface angle") \
+    X(BottomAngle, "Ángulo de abajo", "Bottom surface angle") \
     X(InfillBeforeWalls, "Relleno antes que las paredes", "Infill before walls") \
     X(MaxLink, "Unión máxima del relleno", "Maximum infill link") \
     X(ZOffset, "Desfase de Z", "Z offset") \
@@ -2356,6 +2404,14 @@
     X(HeightTo, "hasta", "to") \
     X(ShapeBox, "Caja", "Box") \
     X(ShapeCylinder, "Cilindro", "Cylinder") \
+    X(VolumeSeam, "Costura", "Seam") \
+    X(VolumeSeamNone, "Sin costura (solo ajustes)", "No seam (settings only)") \
+    X(VolumeSeamCenter, "Costura en el centro", "Seam at the centre") \
+    X(VolumeSeamLeft, "Costura a la izquierda", "Seam on the left") \
+    X(VolumeSeamRight, "Costura a la derecha", "Seam on the right") \
+    X(VolumeSeamPreferred, "Zona preferida", "Preferred zone") \
+    X(VolumeSeamForbidden, "Zona prohibida", "Forbidden zone") \
+    X(VolumeSeamNeutral, "Zona neutra", "Neutral zone") \
     X(RemoveVolume, "Quitar", "Remove") \
     X(VolumeOffset, "Lugar (mm)", "Place (mm)") \
     X(VolumeSize, "Tamaño (mm)", "Size (mm)") \

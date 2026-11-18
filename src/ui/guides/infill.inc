@@ -222,6 +222,56 @@
      "delicate walls. In return, the infill pattern can show a little on the outside face of the part.\n\nExample: off "
      "for almost everything, especially parts meant to be seen; try turning it on if the inner walls come out loose or "
      "detached from the infill."},
+    {"infill.adaptive_mode",
+     "Solo con el relleno gyroid. Lo hace más denso junto a las paredes y las caras de arriba y abajo, donde la pieza "
+     "trabaja más, y más ralo en el centro, donde casi no hace falta. Ahorra material y tiempo. Es experimental: por "
+     "ahora todos los modos arman cáscaras, cada una algo más densa que la de adentro.\n\nEjemplo: cáscaras "
+     "escalonadas con 15 % afuera y 5 % en el centro.",
+     "Gyroid infill only. It makes the infill denser next to the walls and the top and bottom faces, where the part "
+     "works hardest, and sparser in the middle, where it is hardly needed. It saves material and time. It is "
+     "experimental: for now every mode builds shells, each a little denser than the one inside.\n\nExample: stepped "
+     "shells with 15 % outside and 5 % in the middle."},
+    {"infill.adaptive_interior_density",
+     "La densidad del relleno en el punto más hondo de la pieza, cuando la densidad adaptativa está prendida. Junto a "
+     "las paredes vale la densidad del relleno de siempre. Puede ser mayor que esa, para un núcleo más denso.\n\n"
+     "Ejemplo: 5 % con 15 % de relleno ahorra material en piezas grandes.",
+     "The infill density at the deepest point of the part, when adaptive density is on. Next to the walls the usual "
+     "infill density applies. It can be higher than that, for a denser core.\n\nExample: 5 % with 15 % infill saves "
+     "material on large parts."},
+    {"infill.adaptive_gradient",
+     "Cómo pasa la densidad de la de afuera a la del centro a medida que se entra en la pieza. «Lineal» cambia "
+     "parejo. «Cuadrática» se queda cerca de la de afuera más tiempo y cambia hacia el centro. «Exponencial» cambia en "
+     "proporción, rápido al principio.\n\nEjemplo: lineal casi siempre.",
+     "How the density goes from the outside one to the centre one as you go into the part. \"Linear\" changes "
+     "evenly. \"Quadratic\" stays near the outside one longer and changes towards the centre. \"Exponential\" "
+     "changes in proportion, quickly at first.\n\nExample: linear almost always."},
+    {"infill.multiline",
+     "Imprime cada camino del relleno de adentro como varias líneas pegadas, de 1 a 10. El dibujo se hace más grande en "
+     "la misma proporción, así que se usa el mismo material: menos caminos, pero más gruesos. Con 1 (de fábrica), el "
+     "relleno de siempre.\n\nLas paredes gruesas del relleno resisten mejor algunos esfuerzos y hay menos "
+     "viajes.\n\nEjemplo: 2 o 3 con relleno cúbico en piezas que tienen que aguantar peso.",
+     "Prints each path of the inside infill as several touching lines, from 1 to 10. The pattern gets larger in the "
+     "same proportion, so it uses the same material: fewer paths, but thicker. At 1 (the default), the usual "
+     "infill.\n\nThick infill walls resist some loads better and there is less travel.\n\nExample: 2 or 3 with "
+     "cubic infill for parts that must carry weight."},
+    {"infill.separated",
+     "Con varias piezas en la cama, el dibujo del relleno de adentro es uno solo para toda la placa, así que cada pieza "
+     "lo corta en un lugar distinto. Encendido, el relleno de cada pieza se centra en ella misma, como si estuviera "
+     "sola en la cama: todas las copias salen iguales por dentro.\n\nLas piezas que se tocan cuentan como una "
+     "sola.\n\nEjemplo: encendido para imprimir varias copias de una pieza y que salgan idénticas.",
+     "With several parts on the bed, the inside infill's pattern is one for the whole plate, so each part cuts it at "
+     "a different place. On, each part's infill is centred on the part itself, as if it were alone on the bed: all "
+     "the copies come out the same inside.\n\nParts that touch count as one.\n\nExample: on to print several "
+     "copies of a part and have them come out identical."},
+    {"infill.smooth_factor",
+     "El relleno de adentro dibuja líneas con vueltas en punta. Este valor cambia esas vueltas por curvas: con 0 (de "
+     "fábrica) quedan en punta, con 100 % la curva es la más grande que entra. La máquina no tiene que frenar en cada "
+     "esquina, así que vibra menos.\n\nSolo cuenta con los dibujos Hilbert, octagrama, lightning, panal, panal 3D y "
+     "concéntrico. El G-code queda más largo.\n\nEjemplo: 50 % suaviza sin perder la forma del dibujo.",
+     "The inside infill draws lines with pointed turns. This value turns them into curves: at 0 (the default) they "
+     "stay pointed, at 100 % the curve is the largest that fits. The machine does not have to slow down at every "
+     "corner, so it shakes less.\n\nOnly matters with the Hilbert, octagram, lightning, honeycomb, 3D honeycomb and "
+     "concentric patterns. The G-code gets longer.\n\nExample: 50 % smooths without losing the pattern's shape."},
     {"infill.max_link",
      "Para no cortar y saltar entre línea y línea, el relleno une el final de una con el comienzo de la siguiente con "
      "un tramo que corre pegado a la pared. Este ajuste es el largo máximo de ese tramo, en mm. Con 0 se usa un tope "

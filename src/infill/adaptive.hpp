@@ -21,7 +21,9 @@ namespace tisma {
 // Exact: the 1D transform of squared distances along each axis in turn
 // (Felzenszwalb and Huttenlocher 2012, sections 2 and 3). Only voxels of the
 // grid count: with none unset, every distance is huge.
-std::vector<float> distance_transform(const std::vector<char>& set, int nx, int ny, int nz);
+// `skip_axis` 0, 1 or 2 leaves out that axis's pass: the distance within
+// each plane normal to it (orca_2_5.md, rule 10, the normal_* modes).
+std::vector<float> distance_transform(const std::vector<char>& set, int nx, int ny, int nz, int skip_axis = -1);
 
 // How deep each voxel lies inside the sparse infill: the distance (mm) from
 // its centre to the nearest point outside it (walls, solid layers, air); 0
@@ -44,7 +46,9 @@ struct DepthField {
 // which it does not hold up (the support cubic infill, rule 8): what lies
 // right above it, and the walls beside it in its plane, so that a coarse
 // cube still fits between them.
-enum class DepthFrom { Surfaces, TopsAndWalls };
+// PlaneX, PlaneY and PlaneZ: every surface, but measured within the planes
+// normal to that axis only (each slice on its own).
+enum class DepthFrom { Surfaces, TopsAndWalls, PlaneX, PlaneY, PlaneZ };
 
 // The field of the layers' sparse infill. A voxel is inside only where every
 // layer its height overlaps has sparse infill, so a thin solid layer between

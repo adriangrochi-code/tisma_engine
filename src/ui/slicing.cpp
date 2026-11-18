@@ -140,8 +140,12 @@ Settings without_gcode_settings(Settings s) {
 // A run's cut: the model and the slicing's warnings, with what it was made
 // from.
 bool same_volumes(const SliceVolumes& a, const SliceVolumes& b) {
-    if (a.negative.corners() != b.negative.corners() || a.modifiers.size() != b.modifiers.size())
+    if (a.negative.corners() != b.negative.corners() || a.modifiers.size() != b.modifiers.size() ||
+        a.seams.size() != b.seams.size())
         return false;
+    for (std::size_t i = 0; i < a.seams.size(); ++i)
+        if (a.seams[i].kind != b.seams[i].kind || a.seams[i].mesh.corners() != b.seams[i].mesh.corners())
+            return false;
     for (std::size_t i = 0; i < a.modifiers.size(); ++i) {
         const MeshModifier &x = a.modifiers[i], &y = b.modifiers[i];
         if (x.name != y.name || x.object != y.object || x.settings != y.settings || x.under_parts != y.under_parts ||
@@ -271,6 +275,11 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
     const IndexedMesh negative = volumes ? weld_exact(volumes->negative) : IndexedMesh{};
     const IndexedMesh* cut_away = negative.triangles.empty() ? nullptr : &negative;
     const std::vector<MeshModifier>* modifiers = volumes && !volumes->modifiers.empty() ? &volumes->modifiers : nullptr;
+    SupportVolumes seam_volumes;
+    if (volumes)
+        for (const SliceVolumes::Seam& seam : volumes->seams)
+            seam_volumes.seams.push_back({weld_exact(seam.mesh), seam.kind});
+    const SupportVolumes* extra_volumes = seam_volumes.empty() ? nullptr : &seam_volumes;
     if (std::string reason = unprintable_reason(welded, settings); !reason.empty()) {
         out.error = std::move(reason);
         return nullptr;
@@ -297,7 +306,7 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
     }
     auto model = std::make_shared<SlicedModel>();
     try {
-        *model = slice_model(welded, settings, gpu, &stress, painting, objects, mixes, cut_away, modifiers);
+        *model = slice_model(welded, settings, gpu, &stress, painting, objects, mixes, cut_away, modifiers, extra_volumes);
         if (gpu)
             out.gpu = gpu->device_name();
     } catch (const std::runtime_error& e) {
@@ -306,7 +315,7 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
         out.warnings.push_back(
             {"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
         gpu_.reset(); // do not try a failing device again
-        *model = slice_model(welded, settings, nullptr, &stress, painting, objects, mixes, cut_away, modifiers);
+        *model = slice_model(welded, settings, nullptr, &stress, painting, objects, mixes, cut_away, modifiers, extra_volumes);
     }
     if (std::string reason = unprintable_reason(*model, settings); !reason.empty()) {
         out.error = std::move(reason);

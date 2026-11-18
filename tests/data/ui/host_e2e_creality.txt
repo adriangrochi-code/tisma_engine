@@ -1,0 +1,17 @@
+# The Device page against a stock Creality K1C faked on this machine (CR1):
+# Moonraker off, so the state comes by its WebSocket (times in seconds, the
+# model from the board's code), and sending is not tried: the message says to
+# turn on Moonraker/Fluidd.
+host creality {url}
+host test
+host-wait
+expect-host ok yes
+host refresh
+host-wait
+expect-host printing yes
+slice
+host send
+host-wait
+expect-host sent no
+expect-host sent-code unsupported
+expect-text Anycubic Slicer Next

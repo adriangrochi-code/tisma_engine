@@ -124,9 +124,10 @@ const char* support_pattern_name(SupportPattern p) {
 }
 
 const char* support_interface_pattern_name(SupportInterfacePattern p) {
-    return p == SupportInterfacePattern::Concentric ? "concentric"
-           : p == SupportInterfacePattern::Automatic ? "automatic"
-                                                     : "lines";
+    return p == SupportInterfacePattern::Concentric    ? "concentric"
+           : p == SupportInterfacePattern::Automatic   ? "automatic"
+           : p == SupportInterfacePattern::SpiralInset ? "spiral_inset"
+                                                       : "lines";
 }
 
 const char* fuzzy_mode_name(FuzzyMode m) {
@@ -539,10 +540,85 @@ const std::map<std::string, SurfacePattern>& surface_patterns() {
         {"concentric", SurfacePattern::Concentric},
         {"hilbert", SurfacePattern::Hilbert},
         {"archimedean", SurfacePattern::Archimedean},
-        {"octagram", SurfacePattern::Octagram}};
+        {"octagram", SurfacePattern::Octagram},
+        {"spiral_inset", SurfacePattern::SpiralInset}};
     return p;
 }
 } // namespace
+
+namespace {
+const std::map<std::string, FillOrder>& fill_orders() {
+    static const std::map<std::string, FillOrder> o = {
+        {"default", FillOrder::Default}, {"outward", FillOrder::Outward}, {"inward", FillOrder::Inward}};
+    return o;
+}
+} // namespace
+
+namespace {
+const std::map<std::string, TopExpansion>& top_expansions() {
+    static const std::map<std::string, TopExpansion> d = {{"inward", TopExpansion::Inward},
+                                                          {"outward", TopExpansion::Outward},
+                                                          {"inward_and_outward", TopExpansion::InwardAndOutward}};
+    return d;
+}
+} // namespace
+
+double adaptive_density(double surface, double interior, double t, AdaptiveGradient gradient) {
+    t = std::clamp(t, 0.0, 1.0);
+    switch (gradient) {
+    case AdaptiveGradient::Quadratic:
+        return surface + (interior - surface) * t * t;
+    case AdaptiveGradient::Exponential:
+        return surface > 0.0 && interior > 0.0 ? surface * std::pow(interior / surface, t) : surface + (interior - surface) * t;
+    default:
+        return surface + (interior - surface) * t;
+    }
+}
+
+namespace {
+const std::map<std::string, AdaptiveMode>& adaptive_modes() {
+    static const std::map<std::string, AdaptiveMode> m = {
+        {"disabled", AdaptiveMode::Disabled},   {"distance_warp", AdaptiveMode::DistanceWarp},
+        {"smooth_blend", AdaptiveMode::SmoothBlend}, {"stepped_shells", AdaptiveMode::SteppedShells},
+        {"lobes", AdaptiveMode::Lobes},         {"normal_z", AdaptiveMode::NormalZ},
+        {"normal_y", AdaptiveMode::NormalY},    {"normal_x", AdaptiveMode::NormalX}};
+    return m;
+}
+const std::map<std::string, AdaptiveGradient>& adaptive_gradients() {
+    static const std::map<std::string, AdaptiveGradient> g = {{"linear", AdaptiveGradient::Linear},
+                                                              {"quadratic", AdaptiveGradient::Quadratic},
+                                                              {"exponential", AdaptiveGradient::Exponential}};
+    return g;
+}
+} // namespace
+
+const char* adaptive_mode_name(AdaptiveMode mode) {
+    for (const auto& [name, m] : adaptive_modes())
+        if (m == mode)
+            return name.c_str();
+    return "disabled";
+}
+
+const char* adaptive_gradient_name(AdaptiveGradient gradient) {
+    for (const auto& [name, g] : adaptive_gradients())
+        if (g == gradient)
+            return name.c_str();
+    return "linear";
+}
+
+const char* top_expansion_name(TopExpansion direction) {
+    for (const auto& [name, d] : top_expansions())
+        if (d == direction)
+            return name.c_str();
+    return "inward_and_outward";
+}
+
+const char* fill_order_name(FillOrder order) {
+    for (const auto& [name, o] : fill_orders())
+        if (o == order)
+            return name.c_str();
+    return "default";
+}
 
 const char* surface_pattern_name(SurfacePattern pattern) {
     for (const auto& [name, p] : surface_patterns())
@@ -1793,10 +1869,38 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
                                   "bottom_min_thickness", "interface_shells", "top_width", "solid_width",
-                                  "bottom_pattern", "bridge_angle"},
+                                  "bottom_pattern", "bridge_angle", "top_angle", "bottom_angle",
+                                  "top_fill_order", "bottom_fill_order", "internal_solid_pattern", "top_expansion", "top_expansion_margin",
+                                  "top_expansion_direction"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "bottom_pattern") {
             s.bottom_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
+            return;
+        }
+        if (n == "internal_solid_pattern") {
+            s.internal_solid_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
+            return;
+        }
+        if (n == "top_expansion" || n == "top_expansion_margin") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 mm");
+            (n == "top_expansion" ? s.top_expansion : s.top_expansion_margin) = v;
+            return;
+        }
+        if (n == "top_expansion_direction") {
+            s.top_expansion_direction = choice<TopExpansion>(g, n, k, top_expansions());
+            return;
+        }
+        if (n == "top_fill_order" || n == "bottom_fill_order") {
+            (n == "top_fill_order" ? s.top_fill_order : s.bottom_fill_order) = choice<FillOrder>(g, n, k, fill_orders());
+            return;
+        }
+        if (n == "top_angle" || n == "bottom_angle") {
+            const double v = number(g, n, k);
+            if (!(v == -1.0 || (v >= 0.0 && v <= 360.0)))
+                fail(k, "must be -1 (the solid infill's) or from 0 to 360 degrees");
+            (n == "top_angle" ? s.top_angle : s.bottom_angle) = v;
             return;
         }
         if (n == "bridge_angle") {
@@ -1839,12 +1943,48 @@ Settings parse_checked(std::string_view text) {
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
                                 "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width", "before_walls",
-                                "max_link"},
+                                "max_link", "smooth_factor", "separated", "multiline", "adaptive_mode",
+                                "adaptive_interior_density", "adaptive_gradient"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "before_walls") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             s.infill_before_walls = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "adaptive_mode") {
+            s.infill_adaptive_mode = choice<AdaptiveMode>(g, n, k, adaptive_modes());
+            return;
+        }
+        if (n == "adaptive_gradient") {
+            s.infill_adaptive_gradient = choice<AdaptiveGradient>(g, n, k, adaptive_gradients());
+            return;
+        }
+        if (n == "adaptive_interior_density") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.infill_adaptive_interior_density = v;
+            return;
+        }
+        if (n == "multiline") {
+            const auto& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 1 || v.get<long long>() > 10)
+                fail(k, "must be a whole number from 1 to 10");
+            s.infill_multiline = int(v.get<long long>());
+            return;
+        }
+        if (n == "separated") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.infill_separated = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "smooth_factor") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.infill_smooth_factor = v;
             return;
         }
         if (n == "max_link") {
@@ -2571,7 +2711,8 @@ Settings parse_checked(std::string_view text) {
                        s.support_interface_pattern = choice<SupportInterfacePattern>(
                            g, n, k, {{"lines", SupportInterfacePattern::Lines},
                                      {"concentric", SupportInterfacePattern::Concentric},
-                                     {"automatic", SupportInterfacePattern::Automatic}});
+                                     {"automatic", SupportInterfacePattern::Automatic},
+                                     {"spiral_inset", SupportInterfacePattern::SpiralInset}});
                        return;
                    }
                    if (n == "enforce_layers") {
@@ -3573,7 +3714,15 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", surface_pattern_name(s.top_pattern)},
         {"surfaces.bottom_pattern", surface_pattern_name(s.bottom_pattern)},
+        {"surfaces.internal_solid_pattern", surface_pattern_name(s.internal_solid_pattern)},
         {"surfaces.bridge_angle", num(s.bridge_angle)},
+        {"surfaces.top_angle", num(s.top_angle)},
+        {"surfaces.bottom_angle", num(s.bottom_angle)},
+        {"surfaces.top_fill_order", fill_order_name(s.top_fill_order)},
+        {"surfaces.bottom_fill_order", fill_order_name(s.bottom_fill_order)},
+        {"surfaces.top_expansion", num(s.top_expansion)},
+        {"surfaces.top_expansion_margin", num(s.top_expansion_margin)},
+        {"surfaces.top_expansion_direction", top_expansion_name(s.top_expansion_direction)},
         {"surfaces.top_width", num(s.top_width)},
         {"surfaces.solid_width", num(s.solid_width)},
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
@@ -3636,6 +3785,12 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.width", num(s.infill_width)},
         {"infill.before_walls", s.infill_before_walls ? "true" : "false"},
         {"infill.max_link", num(s.infill_max_link)},
+        {"infill.smooth_factor", num(s.infill_smooth_factor)},
+        {"infill.separated", s.infill_separated ? "true" : "false"},
+        {"infill.multiline", std::to_string(s.infill_multiline)},
+        {"infill.adaptive_mode", adaptive_mode_name(s.infill_adaptive_mode)},
+        {"infill.adaptive_interior_density", num(s.infill_adaptive_interior_density)},
+        {"infill.adaptive_gradient", adaptive_gradient_name(s.infill_adaptive_gradient)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
@@ -4227,7 +4382,15 @@ std::string settings_json(const Settings& s) {
           {"bottom_layers", s.bottom_layers},
           {"top_pattern", surface_pattern_name(s.top_pattern)},
           {"bottom_pattern", surface_pattern_name(s.bottom_pattern)},
+          {"internal_solid_pattern", surface_pattern_name(s.internal_solid_pattern)},
           {"bridge_angle", s.bridge_angle},
+          {"top_angle", s.top_angle},
+          {"bottom_angle", s.bottom_angle},
+          {"top_fill_order", fill_order_name(s.top_fill_order)},
+          {"bottom_fill_order", fill_order_name(s.bottom_fill_order)},
+          {"top_expansion", s.top_expansion},
+          {"top_expansion_margin", s.top_expansion_margin},
+          {"top_expansion_direction", top_expansion_name(s.top_expansion_direction)},
           {"top_width", s.top_width},
           {"solid_width", s.solid_width},
           {"top_min_thickness", s.top_min_thickness},
@@ -4242,6 +4405,12 @@ std::string settings_json(const Settings& s) {
           {"width", s.infill_width},
           {"before_walls", s.infill_before_walls},
           {"max_link", s.infill_max_link},
+          {"smooth_factor", s.infill_smooth_factor},
+          {"separated", s.infill_separated},
+          {"multiline", s.infill_multiline},
+          {"adaptive_mode", adaptive_mode_name(s.infill_adaptive_mode)},
+          {"adaptive_interior_density", s.infill_adaptive_interior_density},
+          {"adaptive_gradient", adaptive_gradient_name(s.infill_adaptive_gradient)},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},

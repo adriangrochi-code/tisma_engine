@@ -1,0 +1,12 @@
+# A resin slice is not offered to a program that takes only G-code: the
+# Device page says to export it and take it by USB (QA, 2026-11-17).
+slice
+expect-resin-file
+host octoprint {url}
+host key KEY
+host test
+host-wait
+expect-host ok yes
+menu tab_device
+wait 5
+expect-text Exportá el archivo de resina

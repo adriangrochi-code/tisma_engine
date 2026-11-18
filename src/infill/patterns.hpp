@@ -41,6 +41,14 @@ std::vector<Toolpath> honeycomb3d_fill(const Polygons& region, double spacing, d
 // and then `spacing` mm apart inwards, outside first (rule 13).
 std::vector<Toolpath> concentric_fill(const Polygons& region, double spacing, double width);
 
+// The concentric loops joined into spirals (orca_2_5.md, rule 13 bis): each
+// loop is cut one spacing before it closes and goes on, extruding, straight
+// to the nearest point of the next loop in. A spiral starts at the convex
+// corner of its outer loop nearest to a right angle; another one starts when
+// the next loop is more than four spacings away or the step would leave the
+// region (another island, a hole, a notch). Open paths, outside in.
+std::vector<Toolpath> spiral_inset_fill(const Polygons& region, double spacing, double width);
+
 // The curves of rule 12, the same in every layer, clipped to the region and
 // joined along its boundary:
 //  - hilbert_fill: a Hilbert curve (Hilbert 1891) through cells `spacing` mm

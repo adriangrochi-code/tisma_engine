@@ -495,6 +495,76 @@
      "do not like the automatic choice; a bad angle leaves lines hanging with nothing to hold them.\n\nExample: 0 "
      "almost always; if a bridge comes out with lines parallel to its supports, set the angle that crosses it, for "
      "example 90°."},
+    {"surfaces.top_angle",
+     "La superficie de arriba de todo es la que se ve: sus líneas se tienden en una dirección. Con −1 (de fábrica), "
+     "siguen al relleno macizo, que gira 90° en cada capa. Con un ángulo, en grados, las líneas de arriba van siempre "
+     "en esa dirección, y el planchado también la sigue.\n\nSirve para que la cara de arriba brille parejo o quede "
+     "alineada con un borde de la pieza.\n\nEjemplo: 0° deja las líneas paralelas al eje X; 45° en diagonal.",
+     "The very top surface is the one you see, and its lines are laid in one direction. At −1 (the default) they "
+     "follow the solid infill, which turns 90° every layer. With an angle, in degrees, the top lines always run that "
+     "way, and ironing follows it too.\n\nIt helps the top face shine evenly or line up with an edge of the "
+     "model.\n\nExample: 0° lays the lines along the X axis; 45° diagonally."},
+    {"surfaces.bottom_angle",
+     "Las superficies de abajo son las capas macizas que apoyan sobre la cama o sobre el aire, como el piso de la "
+     "pieza. Con −1 (de fábrica) sus líneas siguen al relleno macizo, que gira 90° en cada capa. Con un ángulo, en "
+     "grados, van siempre en esa dirección.\n\nSirve para que la cara que toca la cama quede con las líneas como "
+     "querés, por ejemplo cruzadas a lo largo de la pieza para que se pegue mejor.\n\nEjemplo: −1 casi siempre; 90° "
+     "deja las líneas paralelas al eje Y.",
+     "The bottom surfaces are the solid layers resting on the bed or on air, like the model's floor. At −1 (the "
+     "default) their lines follow the solid infill, which turns 90° every layer. With an angle, in degrees, they "
+     "always run that way.\n\nIt helps the face on the bed come out with the lines you want, for example across "
+     "the length of the part so it holds better.\n\nExample: −1 almost always; 90° lays the lines along the Y "
+     "axis."},
+    {"surfaces.top_fill_order",
+     "Solo cuenta si la superficie de arriba usa un dibujo que sale del centro: concéntrico, espiral de Arquímedes u "
+     "octagrama. «El camino más corto» (de fábrica) imprime los tramos en el orden que menos viaja. «Del centro al "
+     "borde» empieza en el medio y termina en el borde, y lo que sobra de material queda en el borde, donde se nota "
+     "menos. «Del borde al centro» hace lo contrario.\n\nEjemplo: del centro al borde para una tapa lisa.",
+     "Only matters if the top surface uses a pattern that grows from the centre: concentric, Archimedean spiral or "
+     "octagram. \"Shortest path\" (the default) prints the pieces in the order that travels least. \"Centre to "
+     "edge\" starts in the middle and ends at the edge, so any extra material ends up at the edge, where it shows "
+     "less. \"Edge to centre\" does the opposite.\n\nExample: centre to edge for a smooth lid."},
+    {"surfaces.bottom_fill_order",
+     "Solo cuenta si la capa de abajo de todo usa un dibujo que sale del centro: concéntrico, espiral de Arquímedes u "
+     "octagrama. «El camino más corto» (de fábrica) imprime en el orden que menos viaja. «Del borde al centro» "
+     "empieza por las vueltas de afuera, que son las que más se pegan a la cama en la primera capa. «Del centro al "
+     "borde» hace lo contrario.\n\nEjemplo: del borde al centro si la pieza se despega por las esquinas.",
+     "Only matters if the very bottom layer uses a pattern that grows from the centre: concentric, Archimedean spiral "
+     "or octagram. \"Shortest path\" (the default) prints in the order that travels least. \"Edge to centre\" "
+     "starts with the outer rounds, which hold best to the bed on the first layer. \"Centre to edge\" does the "
+     "opposite.\n\nExample: edge to centre if the part lifts at the corners."},
+    {"surfaces.top_expansion",
+     "La superficie de arriba es la capa maciza que queda a la vista. A veces sale partida en pedazos, o con un hueco "
+     "alrededor de algo que sobresale, como un texto en relieve. Este valor la agranda esa cantidad de milímetros sobre "
+     "el relleno de la misma capa, para que salga entera. Con 0 (de fábrica) no crece.\n\nGasta un poco más de "
+     "material y de tiempo.\n\nEjemplo: 1 mm junta superficies separadas por un pasillo angosto.",
+     "The top surface is the solid layer you see. Sometimes it comes out in pieces, or with a gap around something "
+     "that rises from it, like raised text. This value grows it by that many millimetres over the same layer's "
+     "infill, so it comes out whole. At 0 (the default) it does not grow.\n\nIt uses a little more material and "
+     "time.\n\nExample: 1 mm joins surfaces split by a narrow gap."},
+    {"surfaces.top_expansion_margin",
+     "Cuando la superficie de arriba se agranda, esta es la distancia que deja hasta las paredes, para no pisarlas. Con "
+     "0 (de fábrica) puede llegar hasta las paredes.\n\nSirve si ves que lo agrandado empuja material contra el borde "
+     "y lo marca.\n\nEjemplo: 0,2 mm deja un pequeño respiro junto a las paredes.",
+     "When the top surface grows, this is the gap it keeps from the walls so it does not run over them. At 0 (the "
+     "default) it may reach the walls.\n\nIt helps if the grown part pushes material against the edge and marks "
+     "it.\n\nExample: 0.2 mm leaves a small gap by the walls."},
+    {"surfaces.top_expansion_direction",
+     "Hacia dónde se agranda la superficie de arriba. «Hacia adentro» cierra los huecos que quedan alrededor de lo que "
+     "sobresale en el medio. «Hacia afuera» agranda su borde para unir pedazos separados. «Hacia adentro y afuera» (de "
+     "fábrica) hace las dos cosas.\n\nEjemplo: hacia adentro para un logo en relieve sobre una tapa.",
+     "Which way the top surface grows. \"Inward\" closes the gaps left around what rises from the middle. "
+     "\"Outward\" grows its edge to join separate pieces. \"Inward and outward\" (the default) does both.\n\n"
+     "Example: inward for a raised logo on a lid."},
+    {"surfaces.internal_solid_pattern",
+     "Debajo de la cara de arriba y encima de la de abajo hay algunas capas macizas que no se ven. Este ajuste elige "
+     "su dibujo. De fábrica van en zigzag, que es rápido; con un dibujo concéntrico o en espiral siguen la forma de la "
+     "pieza.\n\nNo cambia cómo se ven las caras de afuera.\n\nEjemplo: zigzag casi siempre; espiral hacia adentro "
+     "en piezas redondas.",
+     "Under the top face and over the bottom one there are a few solid layers you do not see. This setting picks "
+     "their pattern. By default they zig-zag, which is quick; with a concentric or spiral pattern they follow the "
+     "part's shape.\n\nIt does not change how the outside faces look.\n\nExample: zig-zag almost always; inward "
+     "spiral on round parts."},
     {"surfaces.interface_shells",
      "Solo cuenta si imprimís con más de un extrusor, por ejemplo con dos materiales o colores. Donde la parte de uno "
      "se apoya sobre la del otro, encendido, cada una lleva sus propias capas macizas de techo y de piso, como si "

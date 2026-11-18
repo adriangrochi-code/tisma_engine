@@ -191,7 +191,10 @@ public:
                 return;
             }
             const httplib::FormData file = req.form.get_file("file");
-            if (file.content.size() > (std::size_t(1) << 20)) {
+            // 1 MiB unless a test needs a bigger project (G15's Benchy).
+            const char* max = std::getenv("TISMA_MOCK_CLOUD_MAX_BYTES");
+            const std::size_t limit = max ? std::size_t(std::strtoull(max, nullptr, 10)) : std::size_t(1) << 20;
+            if (file.content.size() > limit) {
                 res.status = 413;
                 res.set_content(R"({"detail": "The project is larger than the plan allows"})", "application/json");
                 return;

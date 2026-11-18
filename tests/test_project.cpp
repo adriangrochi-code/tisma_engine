@@ -1,4 +1,5 @@
 #include "project/project.hpp"
+#include "slice/pipeline.hpp"
 #include "project/engineering_values.hpp"
 #include "ui/project_slice.hpp"
 #include "mesh/face_region.hpp"
@@ -722,4 +723,38 @@ TEST_CASE("the paint's slots travel with the project and pick what each mark pri
     CHECK(slotted.size(PaintChannel::Color) == 3); // the last one unpainted now
     CHECK(slotted.tree(PaintChannel::Seam, 0) == Painting::Tree{1});
     CHECK(with_color_slots(paint, {}) == paint);
+}
+
+TEST_CASE("a project keeps a precise seam modifier's kind (orca_2_5.md, rule 4)", "[project][seam]") {
+    Project p = sample();
+    ProjectVolume v;
+    v.offset = {9.0, 0.0, 0.0};
+    v.size = {4.0, 4.0, 12.0};
+    v.seam = "right";
+    p.models.front().volumes.push_back(v);
+    const Project back = read_project(write_project(p));
+    REQUIRE(back.models.front().volumes.size() == 1);
+    CHECK(back.models.front().volumes[0].seam == "right");
+    CHECK(seam_modifier_kind("right") == SeamModifierKind::Right);
+    CHECK_FALSE(seam_modifier_kind("sideways"));
+    // The slice gets it as a seam volume, not a settings modifier.
+    std::vector<ProjectModel> models = back.models;
+    const std::vector<ui::PlateObject> objects = ui::project_objects(models);
+    REQUIRE(objects.front().volumes.size() == 1);
+    CHECK(objects.front().volumes[0].seam == "right");
+    std::vector<TriangleMesh> placed;
+    for (const ui::PlateObject& o : objects)
+        placed.push_back(o.mesh);
+    const ui::PlateSlice plate = ui::plate_slice(objects, placed, Settings{});
+    CHECK(plate.volumes.modifiers.empty());
+    REQUIRE(plate.volumes.seams.size() == 1);
+    CHECK(plate.volumes.seams[0].kind == SeamModifierKind::Right);
+    CHECK(plate.volumes.seams[0].mesh.triangle_count() == 12);
+    CHECK(plate.by_object);
+    // A kind that is not one of the six is refused.
+    std::string text = write_project(p);
+    const std::size_t at = text.find("\"right\"");
+    REQUIRE(at != std::string::npos);
+    text.replace(at, 7, "\"middle\"");
+    CHECK_THROWS_AS(read_project(text), ProjectError);
 }

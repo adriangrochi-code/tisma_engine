@@ -1308,10 +1308,11 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
 - [x] O4 (regla 19, OR19): el mismo G-code byte por byte con 1, 2 y 8 núcleos y en dos exportaciones. Ya se cumplía;
   quedan dos pruebas (`[determinism]`): una T con soportes en árbol y relleno lightning, y dos objetos en dos
   extrusores con etiquetas M486, piel difusa y arcos.
-- [ ] O1 (reglas 1 a 5): limpiar hacia adentro (hecha, 2026-11-02), retracción después del barrido (hecha), paredes
-  sin apoyo al final (hecha, 2026-11-09, OR3), modificadores de costura precisa, polyholes (hecha, 2026-11-09, OR5).
-- [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
-  adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
+- [x] O1 (reglas 1 a 5): limpiar hacia adentro (hecha, 2026-11-02), retracción después del barrido (hecha), paredes
+  sin apoyo al final (hecha, 2026-11-09, OR3), modificadores de costura precisa (hecha, 2026-11-18, OR4: motor,
+  proyecto, interfaz y CLI), polyholes (hecha, 2026-11-09, OR5).
+- [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba (hecha, 2026-11-18, regla 7), orden y ángulo fijo arriba y abajo (hechos, 2026-11-18, reglas 8 y 9), gyroid y TPMS
+  adaptativos (cáscaras escalonadas, mezcla suave y `normal_*` del gyroid, 2026-11-18, regla 10; faltan `distance_warp`, `lobes` y TPMS), relleno suavizado (hecho, 2026-11-18, regla 11, sin la parte de `infill.multiline`), separado por pieza (hecho, 2026-11-18, regla 12), de varias líneas (copias paralelas con el mismo material, 2026-11-18, regla 13; faltan los caminos en trapecio de grilla, triángulos, tri-hexágono, cúbicos y panal 3D), espiral hacia adentro (hecha, 2026-11-18, regla 13 bis: arriba, abajo, sólido interno e interfaces de soporte; el ancho variable de los lazos queda para después de la beta por decisión de QA; falta la línea del centro).
 - [x] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
   capa según los filamentos usados.
   Hecho (2026-11-09): reglas 20 a 22 (OR20 a OR22): `regex_replace(texto, /patrón/, reemplazo)` con `$1`, el literal
@@ -1441,7 +1442,7 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 - [x] Trabajo de CI «Puerta de lanzamiento» en Linux y Windows (`.github/workflows/gate.yml`, etiqueta `gate`); la
       nightly y las versiones (alpha y release) no publican sin él.
 - [x] G2: cubo de 20 mm y Benchy, G-code comprobado, capas, filamento y tiempo, tamaño dentro de 0,1 mm.
-- [ ] G3: cada estilo con la T, la rampa a 60° y el Benchy. Arman la prueba; fallan por el motor (ver PROGRESS).
+- [x] G3: cada estilo con la T, la rampa a 60° y el Benchy (pasa desde el arreglo de G4, 2026-11-16).
 - [x] G4, G5: soporte pintado y en la vista previa.
 - [x] G6: proyecto con soportes, cambio de impresora, filamento y perfil, deshacer.
 - [x] G1: STL, OBJ, 3MF propio y de otro programa.
@@ -1450,6 +1451,22 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
       calibración), G15 (cerrar con trabajos en marcha).
 - [x] G13 y G14 (el motor, sobre los verbos de la interfaz).
 - [ ] G16: el flujo de Android de las apps (PR #56) cuando esté en dev; el iPhone.
+
+### Cierre de la beta: 24-11-2026 (decisión del dueño, 17-11, por QA)
+
+Para esa fecha, en este orden:
+1. Publicar 0.13.0-beta.3. `alpha` a7aeec6 se fusionó el 17-11 y la publicación está en marcha.
+2. F6: medir el motor con y sin GPU sobre el banco. Primera medición del 17-11 en PROGRESS.md: en la CPU y en
+   llvmpipe, con el mismo G-code en los dos caminos. Falta medir en una GPU de verdad.
+3. P2: conexión con las impresoras de fábrica de Creality, Elegoo, Anycubic y Flashforge. QA escribe las fichas en
+   `printer_connections.md` (17 y 18-11).
+   Hecho el 17-11: Flashforge (FF1), Elegoo por SDCP (EL1) y Creality de fábrica (CR1; CR1-4 fuera de la beta hasta
+   medirlo con una impresora real). Anycubic queda fuera de la beta, con el aviso de usar Anycubic Slicer Next.
+4. W4: las superficies de arriba en pendiente. No queda nada por hacer: vale la decisión del 13-11 que ya está en
+   PROGRESS.md (QA, 17-11).
+
+macOS sale como versión alternativa. Se publica solo si pasa su propia puerta, y no frena a Windows, Linux ni Android.
+`release.yml` ya funciona así: `publish_macos` va aparte de `publish`.
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 

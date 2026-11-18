@@ -26,7 +26,8 @@ using Clipper2Lib::Point64;
 // on a crossing of its first or last row, which the next band computes the
 // same way: from the same values at the same nodes.
 Polygons band_curves(std::int64_t i0, std::size_t nx, std::int64_t j0, std::size_t jb, std::size_t je, double h,
-                     const std::vector<double>& sx, const std::vector<double>& cx, double k, double sz, double cz) {
+                     const std::vector<double>& sx, const std::vector<double>& cx, double k, double sz, double cz,
+                     const GyroidField* field = nullptr) {
     const std::size_t ny = je - jb + 1;
     std::vector<double> sy(ny), cy(ny);
     for (std::size_t j = 0; j < ny; ++j) {
@@ -36,7 +37,8 @@ Polygons band_curves(std::int64_t i0, std::size_t nx, std::int64_t j0, std::size
     std::vector<double> v(nx * ny);
     for (std::size_t j = 0; j < ny; ++j)
         for (std::size_t i = 0; i < nx; ++i)
-            v[j * nx + i] = sx[i] * cy[j] + sy[j] * cz + sz * cx[i];
+            v[j * nx + i] = field ? (*field)(h * double(i0 + std::int64_t(i)), h * double(j0 + std::int64_t(jb + j)))
+                                  : sx[i] * cy[j] + sy[j] * cz + sz * cx[i];
 
     // Crossings on grid edges: horizontal edge (i, j)-(i + 1, j) has id j nx + i,
     // vertical edge (i, j)-(i, j + 1) has id nx ny + j nx + i.
@@ -179,7 +181,7 @@ Polygons join_at_rows(Polygons all, const std::vector<std::int64_t>& cuts) {
 
 } // namespace
 
-std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double z, double width) {
+std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double z, double width, const GyroidField* field) {
     std::vector<Toolpath> out;
     if (!(period > 0.0) || region.empty())
         return out;
@@ -208,7 +210,7 @@ std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double 
     const std::size_t bands = (ny - 1 + rows - 1) / rows;
     Polygons open;
     if (bands <= 1) {
-        open = clip_open(band_curves(i0, nx, j0, 0, ny - 1, h, sx, cx, k, sz, cz), inner);
+        open = clip_open(band_curves(i0, nx, j0, 0, ny - 1, h, sx, cx, k, sz, cz, field), inner);
     } else {
         std::vector<Polygons> pieces(bands);
         std::vector<std::int64_t> cuts;
@@ -219,7 +221,7 @@ std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double 
             const std::size_t jb = b * rows, je = std::min(ny - 1, (b + 1) * rows);
             const Clipper2Lib::Rect64 wide(box.left - margin, to_units(h * double(j0 + std::int64_t(jb))) - margin,
                                            box.right + margin, to_units(h * double(j0 + std::int64_t(je))) + margin);
-            pieces[b] = clip_open(band_curves(i0, nx, j0, jb, je, h, sx, cx, k, sz, cz), Clipper2Lib::RectClip(wide, inner));
+            pieces[b] = clip_open(band_curves(i0, nx, j0, jb, je, h, sx, cx, k, sz, cz, field), Clipper2Lib::RectClip(wide, inner));
         });
         Polygons all;
         for (Polygons& p : pieces)

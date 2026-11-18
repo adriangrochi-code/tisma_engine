@@ -83,7 +83,16 @@ struct FillParams {
     double overlap = 0.0; // neighbouring lines' overlap (bead_overlap of the layer's height, perimeters.md rule 1)
     double max_link = 0.0; // mm along the walls the sparse lines may be joined over (infill.max_link); 0: 3 spacings
     SurfacePattern bottom_pattern = SurfacePattern::Rectilinear; // the bottom surfaces (surfaces.bottom_pattern)
+    // The solid inside the part, under a top surface or over a bottom one
+    // (surfaces.internal_solid_pattern, orca_2_5.md rule 13 bis).
+    SurfacePattern internal_pattern = SurfacePattern::Rectilinear;
     std::vector<double> angles; // the layer's angle, cycled (infill.angles, Q18); empty: angle and angle + 90
+    // A fixed angle for the top surface's and the bottom surfaces' lines
+    // (surfaces.top_angle and bottom_angle, orca_2_5.md rule 9); -1: the layer's.
+    double top_angle = -1.0, bottom_angle = -1.0;
+    // The order of a top or bottom surface in a centre-out pattern (rule 8).
+    FillOrder top_order = FillOrder::Default, bottom_order = FillOrder::Default;
+    int multiline = 1; // each sparse path as this many touching lines (infill.multiline, rule 13)
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
@@ -112,6 +121,11 @@ struct FillParams {
 //  - lightning: none here, since each layer's branches come from the layer
 //    above's (lightning_layers).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
+
+// Each path as `lines` copies side by side, `spacing` apart and centred on
+// it, clipped to the region (orca_2_5.md, rule 13).
+std::vector<Toolpath> multiline_paths(const std::vector<Toolpath>& paths, int lines, double spacing, double width,
+                                      const Polygons& region);
 
 // The angle of layer `layer`'s lines: angles[layer % size] when the list is
 // given, else angle, plus 90 on odd layers.

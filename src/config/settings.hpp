@@ -21,7 +21,19 @@ enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
 // The pattern of the top surface and of the bottom one (surfaces.top_pattern,
 // surfaces.bottom_pattern; infill_patterns.md, rules 14 to 17).
-enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram };
+enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram,
+                            SpiralInset };
+// The order of a surface in a centre-out pattern (orca_2_5.md, rule 8): the
+// shortest way, from the centre to the edge, or from the edge to the centre.
+enum class FillOrder { Default, Outward, Inward };
+// Where the top surface grows (orca_2_5.md, rule 7).
+enum class TopExpansion { Inward, Outward, InwardAndOutward };
+// Adaptive gyroid density (orca_2_5.md, rule 10): how the cells grow from
+// the surfaces to the centre, and the density at depth t (0 to 1).
+enum class AdaptiveMode { Disabled, DistanceWarp, SmoothBlend, SteppedShells, Lobes, NormalZ, NormalY, NormalX };
+enum class AdaptiveGradient { Linear, Quadratic, Exponential };
+// S + (I - S) t, S + (I - S) t^2, or S (I / S)^t.
+double adaptive_density(double surface, double interior, double t, AdaptiveGradient gradient);
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram, Honeycomb3d };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
@@ -54,7 +66,7 @@ enum class ScarfMode { Nowhere, Contours, Everywhere };
 enum class SupportStyle { Grid, Organic, Snug };
 // The support base's and interface's patterns (supports_more.md, rules 9 and 11).
 enum class SupportPattern { Lines, Grid, Honeycomb };
-enum class SupportInterfacePattern { Lines, Concentric, Automatic };
+enum class SupportInterfacePattern { Lines, Concentric, Automatic, SpiralInset };
 enum class FuzzyMode { None, External, All };
 // How a short layer slows down (cooling_more.md, rule 5): everything alike,
 // or the outer wall and the one that touches it last.
@@ -306,7 +318,16 @@ struct Settings {
     // infill_patterns.md, rules 14 to 17).
     SurfacePattern top_pattern = SurfacePattern::Monotonic;
     SurfacePattern bottom_pattern = SurfacePattern::Monotonic;
+    SurfacePattern internal_solid_pattern = SurfacePattern::Rectilinear; // orca_2_5.md, rule 13 bis
     double bridge_angle = 0.0;    // degrees, the bridges' lines (surfaces.bridge_angle); 0: by the bridge
+    // A fixed angle for the top and the bottom surfaces' lines (orca_2_5.md,
+    // rule 9), degrees; -1: the solid infill's. The top one also irons.
+    double top_angle = -1.0, bottom_angle = -1.0;
+    FillOrder top_fill_order = FillOrder::Default, bottom_fill_order = FillOrder::Default; // rule 8
+    // Top surface expansion (rule 7): mm it grows (0: off), how near the walls
+    // it may come, and which way.
+    double top_expansion = 0.0, top_expansion_margin = 0.0;
+    TopExpansion top_expansion_direction = TopExpansion::InwardAndOutward;
     // Line widths of their own, mm; 0: from the nozzle, not the walls
     // (surfaces_infill.md, I9).
     double top_width = 0.0;    // the top surface; 0: one nozzle
@@ -743,6 +764,16 @@ struct Settings {
     bool walls_clockwise = false;      // every loop clockwise (rule 9)
     bool walls_outer_first = false;    // each island's walls from the outer one in (perimeters.md, rule 4)
     bool infill_before_walls = false;  // each island's fills before its walls (gcode_motion.md, rule 8)
+    // Percent of the largest curve the sparse infill's sharp turns become
+    // (orca_2_5.md, rule 11); 0: pointed, as always.
+    double infill_smooth_factor = 0.0;
+    // Each part's infill centred on its own 3D box, as if it were sliced
+    // alone (orca_2_5.md, rule 12); off: one centre for the whole plate.
+    bool infill_separated = false;
+    AdaptiveMode infill_adaptive_mode = AdaptiveMode::Disabled; // rule 10
+    double infill_adaptive_interior_density = 20.0;            // percent, at the centre
+    AdaptiveGradient infill_adaptive_gradient = AdaptiveGradient::Linear;
+    int infill_multiline = 1; // each sparse path as 1 to 10 touching lines, the same material (rule 13)
     double infill_max_link = 50.0;     // mm along the walls two sparse lines may be joined over (surfaces_infill.md, rule 7)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
@@ -1028,6 +1059,10 @@ std::string settings_json(const Settings& settings);
 // The name of an infill pattern in the settings ("rectilinear", "grid"...).
 const char* infill_pattern_name(InfillPattern pattern);
 const char* surface_pattern_name(SurfacePattern pattern);
+const char* fill_order_name(FillOrder order);
+const char* top_expansion_name(TopExpansion direction);
+const char* adaptive_mode_name(AdaptiveMode mode);
+const char* adaptive_gradient_name(AdaptiveGradient gradient);
 
 // The name of a flavor in the settings ("marlin", "no_extrusion"...).
 const char* flavor_name(GcodeFlavor flavor);

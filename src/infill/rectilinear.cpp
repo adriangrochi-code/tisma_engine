@@ -330,6 +330,67 @@ double layer_angle(double angle, const std::vector<double>& angles, std::size_t 
     return angle + (layer % 2 == 1 ? 90.0 : 0.0);
 }
 
+std::vector<Toolpath> multiline_paths(const std::vector<Toolpath>& paths, int lines, double spacing, double width,
+                                      const Polygons& region) {
+    std::vector<Toolpath> out;
+    Clipper2Lib::Paths64 copies;
+    for (const Toolpath& t : paths) {
+        const std::size_t n = t.points.size();
+        if (n < 2)
+            continue;
+        // Each point's normal: the bisector of its segments' normals, longer
+        // at a corner so the copy keeps its distance (at most twice).
+        std::vector<Point2d> normal(n);
+        const auto seg_normal = [&](std::size_t a, std::size_t b) {
+            const double dx = t.points[b].p.x - t.points[a].p.x, dy = t.points[b].p.y - t.points[a].p.y;
+            const double l = std::hypot(dx, dy);
+            return l > 0.0 ? Point2d{-dy / l, dx / l} : Point2d{0.0, 0.0};
+        };
+        for (std::size_t i = 0; i < n; ++i) {
+            const bool has_prev = t.closed || i > 0, has_next = t.closed || i + 1 < n;
+            const Point2d a = has_prev ? seg_normal((i + n - 1) % n, i) : Point2d{0.0, 0.0};
+            const Point2d b = has_next ? seg_normal(i, (i + 1) % n) : Point2d{0.0, 0.0};
+            Point2d m{a.x + b.x, a.y + b.y};
+            const double l = std::hypot(m.x, m.y);
+            if (!(l > 1e-12)) {
+                normal[i] = has_prev ? a : b;
+                continue;
+            }
+            m = {m.x / l, m.y / l};
+            const Point2d ref = has_prev ? a : b;
+            const double c = std::max(0.5, m.x * ref.x + m.y * ref.y);
+            normal[i] = {m.x / c, m.y / c};
+        }
+        for (int k = 0; k < lines; ++k) {
+            const double shift = (double(k) - 0.5 * double(lines - 1)) * spacing;
+            Clipper2Lib::Path64 copy;
+            for (std::size_t i = 0; i <= n; ++i) {
+                if (i == n && !t.closed)
+                    break;
+                const std::size_t j = i % n;
+                copy.push_back({to_units(t.points[j].p.x + normal[j].x * shift), to_units(t.points[j].p.y + normal[j].y * shift)});
+            }
+            copies.push_back(std::move(copy));
+        }
+    }
+    if (copies.empty())
+        return out;
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddOpenSubject(copies);
+    clipper.AddClip(region);
+    Clipper2Lib::Paths64 closed, open;
+    clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+    for (const Clipper2Lib::Path64& p : open) {
+        if (p.size() < 2)
+            continue;
+        Toolpath t;
+        for (const auto& q : p)
+            t.points.push_back({{to_mm(q.x), to_mm(q.y)}, width});
+        out.push_back(std::move(t));
+    }
+    return out;
+}
+
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
     const double angle = layer_angle(params, layer);
@@ -359,9 +420,60 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
             return archimedean_fill(region, spacing, params.centre, width);
         case SurfacePattern::Octagram:
             return octagram_fill(region, spacing, params.centre, width);
+        case SurfacePattern::SpiralInset: // orca_2_5.md, rule 13 bis
+            return spiral_inset_fill(region, spacing, width);
         default:
             return std::nullopt;
         }
+    };
+    // A centre-out pattern in a set order (orca_2_5.md, rule 8): the concentric
+    // loops come from the edge in, the spirals' pieces are sorted by how near
+    // the centre they start and turned to run away from it; inward is the
+    // reverse. Each is then printed in that order.
+    const auto in_order = [&](std::vector<Toolpath> paths, SurfacePattern pattern, FillOrder order) {
+        if (order == FillOrder::Default ||
+            (pattern != SurfacePattern::Concentric && pattern != SurfacePattern::Archimedean &&
+             pattern != SurfacePattern::Octagram && pattern != SurfacePattern::SpiralInset))
+            return paths;
+        bool outward = order == FillOrder::Outward;
+        if (pattern == SurfacePattern::SpiralInset) {
+            // Each spiral runs from the outside in: turned round for outward.
+            for (Toolpath& t : paths) {
+                if (outward)
+                    std::reverse(t.points.begin(), t.points.end());
+                t.in_order = t.one_way = true;
+            }
+            return paths;
+        }
+        if (pattern != SurfacePattern::Concentric) {
+            const auto from_centre = [&](const ToolpathPoint& q) {
+                return std::hypot(q.p.x - params.centre.x, q.p.y - params.centre.y);
+            };
+            std::vector<std::pair<double, std::size_t>> keys;
+            for (std::size_t i = 0; i < paths.size(); ++i) {
+                Toolpath& t = paths[i];
+                if (!t.closed && t.points.size() >= 2 && from_centre(t.points.back()) < from_centre(t.points.front()))
+                    std::reverse(t.points.begin(), t.points.end());
+                keys.push_back({t.points.empty() ? 0.0 : from_centre(t.points.front()), i});
+            }
+            std::stable_sort(keys.begin(), keys.end());
+            std::vector<Toolpath> sorted;
+            for (const auto& [key, i] : keys)
+                sorted.push_back(std::move(paths[i]));
+            paths = std::move(sorted); // now from the centre out
+            if (!outward)
+                for (Toolpath& t : paths)
+                    if (!t.closed)
+                        std::reverse(t.points.begin(), t.points.end());
+            outward = !outward; // the list runs from the centre: turned for inward
+        }
+        if (outward)
+            std::reverse(paths.begin(), paths.end());
+        for (Toolpath& t : paths) {
+            t.in_order = true;
+            t.one_way = !t.closed;
+        }
+        return paths;
     };
     // monotonic_lines (rule 14, P10): each line a piece of its own, and all
     // printed the same way, at the layer's angle: a piece that runs against
@@ -377,44 +489,97 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
             t.one_way = true;
         return lines;
     };
+    // A fixed angle for the top and the bottom surfaces (orca_2_5.md, rule 9),
+    // or the layer's; the solid layers under a top surface keep the layer's.
+    const bool fixed_top = params.top_angle >= 0.0, fixed_bottom = params.bottom_angle >= 0.0;
+    const double top_angle = fixed_top ? params.top_angle : angle;
+    const double bottom_angle = fixed_bottom ? params.bottom_angle : angle;
     // The top surface: monotonic lines (each a piece, in monotonic order),
     // the same all one way (monotonic_lines), zig-zags, zig-zags that do not
     // turn between layers (aligned_rectilinear, rule 15), or a curve.
     if (auto c = curves(params.top_pattern, surface, top))
-        out.top = std::move(*c);
+        out.top = in_order(std::move(*c), params.top_pattern, params.top_order);
     else if (params.top_pattern == SurfacePattern::MonotonicLines)
-        out.top = one_way(rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0),
-                          angle);
+        out.top = one_way(rectilinear_fill(surface, top - d, top_angle, top, false, true, true, params.wall_overlap * top + d / 2.0),
+                          top_angle);
     else if (params.top_pattern == SurfacePattern::Monotonic)
-        out.top = rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
+        out.top = rectilinear_fill(surface, top - d, top_angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
     else
         out.top = rectilinear_fill(surface, top - d,
-                                   params.top_pattern == SurfacePattern::AlignedRectilinear ? params.angle : angle, top,
-                                   true, true, false, d / 2.0);
+                                   fixed_top                                                 ? params.top_angle
+                                   : params.top_pattern == SurfacePattern::AlignedRectilinear ? params.angle
+                                                                                              : angle,
+                                   top, true, true, false, d / 2.0);
     // The bottom surfaces: monotonic like the top ones (surfaces.bottom_pattern),
     // reaching as far as the zig-zags, or zig-zags. The other patterns only
     // on the bottom surface itself (rule 17); the solid layers over it and
     // under a top surface zig-zag as always.
     const SurfacePattern bp = params.bottom_pattern;
     const bool lines_bottom = bp == SurfacePattern::Monotonic || bp == SurfacePattern::MonotonicLines;
-    if (lines_bottom && !surfaces.bottom.empty()) {
-        out.solid = rectilinear_fill(surfaces.bottom, inner - d, angle, inner, false, true, true, d / 2.0);
+    const auto zigzag = [&](const Polygons& region, double degrees) {
+        return rectilinear_fill(region, inner - d, degrees, inner, true, true, false, d / 2.0);
+    };
+    // Zig-zags over the bottom part and the part under a top surface, each at its angle.
+    const auto zigzag_solid = [&](const Polygons& bottom, std::vector<Toolpath>& to) {
+        if (!fixed_bottom || surfaces.top_under.empty()) {
+            const Polygons both = surfaces.top_under.empty()
+                                      ? bottom
+                                      : Clipper2Lib::Union(bottom, surfaces.top_under, Clipper2Lib::FillRule::NonZero);
+            for (Toolpath& t : zigzag(both, fixed_bottom ? bottom_angle : angle))
+                to.push_back(std::move(t));
+            return;
+        }
+        const Polygons under = Clipper2Lib::Difference(surfaces.top_under, bottom, Clipper2Lib::FillRule::NonZero);
+        for (Toolpath& t : zigzag(bottom, bottom_angle))
+            to.push_back(std::move(t));
+        for (Toolpath& t : zigzag(under, angle))
+            to.push_back(std::move(t));
+    };
+    // A region's solid in a pattern: a curve, monotonic lines (all one way
+    // with monotonic_lines), zig-zags fixed at the infill's angle
+    // (aligned_rectilinear) or zig-zags at `degrees`.
+    const auto solid_in = [&](SurfacePattern pattern, const Polygons& region, double degrees, FillOrder order) {
+        if (auto c = curves(pattern, region, inner))
+            return in_order(std::move(*c), pattern, order);
+        if (pattern == SurfacePattern::Monotonic || pattern == SurfacePattern::MonotonicLines) {
+            std::vector<Toolpath> lines = rectilinear_fill(region, inner - d, degrees, inner, false, true, true, d / 2.0);
+            return pattern == SurfacePattern::MonotonicLines ? one_way(std::move(lines), degrees) : lines;
+        }
+        return zigzag(region, pattern == SurfacePattern::AlignedRectilinear ? params.angle : degrees);
+    };
+    if (params.internal_pattern != SurfacePattern::Rectilinear) {
+        // The solid inside the part in its own pattern (rule 13 bis): the
+        // bottom surface itself as the bottom pattern says, the rest (the
+        // layers over it and under a top surface) in the internal one.
+        const Polygons exposed = Clipper2Lib::Intersect(surfaces.bottom, surfaces.bottom_exposed, Clipper2Lib::FillRule::NonZero);
+        const Polygons internal =
+            Clipper2Lib::Union(Clipper2Lib::Difference(surfaces.bottom, exposed, Clipper2Lib::FillRule::NonZero),
+                               surfaces.top_under, Clipper2Lib::FillRule::NonZero);
+        if (!exposed.empty())
+            out.solid = solid_in(bp, exposed, bottom_angle, params.bottom_order);
+        if (!internal.empty())
+            for (Toolpath& t : solid_in(params.internal_pattern, internal, angle, FillOrder::Default))
+                out.solid.push_back(std::move(t));
+    } else if (lines_bottom && !surfaces.bottom.empty()) {
+        out.solid = rectilinear_fill(surfaces.bottom, inner - d, bottom_angle, inner, false, true, true, d / 2.0);
         if (bp == SurfacePattern::MonotonicLines)
-            out.solid = one_way(std::move(out.solid), angle);
-        for (Toolpath& t : rectilinear_fill(surfaces.top_under, inner - d, angle, inner, true, true, false, d / 2.0))
+            out.solid = one_way(std::move(out.solid), bottom_angle);
+        for (Toolpath& t : zigzag(surfaces.top_under, angle))
             out.solid.push_back(std::move(t));
     } else if (bp != SurfacePattern::Rectilinear && !surfaces.bottom.empty()) {
         // The bottom surface itself in its pattern, the rest in zig-zags.
         const Polygons exposed = Clipper2Lib::Intersect(surfaces.bottom, surfaces.bottom_exposed, Clipper2Lib::FillRule::NonZero);
-        const Polygons rest = Clipper2Lib::Difference(solid, exposed, Clipper2Lib::FillRule::NonZero);
         if (auto c = curves(bp, exposed, inner))
-            out.solid = std::move(*c);
+            out.solid = in_order(std::move(*c), bp, params.bottom_order);
         else // aligned_rectilinear: the zig-zags at the infill's angle in every layer
-            out.solid = rectilinear_fill(exposed, inner - d, params.angle, inner, true, true, false, d / 2.0);
-        for (Toolpath& t : rectilinear_fill(rest, inner - d, angle, inner, true, true, false, d / 2.0))
-            out.solid.push_back(std::move(t));
+            out.solid = zigzag(exposed, fixed_bottom ? bottom_angle : params.angle);
+        if (fixed_bottom)
+            zigzag_solid(Clipper2Lib::Difference(surfaces.bottom, exposed, Clipper2Lib::FillRule::NonZero), out.solid);
+        else
+            for (Toolpath& t : zigzag(Clipper2Lib::Difference(solid, exposed, Clipper2Lib::FillRule::NonZero), angle))
+                out.solid.push_back(std::move(t));
     } else {
-        out.solid = rectilinear_fill(solid, inner - d, angle, inner, true, true, false, d / 2.0);
+        zigzag_solid(surfaces.bottom, out.solid);
     }
     if (params.gap_fill && !(out.top.empty() && out.solid.empty())) {
         std::vector<Toolpath> lines = out.top;
@@ -434,6 +599,40 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
     // The lines apart by the material they lay: a spacing each (w less the overlap).
     const double ws = w - std::clamp(params.overlap, 0.0, 0.5 * w);
+    // Several lines per path (orca_2_5.md, rule 13): the pattern drawn N
+    // times larger (density / N), each path as N touching lines; the same
+    // material.
+    // A pattern's length does not follow its density exactly (joins along
+    // the walls, cells, clipping), so the density is corrected (up to three
+    // times, the nearest kept) for the lines to add up to the single line's length.
+    if (params.multiline > 1 && params.pattern != InfillPattern::Lightning && !surfaces.sparse.empty()) {
+        const auto length = [](const std::vector<Toolpath>& paths) {
+            double total = 0.0;
+            for (const Toolpath& t : paths)
+                for (std::size_t i = 1; i < t.points.size(); ++i)
+                    total += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+            return total;
+        };
+        LayerSurfaces only;
+        only.sparse = surfaces.sparse;
+        FillParams one = params;
+        one.multiline = 1;
+        const double target = length(fill_layer(only, layer, one, z).sparse);
+        one.density = params.density / double(params.multiline);
+        out.sparse = multiline_paths(fill_layer(only, layer, one, z).sparse, params.multiline, ws, w, surfaces.sparse);
+        double got = length(out.sparse), best = std::abs(got - target);
+        for (int round = 0; round < 3 && got > 0.0 && target > 0.0 && best > 0.01 * target; ++round) {
+            one.density = std::min(1.0, one.density * target / got);
+            std::vector<Toolpath> again =
+                multiline_paths(fill_layer(only, layer, one, z).sparse, params.multiline, ws, w, surfaces.sparse);
+            got = length(again);
+            if (std::abs(got - target) < best) {
+                best = std::abs(got - target);
+                out.sparse = std::move(again);
+            }
+        }
+        return out;
+    }
     switch (params.pattern) {
     case InfillPattern::Rectilinear:
     case InfillPattern::Zigzag: // the same in Tisma Slicer (infill_patterns.md, rule 2)

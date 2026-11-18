@@ -218,6 +218,7 @@ add_library(tisma_core
   src/config/settings.cpp
   src/config/profiles.cpp
   src/slice/painted.cpp
+  src/slice/separated.cpp
   src/slice/pipeline.cpp
   src/slice/job.cpp
   src/geom/medial_axis.cpp
@@ -238,6 +239,7 @@ add_library(tisma_core
   src/infill/lightning.cpp
   src/infill/nonplanar.cpp
   src/infill/patterns.cpp
+  src/infill/smooth.cpp
   src/infill/combine.cpp
   src/infill/connect.cpp
   src/infill/stress_density.cpp
@@ -401,13 +403,13 @@ if(NOT WIN32)
   endif()
 endif()
 add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp src/cloud/report.cpp
-  src/device/print_host.cpp src/net/digest.cpp src/catalog/pack_fetch.cpp)
+  src/device/print_host.cpp src/device/flashforge.cpp src/device/sdcp.cpp src/net/websocket.cpp src/net/digest.cpp src/catalog/pack_fetch.cpp)
 target_include_directories(tisma_net PUBLIC src)
 # tisma_core: running secret-tool or security (cad/process).
 target_link_libraries(tisma_net PRIVATE tisma_core nlohmann_json::nlohmann_json tisma_warnings)
 if(WIN32)
   target_sources(tisma_net PRIVATE src/net/http_winhttp.cpp)
-  target_link_libraries(tisma_net PRIVATE winhttp advapi32)
+  target_link_libraries(tisma_net PRIVATE winhttp advapi32 ws2_32)
 else()
   target_sources(tisma_net PRIVATE src/net/http_httplib.cpp)
   target_link_libraries(tisma_net PRIVATE tisma_httplib)

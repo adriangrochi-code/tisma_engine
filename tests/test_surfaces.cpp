@@ -4,6 +4,7 @@
 #include "slice/pipeline.hpp"
 #include "surfaces/surfaces.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <filesystem>
 #include <numbers>
+#include <set>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -41,6 +43,202 @@ Polygons square(double x0, double y0, double side) {
 }
 
 } // namespace
+
+TEST_CASE("surfaces.top_expansion: the top surface grows into the infill (orca_2_5.md, rule 7)", "[surfaces]") {
+    const auto mm2 = [](const Polygons& p) { return Clipper2Lib::Area(p) / (kUnitsPerMm * kUnitsPerMm); };
+    const auto rect = [](double x0, double y0, double x1, double y1) {
+        return Polygons{{{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)},
+                         {to_units(x0), to_units(y1)}}};
+    };
+    const std::vector<Polygons> infill{square(0, 0, 20)};
+    // Two surfaces split by a 2 mm strip of infill: outward joins them, inward does not.
+    LayerSurfaces split;
+    split.top = Clipper2Lib::Union(rect(0, 0, 9, 20), rect(11, 0, 20, 20), Clipper2Lib::FillRule::NonZero);
+    split.sparse = rect(9, 0, 11, 20);
+    for (const TopExpansionDirection d : {TopExpansionDirection::Outward, TopExpansionDirection::Both}) {
+        std::vector<LayerSurfaces> s{split};
+        expand_top_surfaces(s, infill, 1.5, 0.0, d);
+        CHECK_THAT(mm2(s[0].top), WithinAbs(400.0, 1e-3));
+        CHECK(s[0].sparse.empty());
+    }
+    std::vector<LayerSurfaces> inward{split};
+    expand_top_surfaces(inward, infill, 1.5, 0.0, TopExpansionDirection::Inward);
+    CHECK_THAT(mm2(inward[0].top), WithinAbs(360.0, 1e-3));
+    // A surface with a hole around what rises from it: inward closes 1 mm of it.
+    LayerSurfaces holed;
+    holed.top = Clipper2Lib::Difference(square(0, 0, 20), rect(8, 8, 12, 12), Clipper2Lib::FillRule::NonZero);
+    holed.sparse = rect(8, 8, 12, 12);
+    std::vector<LayerSurfaces> closed{holed};
+    expand_top_surfaces(closed, infill, 1.0, 0.0, TopExpansionDirection::Inward);
+    CHECK_THAT(mm2(closed[0].sparse), WithinAbs(4.0, 1e-3));
+    std::vector<LayerSurfaces> kept{holed};
+    expand_top_surfaces(kept, infill, 1.0, 0.0, TopExpansionDirection::Outward);
+    CHECK_THAT(mm2(kept[0].sparse), WithinAbs(16.0, 1e-3));
+    // The margin keeps what grows that far from the walls.
+    LayerSurfaces half;
+    half.top = rect(0, 0, 9, 20);
+    half.sparse = rect(9, 0, 20, 20);
+    std::vector<LayerSurfaces> margin{half};
+    expand_top_surfaces(margin, infill, 5.0, 8.0, TopExpansionDirection::Outward);
+    CHECK_THAT(mm2(margin[0].top), WithinAbs(180.0 + 3.0 * 4.0, 1e-3));
+    // 0 leaves it as it was.
+    std::vector<LayerSurfaces> off{split};
+    expand_top_surfaces(off, infill, 0.0, 0.0, TopExpansionDirection::Both);
+    CHECK_THAT(mm2(off[0].top), WithinAbs(360.0, 1e-3));
+    // The settings read and are checked.
+    const Settings read = parse_settings(
+        R"({"surfaces": {"top_expansion": 1, "top_expansion_margin": 0.2, "top_expansion_direction": "inward"}})");
+    CHECK(read.top_expansion == 1.0);
+    CHECK(read.top_expansion_direction == TopExpansion::Inward);
+    CHECK_THROWS(parse_settings(R"({"surfaces": {"top_expansion_direction": "up"}})"));
+}
+
+TEST_CASE("O2-7b and O2-7c: the expanded top surface takes the inner walls round a hole, not at the edge (orca_2_5.md, rule 7)", "[surfaces]") {
+    // A 20 x 20 x 5 mm plate with a 6 mm square hole in the middle, of four boxes.
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 20, 7.5f, 5);
+    add_box(mesh, 0, 12.5f, 0, 20, 20, 5);
+    add_box(mesh, 0, 7, 0, 7, 13, 5);
+    add_box(mesh, 13, 7, 0, 20, 13, 5);
+    Settings s; // 3 walls, 3 top layers
+    s.wall_width = s.outer_wall_width = 0.4;
+    s.infill_solid_below_area = 0.0;
+    // The inner walls (index > 0) of the last layer by the hole and by the plate's edge.
+    const auto inner_walls = [](const SlicedModel& m) {
+        int hole = 0, edge = 0;
+        for (const Toolpath& t : m.walls.back().toolpaths) {
+            if (t.index == 0)
+                continue;
+            for (const ToolpathPoint& q : t.points) {
+                if (q.p.x > 5.5 && q.p.x < 14.5 && q.p.y > 5.5 && q.p.y < 14.5)
+                    ++hole;
+                if (q.p.x < 1.5 || q.p.x > 18.5 || q.p.y < 1.5 || q.p.y > 18.5)
+                    ++edge;
+            }
+        }
+        return std::pair{hole, edge};
+    };
+    const SlicedModel plain = slice_model(weld_exact(mesh), s);
+    const auto [hole_before, edge_before] = inner_walls(plain);
+    CHECK(hole_before > 0);
+    CHECK(edge_before > 0);
+    s.top_expansion = 2.0;
+    s.top_expansion_direction = TopExpansion::Inward;
+    const SlicedModel grown = slice_model(weld_exact(mesh), s);
+    const auto [hole_after, edge_after] = inner_walls(grown);
+    CHECK(hole_after == 0);       // only the wall touching the hole stays round it
+    CHECK(edge_after == edge_before); // the plate's edge keeps its 3 walls
+    // The outer walls are all still there, and the surface reaches the hole's wall.
+    const auto outer = [](const SlicedModel& m) {
+        int n = 0;
+        for (const Toolpath& t : m.walls.back().toolpaths)
+            n += t.index == 0;
+        return n;
+    };
+    CHECK(outer(grown) == outer(plain));
+    CHECK(area_mm2(grown.surfaces.back().top) > area_mm2(plain.surfaces.back().top) + 10.0);
+    // The layers under the top surface keep their walls.
+    CHECK(grown.walls.front().toolpaths.size() == plain.walls.front().toolpaths.size());
+    // O2-7c: outward too, the island's edge keeps all its walls; the hole's go as before.
+    s.top_expansion_direction = TopExpansion::InwardAndOutward;
+    const SlicedModel both = slice_model(weld_exact(mesh), s);
+    const auto [hole_both, edge_both] = inner_walls(both);
+    CHECK(hole_both == 0);
+    CHECK(edge_both == edge_before);
+    s.top_expansion_direction = TopExpansion::Outward;
+    const auto [hole_out, edge_out] = inner_walls(slice_model(weld_exact(mesh), s));
+    CHECK(hole_out == hole_before);
+    CHECK(edge_out == edge_before);
+}
+
+TEST_CASE("infill.separated: each part's infill centred on its own box (orca_2_5.md, rule 12)", "[surfaces][infill]") {
+    // Two 10 mm cubes 23.3 mm apart: off the infill's grid from each other.
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 10, 10, 10);
+    add_box(mesh, 23.3f, 0, 0, 33.3f, 10, 10);
+    Settings s;
+    s.wall_width = s.outer_wall_width = 0.4;
+    s.infill_solid_below_area = 0.0;
+    // The sparse infill's points of the middle layer on each cube, the second
+    // moved back by 23.3 mm, rounded to the micron.
+    const auto points = [](const SlicedModel& m, std::size_t layer = 25, bool solid = false) {
+        std::set<std::pair<long, long>> left, right;
+        for (const Toolpath& t : solid ? m.fills[layer].solid : m.fills[layer].sparse)
+            for (const ToolpathPoint& q : t.points) {
+                if (q.p.x < 15.0)
+                    left.insert({std::lround(q.p.x * 1000), std::lround(q.p.y * 1000)});
+                else
+                    right.insert({std::lround((q.p.x - 23.3) * 1000), std::lround(q.p.y * 1000)});
+            }
+        return std::pair{left, right};
+    };
+    const SlicedModel shared = slice_model(weld_exact(mesh), s);
+    const auto [a, b] = points(shared);
+    REQUIRE_FALSE(a.empty());
+    CHECK(a != b); // one grid for the plate: the cubes' lines differ
+    s.infill_separated = true;
+    const SlicedModel own = slice_model(weld_exact(mesh), s);
+    const auto [c, d] = points(own);
+    REQUIRE_FALSE(c.empty());
+    CHECK(c == d); // each on its own centre: the same lines
+    // The solid inside the part (layer 1, over the bottom surface) too.
+    const auto [e, f] = points(own, 1, true);
+    REQUIRE_FALSE(e.empty());
+    CHECK(e == f);
+    // The bottom surface itself stays where the plate puts it.
+    CHECK(points(own, 0, true) == points(shared, 0, true));
+    CHECK(parse_settings(R"({"infill": {"separated": true}})").infill_separated);
+    CHECK_THROWS(parse_settings(R"({"infill": {"separated": 1}})"));
+}
+
+TEST_CASE("infill.adaptive_mode: gyroid denser by the faces, sparser inside (orca_2_5.md, rule 10, OR9)", "[surfaces][infill]") {
+    CHECK(adaptive_density(0.15, 0.05, 0.5, AdaptiveGradient::Linear) == Catch::Approx(0.10));
+    CHECK(adaptive_density(0.15, 0.05, 0.5, AdaptiveGradient::Quadratic) == Catch::Approx(0.125));
+    CHECK(adaptive_density(0.15, 0.05, 0.5, AdaptiveGradient::Exponential) == Catch::Approx(0.15 * std::sqrt(1.0 / 3.0)));
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 40, 40, 40);
+    Settings s;
+    s.wall_width = s.outer_wall_width = 0.4;
+    s.infill_pattern = InfillPattern::Gyroid;
+    s.infill_density = 15.0;
+    s.infill_solid_below_area = 0.0;
+    // The sparse lines' length per mm2 at mid height: in a ring by the faces and in the middle.
+    const auto per_area = [](const SlicedModel& m) {
+        double ring = 0.0, middle = 0.0;
+        for (const Toolpath& t : m.fills[m.fills.size() / 2].sparse)
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const Point2d a = t.points[i - 1].p, b = t.points[i].p;
+                const double x = 0.5 * (a.x + b.x), y = 0.5 * (a.y + b.y), len = std::hypot(b.x - a.x, b.y - a.y);
+                if (std::abs(x - 20.0) < 6.0 && std::abs(y - 20.0) < 6.0)
+                    middle += len;
+                else if (std::min({x, y, 40.0 - x, 40.0 - y}) < 6.0)
+                    ring += len;
+            }
+        const double ring_area = 40.0 * 40.0 - 28.0 * 28.0, middle_area = 12.0 * 12.0;
+        return std::pair{ring / ring_area, middle / middle_area};
+    };
+    const auto [ring0, middle0] = per_area(slice_model(weld_exact(mesh), s));
+    CHECK(std::abs(ring0 - middle0) < 0.2 * ring0); // even without it
+    s.infill_adaptive_mode = AdaptiveMode::SteppedShells;
+    s.infill_adaptive_interior_density = 5.0;
+    const SlicedModel shells = slice_model(weld_exact(mesh), s);
+    const auto [ring1, middle1] = per_area(shells);
+    CHECK(middle1 < 0.7 * ring1); // sparser in the middle
+    CHECK(middle1 < 0.7 * middle0);
+    // smooth_blend: the same gradient as one blended field, without the shells' cuts.
+    s.infill_adaptive_mode = AdaptiveMode::SmoothBlend;
+    const SlicedModel blended = slice_model(weld_exact(mesh), s);
+    const auto [ring2, middle2] = per_area(blended);
+    CHECK(middle2 < 0.8 * ring2);
+    CHECK(blended.fills[blended.fills.size() / 2].sparse.size() < shells.fills[shells.fills.size() / 2].sparse.size());
+    // normal_z: the depth within each layer, the same gradient from the walls.
+    s.infill_adaptive_mode = AdaptiveMode::NormalZ;
+    const auto [ring3, middle3] = per_area(slice_model(weld_exact(mesh), s));
+    CHECK(middle3 < 0.8 * ring3);
+    CHECK(parse_settings(R"({"infill": {"adaptive_mode": "distance_warp", "adaptive_gradient": "quadratic"}})")
+              .infill_adaptive_gradient == AdaptiveGradient::Quadratic);
+    CHECK_THROWS(parse_settings(R"({"infill": {"adaptive_mode": "wavy"}})"));
+}
 
 TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {
     // Ten layers of a 10 mm square; the infill is the whole square.

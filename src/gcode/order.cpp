@@ -545,9 +545,36 @@ bool has_sharp_corner(const Toolpath& loop) {
     return false;
 }
 
+namespace {
+std::vector<Toolpath> order_free(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
+                                 SeamMemory& memory, const SeamPaint* paint,
+                                 std::span<const std::vector<std::size_t>* const> candidates);
+} // namespace
+
 std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
                                   SeamMemory& memory, const SeamPaint* paint,
                                   std::span<const std::vector<std::size_t>* const> candidates) {
+    if (std::none_of(paths.begin(), paths.end(), [](const Toolpath& t) { return t.in_order; }))
+        return order_free(std::move(paths), cursor, mode, seed, memory, paint, candidates);
+    // The paths in a set order (orca_2_5.md, rule 8) after the others, one by
+    // one in their order: each still picks its seam or its end from the cursor.
+    std::vector<Toolpath> free, fixed;
+    for (Toolpath& t : paths)
+        (t.in_order ? fixed : free).push_back(std::move(t));
+    std::vector<Toolpath> out = order_free(std::move(free), cursor, mode, seed, memory, paint, {});
+    for (std::size_t i = 0; i < fixed.size(); ++i) {
+        std::vector<Toolpath> one;
+        one.push_back(std::move(fixed[i]));
+        for (Toolpath& t : order_free(std::move(one), cursor, mode, seed + out.size(), memory, paint, {}))
+            out.push_back(std::move(t));
+    }
+    return out;
+}
+
+namespace {
+std::vector<Toolpath> order_free(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
+                                 SeamMemory& memory, const SeamPaint* paint,
+                                 std::span<const std::vector<std::size_t>* const> candidates) {
     std::vector<Toolpath> out;
     out.reserve(paths.size());
     std::vector<bool> done(paths.size(), false);
@@ -688,6 +715,7 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
     }
     return out;
 }
+} // namespace
 
 std::vector<Polygons> split_islands(const Polygons& region) {
     Clipper2Lib::Clipper64 clipper;

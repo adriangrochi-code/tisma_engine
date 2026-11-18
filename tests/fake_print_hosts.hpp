@@ -450,3 +450,81 @@ private:
 };
 
 } // namespace
+
+// A Flashforge Adventurer 5M in LAN mode (printer_connections.md, «Flashforge
+// en red local», FF1): HTTP POST /detail, /uploadGcode and /control, with the
+// serial number SNFAKE123 and the check code 0a1b2c3d; every answer has «code».
+class FakeFlashforge {
+public:
+    FakeFlashforge() {
+        const auto authorized = [](const nlohmann::json& b) {
+            return b.value("serialNumber", "") == "SNFAKE123" && b.value("checkCode", "") == "0a1b2c3d";
+        };
+        server_.Post("/detail", [this, authorized](const httplib::Request& req, httplib::Response& res) {
+            const nlohmann::json b = nlohmann::json::parse(req.body, nullptr, false);
+            std::lock_guard lock(mutex_);
+            ++details;
+            if (!b.is_object() || !authorized(b)) {
+                res.set_content(R"({"code": 1, "message": "Access code is different"})", "application/json");
+                return;
+            }
+            const nlohmann::json d = {{"status", state},     {"name", "Adventurer 5M"}, {"rightTemp", 210.5},
+                                      {"rightTargetTemp", 210}, {"platTemp", 54.5},    {"platTargetTemp", 55},
+                                      {"printProgress", state == "ready" ? 0.0 : 0.25}, {"printDuration", 60},
+                                      {"estimatedTime", 1800.0}, {"printFileName", uploaded_name}};
+            res.set_content(nlohmann::json{{"code", 0}, {"message", "Success"}, {"detail", d}}.dump(), "application/json");
+        });
+        server_.Post("/control", [this, authorized](const httplib::Request& req, httplib::Response& res) {
+            const nlohmann::json b = nlohmann::json::parse(req.body, nullptr, false);
+            std::lock_guard lock(mutex_);
+            if (!b.is_object() || !authorized(b)) {
+                res.set_content(R"({"code": 1, "message": "Access code is different"})", "application/json");
+                return;
+            }
+            const nlohmann::json p = b.value("payload", nlohmann::json::object());
+            const std::string action = p.value("args", nlohmann::json::object()).value("action", "");
+            controls.push_back(p.value("cmd", "") + ":" + action);
+            if (p.value("cmd", "") == "jobCtl_cmd")
+                state = action == "pause" ? "pause" : action == "continue" ? "printing" : action == "cancel" ? "cancel" : state;
+            res.set_content(R"({"code": 0, "message": "Success"})", "application/json"); // success for anything, as the real one
+        });
+        server_.Post("/uploadGcode", [this](const httplib::Request& req, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            if (req.get_header_value("serialNumber") != "SNFAKE123" || req.get_header_value("checkCode") != "0a1b2c3d") {
+                res.set_content(R"({"code": 1, "message": "Access code is different"})", "application/json");
+                return;
+            }
+            if (!req.form.has_file("gcodeFile")) {
+                res.set_content(R"({"code": -1, "message": "Parameters is error"})", "application/json");
+                return;
+            }
+            const auto file = req.form.get_file("gcodeFile");
+            uploaded = file.content;
+            uploaded_name = file.filename;
+            file_size = req.get_header_value("fileSize");
+            print_now = req.get_header_value("printNow");
+            leveling = req.get_header_value("levelingBeforePrint");
+            if (print_now == "true")
+                state = "printing";
+            res.set_content(R"({"code": 0, "message": "Success"})", "application/json");
+        });
+        port_ = server_.bind_to_any_port("127.0.0.1");
+        thread_ = std::thread([this] { server_.listen_after_bind(); });
+        server_.wait_until_ready();
+    }
+    ~FakeFlashforge() {
+        server_.stop();
+        thread_.join();
+    }
+    std::string url() const { return "http://127.0.0.1:" + std::to_string(port_); }
+
+    std::string state = "ready", uploaded, uploaded_name, file_size, print_now, leveling;
+    std::vector<std::string> controls;
+    int details = 0;
+
+private:
+    httplib::Server server_;
+    std::thread thread_;
+    std::mutex mutex_;
+    int port_ = 0;
+};

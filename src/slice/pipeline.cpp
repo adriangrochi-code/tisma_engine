@@ -3,6 +3,7 @@
 #include "slice/pipeline.hpp"
 
 #include "slice/job.hpp"
+#include "slice/local_layers.hpp"
 
 #include "adhesion/adhesion.hpp"
 #include "gcode/order.hpp"
@@ -10,13 +11,16 @@
 #include "infill/adaptive.hpp"
 #include "infill/arcs.hpp"
 #include "infill/combine.hpp"
+#include "infill/gyroid.hpp"
 #include "infill/lightning.hpp"
+#include "infill/smooth.hpp"
 #include "infill/nonplanar.hpp"
 #include "infill/patterns.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "perimeters/fuzzy.hpp"
 #include "slice/belt.hpp"
 #include "slice/painted.hpp"
+#include "slice/separated.hpp"
 #include "slice/variable_layers.hpp"
 #include "slice/wipe_tower.hpp"
 #include "infill/rectilinear.hpp"
@@ -31,6 +35,7 @@
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <numeric>
 #include <cstdio>
@@ -148,6 +153,8 @@ std::vector<Toolpath> support_interface(const Polygons& interface, const Polygon
                                         double bead, double width) {
     if (settings.support_interface_pattern == SupportInterfacePattern::Concentric)
         return concentric_fill(interface, bead, width);
+    if (settings.support_interface_pattern == SupportInterfacePattern::SpiralInset) // orca_2_5.md, rule 13 bis
+        return spiral_inset_fill(interface, bead, width);
     const double spacing = bead + settings.support_interface_spacing, angle = settings.support_line_angle + 90.0;
     if (!settings.support_contact_loops || contact.empty())
         return rectilinear_fill(interface, spacing, angle, width, true);
@@ -1702,6 +1709,8 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
             moved->blockers = compensated_like(volumes->blockers, input, settings);
         if (!volumes->enforcers.triangles.empty())
             moved->enforcers = compensated_like(volumes->enforcers, input, settings);
+        for (const SeamVolume& v : volumes->seams)
+            moved->seams.push_back({compensated_like(v.mesh, input, settings), v.kind});
     }
     const SupportVolumes* support = moved ? &*moved : nullptr;
     if (!tools)
@@ -2086,10 +2095,12 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     return out;
 }
 
+
 namespace {
 
 // A volume's section on each level (a negative volume, a support blocker or
 // enforcer): its outline, whatever way its triangles face. Own design.
+
 std::vector<Polygons> volume_sections(const IndexedMesh& volume, const std::vector<float>& heights,
                                       double gap_closing, gpu::Context* gpu) {
     IndexedMesh oriented = volume;
@@ -2419,6 +2430,38 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                            skin_counts(stack.share, bottom_count, -1), settings.wall_width, &slopes)
                        : classify_surfaces(skins, infill, top_count * ratio, bottom_count * ratio,
                                            settings.wall_width, &slopes);
+    // The top surface grows before the bridges are found (orca_2_5.md, rule
+    // 7), over the inner walls' band too; the inner walls it covers go, the
+    // outer wall of each island stays.
+    if (settings.top_expansion > 0.0) {
+        double outer = 0.0;
+        for (const LayerWalls& w : out.walls)
+            for (const Toolpath& t : w.toolpaths)
+                if (t.index == 0)
+                    for (const ToolpathPoint& q : t.points)
+                        outer = std::max(outer, q.width);
+        const std::vector<Polygons> gained = expand_top_surfaces(
+            out.surfaces, infill, settings.top_expansion, settings.top_expansion_margin,
+            settings.top_expansion_direction == TopExpansion::Inward    ? TopExpansionDirection::Inward
+            : settings.top_expansion_direction == TopExpansion::Outward ? TopExpansionDirection::Outward
+                                                                        : TopExpansionDirection::Both,
+            &out.regions, outer > 0.0 ? outer : settings.wall_width);
+        tbb::parallel_for(std::size_t(0), gained.size(), [&](std::size_t l) {
+            if (gained[l].empty() || l >= out.walls.size())
+                return;
+            std::vector<Toolpath> kept;
+            for (Toolpath& t : out.walls[l].toolpaths) {
+                if (t.index == 0) {
+                    kept.push_back(std::move(t));
+                    continue;
+                }
+                for (Toolpath& piece : clip_toolpaths({t}, gained[l], false))
+                    if (piece.points.size() >= 2)
+                        kept.push_back(std::move(piece));
+            }
+            out.walls[l].toolpaths = std::move(kept);
+        });
+    }
     // What the other extruders' parts lay counts as printed below.
     std::vector<Polygons> others;
     if (frame && frame->cover) {
@@ -2795,6 +2838,12 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.max_link = settings.infill_max_link;
     fill.bottom_pattern = settings.bottom_pattern;
+    fill.top_angle = settings.top_angle;
+    fill.bottom_angle = settings.bottom_angle;
+    fill.top_order = settings.top_fill_order;
+    fill.internal_pattern = settings.internal_solid_pattern;
+    fill.multiline = settings.infill_multiline;
+    fill.bottom_order = settings.bottom_fill_order;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress
@@ -2846,6 +2895,164 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         out.seam_enforce = painted_areas(painted[2], out.layers, settings.wall_width);
     if (!painted[3].empty())
         out.seam_block = painted_areas(painted[3], out.layers, settings.wall_width);
+    // The weak precise seam modifiers over the paint, the first in the list
+    // last so that it wins (orca_2_5.md, rule 4): preferred marks, forbidden
+    // blocks, neutral clears both, inside each one's section.
+    if (volumes && !volumes->seams.empty()) {
+        out.seam_enforce.resize(out.layers.size());
+        out.seam_block.resize(out.layers.size());
+        const auto strong = [](SeamModifierKind k) {
+            return k == SeamModifierKind::Center || k == SeamModifierKind::Left || k == SeamModifierKind::Right;
+        };
+        for (auto v = volumes->seams.rbegin(); v != volumes->seams.rend(); ++v) {
+            if (v->mesh.triangles.empty() || strong(v->kind))
+                continue;
+            const std::vector<Polygons> sections = volume_sections(v->mesh, heights, settings.gap_closing_radius, gpu);
+            tbb::parallel_for(std::size_t(0), std::min(sections.size(), out.layers.size()), [&](std::size_t l) {
+                const Polygons& zone = sections[l];
+                if (zone.empty())
+                    return;
+                using Clipper2Lib::FillRule;
+                Polygons& on = out.seam_enforce[l];
+                Polygons& off = out.seam_block[l];
+                on = Clipper2Lib::Difference(on, zone, FillRule::NonZero);
+                off = Clipper2Lib::Difference(off, zone, FillRule::NonZero);
+                if (v->kind == SeamModifierKind::Preferred)
+                    on = Clipper2Lib::Union(on, zone, FillRule::NonZero);
+                else if (v->kind == SeamModifierKind::Forbidden)
+                    off = Clipper2Lib::Union(off, zone, FillRule::NonZero);
+            });
+        }
+        // The strong ones, over the weak, the first in the list deciding a
+        // wall first: on each outer wall the longest stretch inside the body
+        // (ties: nearest the bed's back, then leftmost) gives a point that
+        // becomes the only place the seam may go on that wall.
+        std::vector<std::vector<std::pair<Point2d, double>>> fixed(out.layers.size()); // point, radius
+        std::array<std::atomic<int>, 3> trouble{}; // not reaching the wall, several stretches, whole wall
+        for (const SeamVolume& v : volumes->seams) {
+            if (v.mesh.triangles.empty() || !strong(v.kind))
+                continue;
+            const std::vector<Polygons> sections = volume_sections(v.mesh, heights, settings.gap_closing_radius, gpu);
+            std::atomic<bool> reached{false};
+            tbb::parallel_for(std::size_t(0), std::min(sections.size(), out.layers.size()), [&](std::size_t l) {
+                const Polygons& zone = sections[l];
+                if (zone.empty())
+                    return;
+                for (const Toolpath& t : out.walls[l].toolpaths) {
+                    if (!t.closed || t.index != 0 || t.points.size() < 3)
+                        continue;
+                    bool taken = false;
+                    for (const auto& [q, r] : fixed[l])
+                        for (const ToolpathPoint& tp : t.points)
+                            taken = taken || std::hypot(tp.p.x - q.x, tp.p.y - q.y) < 2.0 * r + 1e-6;
+                    if (taken)
+                        continue; // a wall another strong body already decided
+                    Clipper2Lib::Path64 loop;
+                    double total = 0.0;
+                    for (std::size_t i = 0; i <= t.points.size(); ++i) {
+                        const Point2d& a = t.points[i % t.points.size()].p;
+                        loop.push_back({to_units(a.x), to_units(a.y)});
+                        if (i > 0) {
+                            const Point2d& b = t.points[i - 1].p;
+                            total += std::hypot(a.x - b.x, a.y - b.y);
+                        }
+                    }
+                    Clipper2Lib::Clipper64 clip;
+                    clip.AddOpenSubject({loop});
+                    clip.AddClip(zone);
+                    Polygons closed, open;
+                    clip.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+                    if (open.empty())
+                        continue;
+                    reached = true;
+                    const auto length = [](const Clipper2Lib::Path64& path) {
+                        double sum = 0.0;
+                        for (std::size_t i = 1; i < path.size(); ++i)
+                            sum += std::hypot(to_mm(path[i].x - path[i - 1].x), to_mm(path[i].y - path[i - 1].y));
+                        return sum;
+                    };
+                    // Pieces split where the loop closes join again.
+                    std::size_t best = 0;
+                    double best_len = -1.0, best_y = 0.0, best_x = 0.0;
+                    for (std::size_t k = 0; k < open.size(); ++k) {
+                        const double len = length(open[k]);
+                        double y = -1e300, x = 1e300;
+                        for (const auto& q : open[k])
+                            y = std::max(y, to_mm(q.y)), x = std::min(x, to_mm(q.x));
+                        if (len > best_len + 1e-6 ||
+                            (std::abs(len - best_len) <= 1e-6 && (y > best_y + 1e-6 || (std::abs(y - best_y) <= 1e-6 && x < best_x)))) {
+                            best = k, best_len = len, best_y = y, best_x = x;
+                        }
+                    }
+                    if (open.size() > 1)
+                        ++trouble[1];
+                    if (best_len >= total - settings.wall_width) {
+                        ++trouble[2]; // the body holds the whole wall: not used here
+                        continue;
+                    }
+                    const Clipper2Lib::Path64& piece = open[best];
+                    // The piece's direction against the loop's, and the side
+                    // the material is on: left and right as seen from outside.
+                    const Point2d first{to_mm(piece.front().x), to_mm(piece.front().y)};
+                    const Point2d second{to_mm(piece[1].x), to_mm(piece[1].y)};
+                    const double dx = second.x - first.x, dy = second.y - first.y, n = std::hypot(dx, dy);
+                    bool end_is_right = true;
+                    if (n > 0.0) {
+                        const double e = settings.wall_width;
+                        const double mx = (first.x + second.x) / 2.0, my = (first.y + second.y) / 2.0;
+                        // material on the left of travel: the outside on the right, the viewer's right is the travel
+                        end_is_right = region_contains(out.regions[l], mx - dy / n * e, my + dx / n * e);
+                    }
+                    Point2d at;
+                    const bool want_end = v.kind == SeamModifierKind::Right ? end_is_right
+                                          : v.kind == SeamModifierKind::Left ? !end_is_right
+                                                                               : false;
+                    if (v.kind == SeamModifierKind::Center) {
+                        double half = best_len / 2.0;
+                        at = first;
+                        for (std::size_t i = 1; i < piece.size(); ++i) {
+                            const Point2d a{to_mm(piece[i - 1].x), to_mm(piece[i - 1].y)};
+                            const Point2d b{to_mm(piece[i].x), to_mm(piece[i].y)};
+                            const double seg = std::hypot(b.x - a.x, b.y - a.y);
+                            if (seg >= half && seg > 0.0) {
+                                at = {a.x + (b.x - a.x) * half / seg, a.y + (b.y - a.y) * half / seg};
+                                break;
+                            }
+                            half -= seg;
+                            at = b;
+                        }
+                    } else {
+                        at = want_end ? Point2d{to_mm(piece.back().x), to_mm(piece.back().y)} : first;
+                    }
+                    fixed[l].push_back({at, settings.wall_width / 4.0});
+                }
+            });
+            if (!reached)
+                ++trouble[0];
+        }
+        for (std::size_t l = 0; l < fixed.size(); ++l)
+            for (const auto& [q, r] : fixed[l]) {
+                // Only there on that wall: a small disc enforced, the rest of
+                // the wall's surroundings blocked.
+                Polygon disc;
+                for (int k = 0; k < 16; ++k) {
+                    const double a = 2.0 * std::numbers::pi * k / 16.0;
+                    disc.push_back({to_units(q.x + r * std::cos(a)), to_units(q.y + r * std::sin(a))});
+                }
+                using Clipper2Lib::FillRule;
+                out.seam_enforce[l] = Clipper2Lib::Union(out.seam_enforce[l], Polygons{disc}, FillRule::NonZero);
+                out.seam_block[l] = Clipper2Lib::Difference(out.seam_block[l], Polygons{disc}, FillRule::NonZero);
+            }
+        std::string said;
+        if (trouble[0] > 0)
+            said += " a body does not reach the outer wall's mid-line;";
+        if (trouble[1] > 0)
+            said += " a body cuts a wall in several stretches (the longest is used);";
+        if (trouble[2] > 0)
+            said += " a strong body holds a whole wall (not used there);";
+        if (!said.empty())
+            out.notices.push_back("Costura precisa:" + said.substr(0, said.size() - 1));
+    }
     if (!out.regions.empty() && !frame) {
         const double first = out.layers.front().top - out.layers.front().bottom;
         const AdhesionShape shape = adhesion_shape(settings);
@@ -2885,6 +3092,131 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // The tree's fill comes from distance fields (PLAN.md, «Soporte en árbol
     // y pintura más livianos», step 2), the layers' fields computed together
     // below, on the GPU when there is one: the same numbers either way.
+    const InfillPattern ip = settings.infill_pattern;
+    // Adaptive gyroid density (orca_2_5.md, rule 10): shells of gyroid, each
+    // about 1.5 times denser than the one inside, from infill.density at the
+    // surfaces to the interior density at the deepest point, by how deep
+    // each point lies (a 0.5 mm field); smooth_blend and the normal_* modes
+    // (depth within the planes normal to their axis) blend them in one field;
+    // distance_warp and lobes use the shells for now.
+    DepthField gyroid_depth;
+    if (ip == InfillPattern::Gyroid && settings.infill_adaptive_mode != AdaptiveMode::Disabled &&
+        settings.infill_density > 0.0 && settings.infill_density < 100.0) {
+        std::vector<Polygons> sparse(out.surfaces.size());
+        for (std::size_t l = 0; l < sparse.size(); ++l)
+            sparse[l] = out.surfaces[l].sparse;
+        const AdaptiveMode m = settings.infill_adaptive_mode;
+        gyroid_depth = sparse_depth(sparse, out.layers, 0.5,
+                                    m == AdaptiveMode::NormalX   ? DepthFrom::PlaneX
+                                    : m == AdaptiveMode::NormalY ? DepthFrom::PlaneY
+                                    : m == AdaptiveMode::NormalZ ? DepthFrom::PlaneZ
+                                                                 : DepthFrom::Surfaces);
+    }
+    const auto gyroid_shells = [&](std::size_t l, const FillParams& params) {
+        std::vector<Toolpath> sparse;
+        const double S = settings.infill_density / 100.0, I = settings.infill_adaptive_interior_density / 100.0;
+        const double deep = gyroid_depth.deepest, z = out.layers[l].slice_z();
+        const int n = S > 0.0 && I > 0.0 && I != S ? std::max(1, int(std::ceil(std::abs(std::log(I / S)) / std::log(1.5))))
+                                                   : 1;
+        const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
+        const double ws = w - std::clamp(params.overlap, 0.0, 0.5 * w);
+        // smooth_blend: one field, the gyroids of the two shell densities
+        // round each point's own density mixed by where it falls between them.
+        // The normal_* modes blend too, by the depth within their planes.
+        const AdaptiveMode m = settings.infill_adaptive_mode;
+        if ((m == AdaptiveMode::SmoothBlend || m == AdaptiveMode::NormalX || m == AdaptiveMode::NormalY ||
+             m == AdaptiveMode::NormalZ) &&
+            S > 0.0 && I > 0.0) {
+            std::vector<double> levels(std::size_t(n) + 1);
+            for (int k = 0; k <= n; ++k)
+                levels[std::size_t(k)] = S * std::pow(I / S, double(k) / n);
+            const double finest = gyroid_period(ws, std::min(1.0, std::max(S, I)));
+            const GyroidField field = [&](double x, double y) {
+                const double t = deep > 0.0 ? gyroid_depth.at(x, y, z) / deep : 0.0;
+                const double rho = adaptive_density(S, I, t, settings.infill_adaptive_gradient);
+                // The pair of levels round rho, or the end nearest it.
+                std::size_t k = std::abs(rho - levels.front()) <= std::abs(rho - levels.back()) ? 0 : levels.size() - 2;
+                for (std::size_t i = 0; i + 1 < levels.size(); ++i)
+                    if ((rho - levels[i]) * (rho - levels[i + 1]) <= 0.0) {
+                        k = i;
+                        break;
+                    }
+                const double a = levels[k], b = levels[k + 1];
+                const double wa = a != b ? std::clamp((rho - b) / (a - b), 0.0, 1.0) : 1.0;
+                return wa * gyroid_value(x, y, z, gyroid_period(ws, std::min(1.0, a))) +
+                       (1.0 - wa) * gyroid_value(x, y, z, gyroid_period(ws, std::min(1.0, b)));
+            };
+            return gyroid_fill(out.surfaces[l].sparse, finest, z, w, &field);
+        }
+        Polygons outside = out.surfaces[l].sparse;
+        for (int k = 0; k < n && !outside.empty(); ++k) {
+            const double t0 = double(k) / n, t1 = double(k + 1) / n;
+            const Polygons inner = k + 1 < n ? deep_region(gyroid_depth, z, t1 * deep) : Polygons{};
+            const Polygons shell = inner.empty() ? outside
+                                                 : Clipper2Lib::Difference(outside, inner, Clipper2Lib::FillRule::NonZero);
+            outside = inner.empty() ? Polygons{} : Clipper2Lib::Intersect(outside, inner, Clipper2Lib::FillRule::NonZero);
+            const double rho = adaptive_density(S, I, 0.5 * (t0 + t1), settings.infill_adaptive_gradient);
+            if (shell.empty() || !(rho > 0.0))
+                continue;
+            for (Toolpath& t : gyroid_fill(shell, gyroid_period(ws, std::min(rho, 1.0)), z, w))
+                sparse.push_back(std::move(t));
+        }
+        return sparse;
+    };
+    // Each part's sparse infill centred on its own 3D box (orca_2_5.md, rule
+    // 12); not with the patterns that already go by part or by the outline.
+    const bool separate = settings.infill_separated && settings.infill_density > 0.0 &&
+                          ip != InfillPattern::AdaptiveCubic && ip != InfillPattern::SupportCubic &&
+                          ip != InfillPattern::Lightning && ip != InfillPattern::Concentric;
+    const std::vector<std::vector<PartIsland>> parts =
+        separate ? separated_parts(out.regions, out.layers) : std::vector<std::vector<PartIsland>>{};
+    // Layer l's fill with the sparse infill, the solid inside the part (the
+    // layers under a top surface and over a bottom one) and the bridges
+    // filled island by island, each as if its part's centre were the origin
+    // and moved back; the top and bottom surfaces themselves as always.
+    const auto separated_fill = [&](std::size_t l, const FillParams& params) {
+        const LayerSurfaces& all = out.surfaces[l];
+        const auto cut = [](const Polygons& a, const Polygons& b) {
+            return a.empty() || b.empty() ? Polygons{} : Clipper2Lib::Intersect(a, b, Clipper2Lib::FillRule::NonZero);
+        };
+        const auto minus = [](const Polygons& a, const Polygons& b) {
+            return a.empty() || b.empty() ? a : Clipper2Lib::Difference(a, b, Clipper2Lib::FillRule::NonZero);
+        };
+        const Polygons inner_bottom = minus(all.bottom, all.bottom_exposed);
+        LayerSurfaces faces;
+        faces.top = minus(all.top, all.top_under);
+        faces.bottom = cut(all.bottom, all.bottom_exposed);
+        faces.bottom_exposed = faces.bottom;
+        LayerFill fill = fill_layer(faces, l, params, out.layers[l].slice_z());
+        for (const PartIsland& part : parts[l]) {
+            const std::int64_t dx = std::llround(part.centre.x * kUnitsPerMm), dy = std::llround(part.centre.y * kUnitsPerMm);
+            const auto moved = [&](const Polygons& p) { return Clipper2Lib::TranslatePaths(cut(p, part.island), -dx, -dy); };
+            LayerSurfaces own;
+            own.sparse = moved(all.sparse);
+            own.bottom = moved(inner_bottom);
+            own.top = own.top_under = moved(all.top_under);
+            own.bridge = moved(all.bridge);
+            own.bridge_angle = all.bridge_angle;
+            own.bridge_support = Clipper2Lib::TranslatePaths(all.bridge_support, -dx, -dy);
+            if (own.sparse.empty() && own.bottom.empty() && own.top.empty() && own.bridge.empty())
+                continue;
+            FillParams mine = params;
+            mine.centre = {0.0, 0.0};
+            LayerFill f = fill_layer(own, l, mine, out.layers[l].slice_z() - part.z_centre);
+            for (auto [to, from] : {std::pair{&fill.sparse, &f.sparse}, {&fill.solid, &f.solid}, {&fill.bridge, &f.bridge},
+                                    {&fill.gaps, &f.gaps}})
+                for (Toolpath& t : *from) {
+                    for (ToolpathPoint& q : t.points)
+                        q.p = {q.p.x + to_mm(dx), q.p.y + to_mm(dy)};
+                    to->push_back(std::move(t));
+                }
+        }
+        return fill;
+    };
+    const bool smooth_sparse = settings.infill_smooth_factor > 0.0 &&
+                               (ip == InfillPattern::Hilbert || ip == InfillPattern::Octagram || ip == InfillPattern::Lightning ||
+                                ip == InfillPattern::Honeycomb || ip == InfillPattern::Honeycomb3d ||
+                                ip == InfillPattern::Concentric);
     const bool tree_by_field = settings.support_style == SupportStyle::Organic;
     std::vector<Polygons> tree_above(tree_by_field ? out.layers.size() : 0);
     std::vector<double> tree_width(tree_by_field ? out.layers.size() : 0, 0.0);
@@ -2892,16 +3224,23 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                       [&](std::size_t l) {
                           if (repeats[l])
                               return;
-                          out.fills[l] = fill_layer(out.surfaces[l], l, overlapping(l == 0 ? first_fill : fill, l),
-                                                    out.layers[l].slice_z());
+                          out.fills[l] = separate && l < parts.size()
+                                             ? separated_fill(l, overlapping(l == 0 ? first_fill : fill, l))
+                                             : fill_layer(out.surfaces[l], l, overlapping(l == 0 ? first_fill : fill, l),
+                                                          out.layers[l].slice_z());
                           round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
                           if (!out.on_support[l].empty())
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
                                               kBridgeAnchor + settings.wall_width);
                           out.fills[l].arcs = std::move(arc_paths[l]);
                           out.fills[l].overhang_walls = std::move(overhang_walls[l]);
+                          if (!gyroid_depth.empty() && gyroid_depth.deepest > 0.5)
+                              out.fills[l].sparse = gyroid_shells(l, overlapping(l == 0 ? first_fill : fill, l));
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
+                          // Rounded turns in the patterns that have them (orca_2_5.md, rule 11).
+                          if (smooth_sparse)
+                              smooth_corners(out.fills[l].sparse, settings.infill_smooth_factor / 100.0);
                           for (std::size_t b = 0; l < banded.size() && b < banded[l].size(); ++b) {
                               if (banded[l][b].empty())
                                   continue;
@@ -3045,8 +3384,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 return;
             // ironing.md rule 2 and IR8: over the top fill's, or fixed.
             const double over = settings.ironing_angle < 0.0 ? 45.0 : settings.ironing_angle;
-            const double angle = settings.ironing_angle_fixed
-                                     ? over
+            // Over the top surface's own angle when it is fixed (orca_2_5.md, rule 9).
+            const double angle = settings.ironing_angle_fixed ? over
+                                 : settings.top_angle >= 0.0
+                                     ? settings.top_angle + over
                                      : layer_angle(settings.infill_angle, settings.infill_angles, l) + over;
             out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width_at(l), true);
         });
@@ -3126,4 +3467,20 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
 }
 
 } // namespace
+std::optional<SeamModifierKind> seam_modifier_kind(std::string_view name) {
+    if (name == "center")
+        return SeamModifierKind::Center;
+    if (name == "left")
+        return SeamModifierKind::Left;
+    if (name == "right")
+        return SeamModifierKind::Right;
+    if (name == "preferred")
+        return SeamModifierKind::Preferred;
+    if (name == "forbidden")
+        return SeamModifierKind::Forbidden;
+    if (name == "neutral")
+        return SeamModifierKind::Neutral;
+    return std::nullopt;
+}
+
 } // namespace tisma

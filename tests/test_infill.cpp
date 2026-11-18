@@ -1,6 +1,9 @@
 #include "config/settings.hpp"
+#include "gcode/order.hpp"
 #include "infill/gyroid.hpp"
+#include "infill/patterns.hpp"
 #include "infill/rectilinear.hpp"
+#include "infill/smooth.hpp"
 #include "perimeters/coverage.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -81,6 +84,273 @@ TEST_CASE("surfaces.bottom_pattern: monotonic bottom lines, unjoined; the solid 
     p.bottom_pattern = SurfacePattern::Rectilinear;
     const LayerFill zig = fill_layer(s, 0, p, 0.2);
     CHECK(zig.solid.size() < mono.solid.size());
+}
+
+TEST_CASE("surfaces.top_angle and bottom_angle: a fixed angle for the surfaces' lines (orca_2_5.md, rule 9)", "[infill]") {
+    // The direction of a path's longest stretch, in degrees from 0 to 180.
+    const auto directions = [](const std::vector<Toolpath>& paths) {
+        std::set<int> out;
+        for (const Toolpath& t : paths) {
+            double best = 0.0, dir = 0.0;
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const double dx = t.points[i].p.x - t.points[i - 1].p.x, dy = t.points[i].p.y - t.points[i - 1].p.y;
+                if (std::hypot(dx, dy) > best) {
+                    best = std::hypot(dx, dy);
+                    dir = std::fmod(std::atan2(dy, dx) * 180.0 / std::acos(-1.0) + 360.0, 180.0);
+                }
+            }
+            out.insert(int(std::lround(dir)) % 180);
+        }
+        return out;
+    };
+    LayerSurfaces top;
+    top.top = square(0, 0, 10);
+    LayerSurfaces bottom;
+    bottom.bottom = square(0, 0, 10);
+    FillParams p; // 45 degrees, turning 90 a layer
+    CHECK(directions(fill_layer(top, 0, p, 0.2).top) != directions(fill_layer(top, 1, p, 0.4).top));
+    p.top_angle = 30.0;
+    p.bottom_angle = 120.0;
+    for (std::size_t layer : {0u, 1u}) {
+        CHECK(directions(fill_layer(top, layer, p, 0.2).top) == std::set<int>{30});
+        CHECK(directions(fill_layer(bottom, layer, p, 0.2).solid) == std::set<int>{120});
+        p.bottom_pattern = SurfacePattern::Rectilinear;
+        CHECK(directions(fill_layer(bottom, layer, p, 0.2).solid) == std::set<int>{120});
+        p.bottom_pattern = SurfacePattern::Monotonic;
+    }
+    // The solid under a top surface keeps the layer's angle.
+    LayerSurfaces under;
+    under.top = square(0, 0, 10);
+    under.top_under = square(0, 0, 10);
+    CHECK(directions(fill_layer(under, 0, p, 0.2).solid) == std::set<int>{45});
+    // The settings read and are checked.
+    const Settings read = parse_settings(R"({"surfaces": {"top_angle": 30, "bottom_angle": -1}})");
+    CHECK(read.top_angle == 30.0);
+    CHECK(read.bottom_angle == -1.0);
+    CHECK_THROWS(parse_settings(R"({"surfaces": {"top_angle": -5}})"));
+}
+
+TEST_CASE("surfaces.top_fill_order and bottom_fill_order: centre out or edge in (orca_2_5.md, rule 8)", "[infill]") {
+    // How far each path's first point lies from the centre, in the order given.
+    const auto distances = [](const std::vector<Toolpath>& paths, Point2d c) {
+        std::vector<double> out;
+        for (const Toolpath& t : paths)
+            if (!t.points.empty()) {
+                double d = 0.0;
+                for (const ToolpathPoint& q : t.points) // a loop: its mean distance
+                    d += std::hypot(q.p.x - c.x, q.p.y - c.y);
+                const double front = std::hypot(t.points.front().p.x - c.x, t.points.front().p.y - c.y);
+                const double back = std::hypot(t.points.back().p.x - c.x, t.points.back().p.y - c.y);
+                out.push_back(t.closed ? d / double(t.points.size()) : std::min(front, back));
+            }
+        return out;
+    };
+    LayerSurfaces s;
+    s.top = square(0, 0, 20);
+    FillParams p;
+    p.centre = {10.0, 10.0};
+    for (const SurfacePattern pattern : {SurfacePattern::Concentric, SurfacePattern::Archimedean, SurfacePattern::Octagram}) {
+        INFO(int(pattern));
+        p.top_pattern = pattern;
+        p.top_order = FillOrder::Outward;
+        const LayerFill out = fill_layer(s, 0, p, 0.2);
+        REQUIRE(out.top.size() >= 2);
+        const std::vector<double> d = distances(out.top, p.centre);
+        CHECK(std::is_sorted(d.begin(), d.end()));
+        for (const Toolpath& t : out.top) {
+            CHECK(t.in_order);
+            CHECK(t.one_way == !t.closed);
+        }
+        p.top_order = FillOrder::Inward;
+        const LayerFill in = fill_layer(s, 0, p, 0.2);
+        const std::vector<double> e = distances(in.top, p.centre);
+        CHECK(std::is_sorted(e.rbegin(), e.rend()));
+        // Each spiral piece runs towards the centre.
+        for (const Toolpath& t : in.top)
+            if (!t.closed)
+                CHECK(std::hypot(t.points.back().p.x - 10.0, t.points.back().p.y - 10.0) <=
+                      std::hypot(t.points.front().p.x - 10.0, t.points.front().p.y - 10.0));
+        p.top_order = FillOrder::Default;
+        for (const Toolpath& t : fill_layer(s, 0, p, 0.2).top)
+            CHECK_FALSE(t.in_order);
+    }
+    // Ordered paths keep their order when the G-code orders a group.
+    std::vector<Toolpath> group;
+    for (int i = 0; i < 3; ++i) {
+        Toolpath t;
+        t.points = {{{double(10 * (2 - i)), 0.0}, 0.4}, {{double(10 * (2 - i)) + 1.0, 0.0}, 0.4}};
+        t.in_order = t.one_way = true;
+        group.push_back(t);
+    }
+    Point2d cursor{0.0, 0.0};
+    SeamMemory memory;
+    const std::vector<Toolpath> ordered = order_paths(group, cursor, SeamMode::Nearest, 1, memory);
+    REQUIRE(ordered.size() == 3);
+    CHECK(ordered[0].points.front().p.x == 20.0);
+    CHECK(ordered[2].points.front().p.x == 0.0);
+    const Settings read = parse_settings(R"({"surfaces": {"top_fill_order": "outward", "bottom_fill_order": "inward"}})");
+    CHECK(read.top_fill_order == FillOrder::Outward);
+    CHECK(read.bottom_fill_order == FillOrder::Inward);
+    CHECK_THROWS(parse_settings(R"({"surfaces": {"top_fill_order": "sideways"}})"));
+}
+
+TEST_CASE("infill.smooth_factor: the sparse infill's turns become curves (orca_2_5.md, rule 11)", "[infill]") {
+    // A path with a right angle, a hairpin and a nearly straight join.
+    Toolpath t;
+    for (const Point2d p : {Point2d{0, 0}, Point2d{10, 0}, Point2d{10, 10}, Point2d{10.5, 0.2}, Point2d{20.5, 0.25}})
+        t.points.push_back({p, 0.4});
+    std::vector<Toolpath> paths{t};
+    smooth_corners(paths, 0.0);
+    CHECK(paths[0].points.size() == 5);
+    smooth_corners(paths, 1.0);
+    const std::vector<ToolpathPoint>& out = paths[0].points;
+    // The ends stay; the right angle becomes a curve from (5, 0) to (10, 5).
+    CHECK(out.front().p.x == 0.0);
+    CHECK(out.back().p.x == 20.5);
+    CHECK(out.size() > 5);
+    CHECK_THAT(out[1].p.x, WithinAbs(5.0, 1e-9));
+    bool corner_kept = false, hairpin_kept = false;
+    for (const ToolpathPoint& q : out) {
+        corner_kept = corner_kept || (std::abs(q.p.x - 10.0) < 1e-9 && std::abs(q.p.y) < 1e-9);
+        hairpin_kept = hairpin_kept || (std::abs(q.p.x - 10.0) < 1e-9 && std::abs(q.p.y - 10.0) < 1e-9);
+    }
+    CHECK_FALSE(corner_kept);
+    CHECK(hairpin_kept);
+    // No point of the curve is farther from the corner than half the shorter stretch.
+    for (const ToolpathPoint& q : out)
+        if (q.p.y < 5.0 + 1e-9 && q.p.x > 4.99 && q.p.x < 10.0 + 1e-9)
+            CHECK(std::hypot(q.p.x - 10.0, q.p.y) <= 5.0 + 1e-9);
+    // The setting reads and is checked.
+    CHECK(parse_settings(R"({"infill": {"smooth_factor": 40}})").infill_smooth_factor == 40.0);
+    CHECK_THROWS(parse_settings(R"({"infill": {"smooth_factor": 140}})"));
+}
+
+TEST_CASE("spiral_inset: the concentric loops joined into one spiral (orca_2_5.md, rule 13 bis)", "[infill]") {
+    const auto length = [](const std::vector<Toolpath>& paths) {
+        double total = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                total += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        return total;
+    };
+    // A 20 mm square: one spiral, as long as the loops less a spacing each, plus the steps.
+    const std::vector<Toolpath> loops = concentric_fill(square(0, 0, 20), 0.4, 0.4);
+    const std::vector<Toolpath> spiral = spiral_inset_fill(square(0, 0, 20), 0.4, 0.4);
+    REQUIRE(spiral.size() == 1);
+    CHECK_FALSE(spiral[0].closed);
+    double loops_length = 0.0;
+    for (const Toolpath& t : loops)
+        for (std::size_t i = 0; i < t.points.size(); ++i)
+            loops_length += std::hypot(t.points[(i + 1) % t.points.size()].p.x - t.points[i].p.x,
+                                       t.points[(i + 1) % t.points.size()].p.y - t.points[i].p.y);
+    CHECK(std::abs(length(spiral) - loops_length) < 0.5 * double(loops.size()));
+    // It starts at a corner of the outer loop (a right angle) and runs inwards.
+    const Point2d s = spiral[0].points.front().p;
+    CHECK((std::abs(s.x - 0.2) < 1e-6 || std::abs(s.x - 19.8) < 1e-6));
+    CHECK((std::abs(s.y - 0.2) < 1e-6 || std::abs(s.y - 19.8) < 1e-6));
+    const Point2d e = spiral[0].points.back().p;
+    CHECK(std::hypot(e.x - 10.0, e.y - 10.0) < 2.0);
+    // Two islands far apart: a spiral each.
+    const Polygons two = Clipper2Lib::Union(square(0, 0, 10), square(30, 0, 10), Clipper2Lib::FillRule::NonZero);
+    CHECK(spiral_inset_fill(two, 0.4, 0.4).size() == 2);
+    // As a top surface, rule 8's order turns it round.
+    LayerSurfaces top;
+    top.top = square(0, 0, 20);
+    FillParams p;
+    p.top_pattern = SurfacePattern::SpiralInset;
+    p.top_order = FillOrder::Outward;
+    const LayerFill out = fill_layer(top, 0, p, 0.2);
+    REQUIRE(out.top.size() == 1);
+    CHECK(std::hypot(out.top[0].points.front().p.x - 10.0, out.top[0].points.front().p.y - 10.0) < 2.0);
+    CHECK(out.top[0].in_order);
+    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "spiral_inset"}})").top_pattern == SurfacePattern::SpiralInset);
+}
+
+TEST_CASE("surfaces.internal_solid_pattern: the solid inside the part (orca_2_5.md, rule 13 bis)", "[infill]") {
+    // Layer over the bottom surface: its bottom solid is not exposed.
+    LayerSurfaces s;
+    s.bottom = square(0, 0, 20);
+    FillParams p;
+    const std::size_t zigzags = fill_layer(s, 1, p, 0.4).solid.size();
+    p.internal_pattern = SurfacePattern::SpiralInset;
+    const LayerFill spiral = fill_layer(s, 1, p, 0.4);
+    REQUIRE(spiral.solid.size() == 1); // one spiral
+    CHECK_FALSE(spiral.solid[0].closed);
+    CHECK(spiral.solid[0].points.size() > 20);
+    // The exposed bottom surface keeps the bottom pattern.
+    s.bottom_exposed = s.bottom;
+    p.bottom_pattern = SurfacePattern::Monotonic;
+    const LayerFill bottom = fill_layer(s, 0, p, 0.2);
+    for (const Toolpath& t : bottom.solid)
+        CHECK(t.points.size() == 2);
+    CHECK(zigzags >= 1);
+    CHECK(parse_settings(R"({"surfaces": {"internal_solid_pattern": "concentric"}})").internal_solid_pattern ==
+          SurfacePattern::Concentric);
+    CHECK(Settings{}.internal_solid_pattern == SurfacePattern::Rectilinear);
+}
+
+TEST_CASE("infill.multiline: each path as N touching lines, the same material (orca_2_5.md, rule 13)", "[infill]") {
+    const auto length = [](const std::vector<Toolpath>& paths) {
+        double total = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                total += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        return total;
+    };
+    LayerSurfaces s;
+    s.sparse = square(0, 0, 40);
+    for (const InfillPattern pattern : {InfillPattern::Rectilinear, InfillPattern::Cubic, InfillPattern::Gyroid,
+                                        InfillPattern::Honeycomb}) {
+        INFO(int(pattern));
+        FillParams p;
+        p.pattern = pattern;
+        p.density = 0.15;
+        const double one = length(fill_layer(s, 0, p, 5.0).sparse);
+        p.multiline = 3;
+        const double three = length(fill_layer(s, 0, p, 5.0).sparse);
+        REQUIRE(one > 0.0);
+        // The same line length, within 3 % (OR12). Cubic's few lines on a
+        // 40 mm square change length in steps with the density: within 8 %
+        // until its own multiline paths (rule 13, part 2).
+        CHECK(std::abs(three - one) < (pattern == InfillPattern::Cubic ? 0.08 : 0.03) * one);
+    }
+    // OR12: cubic at 15 % with three lines, no path crosses itself.
+    {
+        FillParams p;
+        p.pattern = InfillPattern::Cubic;
+        p.density = 0.15;
+        p.multiline = 3;
+        const auto crosses = [](const Toolpath& t) {
+            const auto& q = t.points;
+            const auto side = [](Point2d a, Point2d b, Point2d c) {
+                return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+            };
+            for (std::size_t i = 1; i < q.size(); ++i)
+                for (std::size_t j = i + 2; j < q.size(); ++j) {
+                    const Point2d a = q[i - 1].p, b = q[i].p, c = q[j - 1].p, d = q[j].p;
+                    if (side(a, b, c) * side(a, b, d) < -1e-12 && side(c, d, a) * side(c, d, b) < -1e-12)
+                        return true;
+                }
+            return false;
+        };
+        for (const double z : {1.0, 5.0, 9.0})
+            for (const Toolpath& t : fill_layer(s, 0, p, z).sparse)
+                CHECK_FALSE(crosses(t));
+    }
+    // A straight path becomes three lines a spacing apart, the middle one on it.
+    Toolpath line;
+    line.points = {{{0.0, 5.0}, 0.4}, {{10.0, 5.0}, 0.4}};
+    const std::vector<Toolpath> copies = multiline_paths({line}, 3, 0.4, 0.4, square(-1, -1, 20));
+    REQUIRE(copies.size() == 3);
+    std::vector<double> ys;
+    for (const Toolpath& t : copies)
+        ys.push_back(t.points.front().p.y);
+    std::sort(ys.begin(), ys.end());
+    CHECK_THAT(ys[0], WithinAbs(4.6, 1e-6));
+    CHECK_THAT(ys[1], WithinAbs(5.0, 1e-6));
+    CHECK_THAT(ys[2], WithinAbs(5.4, 1e-6));
+    CHECK(parse_settings(R"({"infill": {"multiline": 3}})").infill_multiline == 3);
+    CHECK_THROWS(parse_settings(R"({"infill": {"multiline": 11}})"));
 }
 
 TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 14 to 17)", "[infill]") {

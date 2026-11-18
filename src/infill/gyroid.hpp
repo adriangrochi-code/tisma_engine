@@ -5,6 +5,8 @@
 #include "geom/polygons.hpp"
 #include "perimeters/sites.hpp"
 
+#include <functional>
+#include <cmath>
 #include <vector>
 
 namespace tisma {
@@ -21,7 +23,17 @@ inline constexpr int kGyroidSamples = 24;
 inline constexpr double kGyroidTolerance = 0.005; // mm
 // Nodes of the sampling grid marched at once: larger regions go in bands of rows.
 inline constexpr std::size_t kGyroidBandNodes = std::size_t(1) << 22;
-std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double z, double width);
+// A field to march instead of the gyroid at `period` (its value at x, y in
+// the plane): the blended gyroids of the adaptive density (orca_2_5.md,
+// rule 10). `period` then sets the grid's step and how far ends join.
+using GyroidField = std::function<double(double, double)>;
+std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double z, double width,
+                                  const GyroidField* field = nullptr);
+// The gyroid's value at a point for a period.
+inline double gyroid_value(double x, double y, double z, double period) {
+    const double k = 2.0 * 3.14159265358979323846 / period;
+    return std::sin(k * x) * std::cos(k * y) + std::sin(k * y) * std::cos(k * z) + std::sin(k * z) * std::cos(k * x);
+}
 
 // The period for a density (0 to 1) with beads of this width: at fixed z the
 // curves are about 2.61 / period long per unit area (measured numerically,

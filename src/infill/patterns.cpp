@@ -11,6 +11,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <tuple>
 #include <map>
 #include <numbers>
 #include <utility>
@@ -421,6 +423,135 @@ std::vector<Toolpath> octagram_fill(const Polygons& region, double spacing, Poin
         curve.push_back({centre.x + (h1 * s2 - h2 * s1) / det, centre.y + (h2 * c1 - h1 * c2) / det});
     }
     return f.clip(to_paths({curve}), kMaxJoin * spacing * kUnitsPerMm, width);
+}
+
+std::vector<Toolpath> spiral_inset_fill(const Polygons& region, double spacing, double width) {
+    std::vector<Toolpath> out;
+    if (!(spacing > 0.0) || region.empty())
+        return out;
+    // The loops, level by level from the outside, in mm.
+    struct Loop {
+        std::vector<Point2d> points;
+        std::size_t level = 0;
+        bool positive = true;
+        bool used = false;
+    };
+    std::vector<Loop> loops;
+    std::size_t level = 0;
+    for (Polygons ring = offset(region, -width / 2.0); !ring.empty(); ring = offset(ring, -spacing), ++level)
+        for (const Polygon& p : ring) {
+            if (p.size() < 3)
+                continue;
+            Loop loop;
+            loop.level = level;
+            loop.positive = Clipper2Lib::IsPositive(p);
+            for (const Point64& q : p)
+                loop.points.push_back({to_mm(q.x), to_mm(q.y)});
+            loops.push_back(std::move(loop));
+        }
+    const Polygons inside = offset(region, -width / 4.0); // a step must stay in here
+    const auto step_inside = [&](Point2d a, Point2d b) {
+        Clipper2Lib::Clipper64 clipper;
+        clipper.AddOpenSubject({{{to_units(a.x), to_units(a.y)}, {to_units(b.x), to_units(b.y)}}});
+        clipper.AddClip(inside);
+        Clipper2Lib::Paths64 closed, open;
+        clipper.Execute(Clipper2Lib::ClipType::Difference, Clipper2Lib::FillRule::NonZero, closed, open);
+        double outside = 0.0;
+        for (const Clipper2Lib::Path64& o : open)
+            for (std::size_t k = 1; k < o.size(); ++k)
+                outside += std::hypot(to_mm(o[k].x - o[k - 1].x), to_mm(o[k].y - o[k - 1].y));
+        return outside < 1e-3;
+    };
+    // The loop's points from index `from`, round to one spacing before it closes.
+    const auto walk = [&](const std::vector<Point2d>& pts, std::size_t from, std::vector<ToolpathPoint>& to) {
+        const std::size_t n = pts.size();
+        double total = 0.0;
+        for (std::size_t k = 0; k < n; ++k)
+            total += std::hypot(pts[(k + 1) % n].x - pts[k].x, pts[(k + 1) % n].y - pts[k].y);
+        const double stop = std::max(0.0, total - spacing);
+        double run = 0.0;
+        to.push_back({pts[from], width});
+        for (std::size_t k = 0; k < n; ++k) {
+            const Point2d a = pts[(from + k) % n], b = pts[(from + k + 1) % n];
+            const double len = std::hypot(b.x - a.x, b.y - a.y);
+            if (run + len >= stop) {
+                const double t = len > 0.0 ? (stop - run) / len : 0.0;
+                to.push_back({{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}, width});
+                return;
+            }
+            run += len;
+            to.push_back({b, width});
+        }
+    };
+    // The nearest point of a loop to p: the index of the segment and the point on it.
+    const auto nearest = [](const std::vector<Point2d>& pts, Point2d p) {
+        std::size_t best = 0;
+        Point2d at = pts[0];
+        double d = std::numeric_limits<double>::max();
+        for (std::size_t k = 0; k < pts.size(); ++k) {
+            const Point2d a = pts[k], b = pts[(k + 1) % pts.size()];
+            const double dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+            const double t = l2 > 0.0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0.0, 1.0) : 0.0;
+            const Point2d q{a.x + dx * t, a.y + dy * t};
+            const double e = std::hypot(q.x - p.x, q.y - p.y);
+            if (e < d)
+                d = e, best = k, at = q;
+        }
+        return std::tuple{best, at, d};
+    };
+    // A loop opened at a point on its segment k.
+    const auto opened = [](std::vector<Point2d> pts, std::size_t k, Point2d at) {
+        pts.insert(pts.begin() + std::ptrdiff_t(k + 1), at);
+        std::rotate(pts.begin(), pts.begin() + std::ptrdiff_t(k + 1), pts.end());
+        return pts;
+    };
+    for (std::size_t first = 0; first < loops.size(); ++first) {
+        if (loops[first].used)
+            continue;
+        // The start: the convex corner nearest to a right angle.
+        const std::vector<Point2d>& pts = loops[first].points;
+        std::size_t start = 0;
+        double best = std::numeric_limits<double>::max();
+        for (std::size_t k = 0; k < pts.size(); ++k) {
+            const Point2d a = pts[(k + pts.size() - 1) % pts.size()], b = pts[k], c = pts[(k + 1) % pts.size()];
+            const double ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
+            const double cross = ux * vy - uy * vx, lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
+            if (!(lu > 0.0) || !(lv > 0.0) || (cross > 0.0) != loops[first].positive)
+                continue;
+            const double turn = std::acos(std::clamp((ux * vx + uy * vy) / (lu * lv), -1.0, 1.0));
+            const double off = std::abs(turn - std::numbers::pi / 2.0);
+            if (off < best - 1e-9)
+                best = off, start = k;
+        }
+        Toolpath spiral;
+        std::size_t current = first;
+        std::vector<Point2d> ring = loops[first].points;
+        std::rotate(ring.begin(), ring.begin() + std::ptrdiff_t(start), ring.end());
+        for (;;) {
+            loops[current].used = true;
+            walk(ring, 0, spiral.points);
+            const Point2d end = spiral.points.back().p;
+            // The next loop in: the nearest unused one of the next level.
+            std::size_t next = loops.size();
+            std::size_t segment = 0;
+            Point2d at{};
+            double d = 4.0 * spacing;
+            for (std::size_t k = 0; k < loops.size(); ++k) {
+                if (loops[k].used || loops[k].level != loops[current].level + 1)
+                    continue;
+                const auto [s, p, e] = nearest(loops[k].points, end);
+                if (e <= d && step_inside(end, p))
+                    d = e, next = k, segment = s, at = p;
+            }
+            if (next == loops.size())
+                break;
+            current = next;
+            ring = opened(loops[next].points, segment, at);
+        }
+        if (spiral.points.size() >= 2)
+            out.push_back(std::move(spiral));
+    }
+    return out;
 }
 
 std::vector<Toolpath> concentric_fill(const Polygons& region, double spacing, double width) {
