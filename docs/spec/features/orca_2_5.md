@@ -224,6 +224,12 @@ relleno sólido interno y `support.interface_pattern`; wiki, patrones):
   isla, más de cuatro separaciones de distancia, o un paso que cruzaría un agujero o una muesca;
 - en las superficies sólidas de arriba y abajo los lazos tienen ancho variable; en el sólido interno, las interfaces
   y las superficies de menos de 100 % el ancho es fijo;
+- el relleno sólido interno tiene su propio dibujo, `surfaces.internal_solid_pattern`, con los mismos valores que
+  `surfaces.top_pattern`; de fábrica `rectilinear` (el zigzag de hoy, así nada cambia si no se toca) (decisión de QA,
+  18-11-2026);
+- el ancho variable de los lazos de arriba y abajo queda para después de la beta del 24-11: falta medir en
+  OrcaSlicer cómo reparte el ancho (la red del equipo de especificación no lo deja bajar); hasta entonces, ancho fijo
+  en todos los casos y la prueba solo mide la espiral (lazos unidos, paso extruido, una espiral por isla);
 - una línea corta al centro llena el agujerito que puede dejar el último lazo;
 - el sentido lo pone la regla 8.
 
