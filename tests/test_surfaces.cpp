@@ -11,6 +11,7 @@
 #include <cmath>
 #include <filesystem>
 #include <numbers>
+#include <set>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -147,6 +148,38 @@ TEST_CASE("O2-7b and O2-7c: the expanded top surface takes the inner walls round
     const auto [hole_out, edge_out] = inner_walls(slice_model(weld_exact(mesh), s));
     CHECK(hole_out == hole_before);
     CHECK(edge_out == edge_before);
+}
+
+TEST_CASE("infill.separated: each part's infill centred on its own box (orca_2_5.md, rule 12)", "[surfaces][infill]") {
+    // Two 10 mm cubes 23.3 mm apart: off the infill's grid from each other.
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 10, 10, 10);
+    add_box(mesh, 23.3f, 0, 0, 33.3f, 10, 10);
+    Settings s;
+    s.wall_width = s.outer_wall_width = 0.4;
+    s.infill_solid_below_area = 0.0;
+    // The sparse infill's points of the middle layer on each cube, the second
+    // moved back by 23.3 mm, rounded to the micron.
+    const auto points = [](const SlicedModel& m) {
+        std::set<std::pair<long, long>> left, right;
+        for (const Toolpath& t : m.fills[m.fills.size() / 2].sparse)
+            for (const ToolpathPoint& q : t.points) {
+                if (q.p.x < 15.0)
+                    left.insert({std::lround(q.p.x * 1000), std::lround(q.p.y * 1000)});
+                else
+                    right.insert({std::lround((q.p.x - 23.3) * 1000), std::lround(q.p.y * 1000)});
+            }
+        return std::pair{left, right};
+    };
+    const auto [a, b] = points(slice_model(weld_exact(mesh), s));
+    REQUIRE_FALSE(a.empty());
+    CHECK(a != b); // one grid for the plate: the cubes' lines differ
+    s.infill_separated = true;
+    const auto [c, d] = points(slice_model(weld_exact(mesh), s));
+    REQUIRE_FALSE(c.empty());
+    CHECK(c == d); // each on its own centre: the same lines
+    CHECK(parse_settings(R"({"infill": {"separated": true}})").infill_separated);
+    CHECK_THROWS(parse_settings(R"({"infill": {"separated": 1}})"));
 }
 
 TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {

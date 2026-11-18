@@ -15406,3 +15406,14 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   borde.
 - Con esto la regla 7 queda hecha. Faltan en O2 la regla 10 (gyroid y TPMS adaptativos), la 12 (separado por pieza),
   la 13 (varias líneas) y la 13 bis (espiral hacia adentro).
+
+**04:45 (Montevideo, 18-11) — O2, regla 12, parte 1: relleno separado por pieza, el poco denso.**
+- `infill.separated` (apagado de fábrica): el relleno poco denso de cada pieza se centra en su propia caja 3D, como si
+  se laminara sola.
+- Las piezas son las islas de cada capa unidas con las de la capa de abajo que pisan (`src/slice/separated.*`). Dos
+  que se tocan en la misma capa son una sola isla, y por lo tanto una sola pieza.
+- El relleno de cada isla se calcula trasladado al centro de su pieza (también en Z, para el gyroid) y vuelve a su
+  lugar. No cambia el cúbico adaptativo, el de soporte, lightning ni el concéntrico.
+- Pruebas: todas bien (1143 casos). La nueva (`[surfaces][infill]`): dos cubos de 10 mm a 23,3 mm uno del otro. Sin la opción, sus líneas difieren; con
+  ella, son las mismas trasladadas.
+- **Falta (parte 2):** el sólido interno y los puentes (la regla los incluye; las superficies de arriba y abajo no).

@@ -19,6 +19,7 @@
 #include "perimeters/fuzzy.hpp"
 #include "slice/belt.hpp"
 #include "slice/painted.hpp"
+#include "slice/separated.hpp"
 #include "slice/variable_layers.hpp"
 #include "slice/wipe_tower.hpp"
 #include "infill/rectilinear.hpp"
@@ -3087,6 +3088,34 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // y pintura más livianos», step 2), the layers' fields computed together
     // below, on the GPU when there is one: the same numbers either way.
     const InfillPattern ip = settings.infill_pattern;
+    // Each part's sparse infill centred on its own 3D box (orca_2_5.md, rule
+    // 12); not with the patterns that already go by part or by the outline.
+    const bool separate = settings.infill_separated && settings.infill_density > 0.0 &&
+                          ip != InfillPattern::AdaptiveCubic && ip != InfillPattern::SupportCubic &&
+                          ip != InfillPattern::Lightning && ip != InfillPattern::Concentric;
+    const std::vector<std::vector<PartIsland>> parts =
+        separate ? separated_parts(out.regions, out.layers) : std::vector<std::vector<PartIsland>>{};
+    // The sparse infill of layer l, island by island, each filled as if its
+    // part's centre were the origin and moved back.
+    const auto separated_sparse = [&](std::size_t l, const FillParams& params) {
+        std::vector<Toolpath> sparse;
+        for (const PartIsland& part : parts[l]) {
+            Polygons mine = Clipper2Lib::Intersect(out.surfaces[l].sparse, part.island, Clipper2Lib::FillRule::NonZero);
+            if (mine.empty())
+                continue;
+            const std::int64_t dx = std::llround(part.centre.x * kUnitsPerMm), dy = std::llround(part.centre.y * kUnitsPerMm);
+            LayerSurfaces only;
+            only.sparse = Clipper2Lib::TranslatePaths(mine, -dx, -dy);
+            FillParams own = params;
+            own.centre = {0.0, 0.0};
+            for (Toolpath& t : fill_layer(only, l, own, out.layers[l].slice_z() - part.z_centre).sparse) {
+                for (ToolpathPoint& q : t.points)
+                    q.p = {q.p.x + to_mm(dx), q.p.y + to_mm(dy)};
+                sparse.push_back(std::move(t));
+            }
+        }
+        return sparse;
+    };
     const bool smooth_sparse = settings.infill_smooth_factor > 0.0 &&
                                (ip == InfillPattern::Hilbert || ip == InfillPattern::Octagram || ip == InfillPattern::Lightning ||
                                 ip == InfillPattern::Honeycomb || ip == InfillPattern::Honeycomb3d ||
@@ -3106,6 +3135,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                               kBridgeAnchor + settings.wall_width);
                           out.fills[l].arcs = std::move(arc_paths[l]);
                           out.fills[l].overhang_walls = std::move(overhang_walls[l]);
+                          if (separate && l < parts.size())
+                              out.fills[l].sparse = separated_sparse(l, overlapping(l == 0 ? first_fill : fill, l));
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
                           // Rounded turns in the patterns that have them (orca_2_5.md, rule 11).

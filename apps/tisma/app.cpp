@@ -2278,7 +2278,7 @@ const std::map<T, const char*>& row_keys() {
         {T::TopExpansion, "surfaces.top_expansion"}, {T::TopExpansionMargin, "surfaces.top_expansion_margin"},
         {T::TopExpansionDirection, "surfaces.top_expansion_direction"},
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
-        {T::SmoothFactor, "infill.smooth_factor"},
+        {T::SmoothFactor, "infill.smooth_factor"}, {T::InfillSeparated, "infill.separated"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
         {T::NonplanarRow, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
@@ -10074,6 +10074,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         // Rounded turns (orca_2_5.md, rule 11).
         mm(T::SmoothFactor, "infill.smooth_factor", s.infill_smooth_factor, 0.0, 100.0, "%.0f %%", 0.5f);
+        flag(T::InfillSeparated, "infill.separated", s.infill_separated); // rule 12
         if (shown("infill.pattern"))
             changed |= row(T::InfillPattern, s.infill_pattern,
                            {{InfillPattern::Rectilinear, tr(T::Rectilinear)},

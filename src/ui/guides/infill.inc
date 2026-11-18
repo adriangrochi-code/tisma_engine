@@ -222,6 +222,15 @@
      "delicate walls. In return, the infill pattern can show a little on the outside face of the part.\n\nExample: off "
      "for almost everything, especially parts meant to be seen; try turning it on if the inner walls come out loose or "
      "detached from the infill."},
+    {"infill.separated",
+     "Con varias piezas en la cama, el dibujo del relleno de adentro es uno solo para toda la placa, así que cada pieza "
+     "lo corta en un lugar distinto. Encendido, el relleno de cada pieza se centra en ella misma, como si estuviera "
+     "sola en la cama: todas las copias salen iguales por dentro.\n\nLas piezas que se tocan cuentan como una "
+     "sola.\n\nEjemplo: encendido para imprimir varias copias de una pieza y que salgan idénticas.",
+     "With several parts on the bed, the inside infill's pattern is one for the whole plate, so each part cuts it at "
+     "a different place. On, each part's infill is centred on the part itself, as if it were alone on the bed: all "
+     "the copies come out the same inside.\n\nParts that touch count as one.\n\nExample: on to print several "
+     "copies of a part and have them come out identical."},
     {"infill.smooth_factor",
      "El relleno de adentro dibuja líneas con vueltas en punta. Este valor cambia esas vueltas por curvas: con 0 (de "
      "fábrica) quedan en punta, con 100 % la curva es la más grande que entra. La máquina no tiene que frenar en cada "

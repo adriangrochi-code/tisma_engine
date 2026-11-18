@@ -1872,6 +1872,7 @@
     X(TopFillOrder, "Orden de arriba", "Top surface order") \
     X(SubTopExpansion, "Expansión de arriba", "Top surface expansion") \
     X(SmoothFactor, "Suavizar las esquinas del relleno", "Smooth the infill's corners") \
+    X(InfillSeparated, "Relleno separado por pieza", "Infill separated by part") \
     X(TopExpansion, "Expandir la superficie de arriba", "Expand the top surface") \
     X(TopExpansionMargin, "Distancia a las paredes", "Distance from the walls") \
     X(TopExpansionDirection, "Hacia dónde crece", "Which way it grows") \

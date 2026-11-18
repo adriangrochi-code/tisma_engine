@@ -218,6 +218,7 @@ add_library(tisma_core
   src/config/settings.cpp
   src/config/profiles.cpp
   src/slice/painted.cpp
+  src/slice/separated.cpp
   src/slice/pipeline.cpp
   src/slice/job.cpp
   src/geom/medial_axis.cpp

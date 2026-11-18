@@ -759,6 +759,9 @@ struct Settings {
     // Percent of the largest curve the sparse infill's sharp turns become
     // (orca_2_5.md, rule 11); 0: pointed, as always.
     double infill_smooth_factor = 0.0;
+    // Each part's infill centred on its own 3D box, as if it were sliced
+    // alone (orca_2_5.md, rule 12); off: one centre for the whole plate.
+    bool infill_separated = false;
     double infill_max_link = 50.0;     // mm along the walls two sparse lines may be joined over (surfaces_infill.md, rule 7)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
