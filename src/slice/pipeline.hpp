@@ -149,9 +149,19 @@ double support_xy_gap(const Settings& settings);
 // 4 and 5; model_tools.md), in the mesh's coordinates: on each layer they
 // cross, what hangs inside a blocker gets no support, and what hangs inside an
 // enforcer gets it however steep, as the painted faces do.
+// Precise seam modifiers (orca_2_5.md, rule 4), in the same coordinates: a
+// body that prints nothing and says where the outer wall's seam goes. The
+// weak ones mark zones (walls.seam still chooses): preferred, forbidden, or
+// neutral, which clears the paint too. First in the list wins.
+enum class SeamModifierKind { Preferred, Forbidden, Neutral };
+struct SeamVolume {
+    IndexedMesh mesh;
+    SeamModifierKind kind = SeamModifierKind::Preferred;
+};
 struct SupportVolumes {
     IndexedMesh blockers, enforcers;
-    bool empty() const { return blockers.triangles.empty() && enforcers.triangles.empty(); }
+    std::vector<SeamVolume> seams{};
+    bool empty() const { return blockers.triangles.empty() && enforcers.triangles.empty() && seams.empty(); }
 };
 
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,

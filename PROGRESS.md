@@ -15255,3 +15255,16 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   - Los fuertes dan un punto fijo por pared externa: el tramo más largo donde el cuerpo corta la línea media; en empate,
     el más cercano al fondo y después el de más a la izquierda. Izquierda y derecha se miran desde afuera.
   - Un solo aviso «Costura precisa:» junta los problemas, y el tipo se guarda en el proyecto.
+
+**02:00 (Montevideo) — O1, costura precisa, los débiles (OR4, parte 1):**
+- `SupportVolumes::seams`: cuerpos con su tipo (preferida, prohibida, neutra), movidos como la pieza.
+- Cada cuerpo se corta por capa con `volume_sections`, como los bloqueadores de soporte. Su sección se suma a
+  `seam_enforce` (preferida) o a `seam_block` (prohibida), o borra las dos (neutra), por encima de la pintura. Con
+  varios cuerpos, manda el primero de la lista.
+- Prueba `[seam]`: un cuerpo sobre la cara +X de un cubo de 20 mm marca, bloquea, y la neutra borra la costura pintada.
+  Pasan `[paint]` y `[support]`.
+- **Falta:**
+  - los fuertes (centro, izquierda, derecha): un punto fijo por pared;
+  - el aviso «Costura precisa:»;
+  - llevarlo de la CLI y el proyecto a `SeamVolume`;
+  - la interfaz.

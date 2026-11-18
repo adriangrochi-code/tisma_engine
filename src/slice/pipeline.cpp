@@ -1702,6 +1702,8 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
             moved->blockers = compensated_like(volumes->blockers, input, settings);
         if (!volumes->enforcers.triangles.empty())
             moved->enforcers = compensated_like(volumes->enforcers, input, settings);
+        for (const SeamVolume& v : volumes->seams)
+            moved->seams.push_back({compensated_like(v.mesh, input, settings), v.kind});
     }
     const SupportVolumes* support = moved ? &*moved : nullptr;
     if (!tools)
@@ -2846,6 +2848,32 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         out.seam_enforce = painted_areas(painted[2], out.layers, settings.wall_width);
     if (!painted[3].empty())
         out.seam_block = painted_areas(painted[3], out.layers, settings.wall_width);
+    // The weak precise seam modifiers over the paint, the first in the list
+    // last so that it wins (orca_2_5.md, rule 4): preferred marks, forbidden
+    // blocks, neutral clears both, inside each one's section.
+    if (volumes && !volumes->seams.empty()) {
+        out.seam_enforce.resize(out.layers.size());
+        out.seam_block.resize(out.layers.size());
+        for (auto v = volumes->seams.rbegin(); v != volumes->seams.rend(); ++v) {
+            if (v->mesh.triangles.empty())
+                continue;
+            const std::vector<Polygons> sections = volume_sections(v->mesh, heights, settings.gap_closing_radius, gpu);
+            tbb::parallel_for(std::size_t(0), std::min(sections.size(), out.layers.size()), [&](std::size_t l) {
+                const Polygons& zone = sections[l];
+                if (zone.empty())
+                    return;
+                using Clipper2Lib::FillRule;
+                Polygons& on = out.seam_enforce[l];
+                Polygons& off = out.seam_block[l];
+                on = Clipper2Lib::Difference(on, zone, FillRule::NonZero);
+                off = Clipper2Lib::Difference(off, zone, FillRule::NonZero);
+                if (v->kind == SeamModifierKind::Preferred)
+                    on = Clipper2Lib::Union(on, zone, FillRule::NonZero);
+                else if (v->kind == SeamModifierKind::Forbidden)
+                    off = Clipper2Lib::Union(off, zone, FillRule::NonZero);
+            });
+        }
+    }
     if (!out.regions.empty() && !frame) {
         const double first = out.layers.front().top - out.layers.front().bottom;
         const AdhesionShape shape = adhesion_shape(settings);
