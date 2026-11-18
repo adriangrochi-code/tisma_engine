@@ -12459,6 +12459,25 @@ bool App::volume_editor(PlateObject& o, std::size_t k, bool& removed) {
     };
     three("##offset", T::VolumeOffset, v.offset, -1000.0);
     three("##size", T::VolumeSize, v.size, 0.1);
+    // A precise seam modifier (orca_2_5.md, rule 4): its kind, or none.
+    if (!negative) {
+        static constexpr const char* kinds[] = {"", "center", "left", "right", "preferred", "forbidden", "neutral"};
+        const char* labels[] = {tr(T::VolumeSeamNone),      tr(T::VolumeSeamCenter),    tr(T::VolumeSeamLeft),
+                                tr(T::VolumeSeamRight),     tr(T::VolumeSeamPreferred), tr(T::VolumeSeamForbidden),
+                                tr(T::VolumeSeamNeutral)};
+        int kind = 0;
+        for (int i = 1; i < 7; ++i)
+            if (v.seam == kinds[i])
+                kind = i;
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::VolumeSeam));
+        ImGui::SameLine(110.0f * scale_);
+        ImGui::SetNextItemWidth(3.0f * field);
+        if (ImGui::Combo("##seam", &kind, labels, 7)) {
+            v.seam = kinds[kind];
+            changed = true;
+        }
+    }
     if (!negative)
         changed |= own_settings_editor(v.settings, o.settings, false,
                                        format(tr(T::ModifierItem), int(k) + 1));

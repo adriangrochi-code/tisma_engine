@@ -15308,3 +15308,9 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
 - **Falta:**
   - el control para elegir el tipo en la lista de volúmenes;
   - la CLI.
+
+**02:00 (Montevideo, 18-11) — O1, costura precisa, parte 5:**
+- La ventana de ajustes del objeto tiene un selector «Costura» en cada modificador: sin costura (solo ajustes), en el
+  centro, a la izquierda, a la derecha, zona preferida, prohibida o neutra.
+- Pruebas `[text]` y `[ui]` bien, y la interfaz compila. La pantalla no se miró: no hay captura.
+- **Falta:** la CLI.

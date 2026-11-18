@@ -2369,6 +2369,14 @@
     X(HeightTo, "hasta", "to") \
     X(ShapeBox, "Caja", "Box") \
     X(ShapeCylinder, "Cilindro", "Cylinder") \
+    X(VolumeSeam, "Costura", "Seam") \
+    X(VolumeSeamNone, "Sin costura (solo ajustes)", "No seam (settings only)") \
+    X(VolumeSeamCenter, "Costura en el centro", "Seam at the centre") \
+    X(VolumeSeamLeft, "Costura a la izquierda", "Seam on the left") \
+    X(VolumeSeamRight, "Costura a la derecha", "Seam on the right") \
+    X(VolumeSeamPreferred, "Zona preferida", "Preferred zone") \
+    X(VolumeSeamForbidden, "Zona prohibida", "Forbidden zone") \
+    X(VolumeSeamNeutral, "Zona neutra", "Neutral zone") \
     X(RemoveVolume, "Quitar", "Remove") \
     X(VolumeOffset, "Lugar (mm)", "Place (mm)") \
     X(VolumeSize, "Tamaño (mm)", "Size (mm)") \
