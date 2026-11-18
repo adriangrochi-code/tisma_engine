@@ -2273,6 +2273,7 @@ const std::map<T, const char*>& row_keys() {
         {T::BottomLayers, "surfaces.bottom_layers"}, {T::TopMinThickness, "surfaces.top_min_thickness"},
         {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
         {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
+        {T::TopAngle, "surfaces.top_angle"}, {T::BottomAngle, "surfaces.bottom_angle"},
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"}, {T::InfillAngles, "infill.angles"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
@@ -10038,9 +10039,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
                             {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
                             {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
+        flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
+    } else if (id == "surface_angles") {
         mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : tr(T::AutoValue),
            0.5f);
-        flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
+        // A fixed angle, or -1 for the solid infill's (orca_2_5.md, rule 9).
+        mm(T::TopAngle, "surfaces.top_angle", s.top_angle, -1.0, 360.0, s.top_angle >= 0.0 ? "%.0f°" : tr(T::AutoValue), 0.5f);
+        mm(T::BottomAngle, "surfaces.bottom_angle", s.bottom_angle, -1.0, 360.0,
+           s.bottom_angle >= 0.0 ? "%.0f°" : tr(T::AutoValue), 0.5f);
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         if (shown("infill.pattern"))

@@ -84,6 +84,9 @@ struct FillParams {
     double max_link = 0.0; // mm along the walls the sparse lines may be joined over (infill.max_link); 0: 3 spacings
     SurfacePattern bottom_pattern = SurfacePattern::Rectilinear; // the bottom surfaces (surfaces.bottom_pattern)
     std::vector<double> angles; // the layer's angle, cycled (infill.angles, Q18); empty: angle and angle + 90
+    // A fixed angle for the top surface's and the bottom surfaces' lines
+    // (surfaces.top_angle and bottom_angle, orca_2_5.md rule 9); -1: the layer's.
+    double top_angle = -1.0, bottom_angle = -1.0;
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,

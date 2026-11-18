@@ -1793,10 +1793,17 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
                                   "bottom_min_thickness", "interface_shells", "top_width", "solid_width",
-                                  "bottom_pattern", "bridge_angle"},
+                                  "bottom_pattern", "bridge_angle", "top_angle", "bottom_angle"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "bottom_pattern") {
             s.bottom_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
+            return;
+        }
+        if (n == "top_angle" || n == "bottom_angle") {
+            const double v = number(g, n, k);
+            if (!(v == -1.0 || (v >= 0.0 && v <= 360.0)))
+                fail(k, "must be -1 (the solid infill's) or from 0 to 360 degrees");
+            (n == "top_angle" ? s.top_angle : s.bottom_angle) = v;
             return;
         }
         if (n == "bridge_angle") {
@@ -3574,6 +3581,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_pattern", surface_pattern_name(s.top_pattern)},
         {"surfaces.bottom_pattern", surface_pattern_name(s.bottom_pattern)},
         {"surfaces.bridge_angle", num(s.bridge_angle)},
+        {"surfaces.top_angle", num(s.top_angle)},
+        {"surfaces.bottom_angle", num(s.bottom_angle)},
         {"surfaces.top_width", num(s.top_width)},
         {"surfaces.solid_width", num(s.solid_width)},
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
@@ -4228,6 +4237,8 @@ std::string settings_json(const Settings& s) {
           {"top_pattern", surface_pattern_name(s.top_pattern)},
           {"bottom_pattern", surface_pattern_name(s.bottom_pattern)},
           {"bridge_angle", s.bridge_angle},
+          {"top_angle", s.top_angle},
+          {"bottom_angle", s.bottom_angle},
           {"top_width", s.top_width},
           {"solid_width", s.solid_width},
           {"top_min_thickness", s.top_min_thickness},

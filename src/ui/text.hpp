@@ -1868,6 +1868,7 @@
     X(SubSpeedLimits, "Velocidades", "Speeds") \
     X(SubPreparation, "Preparación", "Preparation") \
     X(SubPolyholes, "Agujeros redondos", "Round holes") \
+    X(SubSurfaceAngles, "Ángulos de las superficies", "Surface angles") \
     X(SubAccel, "Aceleraciones", "Accelerations") \
     X(SubMaxTemps, "Temperaturas máximas", "Maximum temperatures") \
     X(SubFirmware, "Firmware", "Firmware") \
@@ -2229,6 +2230,8 @@
     X(CornerSmoothing, "Esquinas redondeadas", "Corner smoothing") \
     X(BottomPattern, "Patrón de abajo", "Bottom pattern") \
     X(BridgeAngle, "Dirección de los puentes", "Bridge direction") \
+    X(TopAngle, "Ángulo de arriba", "Top surface angle") \
+    X(BottomAngle, "Ángulo de abajo", "Bottom surface angle") \
     X(InfillBeforeWalls, "Relleno antes que las paredes", "Infill before walls") \
     X(MaxLink, "Unión máxima del relleno", "Maximum infill link") \
     X(ZOffset, "Desfase de Z", "Z offset") \

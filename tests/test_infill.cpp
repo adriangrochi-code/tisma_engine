@@ -83,6 +83,50 @@ TEST_CASE("surfaces.bottom_pattern: monotonic bottom lines, unjoined; the solid 
     CHECK(zig.solid.size() < mono.solid.size());
 }
 
+TEST_CASE("surfaces.top_angle and bottom_angle: a fixed angle for the surfaces' lines (orca_2_5.md, rule 9)", "[infill]") {
+    // The direction of a path's longest stretch, in degrees from 0 to 180.
+    const auto directions = [](const std::vector<Toolpath>& paths) {
+        std::set<int> out;
+        for (const Toolpath& t : paths) {
+            double best = 0.0, dir = 0.0;
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const double dx = t.points[i].p.x - t.points[i - 1].p.x, dy = t.points[i].p.y - t.points[i - 1].p.y;
+                if (std::hypot(dx, dy) > best) {
+                    best = std::hypot(dx, dy);
+                    dir = std::fmod(std::atan2(dy, dx) * 180.0 / std::acos(-1.0) + 360.0, 180.0);
+                }
+            }
+            out.insert(int(std::lround(dir)) % 180);
+        }
+        return out;
+    };
+    LayerSurfaces top;
+    top.top = square(0, 0, 10);
+    LayerSurfaces bottom;
+    bottom.bottom = square(0, 0, 10);
+    FillParams p; // 45 degrees, turning 90 a layer
+    CHECK(directions(fill_layer(top, 0, p, 0.2).top) != directions(fill_layer(top, 1, p, 0.4).top));
+    p.top_angle = 30.0;
+    p.bottom_angle = 120.0;
+    for (std::size_t layer : {0u, 1u}) {
+        CHECK(directions(fill_layer(top, layer, p, 0.2).top) == std::set<int>{30});
+        CHECK(directions(fill_layer(bottom, layer, p, 0.2).solid) == std::set<int>{120});
+        p.bottom_pattern = SurfacePattern::Rectilinear;
+        CHECK(directions(fill_layer(bottom, layer, p, 0.2).solid) == std::set<int>{120});
+        p.bottom_pattern = SurfacePattern::Monotonic;
+    }
+    // The solid under a top surface keeps the layer's angle.
+    LayerSurfaces under;
+    under.top = square(0, 0, 10);
+    under.top_under = square(0, 0, 10);
+    CHECK(directions(fill_layer(under, 0, p, 0.2).solid) == std::set<int>{45});
+    // The settings read and are checked.
+    const Settings read = parse_settings(R"({"surfaces": {"top_angle": 30, "bottom_angle": -1}})");
+    CHECK(read.top_angle == 30.0);
+    CHECK(read.bottom_angle == -1.0);
+    CHECK_THROWS(parse_settings(R"({"surfaces": {"top_angle": -5}})"));
+}
+
 TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 14 to 17)", "[infill]") {
     const auto length = [](const std::vector<Toolpath>& paths) {
         double total = 0.0;

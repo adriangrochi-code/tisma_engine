@@ -307,6 +307,9 @@ struct Settings {
     SurfacePattern top_pattern = SurfacePattern::Monotonic;
     SurfacePattern bottom_pattern = SurfacePattern::Monotonic;
     double bridge_angle = 0.0;    // degrees, the bridges' lines (surfaces.bridge_angle); 0: by the bridge
+    // A fixed angle for the top and the bottom surfaces' lines (orca_2_5.md,
+    // rule 9), degrees; -1: the solid infill's. The top one also irons.
+    double top_angle = -1.0, bottom_angle = -1.0;
     // Line widths of their own, mm; 0: from the nozzle, not the walls
     // (surfaces_infill.md, I9).
     double top_width = 0.0;    // the top surface; 0: one nozzle

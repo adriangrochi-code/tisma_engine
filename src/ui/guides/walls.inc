@@ -495,6 +495,26 @@
      "do not like the automatic choice; a bad angle leaves lines hanging with nothing to hold them.\n\nExample: 0 "
      "almost always; if a bridge comes out with lines parallel to its supports, set the angle that crosses it, for "
      "example 90°."},
+    {"surfaces.top_angle",
+     "La superficie de arriba de todo es la que se ve: sus líneas se tienden en una dirección. Con −1 (de fábrica), "
+     "siguen al relleno macizo, que gira 90° en cada capa. Con un ángulo, en grados, las líneas de arriba van siempre "
+     "en esa dirección, y el planchado también la sigue.\n\nSirve para que la cara de arriba brille parejo o quede "
+     "alineada con un borde de la pieza.\n\nEjemplo: 0° deja las líneas paralelas al eje X; 45° en diagonal.",
+     "The very top surface is the one you see, and its lines are laid in one direction. At −1 (the default) they "
+     "follow the solid infill, which turns 90° every layer. With an angle, in degrees, the top lines always run that "
+     "way, and ironing follows it too.\n\nIt helps the top face shine evenly or line up with an edge of the "
+     "model.\n\nExample: 0° lays the lines along the X axis; 45° diagonally."},
+    {"surfaces.bottom_angle",
+     "Las superficies de abajo son las capas macizas que apoyan sobre la cama o sobre el aire, como el piso de la "
+     "pieza. Con −1 (de fábrica) sus líneas siguen al relleno macizo, que gira 90° en cada capa. Con un ángulo, en "
+     "grados, van siempre en esa dirección.\n\nSirve para que la cara que toca la cama quede con las líneas como "
+     "querés, por ejemplo cruzadas a lo largo de la pieza para que se pegue mejor.\n\nEjemplo: −1 casi siempre; 90° "
+     "deja las líneas paralelas al eje Y.",
+     "The bottom surfaces are the solid layers resting on the bed or on air, like the model's floor. At −1 (the "
+     "default) their lines follow the solid infill, which turns 90° every layer. With an angle, in degrees, they "
+     "always run that way.\n\nIt helps the face on the bed come out with the lines you want, for example across "
+     "the length of the part so it holds better.\n\nExample: −1 almost always; 90° lays the lines along the Y "
+     "axis."},
     {"surfaces.interface_shells",
      "Solo cuenta si imprimís con más de un extrusor, por ejemplo con dos materiales o colores. Donde la parte de uno "
      "se apoya sobre la del otro, encendido, cada una lleva sus propias capas macizas de techo y de piso, como si "

@@ -2800,6 +2800,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.max_link = settings.infill_max_link;
     fill.bottom_pattern = settings.bottom_pattern;
+    fill.top_angle = settings.top_angle;
+    fill.bottom_angle = settings.bottom_angle;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress
@@ -3208,8 +3210,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 return;
             // ironing.md rule 2 and IR8: over the top fill's, or fixed.
             const double over = settings.ironing_angle < 0.0 ? 45.0 : settings.ironing_angle;
-            const double angle = settings.ironing_angle_fixed
-                                     ? over
+            // Over the top surface's own angle when it is fixed (orca_2_5.md, rule 9).
+            const double angle = settings.ironing_angle_fixed ? over
+                                 : settings.top_angle >= 0.0
+                                     ? settings.top_angle + over
                                      : layer_angle(settings.infill_angle, settings.infill_angles, l) + over;
             out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width_at(l), true);
         });

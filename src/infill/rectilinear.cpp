@@ -377,44 +377,72 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
             t.one_way = true;
         return lines;
     };
+    // A fixed angle for the top and the bottom surfaces (orca_2_5.md, rule 9),
+    // or the layer's; the solid layers under a top surface keep the layer's.
+    const bool fixed_top = params.top_angle >= 0.0, fixed_bottom = params.bottom_angle >= 0.0;
+    const double top_angle = fixed_top ? params.top_angle : angle;
+    const double bottom_angle = fixed_bottom ? params.bottom_angle : angle;
     // The top surface: monotonic lines (each a piece, in monotonic order),
     // the same all one way (monotonic_lines), zig-zags, zig-zags that do not
     // turn between layers (aligned_rectilinear, rule 15), or a curve.
     if (auto c = curves(params.top_pattern, surface, top))
         out.top = std::move(*c);
     else if (params.top_pattern == SurfacePattern::MonotonicLines)
-        out.top = one_way(rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0),
-                          angle);
+        out.top = one_way(rectilinear_fill(surface, top - d, top_angle, top, false, true, true, params.wall_overlap * top + d / 2.0),
+                          top_angle);
     else if (params.top_pattern == SurfacePattern::Monotonic)
-        out.top = rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
+        out.top = rectilinear_fill(surface, top - d, top_angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
     else
         out.top = rectilinear_fill(surface, top - d,
-                                   params.top_pattern == SurfacePattern::AlignedRectilinear ? params.angle : angle, top,
-                                   true, true, false, d / 2.0);
+                                   fixed_top                                                 ? params.top_angle
+                                   : params.top_pattern == SurfacePattern::AlignedRectilinear ? params.angle
+                                                                                              : angle,
+                                   top, true, true, false, d / 2.0);
     // The bottom surfaces: monotonic like the top ones (surfaces.bottom_pattern),
     // reaching as far as the zig-zags, or zig-zags. The other patterns only
     // on the bottom surface itself (rule 17); the solid layers over it and
     // under a top surface zig-zag as always.
     const SurfacePattern bp = params.bottom_pattern;
     const bool lines_bottom = bp == SurfacePattern::Monotonic || bp == SurfacePattern::MonotonicLines;
+    const auto zigzag = [&](const Polygons& region, double degrees) {
+        return rectilinear_fill(region, inner - d, degrees, inner, true, true, false, d / 2.0);
+    };
+    // Zig-zags over the bottom part and the part under a top surface, each at its angle.
+    const auto zigzag_solid = [&](const Polygons& bottom, std::vector<Toolpath>& to) {
+        if (!fixed_bottom || surfaces.top_under.empty()) {
+            const Polygons both = surfaces.top_under.empty()
+                                      ? bottom
+                                      : Clipper2Lib::Union(bottom, surfaces.top_under, Clipper2Lib::FillRule::NonZero);
+            for (Toolpath& t : zigzag(both, fixed_bottom ? bottom_angle : angle))
+                to.push_back(std::move(t));
+            return;
+        }
+        const Polygons under = Clipper2Lib::Difference(surfaces.top_under, bottom, Clipper2Lib::FillRule::NonZero);
+        for (Toolpath& t : zigzag(bottom, bottom_angle))
+            to.push_back(std::move(t));
+        for (Toolpath& t : zigzag(under, angle))
+            to.push_back(std::move(t));
+    };
     if (lines_bottom && !surfaces.bottom.empty()) {
-        out.solid = rectilinear_fill(surfaces.bottom, inner - d, angle, inner, false, true, true, d / 2.0);
+        out.solid = rectilinear_fill(surfaces.bottom, inner - d, bottom_angle, inner, false, true, true, d / 2.0);
         if (bp == SurfacePattern::MonotonicLines)
-            out.solid = one_way(std::move(out.solid), angle);
-        for (Toolpath& t : rectilinear_fill(surfaces.top_under, inner - d, angle, inner, true, true, false, d / 2.0))
+            out.solid = one_way(std::move(out.solid), bottom_angle);
+        for (Toolpath& t : zigzag(surfaces.top_under, angle))
             out.solid.push_back(std::move(t));
     } else if (bp != SurfacePattern::Rectilinear && !surfaces.bottom.empty()) {
         // The bottom surface itself in its pattern, the rest in zig-zags.
         const Polygons exposed = Clipper2Lib::Intersect(surfaces.bottom, surfaces.bottom_exposed, Clipper2Lib::FillRule::NonZero);
-        const Polygons rest = Clipper2Lib::Difference(solid, exposed, Clipper2Lib::FillRule::NonZero);
         if (auto c = curves(bp, exposed, inner))
             out.solid = std::move(*c);
         else // aligned_rectilinear: the zig-zags at the infill's angle in every layer
-            out.solid = rectilinear_fill(exposed, inner - d, params.angle, inner, true, true, false, d / 2.0);
-        for (Toolpath& t : rectilinear_fill(rest, inner - d, angle, inner, true, true, false, d / 2.0))
-            out.solid.push_back(std::move(t));
+            out.solid = zigzag(exposed, fixed_bottom ? bottom_angle : params.angle);
+        if (fixed_bottom)
+            zigzag_solid(Clipper2Lib::Difference(surfaces.bottom, exposed, Clipper2Lib::FillRule::NonZero), out.solid);
+        else
+            for (Toolpath& t : zigzag(Clipper2Lib::Difference(solid, exposed, Clipper2Lib::FillRule::NonZero), angle))
+                out.solid.push_back(std::move(t));
     } else {
-        out.solid = rectilinear_fill(solid, inner - d, angle, inner, true, true, false, d / 2.0);
+        zigzag_solid(surfaces.bottom, out.solid);
     }
     if (params.gap_fill && !(out.top.empty() && out.solid.empty())) {
         std::vector<Toolpath> lines = out.top;

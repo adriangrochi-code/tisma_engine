@@ -169,6 +169,8 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `top_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear`, `monotonic_lines`, `aligned_rectilinear`, `concentric`, `hilbert`, `archimedean`, `octagram` | Superficies superiores: `monotonic`, líneas sueltas todas en el mismo sentido, cada una después de las de abajo que la tocan (sin volver sobre lo hecho); `rectilinear`, en zigzag como las inferiores. `monotonic_lines` es como `monotonic` (líneas sueltas en el mismo sentido); `aligned_rectilinear`, zigzag que no gira 90° entre capas; `concentric`, `hilbert`, `archimedean` y `octagram`, las curvas del relleno, densas (ficha `infill_patterns.md`, reglas 14 a 16) |
 | `bottom_pattern` | texto | `"monotonic"` | los mismos que `top_pattern` | Las superficies de abajo, como `top_pattern`: líneas en orden monótono, sin unir (ficha `surfaces_infill.md`); las capas sólidas bajo una superficie de arriba siguen en zigzag. `rectilinear`: zigzag. Los dibujos que no son líneas (`aligned_rectilinear` y las curvas) cambian solo la capa de abajo de todo, la que no tiene nada de la pieza debajo; las capas sólidas de encima siguen en zigzag (regla 17) |
 | `bridge_angle` | número | 0 | −360 a 360 | Dirección de las líneas de todos los puentes, en grados (ficha `surfaces_infill.md`); 0: la de cada puente, según dónde se apoya |
+| `top_angle` | número | −1 | −1, o 0 a 360 | Ángulo fijo, en grados, de las líneas de la superficie de arriba y del planchado; −1: el del relleno sólido, que gira por capa (ficha `orca_2_5.md`, regla 9) |
+| `bottom_angle` | número | −1 | −1, o 0 a 360 | Lo mismo con las superficies de abajo (regla 9) |
 
 ### `infill`
 

@@ -15324,3 +15324,17 @@ siguen sueltas: no tengo herramienta para borrar archivos de una versión public
   la opción mal escrita da error. `[cli]` completo bien.
 - **Pendiente con QA:** confirmar cómo se lee «invertir en agujeros».
 - **Siguiente:** O2 de `orca_2_5.md`.
+
+**02:40 (Montevideo, 18-11) — O2 de `orca_2_5.md`, regla 9: ángulo fijo arriba y abajo.**
+- Empecé O2 por la regla 9 porque es corta y no depende de las demás. La 7 (expansión de la superficie de arriba) es la
+  más grande y va después, en partes.
+- `surfaces.top_angle` y `surfaces.bottom_angle` (−1, o de 0 a 360): un ángulo fijo para las líneas de la superficie de
+  arriba y de las de abajo. Las capas macizas bajo una superficie de arriba siguen girando con la capa. El planchado
+  toma el ángulo fijo de arriba como base.
+- Con −1, el G-code sale igual que antes. En la interfaz, los tres ángulos (puentes, arriba y abajo) van en la
+  subsección nueva «Ángulos de las superficies», porque «Arriba y abajo» ya tenía 8 ajustes. Cada uno tiene su
+  explicación en los dos idiomas.
+- Pruebas: todas bien (1138 casos), con la nueva de `[infill]`.
+- **0.13.0-beta.4:** el tercer intento falló otra vez en `gate_g15_quit` (Linux). Es la segunda falla seguida, así que
+  no es un flake. El arreglo de la prueba (8968c74) está en dev y no en alpha. No empujo a alpha sin permiso del dueño:
+  se lo pregunté a QA.
